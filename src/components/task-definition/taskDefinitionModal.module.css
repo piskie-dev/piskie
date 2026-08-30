@@ -1,0 +1,1228 @@
+/**
+ * TaskDefinitionModal 样式 —— 「简报 + 装备栏」形态。
+ *
+ * 左栏是一页任务简报：大字号名称 + 文档式描述,没有输入框边框——写简报,
+ * 不是填表。右栏是装备栏：七张能力牌,亮起 = 偏离默认,一眼看出这个任务
+ * 特殊在哪;复杂项(浏览器环境/MCP)点牌原地展开成配置面板。
+ *
+ * 全部色值走 token(check:styles 棘轮)。签名光只有一处：头部顶边的静态
+ * 银白光缝 + 内侧漏光晕。它不呼吸——呼吸的光属于审批门的等待语义。
+ * 进出场按 animate-to-from-top-layer 指导；遮罩为纯黑透明度,不加 blur。
+ */
+
+.shell {
+  margin: auto;
+  inline-size: min(94vw, 780px);
+  /* 固定框高：装备牌展开/收起只在右栏内部滚动,弹窗外框不随内容抽动 */
+  block-size: min(640px, 86vh);
+  display: none;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-card);
+  background: var(--cyber-surface);
+  color: var(--cyber-text);
+  box-shadow: var(--shadow-card-active);
+  overflow: hidden;
+
+  /* 退场态(同时是基态) */
+  opacity: 0;
+  translate: 0 10px;
+  scale: 0.98;
+
+  transition-property: opacity, translate, scale, display, overlay;
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  transition-behavior: allow-discrete;
+}
+
+.shell[open] {
+  display: flex;
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 10px;
+    scale: 0.98;
+  }
+}
+
+/* 关死态必须回到 display:none——上面的 display:flex 覆盖了 UA 对
+   dialog:not([open]) 的隐藏,否则透明壳留在原地拦截下层点击;
+   display 在 transition-property 里且 allow-discrete,退场动画播完才隐藏 */
+.shell:not([open]) {
+  display: none;
+}
+
+.form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.shell::backdrop {
+  background-color: rgb(0 0 0 / 0);
+  transition-property: background-color, display, overlay;
+  transition-duration: 220ms;
+  transition-behavior: allow-discrete;
+}
+
+.shell[open]::backdrop {
+  background-color: rgb(0 0 0 / 0.55);
+
+  @starting-style {
+    background-color: rgb(0 0 0 / 0);
+  }
+}
+
+/* ── 头部：标题 + 副文 + 关闭;签名光在这 ── */
+
+.head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 16px 20px 12px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+/* 光缝：顶边中段一道银白细光 */
+.head::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 14%;
+  block-size: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--cyber-text) 52%, transparent) 50%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* 漏光晕：从光缝向内洒的一层极淡冷光 */
+.head::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 60px;
+  background: radial-gradient(
+    58% 100% at 50% 0%,
+    color-mix(in srgb, var(--cyber-text) 6%, transparent),
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+.headText {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--cyber-text);
+}
+
+.subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--cyber-text-muted);
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.close:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+/* ── 主体：简报(左) × 装备栏(右) ── */
+
+.grid {
+  position: relative; /* 锚定浮层的定位上下文 */
+  display: grid;
+  grid-template-columns: 1fr 292px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.brief {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 20px 22px;
+  border-inline-end: 1px solid var(--line-1);
+}
+
+/* 眉标：小号大间距,双语后缀在文案里 */
+.briefTag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--cyber-text-muted);
+  margin-block-end: 10px;
+  user-select: none;
+}
+
+/* 名称/描述是「简报纸」,不是输入框——双类名抬特异性(0,2,0),
+   压掉 base.css 给 input[type="text"]/textarea 的全局盒样式(0,1,1):
+   深底、边框、圆角、内边距、14px 字号、紫色聚焦圈全部清掉 */
+.name.name {
+  flex: 0 0 auto;
+  inline-size: 100%;
+  margin: 0;
+  padding: 0 0 6px;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.name.name:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.name.name::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 62%, transparent);
+  font-weight: 500;
+}
+
+/* 名称与正文之间的渐隐发丝线 */
+.rule {
+  flex: 0 0 auto;
+  block-size: 1px;
+  background: linear-gradient(90deg, var(--line-2), transparent);
+  margin-block-end: 12px;
+}
+
+.doc.doc {
+  flex: 1 1 auto;
+  min-block-size: 240px;
+  inline-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.8;
+  overscroll-behavior: contain;
+}
+
+.doc.doc::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 58%, transparent);
+}
+
+.doc.doc:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  caret-color: var(--cyber-primary);
+}
+
+.docHint {
+  flex: 0 0 auto;
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+/* ── 装备栏 ── */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-block-size: 0;
+  padding: 14px 12px;
+  background: color-mix(in srgb, var(--cyber-text) 2%, transparent);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.railTag {
+  flex: 0 0 auto;
+  padding: 2px 4px 3px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--cyber-text-muted);
+  user-select: none;
+}
+
+.railNote {
+  margin: -2px 0 0;
+  padding-inline: 4px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--status-waiting);
+}
+
+/* 装备牌：亮起 = 偏离默认(通电语言:光透边,不上漆) */
+.tile {
+  flex: 0 0 auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  overflow: hidden;
+  transition:
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tile[data-lit='true'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 9%, var(--cyber-surface));
+  box-shadow:
+    inset 0 0 12px color-mix(in srgb, var(--cyber-primary) 7%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 9%, transparent);
+}
+
+.tile[data-locked='true'] {
+  opacity: 0.55;
+}
+
+.tileHead {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  inline-size: 100%;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tile[data-locked='true'] .tileHead {
+  cursor: not-allowed;
+}
+
+
+.tileKey {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+.tileValue {
+  font-size: 12.5px;
+  color: var(--cyber-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile[data-lit='true'] .tileValue {
+  color: color-mix(in srgb, var(--cyber-primary) 40%, var(--cyber-text));
+}
+
+/* 状态点：常灭,通电亮 */
+.dot {
+  flex: 0 0 auto;
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 999px;
+  background: var(--line-3);
+  transition: background-color 240ms ease, box-shadow 240ms ease;
+}
+
+.tile[data-lit='true'] .dot {
+  background: var(--cyber-primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--cyber-primary) 70%, transparent);
+}
+
+/* 浮层打开中的牌:银白描边标「正在配置」 */
+.tile[data-open='true'] {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+/* 牌接通瞬间的充能闪光(只在打开/换牌那一次) */
+.tile[data-flash='true'] {
+  animation: tile-charge 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes tile-charge {
+  0% { box-shadow: none; }
+  35% {
+    box-shadow:
+      inset 0 0 14px color-mix(in srgb, var(--cyber-primary) 18%, transparent),
+      0 0 18px color-mix(in srgb, var(--cyber-primary) 35%, transparent);
+  }
+  100% { box-shadow: none; }
+}
+
+.noteText {
+  margin: 0;
+  padding: 4px 7px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+.noteText[data-tone='waiting'] {
+  color: var(--status-waiting);
+}
+
+.hr {
+  block-size: 1px;
+  background: var(--line-1);
+  margin: 4px 6px;
+}
+
+/* 双选面板的选项卡:少选项时不摆细行,标题 + 说明撑起信息量,选中通电 */
+.choiceCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.choiceCard + .choiceCard {
+  margin-block-start: 4px;
+}
+
+.choiceCard:hover {
+  border-color: var(--line-2);
+  background: var(--surface-2);
+}
+
+.choiceCard[data-on='true'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 10%, var(--cyber-surface));
+  box-shadow:
+    inset 0 0 12px color-mix(in srgb, var(--cyber-primary) 7%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 10%, transparent);
+}
+
+.choiceMain {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.choiceTitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.choiceCard[data-on='true'] .choiceTitle {
+  color: color-mix(in srgb, var(--cyber-primary) 40%, var(--cyber-text));
+}
+
+.choiceDesc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+.check {
+  display: inline-flex;
+  margin-inline-start: auto;
+  color: var(--cyber-primary);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.choiceCard .check {
+  flex: 0 0 auto;
+  margin-block-start: 1px;
+}
+
+.choiceCard[data-on='true'] .check,
+.envRow[data-on='true'] .check {
+  opacity: 1;
+}
+
+/* ── 浏览器环境多选行 ── */
+
+/* 两行布局：第一行 名称+状态,第二行 用途(整行宽度,最多两行) */
+.envRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  inline-size: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12.5px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.envRow:hover {
+  background: var(--surface-2);
+}
+
+.statusDot {
+  flex: 0 0 auto;
+  margin-block-start: 5px;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 999px;
+  background: var(--status-running);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--status-running) 60%, transparent);
+}
+
+.statusDot[data-busy='true'] {
+  background: var(--status-waiting);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--status-waiting) 60%, transparent);
+}
+
+.envMain {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.envTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.envName {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.envRow[data-on='true'] .envName {
+  color: color-mix(in srgb, var(--cyber-primary) 35%, var(--cyber-text));
+}
+
+.envPurpose {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.envState {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+.envRow .check {
+  margin-block-start: 2px;
+}
+
+/* ── MCP:全部/白名单开关 + 有序白名单 ── */
+
+.mcpHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px 7px;
+}
+
+.mcpHeadTitle {
+  font-size: 12px;
+  color: var(--cyber-text);
+}
+
+.mcpHeadDesc {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+.mcpRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px 5px 9px;
+  border-radius: var(--radius-badge);
+  transition: background-color 160ms ease;
+}
+
+.mcpRow:hover {
+  background: var(--surface-2);
+}
+
+/* 序号徽章 = 优先级 */
+.order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 1px solid color-mix(in srgb, var(--cyber-primary) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+  color: color-mix(in srgb, var(--cyber-primary) 45%, var(--cyber-text));
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+}
+
+.mcpRow[data-off='true'] .order {
+  visibility: hidden;
+}
+
+.mcpHit {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.mcpRow[data-off='true'] .mcpHit {
+  color: var(--cyber-text-muted);
+}
+
+.mcpName {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpSrc {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+.mcpMissing {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--status-waiting);
+}
+
+.move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.move:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.move:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── 工作空间 ── */
+
+/* 完整路径多行展示,按钮独立一行 */
+.wsPath {
+  display: block;
+  margin: 5px 7px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-badge);
+  background: color-mix(in srgb, var(--cyber-bg) 55%, transparent);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--cyber-text-muted);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.wsPath[data-set='true'] {
+  color: var(--cyber-text);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.wsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 7px 5px;
+}
+
+.wsBtn {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  block-size: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.wsBtn:hover {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+/* ── 锚定浮层(机械臂部署) ──
+   装备牌只做摘要;配置面板以 380px 浮层锚定在牌左侧、悬浮于简报区上方。
+   三段部署:充能停顿 → 光梭射出(壳未物质化)→ 摊板时壳显形、光梭熄灭;
+   收起为镜像三拍;换牌折成光梭沿导轨滑行。全程只动 transform/opacity。 */
+
+.fly {
+  position: absolute;
+  inset-inline-end: 302px;
+  inline-size: 380px;
+  max-block-size: calc(100% - 16px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--cyber-border);
+  border-radius: var(--radius-control);
+  background: var(--cyber-elevated);
+  /* 壳体阴影成对定义:结构一致才能在关键帧间插值 */
+  --fly-shadow:
+    0 12px 32px color-mix(in srgb, var(--cyber-bg) 85%, transparent),
+    0 0 24px color-mix(in srgb, var(--cyber-primary) 6%, transparent);
+  --fly-shadow-off:
+    0 12px 32px transparent,
+    0 0 24px transparent;
+  box-shadow: var(--fly-shadow);
+  transform-origin: right var(--tie, 24px);
+  will-change: transform;
+  transition: top 220ms cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* 连接光点(=机械臂锚点):右缘对准牌头,配置偏离默认时通电 */
+.fly::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -3px;
+  inset-block-start: var(--tie, 24px);
+  inline-size: 5px;
+  block-size: 5px;
+  margin-block-start: -2px;
+  border-radius: 999px;
+  background: var(--line-3);
+}
+
+.fly[data-lit='true']::after {
+  background: var(--cyber-primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--cyber-primary) 70%, transparent);
+}
+
+/* 臂本体:对称「光梭」层。平时隐形;折叠态由它接管形体——
+   白热心在正中、向两端对称收尖,压扁后是一道细长光痕,而非矩形光条 */
+.flyBeam {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  background:
+    radial-gradient(
+      72px 70% at 50% 50%,
+      color-mix(in srgb, var(--cyber-text) 26%, transparent),
+      color-mix(in srgb, var(--cyber-primary) 26%, transparent) 45%,
+      transparent 72%
+    ),
+    radial-gradient(
+      92% 42% at 50% 50%,
+      color-mix(in srgb, var(--cyber-primary) 30%, transparent),
+      color-mix(in srgb, var(--cyber-primary) 10%, transparent) 60%,
+      transparent 82%
+    );
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+}
+
+/* 展开:0-14% 充能停顿 → 44% 光梭射出过冲 → 54% 臂定位 → 78% 壳物质化 → 86% 摊板过冲 */
+.deploy {
+  animation: fly-deploy 520ms both;
+}
+
+@keyframes fly-deploy {
+  0% {
+    transform: scale(0.04, 0.045);
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: var(--fly-shadow-off);
+    animation-timing-function: steps(1, end);
+  }
+  14% {
+    transform: scale(0.04, 0.045);
+    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  44% {
+    transform: scale(1.035, 0.045);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  54% {
+    transform: scale(1, 0.045);
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: var(--fly-shadow-off);
+    animation-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1);
+  }
+  78% {
+    background-color: var(--cyber-elevated);
+    border-color: var(--cyber-border);
+    box-shadow: var(--fly-shadow);
+  }
+  86% {
+    transform: scale(1, 1.03);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  100% {
+    transform: scale(1, 1);
+    background-color: var(--cyber-elevated);
+    border-color: var(--cyber-border);
+    box-shadow: var(--fly-shadow);
+  }
+}
+
+.deploy .flyBeam {
+  animation: beam-deploy 520ms both;
+}
+
+@keyframes beam-deploy {
+  0%, 8% { opacity: 0; }
+  22% { opacity: 1; }
+  58% { opacity: 1; }
+  82%, 100% { opacity: 0; }
+}
+
+/* 收起(展开的镜像三拍):折板成光梭 → 光梭停顿一拍 → 缩回牌内熄灭 */
+.retract {
+  animation: fly-retract 460ms both;
+}
+
+@keyframes fly-retract {
+  0% {
+    transform: scale(1, 1);
+    opacity: 1;
+    background-color: var(--cyber-elevated);
+    border-color: var(--cyber-border);
+    box-shadow: var(--fly-shadow);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.5);
+  }
+  26% {
+    transform: scale(1, 0.045);
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: var(--fly-shadow-off);
+    animation-timing-function: linear;
+  }
+  56% {
+    transform: scale(1, 0.045);
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: var(--fly-shadow-off);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.6);
+  }
+  86% {
+    transform: scale(0.04, 0.045);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.04, 0.045);
+    opacity: 0;
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: var(--fly-shadow-off);
+  }
+}
+
+.retract .flyBeam {
+  animation: beam-retract 460ms both;
+}
+
+@keyframes beam-retract {
+  0%, 16% { opacity: 0; }
+  28% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 换牌:折成光梭(arming)→ top 沿导轨滑行 → 弹回展开、壳复原(unfolding) */
+.asArm {
+  transform: scale(1, 0.045);
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: var(--fly-shadow-off);
+}
+
+.asArm .flyBeam {
+  opacity: 1;
+}
+
+.arming {
+  transition:
+    top 220ms cubic-bezier(0.34, 1.3, 0.64, 1),
+    transform 120ms cubic-bezier(0.4, 0, 1, 1),
+    background-color 100ms ease,
+    border-color 100ms ease,
+    box-shadow 100ms ease;
+}
+
+.unfolding {
+  transition:
+    top 220ms cubic-bezier(0.34, 1.3, 0.64, 1),
+    transform 200ms cubic-bezier(0.34, 1.45, 0.64, 1),
+    background-color 180ms ease 50ms,
+    border-color 180ms ease 50ms,
+    box-shadow 180ms ease 50ms;
+}
+
+/* 浮层内容:无标题行——来源牌就在右侧且互斥,点空白即关。
+   部署尾声整体亮起,行级联滑入;折叠态瞬灭 */
+.flyBody {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* 横向锁死:行级联的 translateX(10px) 在动画期会向右越界,
+     不锁会闪出一条横向滚动条,动画归位后又消失 */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flyBody {
+  transition: opacity 100ms ease;
+}
+
+.arming .flyBody,
+.asArm .flyBody,
+.retract .flyBody {
+  opacity: 0;
+}
+
+.deploy .flyBody {
+  animation: content-in 200ms both;
+  animation-delay: 400ms;
+}
+
+.pop .flyBody {
+  animation: content-in 160ms both;
+  animation-delay: 120ms;
+}
+
+@keyframes content-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.deploy .flyBody > * {
+  animation: row-in 260ms both;
+  animation-delay: calc(420ms + var(--i, 0) * 26ms);
+}
+
+.pop .flyBody > * {
+  animation: row-in 220ms both;
+  animation-delay: calc(140ms + var(--i, 0) * 22ms);
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 通电开关(装备牌头 / MCP 面板共用) ── */
+
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  inline-size: 32px;
+  block-size: 18px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 999px;
+  background: var(--cyber-text-muted);
+  transition:
+    translate 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* data-on 变体给「整牌即开关」的纯视觉开关件(span,非按钮)用 */
+.toggle[aria-checked='true'],
+.toggle[data-on='true'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 20%, var(--cyber-surface));
+  box-shadow:
+    inset 0 0 8px color-mix(in srgb, var(--cyber-primary) 10%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 14%, transparent);
+}
+
+.toggle[aria-checked='true']::after,
+.toggle[data-on='true']::after {
+  translate: 14px 0;
+  background: color-mix(in srgb, var(--cyber-primary) 30%, var(--cyber-text));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 底栏 ── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 12px 20px;
+  border-block-start: 1px solid var(--line-1);
+}
+
+.formError {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: 12px;
+  color: var(--status-error);
+}
+
+.footHint {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+/* 取消：幽灵胶囊,30px 档(与审批门选项同规格) */
+.cancel {
+  block-size: 30px;
+  padding: 0 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cancel:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+.saveAndStart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  block-size: 30px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--cyber-primary) 28%, var(--line-2));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.saveAndStart:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyber-primary) 48%, var(--line-2));
+  background: color-mix(in srgb, var(--cyber-primary) 8%, transparent);
+  color: color-mix(in srgb, var(--cyber-primary) 30%, var(--cyber-text));
+}
+
+/* 提交：全弹层唯一的主色重音——「通电」不上漆,光从按钮内部渗出 */
+.submit {
+  block-size: 30px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--cyber-primary) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-primary) 14%, var(--cyber-surface));
+  color: color-mix(in srgb, var(--cyber-primary) 45%, var(--cyber-text));
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--cyber-primary) 8%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.submit:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyber-primary) 62%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 20%, var(--cyber-surface));
+  box-shadow:
+    inset 0 0 16px color-mix(in srgb, var(--cyber-primary) 12%, transparent),
+    0 0 14px color-mix(in srgb, var(--cyber-primary) 22%, transparent);
+}
+
+.submit:disabled,
+.cancel:disabled,
+.saveAndStart:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 减弱动效 ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    translate: none;
+    scale: none;
+    transition-duration: 80ms;
+  }
+
+  .shell[open] {
+    @starting-style {
+      translate: none;
+      scale: none;
+    }
+  }
+
+  .deploy,
+  .retract,
+  .deploy .flyBeam,
+  .retract .flyBeam,
+  .deploy .flyBody,
+  .deploy .flyBody > *,
+  .pop .flyBody,
+  .pop .flyBody > *,
+  .tile[data-flash='true'] {
+    animation: none;
+  }
+
+  .fly,
+  .arming,
+  .unfolding,
+  .flyBeam,
+  .flyBody {
+    transition: none;
+  }
+
+  .asArm {
+    transform: none;
+    background-color: var(--cyber-elevated);
+    border-color: var(--cyber-border);
+    box-shadow: var(--fly-shadow);
+  }
+
+  .asArm .flyBody {
+    opacity: 1;
+  }
+
+  .asArm .flyBeam {
+    opacity: 0;
+  }
+}

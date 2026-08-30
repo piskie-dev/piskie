@@ -1,0 +1,105 @@
+/**
+ * NumberField 皮肤:antd InputNumber(small)像素复刻,色值全走 token
+ * (数值依据见 NumberField.tsx 头注释;深浅主题由 tokens.css 变量自动切换)。
+ */
+
+.field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  block-size: 24px;
+  border: 1px solid var(--cyber-border);
+  border-radius: 6px;
+  background: var(--cyber-bg);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.field:hover {
+  border-color: var(--cyber-primary);
+}
+
+.field:focus-within {
+  border-color: var(--cyber-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyber-primary) 22%, transparent);
+}
+
+.field[data-disabled] {
+  background: color-mix(in srgb, var(--cyber-text) 8%, transparent);
+  border-color: var(--cyber-border);
+  cursor: not-allowed;
+}
+
+.field input {
+  inline-size: 100%;
+  block-size: 22px;
+  padding: 0 7px;
+  border: 0;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 14px;
+  line-height: 22px;
+  outline: none;
+}
+
+.field[data-disabled] input {
+  color: color-mix(in srgb, var(--cyber-text) 25%, transparent);
+  cursor: not-allowed;
+}
+
+/* 步进列:复刻 antd handler-wrap —— 右列 22px,悬停浮现,上下平分,hover 微扩 */
+.steps {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: 22px;
+  display: flex;
+  flex-direction: column;
+  background: var(--cyber-bg);
+  border-start-end-radius: 5px;
+  border-end-end-radius: 5px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.field:hover .steps,
+.field:focus-within .steps {
+  opacity: 1;
+}
+
+.field[data-disabled] .steps {
+  display: none;
+}
+
+.steps button {
+  flex: 1 1 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  color: color-mix(in srgb, var(--cyber-text) 45%, transparent);
+  border-inline-start: 1px solid var(--cyber-border);
+  transition: flex-basis 0.2s, color 0.2s, background-color 0.2s;
+}
+
+.steps button + button {
+  border-block-start: 1px solid var(--cyber-border);
+}
+
+.steps button:hover {
+  flex-basis: 60%;
+  color: var(--cyber-primary);
+}
+
+.steps button:active {
+  background: color-mix(in srgb, var(--cyber-text) 4%, transparent);
+}
+
+.steps button:disabled {
+  color: color-mix(in srgb, var(--cyber-text) 25%, transparent);
+  cursor: not-allowed;
+}

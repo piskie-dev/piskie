@@ -1,0 +1,146 @@
+/**
+ * ThreadMode 三栏。
+ *
+ * 与 dock 的 `workbench.module.css` **互不参照**：没有公共布局抽象，
+ * 两套 grid 各自服务自己的视觉。共享的只有 data 层与 content 层。
+ *
+ * 中栏 transcript 居中单列 `max 760px`——这是 thread 的核心阅读形态，
+ * 与 dock 的"填满主列"是两种不同的信息密度取向。
+ *
+ * 左栏宽度 **240px**。dock 侧原为旧 `AgentSidebar` 的 186，
+ * 用户特批把 dock 也改成 240（"dock 模式本身的太小了"）—— 两个模式取同一个值，
+ * 切换时主屏不横向跳位。
+ *
+ * 右栏折叠用 `content-visibility: hidden`：**DOM 与滚动位置全留着**，
+ * 切回来是瞬时的（不是卸载重建）。但它只省 CPU 不省内存，
+ * 所以缓存必须配 LRU 上限，见 `RightPanel`。
+ */
+
+.threadview {
+  display: grid;
+  /* 中栏给硬下限（360px）：右栏拖宽的上限因此不必保守——空间不够时
+     `minmax(0, var(--col-panel))` 的下限是 0，栅格会自动把右栏压回来，
+     阅读列永远不会被挤没。这样"最大宽度"由 CSS 兜底，不需要按窗口宽度算。 */
+  grid-template-columns:
+    minmax(200px, var(--col-threads, 240px))
+    minmax(360px, 1fr)
+    minmax(0, var(--col-panel, 38%));
+  grid-template-areas: 'threads transcript panel';
+  min-block-size: 0;
+  block-size: 100%;
+  /* 与 dock 的 `.dock` 一致：栅格自身不产生滚动条。
+     缺这一条时任何子项的固有宽度都会在底部撑出一条横向滚动条。 */
+  overflow: hidden;
+  background: var(--console-canvas-bg);
+}
+
+/* 右栏隐藏（无内容或 tab 被全部关闭）：第三列收成 0，中栏吃满。
+   用户再次打开具体内容时，对应 tab 会随内容自然恢复。 */
+.threadview[data-panel-hidden='true'] {
+  grid-template-columns: minmax(186px, var(--col-threads, 240px)) minmax(0, 1fr) 0;
+}
+
+.threadview[data-threads-collapsed='true'][data-panel-hidden='true'] {
+  grid-template-columns: 52px minmax(0, 1fr) 0;
+}
+
+/* 左栏收起：与 dock 同为 **52px**。
+   两个模式的展开(240)/收起(52)取同一组值 ⇒ 无论哪个状态切换模式，主屏都不横向跳位。
+   收起开关是壳级共享状态（`useConsoleShell.sessionsCollapsed`），不是各模式自己的。 */
+.threadview[data-threads-collapsed='true'] {
+  grid-template-columns: 52px minmax(360px, 1fr) minmax(0, var(--col-panel, 38%));
+}
+
+.threadview[data-threads-collapsed='true'][data-empty='true'] {
+  grid-template-columns: 52px minmax(0, 1fr) 0;
+}
+
+/* 空态：没有会话时右栏无内容可显示，同样收成两列 —— 否则右侧 38% 是一片死区。
+   左栏与右栏只需保持位置稳定，不需要为无内容的右栏保留空条。
+   （右栏"有会话但无内容"的收起走 `data-panel-hidden`，见上。） */
+.threadview[data-empty='true'] {
+  grid-template-columns: minmax(200px, var(--col-threads, 240px)) minmax(0, 1fr) 0;
+}
+
+.threads {
+  grid-area: threads;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--line-1);
+  background: var(--console-canvas-bg);
+}
+
+.center {
+  grid-area: transcript;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+/* 阅读列在**右栏不占位时放宽**（依 Codex 截图：收起右栏后正文行明显变长，
+   不只是两侧留白变多）。截图里 Codex 的阅读列从约 818px 涨到约 976px，
+   比例 ≈1.19；我们 760 × 1.19 ≈ 905 → 取 908，与空态复用同一个值
+   （908 本身来自旧 `WelcomeScreen.centerStage` 的 `min(100%, 908px)`）。
+
+   **不加过渡**：宽度动画会让整列文本每帧重排，长流水下成本高；
+   而收起右栏是一次明确的用户操作，瞬时生效并不算"意外位移"。 */
+.threadview[data-empty='true'] .column,
+.threadview[data-panel-hidden='true'] .column {
+  --thread-col-max: 908px;
+}
+
+/* 阅读列容器**满宽**，限宽经 --thread-col-max 下沉到各内容层——
+   滚动容器（Transcript）因此占满整栏，两侧留白也在滚动区内，
+   鼠标悬在留白上滚轮照样生效；滚动条落在主屏右缘。
+   空态与活跃态用同一个容器 ⇒ composer 零位移 */
+.column {
+  --thread-col-max: 760px;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+/* 限宽的具体下沉规则在 `content/thread.module.css`（.thread/.center 定义在那边，
+   CSS Modules 跨文件同名不匹配）；这里只负责提供 --thread-col-max。 */
+
+.panel {
+  grid-area: panel;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--line-1);
+  background: var(--console-canvas-bg);
+}
+
+/* 折叠时跳过 layout/paint，但 DOM 与滚动位置留着 */
+.panel[data-collapsed='true'] {
+  content-visibility: hidden;
+  border: 0;
+}
+
+/* 分栏条：落在 threads|center 与 center|panel 两条栅格线上 */
+.dividerStart {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -3px;
+  z-index: 1;
+}
+
+.dividerEnd {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -3px;
+  z-index: 1;
+}
+
+/* 侧栏与中栏都直接透出壁纸，可读性统一由背景遮罩控制。 */

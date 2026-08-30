@@ -1,0 +1,660 @@
+/**
+ * 横条阅读流（thread）样式 —— 依据用户提供的 Codex 桌面应用截图逐条对齐**形态**，
+ * 色值按角色映射到本项目的暗色 token（Codex 本身是亮色主题）。
+ *
+ * 原为 thread 专属；2026-08-05 dock 节点内部统一为同一套 cell 呈现后随 `ThreadCell`
+ * 迁入 `content/`。`.thread`/`.header`/`.center` 等装配类仍只有 thread 的 `ThreadView`
+ * 使用 —— 与 cell 类共存一份文件是为了不拆散 `--thread-*` 变量的消费面。
+ *
+ * 从截图确定的形态规律（与 dock 完全相反，故必须分开写）：
+ *
+ * | 元素 | Codex |
+ * |---|---|
+ * | 头部 | 一行：标题 + `···`。无状态徽章 / 无 meta 轨 / 无 token 指示器 |
+ * | 用户消息 | **右对齐圆角气泡**，浅底无边框 |
+ * | 任务分派 | 卡片，收起时截断淡出（**不走气泡**：它是工作包正文，不是用户说的话） |
+ * | AI 正文 | 满宽纯文本，**无容器**，行高松、段间留白大 |
+ * | 单步动作 | 描边小图标 + 一行灰字，**无边框无底色** |
+ * | 聚合产物（diff/计划） | **唯一带边框卡片的东西**：头部 + 分行明细；一律可收起 |
+ * | 轮次摘要 | `已处理 1m 17s ›` 一行灰字 + 尖角 |
+ * | 回到底部 | 浮动圆钮，**只在上翻时出现**（实现在共享的 `Transcript`） |
+ *
+ * **关键规律：只有聚合产物配卡片，单步动作一律无容器。** dock 的做法正好相反
+ * （每条都是卡片），这也是两个模式不能共用 cell 呈现的根本原因。
+ *
+ * ── 换肤口子 ──
+ * 下面所有规则**只引用 `--thread-*` 变量**，变量在 `.skin` 上一次性定义并指向暗色 token。
+ * 将来加自定义皮肤时只覆写这一个变量块即可（例如
+ * `:root[data-skin='light'] .skin { --thread-bubble-bg: #f4f4f5; … }`），
+ * 无需触碰任何选择器。皮肤功能本版不做。
+ *
+ * ── 谁在消费 ──
+ * `.skin` 独立成类是因为 **dock 也用这套 cell 呈现**（用户 2026-08-05 裁决：
+ * dock 节点内部与 thread 统一为横条阅读流）：`DockPanel` 把 `.skin` 挂在面板根上，
+ * `ThreadCell` 的规则在两个模式里都能解析到变量。`.thread` 的布局部分仍是 thread 专属。
+ */
+
+.skin {
+  /* ↓ 换肤唯一入口：改这一块即可整体换色 */
+  --thread-text: var(--cyber-text);
+  --thread-text-soft: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+  --thread-muted: var(--cyber-text-muted);
+  --thread-muted-soft: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+  --thread-bubble-bg: var(--surface-3);
+  --thread-card-bg: var(--surface-1);
+  --thread-card-border: var(--line-2);
+  --thread-rule: var(--line-1);
+  --thread-pill-bg: var(--surface-2);
+  --thread-pill-bg-hover: var(--surface-3);
+  --thread-removed: var(--status-error);
+  --thread-accent: var(--cyber-primary);
+  /* Dock 的 footer 自带 8px 内边距；流水沿用同一条内容轨。 */
+  --conversation-inline-gutter: 8px;
+}
+
+.thread {
+  composes: skin;
+  /* Codex 的输入器直接铺满阅读列，流水也铺满同一列。 */
+  --conversation-inline-gutter: 0px;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: 100%;
+  min-inline-size: 0;
+}
+
+/* ── 头部：一行，标题 + 溢出菜单 ── */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  padding: 10px 16px;
+}
+
+.headerIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--thread-muted);
+}
+
+.headerTitle {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--thread-text);
+}
+
+/* ── 流水条目 ── */
+
+/* 条目之间靠留白分隔，不靠边框（Codex 的段间距明显大于 dock） */
+.cell {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* 用户消息：右对齐圆角气泡 */
+.userRow {
+  display: flex;
+  justify-content: flex-end;
+  min-inline-size: 0;
+}
+
+.bubble {
+  max-inline-size: 78%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: var(--thread-bubble-bg);
+  color: var(--thread-text);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+
+.userMedia {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-block-start: 6px;
+}
+
+.userImage {
+  inline-size: 96px;
+  block-size: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+/* AI 正文：无容器，满宽 */
+.body {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--thread-text);
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+.body > :first-child { margin-block-start: 0; }
+.body > :last-child { margin-block-end: 0; }
+
+.thinkDisclosure {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  min-inline-size: 0;
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--thread-muted);
+}
+
+.thinkToggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 24px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.thinkToggle:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--thread-accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.thinkLeading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-inline-end: 6px;
+  color: var(--thread-text-soft);
+}
+
+/* 完成态的前置开合箭头（占图标位，disclosure 惯例）：展开时旋转 90°，hover 提亮 */
+.thinkCaret {
+  color: var(--thread-muted);
+  transition: rotate 180ms ease, color 150ms ease;
+}
+
+.thinkToggle:hover .thinkCaret {
+  color: var(--thread-text-soft);
+}
+
+.thinkToggle[aria-expanded='true'] .thinkCaret {
+  rotate: 90deg;
+}
+
+.thinkLabel {
+  flex: none;
+  font-weight: 500;
+  color: var(--thread-text-soft);
+}
+
+.thinkSeparator {
+  flex: none;
+  inline-size: 2px;
+  block-size: 2px;
+  margin-inline: 8px;
+  border-radius: 50%;
+  background: var(--thread-muted-soft);
+}
+
+.thinkSummary {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--thread-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 折叠摘要复用正文 XMarkdown，但仍保持 disclosure 的单行布局。 */
+.thinkSummary :global(.x-markdown) {
+  display: inline;
+  inline-size: auto;
+  line-height: inherit;
+}
+
+.thinkSummary :global(.x-markdown) > * {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+}
+
+.thinkSummary :global(.x-markdown) pre,
+.thinkSummary :global(.x-markdown) code {
+  white-space: nowrap;
+}
+
+.thinkSummary[data-follow-end] {
+  text-overflow: clip;
+}
+
+.thinkBody {
+  padding: 4px 0 4px 22px;
+  color: var(--thread-muted);
+}
+
+.thinkMarkdown {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.thinkMarkdown :global(p),
+.thinkMarkdown :global(ul),
+.thinkMarkdown :global(ol),
+.thinkMarkdown :global(pre) {
+  margin-block: 0 4px;
+}
+
+.thinkMarkdown :global(li) {
+  margin-block: 0;
+}
+
+.thinkMarkdown > :first-child { margin-block-start: 0; }
+.thinkMarkdown > :last-child { margin-block-end: 0; }
+
+/* 思考中使用 Orb 环流（组件自带）+ 标签流光；完成后全部静止。
+   旧的整行扫光（8% 透明度）存在感稀薄，已删。 */
+.thinkDisclosure[data-live='true'] .thinkLabel {
+  background: linear-gradient(
+    90deg,
+    var(--thread-muted) 0%,
+    var(--thread-text) 50%,
+    var(--thread-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: think-shimmer 2.2s linear infinite;
+}
+
+@keyframes think-shimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+
+
+/* 单步动作行：图标 + 一行灰字，无容器 */
+.actionLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  font-size: 13px;
+  color: var(--thread-muted);
+  text-align: start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  transition: color 160ms ease;
+}
+
+.actionLine[data-clickable='true'] {
+  cursor: pointer;
+}
+
+.actionLine[data-clickable='true']:hover {
+  color: var(--thread-text);
+}
+
+.actionIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.actionText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionBadge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-badge);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+/*
+ * 带行尾动作的工具行。**只有有 aside 时才包这一层**（见 ThreadCell 的 ActionLine），
+ * 所以不影响其余动作行的 DOM 与观感。
+ */
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+/* 行尾的次要动作：默认几乎隐形，hover 整行或键盘聚焦时才浮出 */
+.actionAside {
+  flex: 0 0 auto;
+  border: 0;
+  padding-inline: 8px;
+  min-block-size: 22px;
+  border-radius: 999px;
+  background: var(--thread-pill-bg);
+  color: var(--thread-muted);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+
+.toolRow:hover .actionAside,
+.actionAside:focus-visible {
+  opacity: 1;
+}
+
+.actionAside:hover {
+  background: var(--thread-pill-bg-hover);
+  color: var(--thread-text);
+}
+
+/* 指针不可用（纯键盘/触摸）时不能靠 hover 才出现 */
+@media (hover: none) {
+  .actionAside {
+    opacity: 1;
+  }
+}
+
+/* 失败/取消只改文字色，不加底色块 */
+.actionLine[data-state='failed'] { color: var(--thread-removed); }
+.actionLine[data-state='cancelled'] { color: var(--status-waiting); }
+.actionLine[data-tone='danger'] { color: var(--thread-removed); }
+.actionLine[data-tone='warning'] { color: var(--status-waiting); }
+.actionLine[data-tone='muted'] { color: var(--thread-muted-soft); }
+
+.chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  transition: rotate 180ms ease;
+}
+
+.actionLine[aria-expanded='true'] .chevron {
+  rotate: 90deg;
+}
+
+/* 就地展开的详情：缩进对齐动作文字，不另起卡片 */
+.inlineDetail {
+  margin-block-start: 8px;
+  padding-inline-start: 21px;
+  overflow: clip;
+}
+
+.plainValue {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* ── 聚合产物卡片（唯一带边框的形态）── */
+
+.card {
+  overflow: clip;
+  border: 1px solid var(--thread-card-border);
+  border-radius: 12px;
+  background: var(--thread-card-bg);
+}
+
+.cardHeadButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+/* 可开合的卡头（任务分派）：除了 cursor 与 hover，度量与静态卡头完全一致 */
+.cardHeadButton {
+  inline-size: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.cardHeadButton:hover {
+  background: var(--thread-pill-bg);
+}
+
+.cardHeadButton[aria-expanded='true'] .chevron {
+  rotate: 90deg;
+}
+
+.cardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 8px;
+  background: var(--thread-pill-bg);
+  color: var(--thread-muted);
+}
+
+.cardHeadMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.cardTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--thread-text);
+}
+
+.cardStat {
+  display: flex;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}
+
+.cardBody {
+  padding: 0 14px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--thread-text-soft);
+}
+
+/* ── 卡片正文的收起 ──
+   收起用高度截断 + 下缘淡出，不用 `-webkit-line-clamp`：正文可能是渲染后的 markdown
+   （标题/列表/代码块），line-clamp 要求 `display: -webkit-box`，会打乱内部块级布局。
+   "下面还有"这件事由淡出边缘表达，不需要额外文案。
+
+   展开动到自然高度靠 `interpolate-size`（容器 `Transcript.module.css` 已开启），
+   `max-block-size` 从固定值过渡到 `max-content`，不写 JS 测高。 */
+
+.collapsibleBody {
+  max-block-size: max-content;
+  overflow: clip;
+  transition: max-block-size 240ms ease;
+}
+
+.collapsibleBody:not([data-open='true']) {
+  max-block-size: 88px;
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+}
+
+/* ── 逐题问答（ask_user_answers 投影）── */
+
+.qaList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qaQuestion {
+  font-size: 13px;
+  color: var(--thread-muted);
+}
+
+.qaAnswer {
+  font-size: 13px;
+  color: var(--thread-text);
+  white-space: pre-wrap; /* 自由输入的换行原样保留 */
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+/* ── MCP 音频块（mcp_audio 投影）── */
+
+.audioList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.audioPlayer {
+  inline-size: 280px;
+}
+
+/* 纯文本正文（任务分派）；markdown 正文走 .cardBody */
+.plainBody {
+  padding: 0 14px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--thread-text-soft);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+/* ── 阅读区容器 ── */
+
+/* 「回到底部」浮钮由共享的 `Transcript` 负责（只在上翻时出现） */
+.center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* 底部功能带挤压阅读区时由这里收口，流水不能越界画到任务清单上。 */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.center:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+/* 阅读列限宽下沉（--thread-col-max 由 thread 的 .column 提供，无变量场景不限宽）：
+   .center（滚动容器宿主）满宽——两侧留白也在滚动区内，悬停留白滚轮照样生效；
+   其余直接子块（头部/任务清单/门/composer/指标条…）各自限宽居中。 */
+.thread > :not(.center) {
+  inline-size: 100%;
+  max-inline-size: var(--thread-col-max, none);
+  margin-inline: auto;
+}
+
+/* 流水滚动区内的兄弟（生图审核）同样限宽 */
+.center > :not(:first-child) {
+  inline-size: 100%;
+  max-inline-size: var(--thread-col-max, none);
+  margin-inline: auto;
+}
+
+/* ── 空流水 ── */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 100%;
+  font-size: 13px;
+  color: var(--thread-muted-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionLine,
+  .cardHeadButton,
+  .chevron,
+  .collapsibleBody {
+    transition: none;
+  }
+
+  .thinkDisclosure[data-live='true'] .thinkLabel {
+    animation: none;
+  }
+
+  /* shimmer 关掉后文字得有颜色 */
+  .thinkDisclosure[data-live='true'] .thinkLabel {
+    background: none;
+    color: var(--thread-text-soft);
+  }
+}
+
+/* ── 生图成品缩略图（成功的 generate_image 行下方） ── */
+
+.imageRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 6px;
+  padding-inline-start: 22px; /* 与动作行文字对齐（图标 14 + gap 8） */
+}
+
+.imageThumb {
+  display: block;
+  inline-size: 180px;
+  block-size: 180px;
+  border: 1px solid var(--thread-card-border);
+  border-radius: 10px;
+  background: var(--thread-card-bg);
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: border-color 160ms ease;
+}
+
+.imageThumb:hover {
+  border-color: color-mix(in srgb, var(--cyber-text) 30%, transparent);
+}
+
+/* 文件已不在时退化为路径 */
+.imagePath {
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  color: var(--thread-muted-soft);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,395 @@
+/**
+ * 左栏（ThreadSidebar / WorkspaceTree）样式。
+ *
+ * 原为 thread 专属；2026-08-05 用户裁决 dock 侧栏与 thread 完全一致后，
+ * 随 `ThreadSidebar` 迁入 `content/`，dock 的卡片列样式（sessions.module.css）退役。
+ */
+
+.threads {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: 100%;
+}
+
+/* ── 顶部：搜索 + 新建 ── */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 28px;
+  padding-inline: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  transition: border-color 180ms ease;
+}
+
+.search:focus-within {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.searchInput::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 55%, transparent);
+}
+
+.newButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.newButton:hover {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+/* ── 滚动区 ── */
+
+/* 滚动条默认隐身，悬停列表时才现（与流水同语言：细条、半透明） */
+.scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  padding-block-end: 8px;
+}
+
+.scroll:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+.empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+/* ── 工作区分组 ── */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+
+/* 组头粘顶：滚到长组中间时始终知道自己在哪个工作区，随手可折叠。
+   背景用画布面变量——透壁纸场景与所在面同色，不砸实底。
+   结构:外层 div(粘顶容器) = 折叠钮(占满) + 新建会话钮(悬停显)。 */
+.groupHead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  /* 14px = 行的 margin(6) + padding(8):让新建钮与行内 ··· 触发钮(同 20px 宽)中心对齐 */
+  padding-inline-end: 14px;
+  background: var(--console-canvas-bg);
+}
+
+.groupToggle {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 24px;
+  padding: 0;
+  padding-inline-start: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  /* 名称与计数同置 line-height:1——两者字号/字族不同,默认行高不一致会错位 */
+  line-height: 1;
+  text-align: start;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+
+.groupToggle:hover {
+  color: var(--cyber-text);
+}
+
+/* 在此工作区新建会话:悬停组头才显形 */
+.groupNew {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.groupHead:hover .groupNew,
+.groupNew:focus-visible {
+  opacity: 1;
+}
+
+.groupNew:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.caret {
+  display: inline-flex;
+  flex: 0 0 auto;
+  transition: rotate 180ms ease;
+}
+
+.group[data-open='true'] .caret {
+  rotate: 90deg;
+}
+
+.groupLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCount {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* ── 会话 / 历史行 ── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  min-block-size: 28px;
+  padding-inline: 10px 8px;
+  margin-inline: 6px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
+.row:hover {
+  background: var(--surface-2);
+}
+
+.row[data-selected='true'] {
+  background: var(--surface-3);
+}
+
+/* 工作区组内的会话行缩进一级 */
+.group .row {
+  padding-inline-start: 22px;
+}
+
+/* 组尾「还有 N 条…」：与行同构的弱化入口，点开全量 */
+.moreRow {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-block-size: 26px;
+  padding-inline-start: 22px;
+  margin-inline: 6px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.moreRow:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.rowLabel {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  color: var(--cyber-text-muted);
+}
+
+.rowMenu {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.row:hover .rowMenu,
+.row[data-selected='true'] .rowMenu {
+  opacity: 1;
+}
+
+/* 非在跑的行：状态点位置留同宽空位，否则两种行的文字起点会错开 6+6px */
+.dotSlot {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+}
+
+/* 历史行的语义与在跑不同：这是"恢复"，不是"新建"（必须区分的两个动作）。
+   合并成单一列表后，区分手段只剩「有没有状态点」+「文字色」这两样，不再靠分区。 */
+.row:not([data-live='true']) .rowLabel {
+  color: var(--cyber-text-muted);
+}
+
+.row:not([data-live='true']):hover .rowLabel,
+.row:not([data-live='true'])[data-selected='true'] .rowLabel {
+  color: var(--cyber-text);
+}
+
+/* ── 收起态（52px）──
+   与 dock 的收起态**同宽同形**（用户要求两边统一）：展开按钮 + 状态点竖列 + 底部动作。
+   历史在收起态下不可达，与 dock 一致（dock 收起时「历史」tab 同样进不去）。 */
+
+.collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 0;
+  block-size: 100%;
+  padding: 8px 0;
+}
+
+.collapsedList {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.collapsedList::-webkit-scrollbar {
+  display: none;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.iconButton:hover {
+  border-color: var(--line-2);
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.iconButton[data-selected='true'] {
+  border-color: var(--line-3);
+  background: var(--surface-3);
+}
+
+.rule {
+  flex: 0 0 auto;
+  inline-size: 60%;
+  block-size: 1px;
+  background: var(--line-1);
+}
+
+/* 展开态顶部的收起按钮 */
+.collapseButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 24px;
+  block-size: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.collapseButton:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}

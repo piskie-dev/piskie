@@ -1,0 +1,618 @@
+{
+  "browser": {
+    "takeSnapshot": {
+      "description": "Take a text snapshot of the currently selected page based on the accessibility tree. The snapshot lists page elements along with a unique identifier (uid). UID lifecycle: each takeSnapshot generates a NEW snapshot and immediately invalidates all UIDs from previous snapshots — use UIDs right after taking the snapshot, and never reuse UIDs across snapshots. Prefer taking a snapshot over taking a screenshot.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "verbose": {
+            "default": false,
+            "description": "Whether to include all possible information available in the full a11y tree. Default is false.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "clickByUid": {
+      "description": "Clicks on the provided element identified by its UID from the page content snapshot. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After clicking, automatically detects if new tabs were opened or closed, and includes this information in the response. This helps you know immediately if a new page opened without manually calling listPages. IMPORTANT: The snapshot is taken immediately after the click. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of an element on the page from the page content snapshot (format: snapshotId_nodeIndex, e.g., \"10_116\")"
+          },
+          "dblClick": {
+            "default": false,
+            "description": "Set to true for double clicks. Default is false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "uid"
+        ]
+      }
+    },
+    "fillByUid": {
+      "description": "Type text into an input, text area or select an option from a <select> element identified by its UID. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After filling, automatically detects if new tabs were opened or closed (e.g., autocomplete triggered a popup), and includes this information in the response. IMPORTANT: The snapshot is taken immediately after filling. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of an element on the page from the page content snapshot"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value to fill in (text for input/textarea, option text for select)"
+          }
+        },
+        "required": [
+          "uid",
+          "value"
+        ]
+      }
+    },
+    "pressKey": {
+      "description": "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations). Examples: \"Enter\", \"Control+A\", \"Control++\", \"Control+Shift+R\". Modifiers: Control, Shift, Alt, Meta",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "A key or a combination. Examples: \"Enter\", \"Tab\", \"Escape\", \"Control+A\", \"Control+Shift+R\", \"PageDown\", \"ArrowUp\". Available modifiers: Control, Shift, Alt, Meta"
+          },
+          "count": {
+            "default": 1,
+            "description": "Number of times to press the key (deprecated, use count=1 and call multiple times if needed)",
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    "navigateTo": {
+      "description": "Navigates the currently selected page to a URL, or performs history navigation (back/forward/reload). Returns a snapshot after navigation completes. IMPORTANT: If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "description": "Navigate the page by URL, back or forward in history, or reload. Defaults to \"url\" if url parameter is provided",
+            "type": "string",
+            "enum": [
+              "url",
+              "back",
+              "forward",
+              "reload"
+            ]
+          },
+          "url": {
+            "description": "Target URL (required only when type=url or type is omitted)",
+            "type": "string",
+            "pattern": "^https?:\\/\\/"
+          },
+          "ignoreCache": {
+            "default": false,
+            "description": "Whether to ignore cache on reload (only applicable for type=reload)",
+            "type": "boolean"
+          },
+          "timeout": {
+            "default": 30000,
+            "description": "Maximum wait time in milliseconds. If set to 0, the default timeout will be used.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 300000
+          }
+        }
+      }
+    },
+    "goBack": {
+      "description": "Navigate back in browser history. Equivalent to navigateTo with type=\"back\" — either works; do not call both.",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "refresh": {
+      "description": "Refresh the current page. Equivalent to navigateTo with type=\"reload\" — either works; do not call both.",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "newPage": {
+      "description": "Open a new page/tab in the browser and load the specified URL",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Target URL to load in the new page. Include a scheme, e.g. https://example.com, http://localhost:3000, about:blank, or file:///path/to/file.html."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    "closePage": {
+      "description": "Close the page/tab at the specified index (use listPages to get page indexes)",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageIndex": {
+            "description": "Index of the page to close",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pageIndex"
+        ]
+      }
+    },
+    "closeBrowser": {
+      "description": "Close a browser instance by browserId. This will terminate the Chrome process and delete the persisted config. The browser can be reopened later with a new session.",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "listPages": {
+      "description": "List all open pages/tabs in the browser",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "selectPage": {
+      "description": "Select a different page/tab by index for subsequent browser operations. Always call listPages first to see available pages and their indices. If the page is still loading or incomplete, wait briefly and call takeSnapshot again.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageIdx": {
+            "description": "Index of the page to switch to (0-based). Use listPages to see available indices.",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pageIdx"
+        ]
+      }
+    },
+    "handleDialog": {
+      "description": "Accept or dismiss the browser dialog currently open on the selected page. Use promptText when accepting a prompt dialog.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "description": "Whether to accept or dismiss the dialog"
+          },
+          "promptText": {
+            "description": "Optional text to enter when accepting a prompt dialog",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    "waitFor": {
+      "description": "Wait until any one of the specified texts appears on the selected page, then return a fresh page snapshot.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Non-empty list of texts; resolves when any value appears"
+          },
+          "timeout": {
+            "description": "Maximum wait time in milliseconds; 0 uses the default timeout",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 300000
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "hoverByUid": {
+      "description": "Hover the mouse over an element identified by its UID. Useful for triggering hover effects, tooltips, or dropdown menus.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of an element on the page from the page content snapshot"
+          }
+        },
+        "required": [
+          "uid"
+        ]
+      }
+    },
+    "drag": {
+      "description": "Drag an element onto another element. Both UIDs must come from the latest page snapshot. Returns a fresh snapshot after the drag.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "fromUid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of the element to drag"
+          },
+          "toUid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of the element to drop into"
+          }
+        },
+        "required": [
+          "fromUid",
+          "toUid"
+        ]
+      }
+    },
+    "uploadFile": {
+      "description": "Upload a local file through a file input or an element that opens a file chooser. The file must be inside the current workspace or its temporary directory. Returns a fresh snapshot after the upload.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^\\d+_\\d+$",
+            "description": "The uid of the file input or file-chooser trigger from the latest page snapshot"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Absolute local path of the file to upload"
+          }
+        },
+        "required": [
+          "uid",
+          "filePath"
+        ]
+      }
+    },
+    "fillFormByUids": {
+      "description": "Fill multiple form fields in one operation. All UIDs must come from the SAME (latest) snapshot — mixing UIDs from different snapshots will fail. Automatically creates a new snapshot after filling (which invalidates the UIDs just used). Use this to efficiently fill multiple inputs, selects, or textareas at once.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "elements": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uid": {
+                  "type": "string",
+                  "pattern": "^\\d+_\\d+$",
+                  "description": "The uid of the form element"
+                },
+                "value": {
+                  "type": "string",
+                  "description": "The value to fill in"
+                }
+              },
+              "required": [
+                "uid",
+                "value"
+              ]
+            },
+            "description": "Array of form elements to fill"
+          }
+        },
+        "required": [
+          "elements"
+        ]
+      }
+    },
+    "takeScreenshot": {
+      "description": "Take a screenshot of the page or element.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "default": "png",
+            "description": "Type of format to save the screenshot as. Default is \"png\"",
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg",
+              "webp"
+            ]
+          },
+          "fullPage": {
+            "description": "If set to true takes a screenshot of the full page instead of the currently visible viewport. Incompatible with uid.",
+            "type": "boolean"
+          },
+          "quality": {
+            "description": "Compression quality for JPEG and WebP formats (0-100). Higher values mean better quality but larger file sizes. Ignored for PNG format.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "uid": {
+            "description": "The uid of an element on the page content snapshot. If omitted, takes a screenshot of the full page.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evaluateScript": {
+      "description": "Execute a JavaScript function in the browser context. The function must be a valid JavaScript function expression. The return value MUST be JSON-serializable — returning DOM nodes, functions, or circular structures fails; extract plain data instead. Example: \"() => Array.from(document.querySelectorAll('a')).map(a => ({ text: a.textContent, href: a.href }))\".",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "function": {
+            "type": "string",
+            "description": "A JavaScript function as a string (e.g., \"() => document.title\" or \"() => { return document.querySelectorAll('a').length; }\")"
+          }
+        },
+        "required": [
+          "function"
+        ]
+      }
+    },
+    "listConsoleMessages": {
+      "description": "Read console messages collected for the selected page since its latest navigation.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "description": "Maximum number of messages to return; omit to return all messages",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "pageIdx": {
+            "description": "Zero-based result page; defaults to the first page",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "types": {
+            "description": "Only return the selected console message types",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "log",
+                "debug",
+                "info",
+                "error",
+                "warn",
+                "dir",
+                "dirxml",
+                "table",
+                "trace",
+                "clear",
+                "startGroup",
+                "startGroupCollapsed",
+                "endGroup",
+                "assert",
+                "profile",
+                "profileEnd",
+                "count",
+                "timeEnd",
+                "verbose"
+              ]
+            }
+          },
+          "includePreservedMessages": {
+            "default": false,
+            "description": "Include messages preserved over the last three navigations",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "getConsoleMessage": {
+      "description": "Read one console message in detail by the msgid returned from listConsoleMessages.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "msgid": {
+            "description": "The msgid returned by listConsoleMessages",
+            "type": "number"
+          }
+        },
+        "required": [
+          "msgid"
+        ]
+      }
+    },
+    "listNetworkRequests": {
+      "description": "Read network requests collected for the selected page since its latest navigation.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "description": "Maximum number of requests to return; omit to return all requests",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "pageIdx": {
+            "description": "Zero-based result page; defaults to the first page",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "resourceTypes": {
+            "description": "Only return the selected resource types",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "document",
+                "stylesheet",
+                "image",
+                "media",
+                "font",
+                "script",
+                "texttrack",
+                "xhr",
+                "fetch",
+                "prefetch",
+                "eventsource",
+                "websocket",
+                "manifest",
+                "signedexchange",
+                "ping",
+                "cspviolationreport",
+                "preflight",
+                "fedcm",
+                "other"
+              ]
+            }
+          },
+          "includePreservedRequests": {
+            "default": false,
+            "description": "Include requests preserved over the last three navigations",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "getNetworkRequest": {
+      "description": "Read request and response headers and available bodies for a reqid returned by listNetworkRequests. This tool does not write body files.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "reqid": {
+            "description": "The reqid returned by listNetworkRequests; when omitted, reports that no DevTools request is selected",
+            "type": "number"
+          }
+        }
+      }
+    },
+    "getAllCookies": {
+      "description": "Export all cookies (whole cookie store, including httpOnly) via CDP Network domain. Returns JSON { success, count, cookies }. The cookies array can be fed directly back to setCookies for account migration.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "description": "Optional: only return cookies matching these URLs; omit to return the entire cookie store",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "setCookies": {
+      "description": "Import cookies via CDP Network domain. Accepts a standard cookie JSON array (CDP CookieParam: name/value/domain/path/url/expires/httpOnly/secure/sameSite).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            "description": "Cookie objects to set (CDP CookieParam shape)"
+          }
+        },
+        "required": [
+          "cookies"
+        ]
+      }
+    },
+    "deleteCookies": {
+      "description": "Delete specific cookies (one Network.deleteCookies per item). Each item needs a name and at least a url or domain to locate it.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            "description": "Cookies to delete; each item requires name plus url or domain"
+          }
+        },
+        "required": [
+          "cookies"
+        ]
+      }
+    },
+    "clearCookies": {
+      "description": "Clear all cookies in the browser (Network.clearBrowserCookies).",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "getWindowBounds": {
+      "description": "Read the browser window position/size/state. Returns JSON { success, bounds: { left, top, width, height, windowState } }.",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "setWindowBounds": {
+      "description": "Set the browser window position/size/state (used for tiling). When geometry (left/top/width/height) is provided, the window is switched to normal state first. Returns JSON { success, bounds } with the actual bounds after applying.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "bounds": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "number"
+              },
+              "top": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "windowState": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "minimized",
+                  "maximized",
+                  "fullscreen"
+                ]
+              }
+            },
+            "description": "Target window bounds"
+          }
+        },
+        "required": [
+          "bounds"
+        ]
+      }
+    }
+  }
+}

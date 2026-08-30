@@ -1,0 +1,7 @@
+{
+  "name": "@tencent-weixin/openclaw-weixin",
+  "version": "2.4.6",
+  "private": true,
+  "type": "module",
+  "ilink_appid": "bot"
+}

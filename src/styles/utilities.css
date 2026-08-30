@@ -1,0 +1,392 @@
+/* 自定义工具类与复合组件类（.glass/.glow-xxx/.badge 等）+ keyframes + 第三方（react-flow）覆盖 */
+
+/* 基础颜色类（!important 版本）
+   注意：与 Tailwind 自动生成的同名类并存。Tailwind 4 的工具类位于 @layer utilities，
+   会被 AntD CSS-in-JS 的无 layer 样式压过；这些 !important 版本保证在 AntD 渲染的
+   元素上也能生效。删除前需逐页目检 AntD 组件上的用法。 */
+.text-cyber-text {
+  color: var(--cyber-text) !important;
+}
+
+.text-cyber-text-muted {
+  color: var(--cyber-text-muted) !important;
+}
+
+.text-cyber-primary {
+  color: var(--cyber-primary) !important;
+}
+
+.text-cyber-accent {
+  color: var(--cyber-accent) !important;
+}
+
+.text-cyber-warning {
+  color: var(--cyber-warning) !important;
+}
+
+.text-cyber-success {
+  color: var(--cyber-success) !important;
+}
+
+.text-cyber-error {
+  color: var(--cyber-error) !important;
+}
+
+.text-cyber-purple {
+  color: var(--cyber-purple) !important;
+}
+
+/* text-white 语义即"永远白"（主色底上的字形等）；Tailwind 版在 @layer utilities
+   会被 AntD 无 layer 的 .anticon{color:inherit} 压掉（check-icon 实例，用户反馈），
+   这里给无 layer 版本兜底 */
+.text-white {
+  color: #ffffff !important;
+}
+
+/* 消费变量而非字面色值：壁纸激活时跟随 tokens.css 的 data-app-bg 覆盖，
+   默认值不变（--color-cyber-bg = var(--cyber-bg)），!important 压 AntD 的语义保留 */
+.bg-cyber-bg {
+  background-color: var(--color-cyber-bg) !important;
+}
+
+.bg-cyber-surface {
+  background-color: var(--cyber-surface) !important;
+}
+
+.bg-console-canvas {
+  background-color: var(--console-canvas-bg) !important;
+}
+
+.border-cyber-border {
+  border-color: var(--cyber-border) !important;
+}
+
+/* Piskie ships dedicated transparent marks for each surface. */
+.app-logo-adaptive {
+  content: url('/logo-on-dark-128.png');
+}
+
+:root[data-theme='light'] .app-logo-adaptive {
+  content: url('/logo-on-light-128.png');
+}
+
+/* Custom utility classes */
+.full-height {
+  height: 100%;
+}
+
+.scrollable {
+  overflow-y: auto;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: color-mix(in srgb, var(--cyber-surface) 80%, transparent);
+  backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--cyber-border) 50%, transparent);
+}
+
+/* Cyber scrollbar for dark theme */
+.cyber-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cyber-scrollbar::-webkit-scrollbar-track {
+  background: var(--surface-2);
+}
+
+.cyber-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--cyber-text-muted) 45%, transparent);
+  border-radius: 4px;
+}
+
+.cyber-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--cyber-text-muted) 65%, transparent);
+}
+
+/* ========================================= */
+/* 新增：徽章样式 */
+/* ========================================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+
+/* ========================================= */
+/* React Flow 画布样式 */
+/* ========================================= */
+/* 确保 React Flow 容器有正确的高度 */
+.react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+/* 画布背景 */
+.react-flow__background {
+  background-color: var(--cyber-bg) !important;
+}
+
+/* 画布平移区域 */
+.react-flow__pane {
+  cursor: grab;
+}
+
+.react-flow__pane:active {
+  cursor: grabbing;
+}
+
+/* 控制面板样式 */
+.react-flow__controls {
+  background: var(--cyber-surface) !important;
+  border: 1px solid var(--cyber-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.react-flow__controls-button {
+  background: var(--cyber-surface) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--cyber-border) !important;
+  color: var(--cyber-text-muted) !important;
+  fill: var(--cyber-text-muted) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: color-mix(in srgb, var(--cyber-primary) 20%, transparent) !important;
+  color: var(--cyber-primary) !important;
+  fill: var(--cyber-primary) !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+/* 小地图样式 */
+.react-flow__minimap {
+  background: var(--cyber-surface) !important;
+  border: 1px solid var(--cyber-border) !important;
+  border-radius: 8px !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* 边连线样式：参考电路板的灰白轨道 + 单段流水高光 */
+.react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.26);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+}
+
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  opacity: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+
+.react-flow__handle-left {
+  left: 0 !important;
+}
+
+.react-flow__handle-right {
+  right: 0 !important;
+}
+
+/* 节点选中状态 - 使用微妙的白色轮廓，不与状态边框/阴影冲突 */
+.react-flow__node.selected {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* React Flow handles stay measurable for edge anchors, but are not drawn. */
+.react-flow__handle,
+.react-flow__handle:hover {
+  opacity: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+
+/* ========================================= */
+/* Markdown 主题样式（历史类名保留，色值始终跟随当前主题） */
+/* ========================================= */
+.markdown-dark-theme {
+  color: var(--cyber-text) !important;
+}
+
+/* 直接子元素和所有后代元素 */
+.markdown-dark-theme,
+.markdown-dark-theme * {
+  color: inherit;
+}
+
+.markdown-dark-theme h1,
+.markdown-dark-theme h2,
+.markdown-dark-theme h3,
+.markdown-dark-theme h4,
+.markdown-dark-theme h5,
+.markdown-dark-theme h6,
+.markdown-dark-theme [class*="ant-"] h1,
+.markdown-dark-theme [class*="ant-"] h2,
+.markdown-dark-theme [class*="ant-"] h3,
+.markdown-dark-theme [class*="ant-"] h4,
+.markdown-dark-theme [class*="ant-"] h5,
+.markdown-dark-theme [class*="ant-"] h6 {
+  color: var(--cyber-text) !important;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-dark-theme h1 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--cyber-border);
+  padding-bottom: 0.3em;
+}
+
+.markdown-dark-theme h2 {
+  font-size: 1.25em;
+  border-bottom: 1px solid var(--cyber-border);
+  padding-bottom: 0.3em;
+}
+
+.markdown-dark-theme h3 {
+  font-size: 1.1em;
+}
+
+.markdown-dark-theme p,
+.markdown-dark-theme [class*="ant-"] p,
+.markdown-dark-theme span,
+.markdown-dark-theme div:not([class]) {
+  color: var(--cyber-text) !important;
+  line-height: 1.7;
+}
+
+.markdown-dark-theme a,
+.markdown-dark-theme [class*="ant-"] a {
+  color: var(--cyber-primary) !important;
+}
+
+.markdown-dark-theme a:hover {
+  color: var(--cyber-accent) !important;
+  text-decoration: underline;
+}
+
+.markdown-dark-theme code,
+.markdown-dark-theme [class*="ant-"] code {
+  /* 可点击路径是原生 button；让 code 自己成为换行容器，边框才能包住全部行。 */
+  display: inline-block;
+  max-inline-size: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--cyber-text) !important;
+  background: var(--surface-2) !important;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 0.08em 0.34em;
+  font-size: 0.92em;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 5%, transparent);
+}
+
+.markdown-dark-theme pre,
+.markdown-dark-theme [class*="ant-"] pre {
+  background: var(--cyber-surface) !important;
+  border: 1px solid var(--cyber-border) !important;
+  border-radius: 8px !important;
+  padding: 1em !important;
+  overflow-x: auto;
+}
+
+.markdown-dark-theme pre code,
+.markdown-dark-theme [class*="ant-"] pre code {
+  display: block;
+  max-inline-size: none;
+  white-space: inherit;
+  overflow-wrap: normal;
+  background: transparent !important;
+  color: var(--cyber-text) !important;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.markdown-dark-theme ul,
+.markdown-dark-theme ol,
+.markdown-dark-theme [class*="ant-"] ul,
+.markdown-dark-theme [class*="ant-"] ol {
+  color: var(--cyber-text) !important;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.markdown-dark-theme li,
+.markdown-dark-theme [class*="ant-"] li {
+  color: var(--cyber-text) !important;
+  margin-bottom: 0.5em;
+}
+
+.markdown-dark-theme blockquote,
+.markdown-dark-theme [class*="ant-"] blockquote {
+  border-left: 3px solid var(--cyber-primary);
+  padding-left: 1em;
+  margin-left: 0;
+  color: var(--cyber-text-muted) !important;
+  font-style: italic;
+}
+
+.markdown-dark-theme table,
+.markdown-dark-theme [class*="ant-"] table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1em;
+}
+
+.markdown-dark-theme th,
+.markdown-dark-theme td,
+.markdown-dark-theme [class*="ant-"] th,
+.markdown-dark-theme [class*="ant-"] td {
+  border: 1px solid var(--cyber-border) !important;
+  padding: 0.5em 1em;
+  text-align: left;
+}
+
+.markdown-dark-theme th,
+.markdown-dark-theme [class*="ant-"] th {
+  background: color-mix(in srgb, var(--cyber-border) 50%, transparent) !important;
+  color: var(--cyber-text) !important;
+}
+
+.markdown-dark-theme td,
+.markdown-dark-theme [class*="ant-"] td {
+  color: var(--cyber-text) !important;
+}
+
+.markdown-dark-theme hr {
+  border: none;
+  border-top: 1px solid var(--cyber-border);
+  margin: 1.5em 0;
+}
+
+.markdown-dark-theme img {
+  max-width: 100%;
+  border-radius: 8px;
+}

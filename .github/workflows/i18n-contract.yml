@@ -1,0 +1,42 @@
+name: I18n contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/i18n-contract.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/check-i18n-literals.mjs'
+      - 'scripts/check-i18n-literals.test.mjs'
+      - 'src/**'
+      - 'vitest.config.ts'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/i18n-contract.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/check-i18n-literals.mjs'
+      - 'scripts/check-i18n-literals.test.mjs'
+      - 'src/**'
+      - 'vitest.config.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  i18n-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:i18n
+      - run: npm run test:i18n-check
+      - run: npx vitest run src/i18n/__tests__/locales.test.ts
+      - run: npm run type-check

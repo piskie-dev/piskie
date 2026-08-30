@@ -1,0 +1,204 @@
+/**
+ * Panel 骨架——**零高度算术**。
+ *
+ * 旧实现用 8 个高度常量 + 3 个 ResizeObserver 实测头部/输入区高度，再反推日志区高度
+ * （`AgentLogNode.tsx:126-139`、`:791-833`、`:889-892`）。这里全部由 flex 决定：
+ * body 拿 `flex: 1` 与 `min-block-size: 0`，其余各带各的自然高度。
+ *
+ * `container-type: inline-size` 是子件做密度自适应的前提。
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: 100%;
+  overflow: hidden;
+
+  /* 外壳对齐 thread 设计语言（2026-08-05 用户裁决重设计）：
+     单层 1px 描边 + 16px 圆角 + 安静的面，替代旧 NODE_CONFIG 的 2px 粗框 */
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-card-active);
+
+  /* 子件按容器宽度自适应，不靠 density prop */
+  container-type: inline-size;
+
+  /* 面板间布局隔离：一处变更不触发全局重排（interactions-in-complex-layouts） */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px auto 480px;
+}
+
+/* 主题背景激活时节点垫实底：surface-1 近乎全透明，
+   不垫实底会让节点内的消息文字直接衬在壁纸上不可读；
+   linear-gradient(surface-1) 叠 --cyber-bg 与无壁纸时的合成结果完全一致 */
+:global(:root[data-app-bg]) .panel {
+  background: linear-gradient(var(--surface-1), var(--surface-1)), var(--cyber-bg);
+}
+
+/* 非活跃面板保留 DOM 与滚动位置，但跳过排版和绘制，并配合订阅门控暂停后台工作。 */
+.panel[data-fidelity='hidden'] {
+  content-visibility: hidden;
+}
+
+/*
+ * 顶部状态线（重设计）：旧版是恒在的 4px 实心条（无状态时一条发白的灰条，
+ * 用户 2026-08-05 反馈突兀）。现在**默认无色**，有语气时才浮现一条两端渐隐的
+ * 3px 色线——状态可辨识，但不再是一块盖在圆角上的色块。
+ */
+.statusBar {
+  --status-line: transparent;
+
+  flex: 0 0 auto;
+  block-size: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--status-line) 22%,
+    var(--status-line) 78%,
+    transparent
+  );
+}
+
+.statusBar[data-tone='running'] { --status-line: var(--status-running); }
+.statusBar[data-tone='thinking'] { --status-line: var(--status-thinking); }
+.statusBar[data-tone='waiting'] { --status-line: var(--status-waiting); }
+.statusBar[data-tone='error'] { --status-line: var(--status-error); }
+
+.statusBar[data-pulse='true'] {
+  animation: statusBarPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes statusBarPulse {
+  50% { opacity: 0.45; }
+}
+
+/* 信息栏只保留标题、状态与动作；高度由单行内容自然决定。 */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 10px 12px 8px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+/* 图标方框：去描边，安静的面（与 thread 的 cardIcon 同语言） */
+.iconBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--cyber-text-muted);
+}
+
+.headerMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.title {
+  /* 弹性截断：旧的 160px 硬上限在 560 宽节点里白白截标题 */
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/*
+ * 面板正文。
+ *
+ * `display: flex` **是必需的，别删**：没有它 `.body` 就是块容器，里面 `Transcript`
+ * 的 `.viewport` / `.transcript`（都是 `flex: 1 1 auto`）高度不受约束，被内容撑到全高
+ * （实测 5559px），于是真正溢出滚动的是 `.body`，而 `.transcript` 成了"不滚却带
+ * `overscroll-behavior: contain`"的容器 —— 滚轮落在流水上时既不滚流水、也不冒泡给
+ * 外层，**整个流水区滚轮全废**（用户 2026-08-03 反馈；thread 的 `.center` 一直有
+ * `display: flex`，所以只有 dock 中招）。
+ *
+ * 约束住之后 `.transcript` 才是真正的滚动容器 —— 这也是老实现的形态
+ * （`AgentLogNode.tsx:1513` 的日志列表自己 `overflow-y-auto`），
+ * 且 `Transcript` 的贴底跟随 / 「加载更早」/ 回到底部都挂在那个元素的
+ * `scrollRef` 上，它不滚这些逻辑一并失效。
+ *
+ * `.body` 自己保留 `overflow-y: auto`：流水之后还会追加生图审核块，
+ * 多块时靠 `.body` 兜底滚动。
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* 横向锁死:overflow-y auto 会把未设置的 overflow-x 联动成 auto,
+     内层内容超 1px 就冒出横向滚动条;主体永不横滚,
+     宽内容(代码块等)在各自容器内滚 */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  /* 滚动条默认隐藏、悬停显现(全局新规范);非 auto 色即脱离全局 8px webkit 粗条 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.body:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+/* 运行状态与 Gate 仍用分隔线标明独立功能带。 */
+.gate,
+.runtime {
+  flex: 0 0 auto;
+  border-block-start: 1px solid var(--line-1);
+}
+
+.runtime {
+  max-block-size: min(42%, 280px);
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.runtime:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+.runtime:empty { display: none; }
+
+/* ConversationComposer 是通栏卡片（inline 边距 0，宽度归容器管）——
+   dock 面板里由 footer 给两侧留白，别让圆角卡贴死面板边框 */
+.footer {
+  flex: 0 0 auto;
+  padding-inline: 8px;
+}
+
+.taskList {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  padding: 8px;
+}

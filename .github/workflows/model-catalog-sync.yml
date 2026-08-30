@@ -1,0 +1,43 @@
+name: Model catalog sync
+
+on:
+  schedule:
+    - cron: '30 1 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run catalog:sync
+      - run: npm run catalog:validate
+      - run: npx vitest run shared/ai-model-catalog/__tests__/catalog-sync.test.ts shared/ai-model-catalog/__tests__/image-catalog-sources.test.ts
+      - name: Create or update synchronized catalog PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- shared/ai-model-catalog/providers shared/ai-model-catalog/generated/catalog.json; then exit 0; fi
+          branch=automation/model-catalog-sync
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -B "$branch"
+          git add shared/ai-model-catalog/providers shared/ai-model-catalog/generated/catalog.json
+          git commit -m "chore: synchronize model catalogs"
+          git push --force origin "$branch"
+          gh pr view "$branch" --json number >/dev/null 2>&1 || gh pr create \
+            --base "${GITHUB_REF_NAME}" \
+            --head "$branch" \
+            --title "chore: synchronize model catalogs" \
+            --body "Automated weekly refresh from models.dev and the configured official image-provider documentation sources. All parsers, generated output, and catalog validation passed before this PR was opened."

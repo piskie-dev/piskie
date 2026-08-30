@@ -1,0 +1,19 @@
+Piskie browser automation runtime
+
+This product contains source-derived portions of chrome-devtools-mcp 1.7.0.
+The adapted portions include page/session ownership, action waiting, snapshots,
+input and dialog tools, file-root validation, console/network collectors,
+formatters, filters, and pagination.
+
+chrome-devtools-mcp
+Copyright 2025 Google LLC
+SPDX-License-Identifier: Apache-2.0
+Upstream: https://github.com/ChromeDevTools/chrome-devtools-mcp
+Version tag: chrome-devtools-mcp-v1.7.0
+Commit: 774d78f5eef5e610407a0c92fa6ec5ed74b027e8
+
+The derived files and their modifications are listed in provenance.json next
+to this NOTICE. Piskie does not redistribute chrome-devtools-mcp's bundled
+DevTools or Lighthouse third-party bundles; their bundle-specific notices are
+therefore not part of this derived runtime. Licenses for Piskie's direct npm
+dependencies remain with those dependencies in the application distribution.

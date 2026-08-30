@@ -1,0 +1,438 @@
+.taskList {
+  --task-strong: var(--cyber-text);
+  --task-soft: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+  --task-muted: var(--cyber-text-muted);
+  --task-muted-soft: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  padding: 6px 12px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--task-strong);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 4%, transparent);
+  container-type: inline-size;
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--task-strong);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.headerIcon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  color: var(--task-muted);
+}
+
+.headerState,
+.headerChevron,
+.headerCheck,
+.progressGlyph {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.headerState {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 140ms ease;
+}
+
+.headerChevron {
+  opacity: 0;
+  transition: opacity 140ms ease, rotate 220ms ease;
+}
+
+.toggle[aria-expanded='false'] .headerChevron {
+  rotate: -90deg;
+}
+
+.toggle:hover .headerState,
+.toggle:focus-visible .headerState {
+  opacity: 0;
+}
+
+.toggle:hover .headerChevron,
+.toggle:focus-visible .headerChevron {
+  opacity: 1;
+}
+
+.headerCheck {
+  inline-size: 16px;
+  block-size: 16px;
+  color: var(--status-running);
+}
+
+@property --task-progress {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
+}
+
+.progressGlyph {
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 50%;
+  color: var(--task-strong);
+  transition: --task-progress 400ms ease;
+}
+
+.progressRing {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+  color: var(--task-muted);
+}
+
+.progressGlyph::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--task-progress, 0%), transparent 0);
+}
+
+.headerTitle {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.headerActivity {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.headerCount {
+  flex: 0 0 auto;
+  color: var(--task-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.planButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 24px;
+  block-size: 24px;
+  margin-inline-start: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--task-muted);
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.planButton:hover,
+.planButton:focus-visible {
+  background: var(--surface-2);
+  color: var(--task-strong);
+}
+
+.collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex: 0 1 auto;
+  min-block-size: 0;
+  opacity: 1;
+  transition: grid-template-rows 280ms ease, opacity 200ms ease;
+}
+
+.collapsible[data-collapsed='true'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.collapsibleInner {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.scrollArea {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* 短窗口里给流水与输入器保留空间，清单内容在自身区域滚动。 */
+  max-block-size: min(288px, 24vh);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-block-start: 9px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollArea:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+.taskSummary {
+  margin-block-end: 9px;
+  padding-block-end: 8px;
+  border-block-end: 1px solid var(--line-1);
+  color: var(--task-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.group {
+  min-inline-size: 0;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  margin-block-end: 7px;
+}
+
+.groupLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--task-soft);
+  font-size: 11px;
+}
+
+.groupLabel[data-inactive='true'] {
+  color: var(--task-muted);
+}
+
+.groupRule {
+  flex: 1 1 auto;
+  min-inline-size: 12px;
+  block-size: 1px;
+  background: var(--line-1);
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-inline-size: 0;
+  animation: task-item-in 360ms ease backwards;
+  animation-delay: calc(var(--task-index, 0) * 45ms);
+}
+
+@keyframes task-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.itemHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--task-muted);
+  font: inherit;
+  line-height: 18px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.statusMark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-block-start: 1px;
+  color: var(--task-muted);
+}
+
+.statusMark svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.statusMark[data-status='in_progress'] {
+  color: var(--task-strong);
+}
+
+.itemSubject {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 260ms ease;
+}
+
+.item[data-status='completed'] .itemSubject {
+  color: var(--task-muted-soft);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--task-muted) 55%, transparent);
+}
+
+.itemCaret {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  margin-block-start: 3px;
+  color: var(--task-muted-soft);
+  opacity: 0;
+  transition: opacity 160ms ease, rotate 180ms ease;
+}
+
+.itemHead:hover .itemCaret,
+.itemHead:focus-visible .itemCaret,
+.itemHead[aria-expanded='true'] .itemCaret {
+  opacity: 1;
+}
+
+.itemHead[aria-expanded='true'] .itemCaret {
+  rotate: 90deg;
+}
+
+.itemDetail {
+  min-inline-size: 0;
+  margin: 5px 0 4px 25px;
+  padding: 7px 9px;
+  border-inline-start: 1px solid var(--line-2);
+  color: var(--task-muted);
+}
+
+.itemDescription {
+  margin: 0;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  color: var(--task-soft);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.itemMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-block-start: 5px;
+  color: var(--task-muted-soft);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+}
+
+.chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: var(--task-muted-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.diffAdd {
+  color: var(--status-running);
+}
+
+.diffRemove {
+  margin-inline-start: 4px;
+  color: var(--status-error);
+}
+
+.planBody {
+  max-block-size: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.planEmpty {
+  padding: 24px 8px;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@container (max-width: 360px) {
+  .headerActivity {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .itemCaret {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headerState,
+  .headerChevron,
+  .progressGlyph,
+  .collapsible,
+  .planButton,
+  .item,
+  .itemSubject,
+  .itemCaret {
+    animation: none;
+    transition: none;
+  }
+
+}

@@ -1,0 +1,47 @@
+/**
+ * PopShell 底盘样式:只管定位与进出场,不带任何皮肤(面板观感由内容自带)。
+ * anchor positioning 接管定位,需先清掉 popover 的默认居中 inset/margin。
+ */
+
+.shell {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  margin-block: 4px;
+
+  opacity: 0;
+  translate: 0 -4px;
+
+  transition-property: opacity, translate, display, overlay;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+.shell[data-placement='block-start'] {
+  position-area: block-start span-inline-start;
+  translate: 0 4px;
+}
+
+.shell:popover-open {
+  opacity: 1;
+  translate: 0 0;
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.shell[data-placement='block-start']:popover-open {
+  @starting-style {
+    translate: 0 4px;
+  }
+}

@@ -1,0 +1,528 @@
+/**
+ * 审批门样式。
+ *
+ * 取代四份互相抄写的 Tailwind 串：`ToolApprovalPanel` / `DiffApprovalPanel` /
+ * `PlanApprovalPanel` / `AIQuestionPanel` 各写一遍「标题行 + 编号按钮 + 反馈输入行」，
+ * 其中 `bg-blue-600 hover:bg-blue-500`、`text-cyber-text-muted/30` 这类硬编码彩色
+ * 与透明度后缀重复了 12 处。这里全部走 token。
+ *
+ * 进场用 **`@starting-style`**（无需 framer-motion）：门是「突然要你决定」的东西，
+ * 从底部滑入 + 淡入能把注意力带过去，但不该有退场动画——用户点完就该立刻消失。
+ */
+
+.gate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-block-start: 1px solid color-mix(in srgb, var(--cyber-border) 40%, transparent);
+  background: color-mix(in srgb, var(--cyber-surface) 95%, transparent);
+
+  /* 进场：从底部滑入。退场无动画（决定作出后即刻让位给 composer） */
+  transition: opacity 200ms ease-out, translate 200ms ease-out;
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* 光闸线（签名元素）：一道横在流水与输入区之间的呼吸光。
+   银白中性光——不占用任何状态/品牌色语义（紫=输入、琥珀=等待状态点），
+   黑底白光，与输入行聚焦的白光圈同语言。 */
+.gate::before {
+  content: '';
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline: 8%;
+  block-size: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--cyber-text) 62%, transparent) 50%,
+    transparent
+  );
+  animation: gate-beam-breathe 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes gate-beam-breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
+@starting-style {
+  .gate {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+.gate[data-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 等待指示灯：waiting 色脉冲小灯，门在场即亮 */
+.pulse {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 999px;
+  background: var(--status-waiting);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--status-waiting) 70%, transparent);
+  animation: gate-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes gate-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ── 标题行 ── */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  /* 旧 `px-3 py-2 border-b border-cyber-border/30` */
+  padding: 8px 12px;
+  border-block-end: 1px solid color-mix(in srgb, var(--cyber-border) 30%, transparent);
+}
+
+.headerIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--status-thinking);
+}
+
+.headerIcon[data-tone='success'] { color: var(--status-running); }
+.headerIcon[data-tone='muted'] { color: var(--cyber-text-muted); }
+
+/* 旧门用的是 `NODE_TEXT_PRIMARY`(16px) / `NODE_TEXT_SECONDARY`(13px)，
+   比流水条目大一档 —— 门是要用户停下来读的东西 */
+.headerTitle {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.headerNote {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--cyber-text-muted);
+}
+
+/* 靠右的次要信息（计划摘要、题数） */
+.headerTrailing {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  max-inline-size: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--cyber-text-muted);
+}
+
+/* ── 命令 / 文本预览块（CommandGate）──
+   批准要跑什么必须一眼可见：等宽、保留换行、上限高度内滚动。 */
+
+.commandBlock {
+  flex: 0 0 auto;
+  max-block-size: 132px;
+  margin: 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: 8px;
+  background: var(--surface-1);
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cyber-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.commandPrompt {
+  color: var(--cyber-text-muted);
+  user-select: none;
+}
+
+/* ── 选项区 ── */
+
+/* 旧 `py-2 space-y-1.5`，每个选项外面再套一层 `px-3` */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+}
+
+/* 选项过多时内部滚动，不撑高整个面板 */
+.optionsScroll {
+  max-block-size: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* 审批动作按钮横排：内容宽、并肩排——动作是「按钮」，不是表单列表 */
+.actionRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 选项：胶囊形紧凑按钮（参照 aicss 输入件的 pill 语言）。键帽在前、文案在后；
+   ghost 轻底，hover 才亮。默认满宽（提问门的答案列表用）；在 actionRow 里收缩为内容宽。 */
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  block-size: 30px;
+  padding: 0 14px 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.option:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+.actionRow .option {
+  flex: 0 0 auto;
+  inline-size: auto;
+}
+
+.optionLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 键帽：序号即键位，控制台的母语。胶囊里配圆帽 */
+.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-inline-size: 18px;
+  block-size: 18px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--cyber-text-muted);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* 主选项：「通电」而非「上漆」——主色实底刷大面积是荧光色块，违背光语言。
+   暗底 + 主色透字 + 内外微光，让光从按钮内部渗出来；全门唯一的重音。 */
+.option[data-variant='primary'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 14%, var(--cyber-surface));
+  color: color-mix(in srgb, var(--cyber-primary) 45%, var(--cyber-text));
+  font-weight: 500;
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--cyber-primary) 8%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+}
+
+.option[data-variant='primary']:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyber-primary) 62%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 20%, var(--cyber-surface));
+  color: color-mix(in srgb, var(--cyber-primary) 30%, var(--cyber-text));
+  box-shadow:
+    inset 0 0 16px color-mix(in srgb, var(--cyber-primary) 12%, transparent),
+    0 0 14px color-mix(in srgb, var(--cyber-primary) 22%, transparent);
+}
+
+.option[data-variant='primary'] .key {
+  border-color: color-mix(in srgb, var(--cyber-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--cyber-primary) 40%, var(--cyber-text));
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── 反馈 / 自由输入行 ──
+   与选项同构的行框；聚焦时主色细光边接住 composer 的光语言。 */
+
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 30px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  transition:
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 聚焦是「你在操作」：中性白光，不抢门的琥珀等待光 */
+.feedback:focus-within {
+  border-color: var(--line-3);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--cyber-text) 12%, transparent);
+}
+
+/* 聚焦框由外层 .feedback 承担；压掉 base.css 给 input[type=text] 的全局
+   边框/光圈/内边距（特异性更高）——padding 不压掉会把 13px 的 placeholder
+   裁成一条竖线（30px 行高减 16px 内边距装不下一行字）。 */
+.feedbackInput,
+.feedbackInput:focus {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  block-size: 100%;
+  margin: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0;
+  outline: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--cyber-text);
+  caret-color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 13px !important;
+}
+
+.feedbackInput::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 50%, transparent);
+}
+
+.send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 240ms cubic-bezier(0.22, 1, 0.36, 1), color 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.send:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.send:disabled {
+  color: color-mix(in srgb, var(--cyber-text-muted) 30%, transparent);
+  cursor: not-allowed;
+}
+
+/* ── 附件 ── */
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-inline: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  block-size: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  font-size: 11px;
+}
+
+.chipThumb {
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 6px;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.chipName {
+  max-inline-size: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--cyber-text);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.chipRemove:hover {
+  background: var(--status-error);
+}
+
+/* ── diff 门专属 ── */
+
+.diffStat {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+.added { color: var(--status-running); }
+.removed { color: var(--status-error); }
+
+.ghostButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  min-block-size: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.ghostButton:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.ghostButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── 提问门专属 ── */
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  padding-block: 8px;
+  max-block-size: 384px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.questionText {
+  padding-inline: 12px;
+  margin-block-end: 6px;
+  font-size: 16px;
+  color: var(--cyber-text);
+  white-space: pre-wrap;
+}
+
+.questionOrdinal {
+  margin-inline-end: 6px;
+  color: var(--cyber-text-muted);
+}
+
+/* 提问门的选项文字用 `--cyber-text`（旧 `OPTION_IDLE` 是 text-cyber-text，
+   与审批门的 ghost 项用 muted 不同） */
+.optionsScroll .option {
+  color: var(--cyber-text);
+}
+
+.questionHint {
+  margin-inline-start: 6px;
+  font-size: 13px;
+  color: var(--cyber-text-muted);
+}
+
+.submitRow {
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-block-start: 1px solid var(--line-1);
+}
+
+.submit {
+  block-size: 30px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--cyber-primary) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-primary) 14%, var(--cyber-surface));
+  color: color-mix(in srgb, var(--cyber-primary) 45%, var(--cyber-text));
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--cyber-primary) 8%, transparent),
+    0 0 10px color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.submit:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyber-primary) 62%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 20%, var(--cyber-surface));
+  box-shadow:
+    inset 0 0 16px color-mix(in srgb, var(--cyber-primary) 12%, transparent),
+    0 0 14px color-mix(in srgb, var(--cyber-primary) 22%, transparent);
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate {
+    transition: none;
+  }
+
+  .gate::before,
+  .pulse {
+    animation: none;
+  }
+}

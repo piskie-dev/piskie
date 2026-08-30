@@ -1,0 +1,392 @@
+/**
+ * 生图审核样式。
+ *
+ * 取代 `ImageNode` 的节点外壳：`NEUTRAL_NODE_SHADOW` + `BORDER_MAP` + `SHADOW_MAP`
+ * 三张按状态查表的样式表（`border-amber-500/30` / `border-red-500/30` 一类硬编码），
+ * 加 ReactFlow 的 `Handle` 与画布定位。
+ *
+ * 现在它是流水尾部、composer 之上的一块审核区：与 `Gate` 同族的视觉语言
+ * （标题行 + 内容 + 操作行），但**可与审批门并存**——生图审核期间照样可能有工具待确认。
+ */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  border-block-start: 1px solid var(--line-1);
+  background: var(--cyber-surface);
+
+  transition: opacity 200ms ease-out, translate 200ms ease-out;
+  opacity: 1;
+  translate: 0 0;
+}
+
+@starting-style {
+  .review {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+.review[data-busy='true'] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  padding: 8px 12px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--status-thinking);
+}
+
+.review[data-tone='waiting'] .icon { color: var(--status-waiting); }
+.review[data-tone='error'] .icon { color: var(--status-error); }
+.review[data-tone='done'] .icon { color: var(--status-running); }
+
+.title {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.statusTag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-badge);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--cyber-text-muted);
+}
+
+.review[data-tone='waiting'] .statusTag {
+  border-color: color-mix(in srgb, var(--status-waiting) 30%, transparent);
+  background: color-mix(in srgb, var(--status-waiting) 12%, transparent);
+  color: var(--status-waiting);
+}
+
+.review[data-tone='error'] .statusTag {
+  border-color: color-mix(in srgb, var(--status-error) 30%, transparent);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  color: var(--status-error);
+}
+
+.review[data-tone='done'] .statusTag {
+  border-color: color-mix(in srgb, var(--status-running) 30%, transparent);
+  background: color-mix(in srgb, var(--status-running) 12%, transparent);
+  color: var(--status-running);
+}
+
+.progress,
+.countdown {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  color: var(--cyber-text-muted);
+}
+
+.countdown {
+  margin-inline-start: auto;
+}
+
+/* ── 图片网格 ── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  flex: 0 0 auto;
+  max-block-size: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  overflow: clip;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.tile[data-selectable='true'] {
+  cursor: pointer;
+}
+
+.tile[data-selected='true'] {
+  border-color: var(--cyber-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyber-primary) 50%, transparent);
+}
+
+.thumb {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.placeholder {
+  display: inline-flex;
+  color: var(--cyber-text-muted);
+}
+
+/*
+ * 生成中的占位（用户 2026-08-05，参照 Gemini 生图加载效果；第一版做成了
+ * 同心圆向外扩散，用户纠正：Gemini 是**柔和的白色波带斜向流过灰底**，不是圆形涟漪）：
+ *
+ * - 波带 = repeating-linear-gradient（周期 100px，~10° 斜角）+ 12px blur ⇒ 绸缎感
+ * - 流动 = transform: translate3d 平移**恰好两个水平周期**（203px ≈ 2×100px/cos10°），
+ *   循环点无缝；只动合成层，不触发重排重绘
+ * - 白色 = --cyber-text 低透明度（近白 token，换肤跟随），灰底 = 文字色掺 surface
+ * - 没有 spinner：波纹本身就是"进行中"的信号，状态文字在块头部
+ */
+.waves {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--cyber-text) 7%, var(--surface-1));
+  overflow: clip;
+}
+
+.waves::before {
+  content: '';
+  position: absolute;
+  inset: -30% -240px;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 42px,
+    color-mix(in srgb, var(--cyber-text) 13%, transparent) 71px,
+    transparent 100px
+  );
+  filter: blur(12px);
+  animation: image-waves 3.4s linear infinite;
+}
+
+@keyframes image-waves {
+  from {
+    transform: translate3d(-203px, 0, 0);
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* 降低动效偏好：静态柔波，不流动 */
+@media (prefers-reduced-motion: reduce) {
+  .waves::before {
+    animation: none;
+    transform: translate3d(-100px, 0, 0);
+  }
+}
+
+.tileError {
+  padding-inline: 8px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--status-error);
+}
+
+/* 左上角选中标记 / 右上角删除，都只在可编辑态出 */
+.tileMark {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-start: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 15px;
+  block-size: 15px;
+  border: 1px solid color-mix(in srgb, var(--cyber-text) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-bg) 70%, transparent);
+  color: transparent;
+}
+
+.tile[data-selected='true'] .tileMark {
+  border-color: transparent;
+  background: var(--cyber-primary);
+  color: #fff; /* 品牌蓝上的勾恒为白 style-token-ignore */
+}
+
+.tileAction {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-bg) 70%, transparent);
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+
+.tile:hover .tileAction {
+  opacity: 1;
+}
+
+.tileAction:hover {
+  color: var(--status-error);
+}
+
+.zoom {
+  position: absolute;
+  inset-block-end: 4px;
+  inset-inline-end: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-bg) 70%, transparent);
+  color: var(--cyber-text-muted);
+  cursor: zoom-in;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.tile:hover .zoom {
+  opacity: 1;
+}
+
+/* ── 操作区 ── */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 12px 8px;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+
+.hint {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+.notice {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
+  border-radius: var(--radius-badge);
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  font-size: 11px;
+  color: var(--status-error);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-block-size: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+.button[data-variant='primary'] {
+  border-color: transparent;
+  background: var(--cyber-primary);
+  color: #fff; /* 同主按钮 style-token-ignore */
+  font-weight: 500;
+}
+
+.button[data-variant='primary']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cyber-primary) 85%, #fff);
+}
+
+.button[data-variant='danger']:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--status-error) 40%, transparent);
+  color: var(--status-error);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.instruction {
+  flex: 1 1 220px;
+  min-inline-size: 0;
+  min-block-size: 26px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  outline: none;
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+
+  /* 与 composer 同一套：原生自增高 */
+  field-sizing: content;
+  max-block-size: 88px;
+  overflow-y: auto;
+}
+
+.instruction:focus {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.instruction::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review,
+  .tile,
+  .tileAction,
+  .zoom {
+    transition: none;
+  }
+}

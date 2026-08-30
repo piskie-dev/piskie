@@ -1,0 +1,490 @@
+/**
+ * 空态输入器样式 —— 与非空态统一为 「光边」。
+ *
+ * 原先的海军蓝独立色系、30/28px 双层框、8 色彩虹流动描边已废弃；改为消费全局 token、
+ * 单层 16px 框，识别特征由 conic 渐变光边承担（primary→accent，聚焦时旋转加亮 + 外发光），
+ * 与 conversationComposer 同源。控件胶囊结构保留。
+ *
+ * 模式/审批下拉已改用可定制原生 <select>（见 components/agent-params），不再依赖
+ * AntD(2026-08-25 已全应用清零,历史 `:global(.ant-select-*)` 规则随之删除)。
+ */
+
+@property --welcome-beam-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes welcome-beam-spin {
+  to {
+    --welcome-beam-angle: 360deg;
+  }
+}
+
+/* 与非空态输入器统一（光边）：不再自带海军蓝独立色系，一律消费全局 token，
+   深浅自动跟随；识别特征改由 conic 渐变光边承担（见 .composerFrame）。 */
+.composerBlock {
+  --welcome-composer-bg: var(--surface-1);
+  --welcome-composer-bg-strong: var(--surface-2);
+  --welcome-composer-bg-hover: var(--surface-3);
+  --welcome-composer-border: var(--line-2);
+  --welcome-composer-border-strong: var(--line-2);
+  --welcome-composer-text: var(--cyber-text);
+  --welcome-composer-text-muted: var(--cyber-text-muted);
+  --welcome-composer-text-soft: color-mix(in srgb, var(--cyber-text-muted) 72%, transparent);
+  --welcome-composer-placeholder: color-mix(in srgb, var(--cyber-text-muted) 78%, transparent);
+
+  width: 100%;
+  min-width: 0;
+  max-width: 760px;
+}
+
+.composerFrame {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  transition: box-shadow 200ms ease;
+}
+
+/* 渐变光边（同非空态）：镶在 1px 边框上，mask 抠中空只留边 */
+.composerFrame::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--welcome-beam-angle),
+    var(--cyber-primary),
+    var(--cyber-accent),
+    var(--cyber-primary),
+    color-mix(in srgb, var(--cyber-primary) 60%, var(--cyber-accent)),
+    var(--cyber-primary)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.composerFrame:focus-within {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--cyber-primary) 26%, transparent);
+}
+
+.composerFrame:focus-within::before {
+  opacity: 1;
+  animation: welcome-beam-spin 3.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composerFrame:focus-within::before {
+    animation: none;
+  }
+}
+
+.composerShell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  /* 内部节奏对齐非空态（inputZone 12/14/4 + toolbar 4/10/8）：切换时输入框本体不跳变 */
+  gap: 4px;
+  min-height: 80px;
+  border-radius: 16px;
+  padding: 12px 14px 8px;
+  background: var(--welcome-composer-bg);
+  border: 1px solid transparent;
+  cursor: text;
+}
+
+.composerShell::before {
+  content: none;
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.imageThumb {
+  position: relative;
+  overflow: hidden;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  border: 1px solid var(--welcome-composer-border);
+  background: var(--welcome-composer-bg-strong);
+}
+
+.imageThumbPreview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.fileChip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--welcome-composer-border);
+  background: var(--welcome-composer-bg-strong);
+  color: var(--welcome-composer-text-muted);
+}
+
+.removeButton {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.56);
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.fileChip .removeButton {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+
+.imageThumb:hover .removeButton,
+.fileChip:hover .removeButton {
+  opacity: 1;
+}
+
+.removeButton:hover {
+  transform: scale(1.05);
+  background: rgba(239, 68, 68, 0.9);
+}
+
+.textareaWrap {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-height: 24px;
+  padding-top: 2px;
+  background: transparent;
+}
+
+.textarea,
+.textarea:focus,
+.textarea:focus-visible {
+  width: 100%;
+  min-height: 22px;
+  max-height: min(40vh, 240px);
+  margin: 0;
+  padding: 0;
+  border: 0 !important;
+  outline: none;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--welcome-composer-text);
+  /* 字号/行高对齐非空态 14px/1.6 —— 两态切换时正文不变大变小 */
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.textarea::placeholder {
+  color: var(--welcome-composer-placeholder);
+}
+
+.toolbar {
+  --welcome-control-padding-x: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 24px;
+  padding: 0;
+  background: transparent;
+}
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow: visible;
+}
+
+.primaryControls,
+.secondaryControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.primaryControls {
+  flex: 0 1 auto;
+}
+
+.secondaryControls {
+  flex: 0 1 auto;
+}
+
+.controlPill,
+.attachmentPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  /* 控件高度/圆角对齐非空态 pill（24px / 8px） */
+  height: 24px;
+  min-height: 24px;
+  min-width: 0;
+  padding-inline: var(--welcome-control-padding-x);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--welcome-composer-text);
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.controlPill:hover,
+.attachmentPill:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+/* InlineSelect(计划/审批下拉)自带 hover 底色,套在胶囊里会亮出内外双层——
+   hover 反馈统一由外层胶囊负责,内层一律透明 */
+.controlPill select,
+.controlPill select:hover {
+  background: transparent;
+}
+
+.controlPill:focus,
+.controlPill:focus-visible,
+.controlPill:focus-within,
+.controlPill:active,
+.attachmentPill:focus,
+.attachmentPill:focus-visible,
+.attachmentPill:active {
+  outline: none;
+  box-shadow: none;
+}
+
+.modelReasoningSlot {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 208px;
+}
+
+.resourceControl {
+  padding-inline: 8px;
+}
+
+
+.workspaceButton {
+  gap: 8px;
+  max-width: 164px;
+  padding-inline: var(--welcome-control-padding-x);
+  cursor: pointer;
+}
+
+.workspaceButton:focus,
+.workspaceButton:focus-visible,
+.workspaceButton:active {
+  background: var(--surface-2);
+  outline: none;
+  box-shadow: none;
+}
+
+.workspaceIcon {
+  flex: 0 0 auto;
+  color: var(--welcome-composer-text-muted);
+}
+
+.workspaceButtonText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentPill {
+  gap: 6px;
+  padding-inline: var(--welcome-control-padding-x);
+  color: var(--welcome-composer-text-muted);
+  font-size: 12px;
+}
+
+/* 主题表面色实底，对齐非空态 mainAction（28px 圆） */
+.sendButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-inline-start: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.sendButton:disabled {
+  cursor: not-allowed;
+  background: var(--surface-2);
+  color: var(--cyber-text-muted);
+}
+
+.sendEnabled {
+  color: var(--cyber-text);
+}
+
+.sendButton:not(:disabled):hover {
+  background: var(--surface-3);
+}
+
+
+@media (max-width: 640px) {
+  .composerFrame {
+    border-radius: 14px;
+  }
+
+  .composerShell {
+    min-height: 104px;
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .textareaWrap {
+    min-height: 44px;
+    padding-top: 2px;
+  }
+
+  .textarea {
+    min-height: 24px;
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .toolbarGroup {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .primaryControls,
+  .secondaryControls {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .modelReasoningSlot,
+  .workspaceButton {
+    max-width: 100%;
+  }
+
+  .workspaceButtonText {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composerFrame,
+  .composerFrame::before,
+  .removeButton,
+  .controlPill,
+  .attachmentPill,
+  .sendButton {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ── 新树补充：旧实现里这几处是内联 Tailwind / AntD Dropdown ── */
+
+/* 旧 `text-[11px] max-w-[140px] truncate` */
+.fileName {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* 工作区菜单用原生 popover */
+.workspaceMenu {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--welcome-composer-border);
+  border-radius: 18px;
+  background: var(--welcome-composer-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+}
+
+.workspaceMenuItem {
+  min-width: 220px;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.workspaceMenuItem:hover,
+.workspaceMenuItem:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+/* 自增高交给原生 */
+.textarea {
+  field-sizing: content;
+  overflow-y: auto;
+}

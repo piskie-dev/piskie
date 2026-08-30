@@ -1,0 +1,76 @@
+/**
+ * 页面壳样式。
+ *
+ * 壳提供页面尺寸与启动错误浮层。顶栏操作仍由壳拥有，但交给模式放进
+ * `TopRail` 的正常布局，不再通过绝对定位覆盖内容。
+ */
+
+.shell {
+  --console-top-rail-size: 41px;
+
+  position: relative;
+  min-block-size: 0;
+  block-size: 100%;
+  background: var(--console-canvas-bg);
+}
+
+/* ── 启动失败提示 ──
+   四个启动入口（空态卡片 / TaskDefinitionLauncher / 创建并启动 / 快速聊天）共用这一处。
+   `StartOutcome.failed` 由发起操作的页面就地展示，不进入跨操作的全局错误状态。
+   贴顶居中、浮在模式之上，并落在正常布局的顶栏下方。 */
+
+.startError {
+  position: absolute;
+  z-index: 30;
+  inset-block-start: calc(var(--console-top-rail-size, 41px) + 4px);
+  inset-inline: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  inline-size: fit-content;
+  max-inline-size: min(560px, 70%);
+  margin-inline: auto;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+
+  transition: opacity 200ms ease, translate 200ms ease;
+  opacity: 1;
+  translate: 0 0;
+}
+
+@starting-style {
+  .startError {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+}
+
+.startErrorClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.startErrorClose:hover {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startError,
+  .startErrorClose {
+    transition: none;
+  }
+}

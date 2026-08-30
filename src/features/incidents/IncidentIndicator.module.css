@@ -1,0 +1,407 @@
+/**
+ * 顶栏事故指示器皮肤(Lumen 重写:亮起靠光不靠漆)。
+ * 挂在 Layout 顶栏,消费全局 token;色调轴:错误 = status-error,仅警告 = status-waiting。
+ */
+
+.dock {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ── 触发签:常驻告警态——有错误即整签染色发光,计数变色加粗,光点持续脉动;
+   新错误 5 秒窗再叠加瓢虫 + 扫光 + 强呼吸的大场面 ── */
+
+.beacon {
+  --beacon-tone: var(--status-error);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--beacon-tone) 14%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 10%, transparent),
+    0 0 14px color-mix(in srgb, var(--beacon-tone) 24%, transparent);
+  color: color-mix(in srgb, var(--beacon-tone) 62%, var(--cyber-text));
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.beacon[data-tone='warning'] {
+  --beacon-tone: var(--status-waiting);
+}
+
+.beacon:hover {
+  background: color-mix(in srgb, var(--beacon-tone) 22%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 10%, transparent),
+    0 0 20px color-mix(in srgb, var(--beacon-tone) 34%, transparent);
+}
+
+.beaconDot {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 999px;
+  background: var(--beacon-tone);
+  box-shadow: 0 0 9px var(--beacon-tone);
+  flex: 0 0 auto;
+  animation: incident-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes incident-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 7px var(--beacon-tone);
+    scale: 1;
+  }
+
+  50% {
+    box-shadow: 0 0 14px 2px var(--beacon-tone);
+    scale: 1.25;
+  }
+}
+
+/* 新事故:「巡检光束与虫」——瓢虫(bug)以走-停步态逆时针爬行,
+   一道 bloom 光束顺时针独立扫描(系统巡逻查虫);两个角色解耦,各按各的节奏 */
+.beacon[data-new='true']::after {
+  content: '🐞';
+  position: absolute;
+  /* 报错主角要显眼:加大 + 淡红辉光衬出轮廓 */
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--beacon-tone) 60%, transparent));
+  offset-path: border-box;
+  /* 逆时针行进:auto 随路径正向,+270deg 让头朝实际行进方向 */
+  offset-rotate: auto 270deg;
+  pointer-events: none;
+  animation: incident-crawl 9s ease-in-out infinite;
+}
+
+/* 告警氛围:胶囊内部斜向扫光(自带裁剪层,不碰边框上的瓢虫)+ 外圈呼吸光晕,同周期 2.6s */
+.sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  pointer-events: none;
+  display: none;
+}
+
+.beacon[data-new='true'] .sheen {
+  display: block;
+}
+
+.sheen::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 46%;
+  background: linear-gradient(
+    105deg,
+    transparent,
+    color-mix(in srgb, var(--beacon-tone) 26%, transparent) 42%,
+    color-mix(in srgb, #fff 26%, transparent) 52%,
+    color-mix(in srgb, var(--beacon-tone) 26%, transparent) 62%,
+    transparent
+  );
+  animation: incident-sheen 2.6s ease-in-out infinite;
+}
+
+/* 扫光:前 55% 从左掠到右,余下时间停在场外(呼吸留白) */
+@keyframes incident-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  55%,
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.beacon[data-new='true'] {
+  animation: incident-halo 2.6s ease-in-out infinite;
+}
+
+@keyframes incident-halo {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 9%, transparent),
+      0 0 10px color-mix(in srgb, var(--beacon-tone) 16%, transparent);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 9%, transparent),
+      0 0 22px 2px color-mix(in srgb, var(--beacon-tone) 42%, transparent);
+  }
+}
+
+/* 瓢虫步态:逆时针,走-停-走(每 1/8 圈冲一段停一拍),像真的虫 */
+@keyframes incident-crawl {
+  0% {
+    offset-distance: 100%;
+  }
+
+  7.5% {
+    offset-distance: 87.5%;
+  }
+
+  12.5% {
+    offset-distance: 87.5%;
+  }
+
+  20% {
+    offset-distance: 75%;
+  }
+
+  25% {
+    offset-distance: 75%;
+  }
+
+  32.5% {
+    offset-distance: 62.5%;
+  }
+
+  37.5% {
+    offset-distance: 62.5%;
+  }
+
+  45% {
+    offset-distance: 50%;
+  }
+
+  50% {
+    offset-distance: 50%;
+  }
+
+  57.5% {
+    offset-distance: 37.5%;
+  }
+
+  62.5% {
+    offset-distance: 37.5%;
+  }
+
+  70% {
+    offset-distance: 25%;
+  }
+
+  75% {
+    offset-distance: 25%;
+  }
+
+  82.5% {
+    offset-distance: 12.5%;
+  }
+
+  87.5% {
+    offset-distance: 12.5%;
+  }
+
+  95% {
+    offset-distance: 0%;
+  }
+
+  100% {
+    offset-distance: 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beacon[data-new='true']::after,
+  .beacon[data-new='true'] .sheen {
+    display: none;
+  }
+}
+
+/* ── 浮层:事故台账 ── */
+
+/* 无描边:明度分层 + 顶缘内高光 + 深投影分离 */
+.ledger {
+  position: absolute;
+  inset-block-start: calc(100% + 10px);
+  inset-inline-end: 0;
+  inline-size: min(92vw, 440px);
+  max-block-size: min(68vh, 540px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  background: var(--cyber-elevated);
+  color: var(--cyber-text);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 10%, transparent),
+    0 24px 60px rgb(0 0 0 / 0.48);
+  z-index: 80;
+  overflow: hidden;
+}
+
+/* 眉标:mono 小帽 + 色调光条 + 一键清空 */
+.ledgerCap {
+  --cap-tone: var(--status-error);
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyber-text-muted);
+  border-block-end: 1px solid var(--line-1);
+  flex: 0 0 auto;
+}
+
+.ledgerCap[data-tone='warning'] {
+  --cap-tone: var(--status-waiting);
+}
+
+.ledgerCap::before {
+  content: '';
+  inline-size: 3px;
+  block-size: 10px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--cap-tone), color-mix(in srgb, var(--cap-tone) 30%, transparent));
+  flex: 0 0 auto;
+}
+
+.capSpring {
+  flex: 1 1 auto;
+}
+
+.capAct {
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  font: inherit;
+  letter-spacing: 0.08em;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.capAct:hover {
+  color: var(--status-error);
+}
+
+/* 列表:hover 显现滚动条 */
+.ledgerBody {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.ledgerBody:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+/* ── 事故行:发丝线分隔,严重度语义由右侧代码签(色+文)独任 ── */
+
+.caseRow {
+  --case-tone: var(--status-error);
+
+  padding: 12px 14px 10px;
+}
+
+.caseRow[data-severity='warning'] {
+  --case-tone: var(--status-waiting);
+}
+
+.caseRow + .caseRow {
+  border-block-start: 1px solid var(--line-1);
+}
+
+.caseHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.caseWho {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caseCode {
+  flex: 0 0 auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--case-tone);
+  background: color-mix(in srgb, var(--case-tone) 11%, transparent);
+}
+
+.caseMsg {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cyber-text-muted);
+  word-break: break-word;
+}
+
+/* 原始错误:mono 低噪块,超长内部滚动 */
+.caseRaw {
+  margin: 7px 0 0;
+  padding: 8px 10px;
+  max-block-size: 96px;
+  overflow: auto;
+  border-radius: 9px;
+  background: var(--surface-2);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--cyber-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.caseRaw:hover {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+.caseActs {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-block-start: 7px;
+}
+
+.caseAct {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 11.5px;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.caseAct:hover {
+  color: var(--cyber-text);
+}
+
+.caseActHalt:hover {
+  color: var(--status-error);
+}

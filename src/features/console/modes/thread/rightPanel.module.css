@@ -1,0 +1,116 @@
+/**
+ * 右栏样式。
+ *
+ * 面板间与 worker 间用 `content-visibility: hidden` 缓存：**DOM 与滚动位置全留着**，
+ * 切回来瞬时。但它只省 CPU 不省内存，所以：
+ * 1. 缓存配 LRU 上限（在 `RightPanel.tsx`，最多 5 个）
+ * 2. 隐藏的槽位同时做**订阅门控**（`fidelity='hidden'`），避免后台订阅继续工作
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: 100%;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabSlot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-block-size: 24px;
+  padding-inline: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.tabSlot[data-selected='true'] .tab {
+  color: var(--cyber-text);
+}
+
+.tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 18px;
+  block-size: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.tabClose:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.body {
+  position: relative;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+/* 每个缓存槽铺满 body，未选中的用 content-visibility: hidden 冻结 */
+.slot {
+  position: absolute;
+  inset: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.slot[data-hidden='true'] {
+  content-visibility: hidden;
+  /* hidden 的元素不接受指针事件，避免遮住可见槽 */
+  pointer-events: none;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 100%;
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+/* 动效收敛：关闭键与 tab 外框 */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .tabSlot,
+  .tabClose {
+    transition: none;
+  }
+}

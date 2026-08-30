@@ -1,0 +1,155 @@
+/**
+ * 原生 overlay（dialog / popover）的共用样式。
+ *
+ * 全部走 tokens.css 的变量，零硬编码彩色（`check:styles` 棘轮）。
+ * 进出场按 `animate-to-from-top-layer` 指导：必须 transition `overlay` 与 `display`
+ * （否则退场期会被提前从 top layer 摘掉 / 直接消失），并写 `transition-behavior: allow-discrete`。
+ */
+
+/* ==================== Dialog ==================== */
+
+.dialog {
+  margin: auto;
+  max-inline-size: min(92vw, var(--dialog-width, 560px));
+  max-block-size: 84vh;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-card);
+  background: var(--cyber-surface);
+  color: var(--cyber-text);
+  box-shadow: var(--shadow-card-active);
+
+  /* 退场态（同时是基态） */
+  opacity: 0;
+  scale: 0.97;
+
+  transition-property: opacity, scale, display, overlay;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+.dialog[open] {
+  opacity: 1;
+  scale: 1;
+
+  @starting-style {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+.dialog::backdrop {
+  background-color: rgb(0 0 0 / 0);
+  backdrop-filter: blur(0px);
+  transition-property: background-color, backdrop-filter, display, overlay;
+  transition-duration: 200ms;
+  transition-behavior: allow-discrete;
+}
+
+/* 遮罩是黑色透明度，不计入色值棘轮（属基准视觉语言） */
+.dialog[open]::backdrop {
+  background-color: rgb(0 0 0 / 0.5);
+  backdrop-filter: blur(2px);
+
+  @starting-style {
+    background-color: rgb(0 0 0 / 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-block-end: 1px solid var(--line-1);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dialogBody {
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  max-block-size: calc(84vh - 52px);
+}
+
+/* ==================== Popover（含 Tooltip） ==================== */
+
+.popover {
+  /* anchor positioning 接管定位，需先清掉 popover 的默认居中 inset/margin */
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--cyber-surface);
+  color: var(--cyber-text);
+  box-shadow: var(--shadow-card-active);
+
+  /* 默认贴触发元素下方，越界自动翻到上方 */
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  margin-block: 6px;
+
+  opacity: 0;
+  translate: 0 -4px;
+
+  transition-property: opacity, translate, display, overlay;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+.popover:popover-open {
+  opacity: 1;
+  translate: 0 0;
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.tooltip {
+  composes: popover;
+  padding: 5px 9px;
+  border-radius: var(--radius-badge);
+  font-size: 11px;
+  line-height: 1.35;
+  max-inline-size: 260px;
+  pointer-events: none;
+  position-area: block-start;
+  position-try-fallbacks: flip-block;
+
+  /* 锚定容器查询：翻转时可改箭头/间距（见 position-aware-tooltips） */
+  container-type: anchored;
+}
+
+/* ==================== 减弱动效 ==================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog,
+  .popover,
+  .tooltip {
+    scale: none;
+    translate: none;
+    transition-duration: 80ms;
+  }
+
+  .dialog[open] {
+    @starting-style {
+      scale: none;
+    }
+  }
+
+  .popover:popover-open {
+    @starting-style {
+      translate: none;
+    }
+  }
+}

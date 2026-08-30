@@ -1,0 +1,238 @@
+/**
+ * 图片灯箱 —— 原生 <dialog> top-layer 呈现。
+ * 单图完整保留原样；多图只附加左右导航和下方缩略图。
+ */
+
+.lightbox {
+  margin: auto;
+  max-inline-size: 90vw;
+  max-block-size: 90vh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  user-select: none;
+  /* 进出场：不透明度 + 轻微缩放，allow-discrete 让 display 参与过渡 */
+  opacity: 0;
+  scale: 0.94;
+  transition:
+    opacity 200ms ease,
+    scale 200ms ease,
+    overlay 200ms ease allow-discrete,
+    display 200ms ease allow-discrete;
+}
+
+.lightbox[open] {
+  opacity: 1;
+  scale: 1;
+}
+
+@starting-style {
+  .lightbox[open] {
+    opacity: 0;
+    scale: 0.94;
+  }
+}
+
+.lightbox::backdrop {
+  background: color-mix(in srgb, #000 80%, transparent);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition:
+    opacity 200ms ease,
+    overlay 200ms ease allow-discrete,
+    display 200ms ease allow-discrete;
+}
+
+.lightbox[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .lightbox[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+.browser {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.browser[data-multiple='true'] {
+  gap: 10px;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+}
+
+.frame {
+  position: relative;
+  display: flex;
+  border-radius: var(--radius-lg, 10px);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.picture {
+  display: block;
+  max-inline-size: 90vw;
+  max-block-size: 90vh;
+  object-fit: contain;
+}
+
+/* 多图时只为下方缩略图让出空间，图片本身材质保持不变。 */
+.browser[data-multiple='true'] .picture {
+  max-block-size: calc(90vh - 66px);
+}
+
+.dismiss {
+  position: fixed;
+  inset-block-start: 16px;
+  inset-inline-end: 16px;
+  z-index: 3;
+  inline-size: 40px;
+  block-size: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.dismiss:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.nav {
+  position: fixed;
+  inset-block: 52px 62px;
+  z-index: 1;
+  inline-size: 50vw;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.previous {
+  inset-inline-start: 0;
+}
+
+.next {
+  inset-inline-end: 0;
+}
+
+.filmstrip {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-inline-size: 90vw;
+  min-inline-size: 0;
+}
+
+.counter {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rail {
+  display: flex;
+  gap: 7px;
+  min-inline-size: 0;
+  max-inline-size: calc(90vw - 46px);
+  padding: 3px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.thumbnail {
+  position: relative;
+  flex: 0 0 auto;
+  inline-size: 54px;
+  block-size: 40px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  opacity: 0.5;
+  scale: 0.94;
+  cursor: pointer;
+  transition: opacity 140ms ease, scale 140ms ease;
+}
+
+.thumbnail::after {
+  content: '';
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 2px;
+  block-size: 2px;
+  border-radius: 999px;
+  background: #fff;
+  opacity: 0;
+}
+
+.thumbnail:hover {
+  opacity: 0.8;
+}
+
+.thumbnail[data-active='true'] {
+  opacity: 1;
+  scale: 1;
+}
+
+.thumbnail[data-active='true']::after {
+  opacity: 1;
+}
+
+.thumbnail img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.dismiss:focus-visible,
+.thumbnail:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.nav:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 680px) {
+  .nav {
+    inset-block: 48px 58px;
+  }
+
+  .thumbnail {
+    inline-size: 48px;
+    block-size: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox,
+  .dismiss,
+  .thumbnail {
+    transition-duration: 60ms;
+  }
+}

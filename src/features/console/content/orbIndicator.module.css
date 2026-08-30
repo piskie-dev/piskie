@@ -1,0 +1,73 @@
+/* OrbIndicator：orbit 环流用于 Working；expanding 收放用于 Thinking。 */
+
+.orb {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.orb i {
+  position: absolute;
+  inset: 0;
+  rotate: calc(var(--orb-i) * 45deg);
+}
+
+.orb[data-orb-variant='orbit'] i::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0.5px;
+  inset-inline-start: 50%;
+  inline-size: 2.6px;
+  block-size: 2.6px;
+  margin-inline-start: -1.3px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: orb-orbit 1.6s linear infinite;
+  animation-delay: calc(var(--orb-i) * -0.2s);
+}
+
+@keyframes orb-orbit {
+  0%, 100% { opacity: 0.2; }
+  12.5% { opacity: 1; }
+}
+
+.orb[data-orb-variant='expanding'] {
+  animation: orb-expanding-twist 9.6s linear infinite;
+}
+
+.orb[data-orb-variant='expanding'] i::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: 2px;
+  block-size: 2px;
+  margin: -1px 0 0 -1px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: orb-expanding 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite both;
+}
+
+@keyframes orb-expanding {
+  0%, 5%, 50%, 55%, 100% { transform: translateY(-1.15px); }
+  25%, 30%, 75%, 80% { transform: translateY(-4.8px); }
+}
+
+@keyframes orb-expanding-twist {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .orb i::before {
+    animation: none;
+  }
+
+  .orb[data-orb-variant='orbit'] i::before {
+    opacity: 0.7;
+  }
+
+  .orb[data-orb-variant='expanding'] i::before {
+    transform: translateY(-4px);
+  }
+}

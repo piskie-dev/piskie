@@ -1,0 +1,227 @@
+/**
+ * 天际栏（全局系统栏）皮肤。
+ * 全路由同一条栏:亮起靠光不靠漆,灯签统一暗胶囊+语义光点,遥测走 mono 排印;
+ * 只消费全局 token(cyber-* 与 status-*),深浅主题自适应。
+ * 整条栏是窗口拖拽区,可交互元素逐个打 no-drag 洞。
+ */
+
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 48px;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  -webkit-app-region: drag;
+  --sb-faint: color-mix(in srgb, var(--cyber-text-muted) 72%, transparent);
+  --sb-cell: color-mix(in srgb, var(--cyber-text) 6%, transparent);
+  --sb-cell-hi: color-mix(in srgb, var(--cyber-text) 10%, transparent);
+  --sb-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/* macOS:红绿灯与栏同层(单栏合并),左侧让位 */
+.bar[data-mac='true'] {
+  padding-left: 84px;
+}
+
+/* ── 品牌位 ── */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand img {
+  width: 24px;
+  height: 24px;
+}
+
+.brand b {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: color-mix(in srgb, var(--cyber-text) 84%, transparent);
+}
+
+/* ── 任务广播位:正在进行=头条,多任务轮播 ── */
+.cast {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  border: 0;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cast:hover {
+  background: var(--sb-cell);
+}
+
+.castDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--status-running);
+  box-shadow: 0 0 8px var(--status-running);
+  animation: sb-pulse 2.6s ease-in-out infinite;
+}
+
+.castName {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.castTime {
+  font-family: var(--sb-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--sb-faint);
+  white-space: nowrap;
+}
+
+.castMore {
+  font-family: var(--sb-mono);
+  font-size: 9.5px;
+  color: var(--cyber-text-muted);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyber-text) 7%, transparent);
+}
+
+/* 头条轮换入场 */
+.castSwap {
+  animation: sb-cast-in 450ms ease;
+}
+
+@keyframes sb-cast-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+.spring {
+  flex: 1;
+}
+
+/* ── 遥测串:纯 mono 排印(信息是背景音,不是信号灯) ── */
+.tele {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--sb-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--sb-faint);
+  white-space: nowrap;
+}
+
+.tele b {
+  font-weight: 500;
+  color: var(--cyber-text-muted);
+}
+
+.tele .unit {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  opacity: 0.85;
+}
+
+/* ── 灯签族:暗胶囊 + 语义光点,亮起靠光 ── */
+.lamp {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--cyber-text) 72%, transparent);
+  background: var(--sb-cell);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 8%, transparent);
+  transition: background-color 180ms ease;
+}
+
+.lamp:hover {
+  background: var(--sb-cell-hi);
+}
+
+.lamp i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sb-tone, var(--cyber-primary));
+  box-shadow: 0 0 8px var(--sb-tone, var(--cyber-primary));
+}
+
+.lamp[data-tone='hold'] {
+  --sb-tone: var(--status-waiting);
+}
+
+.lamp[data-tone='halt'] {
+  --sb-tone: var(--status-error);
+  color: color-mix(in srgb, var(--status-error) 55%, var(--cyber-text));
+}
+
+.lamp[data-tone='hold'] i {
+  animation: sb-pulse 2.6s ease-in-out infinite;
+}
+
+/* 全部中断:方形止灯,不脉动 */
+.lampStop i {
+  border-radius: 1.5px;
+  width: 7px;
+  height: 7px;
+  animation: none;
+}
+
+@keyframes sb-pulse {
+  50% {
+    box-shadow: 0 0 13px 1.5px var(--sb-tone, var(--status-running));
+  }
+}
+
+/* 右侧动作簇:整簇打 no-drag 洞(内含复用组件,不逐个改它们的皮肤) */
+.deck {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 中断失败的瞬时提示 */
+.note {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--status-error) 70%, var(--cyber-text));
+  white-space: nowrap;
+}
+
+.clock {
+  font-family: var(--sb-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--cyber-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .castDot,
+  .lamp i,
+  .castSwap {
+    animation: none;
+  }
+}

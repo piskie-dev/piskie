@@ -1,0 +1,176 @@
+/**
+ * Transcript 列表（关键 CSS）。
+ *
+ * **不用 JS 虚拟化**：`content-visibility: auto` + `contain-intrinsic-size` 让浏览器跳过
+ * 离屏 cell 的 layout/paint，DOM 保持完整（`defer-rendering-heavy-content`）。
+ *
+ * `interpolate-size: allow-keywords` 挂在容器上，使详情区能从 0 过渡到 `auto`——
+ * 取代旧实现的 JS 测高与 max-height hack（`animate-to-intrinsic-sizes`）。
+ */
+
+/* 滚动容器的包裹层：`absolute` 的浮钮不能直接放在滚动容器里
+   （会随内容滚走），所以外面套一层定位上下文 */
+.viewport {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+/*
+ * 流水**下方还会追加生图审核块**（dock 的 `DockPanel` 与 thread 的 `.center`
+ * 都把 `imageNodes` 铺在流水之后）。父层是 flex 列，而本元素 `min-block-size: 0`
+ * ⇒ 审核块一多就会把流水挤到 0 高、对话整段消失。给一个下限：
+ * 挤到下限后由外层滚动容器兜底。
+ */
+.viewport {
+  min-block-size: 200px;
+}
+
+/* 回到底部浮钮：贴底居中，**只在上翻时渲染**（可见性由组件控制） */
+.scrollToBottom {
+  position: absolute;
+  inset-block-end: 12px;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 32px;
+  block-size: 32px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--cyber-text);
+  cursor: pointer;
+  transition: background-color 160ms ease, opacity 160ms ease;
+  opacity: 1;
+}
+
+@starting-style {
+  .scrollToBottom { opacity: 0; }
+}
+
+.scrollToBottom:hover {
+  background: var(--surface-2);
+}
+
+/*
+ * 唯一密度：阅读流（依 Codex 截图的段间距）。
+ * 原本 dock 用紧凑的 `panel` 密度（6px 间距 / 8px 内边距），2026-08-05 用户裁决
+ * dock 节点内部与 thread 统一为横条阅读流后，`variant` 机制随之退役。
+ *
+ * 滚动条**默认隐形，滚动中才显示**（用户 2026-08-04）：
+ * JS 在滚动事件里给容器打 `data-scrolling`，静止 1s 后摘掉（见 Transcript.tsx）。
+ * 颜色用标准 `scrollbar-color`（非 auto 时该元素改走标准渲染，全局
+ * `::-webkit-scrollbar` 的 8px 样式对它不再生效，变成系统细条 —— 阅读流里更轻）。
+ * `scrollbar-gutter: stable` 仍在：显隐只是颜色变化，不引起布局抖动。
+ */
+.transcript {
+  interpolate-size: allow-keywords;
+
+  --transcript-gap: 20px;
+
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* 横向锁死:主体永不横滚,宽内容在各自 overflow-x:auto 容器内滚 */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+/* ResizeObserver 观察这一层：live Markdown、活动行和异步媒体的真实高度都在这里。
+   阅读列限宽在这里生效（--thread-col-max 由 thread 的 .column 提供）：
+   滚动容器本身满宽——两侧留白也能接住滚轮；dock 等无变量场景不限宽。 */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--transcript-gap);
+  box-sizing: border-box;
+  min-block-size: 100%;
+  min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: var(--thread-col-max, none);
+  margin-inline: auto;
+  padding: 8px var(--conversation-inline-gutter, 16px) 24px;
+}
+
+.transcript[data-scrolling='true'] {
+  scrollbar-color: color-mix(in srgb, var(--cyber-text) 28%, transparent) transparent;
+}
+
+/* 视口内那批不加 content-visibility——指导明确要求不要对首屏元素用 auto */
+.cell[data-deferred='true'] {
+  content-visibility: auto;
+  /* auto 让浏览器渲染过一次后记住真实高度，避免滚动时抖动 */
+  contain-intrinsic-size: auto none auto 96px;
+}
+
+/* 末尾可能是 TranscriptNode 或活动行；都由真实内容层承担初始定位。 */
+.content > :last-child {
+  scroll-initial-target: nearest;
+}
+
+.loadEarlier {
+  align-self: center;
+  margin-block-end: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.loadEarlier:hover {
+  background: var(--surface-2);
+  border-color: var(--line-3);
+}
+
+.empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 120px;
+  color: color-mix(in srgb, var(--cyber-text-muted) 45%, transparent);
+  font-size: 13px;
+}
+
+/* 连续活动状态是内容行，不是消息。它只在工作中存在（内容一到即消失），
+   Atom 呼吸 + 标签流光，与 Think 思考中态使用同一套动态语言。 */
+.activityRow {
+  display: grid;
+  grid-template-columns: 14px max-content max-content max-content;
+  align-items: start;
+  column-gap: 7px;
+  flex: none;
+  align-self: flex-start;
+  min-block-size: 18px;
+  min-inline-size: 0;
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--cyber-text-muted);
+}
+
+.activityIcon {
+  display: inline-flex;
+  margin-block-start: 3px;
+  color: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+}
+
+.activitySeparator {
+  color: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+}
+
+.activityElapsed {
+  font-variant-numeric: tabular-nums;
+}

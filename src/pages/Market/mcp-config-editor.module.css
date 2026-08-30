@@ -1,0 +1,254 @@
+/* 安装位置那一行展开后的 MCP 配置表单 */
+
+.form {
+  display: grid;
+  gap: 11px;
+  border-top: 1px dashed var(--line-2);
+  margin-top: 10px;
+  padding-top: 12px;
+}
+
+.transportChoice {
+  display: inline-grid;
+  width: fit-content;
+  grid-auto-flow: column;
+  gap: 2px;
+  border: 1px solid var(--line-1);
+  border-radius: 9px;
+  background: var(--surface-1);
+  padding: 2px;
+}
+
+.transportChoice button {
+  min-height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 620;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.transportChoice button:hover {
+  color: var(--cyber-text);
+}
+
+.transportActive {
+  background: color-mix(in srgb, var(--cyber-accent) 16%, transparent);
+  color: var(--cyber-accent);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--cyber-text);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.field > span small {
+  color: var(--cyber-text-muted);
+  font-weight: 500;
+}
+
+.field input,
+.field textarea,
+.field select,
+.pairRow input {
+  width: 100%;
+  border: 1px solid var(--line-1);
+  border-radius: 8px;
+  outline: 0;
+  background: color-mix(in srgb, var(--cyber-bg) 68%, transparent);
+  color: var(--cyber-text);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.field input,
+.field select,
+.pairRow input {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.field textarea {
+  min-height: 58px;
+  resize: vertical;
+  line-height: 1.55;
+  padding: 7px 10px;
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus,
+.pairRow input:focus {
+  border-color: color-mix(in srgb, var(--cyber-accent) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cyber-accent) 9%, transparent);
+}
+
+.hintChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px dashed color-mix(in srgb, var(--cyber-accent) 40%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-accent);
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  padding: 2px 8px 2px 6px;
+  cursor: pointer;
+}
+
+.hintChip:hover {
+  background: color-mix(in srgb, var(--cyber-accent) 12%, transparent);
+}
+
+.hintChip svg {
+  width: 10px;
+}
+
+.pairEditor {
+  display: grid;
+  gap: 6px;
+}
+
+.pairRow {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.pairValueCell {
+  position: relative;
+}
+
+.pairValueCell input {
+  padding-right: 30px;
+}
+
+.pairReveal,
+.pairRemove {
+  display: grid;
+  border: 0;
+  place-items: center;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+}
+
+.pairReveal {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+}
+
+.pairRemove {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.pairReveal:hover {
+  color: var(--cyber-text);
+}
+
+.pairRemove:hover {
+  background: color-mix(in srgb, var(--cyber-error) 12%, transparent);
+  color: var(--cyber-error);
+}
+
+.pairReveal svg,
+.pairRemove svg {
+  width: 13px;
+}
+
+.addPairButton {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--cyber-accent) 12%, transparent);
+  color: var(--cyber-accent);
+  font: inherit;
+  font-size: 9px;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.addPairButton svg {
+  width: 11px;
+}
+
+.plaintextNote {
+  color: var(--cyber-text-muted);
+  font-size: 9px;
+}
+
+.formError {
+  margin: 0;
+  color: var(--cyber-error);
+  font-size: 10px;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.formCancel,
+.formSave {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.formCancel {
+  border: 1px solid var(--line-1);
+  background: var(--surface-1);
+  color: var(--cyber-text);
+}
+
+.formCancel:hover {
+  background: var(--surface-2);
+}
+
+.formSave {
+  background: var(--cyber-primary);
+  color: var(--cyber-bg);
+}
+
+.formSave:disabled,
+.formCancel:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

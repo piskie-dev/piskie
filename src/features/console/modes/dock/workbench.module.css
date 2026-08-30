@@ -1,0 +1,162 @@
+/**
+ * DockMode 布局—— **几何逐条复刻旧 `computeDockLayout`**。
+ *
+ * 取证来源 `AgentCanvas.tsx:277-340` 与 `pages/Console/index.tsx:677-731`：
+ *
+ * | 旧实现 | 这里 |
+ * |---|---|
+ * | 左栏是 flex 兄弟、**全高**（`index.tsx:680`），画布区是 `flex-1` | `.dock` 横向 flex：`.sessions` + `.work` |
+ * | 主面板 `w = clamp(floor(W×0.26), 260, min(520, W))`、`h = H` | `.mainCol` 宽 `clamp(260px, 26%, 520px)`，恒定不撑满 |
+ * | 选中 sub 是**同宽度带的一列**，辅助行在该列底部（`reserveFollowingBottomRow`） | `.subCol` 同宽，`.subAux` 在其内部底部 |
+ * | 屏幕预览在选中 sub 列底部 | `.subAux` 承载屏幕预览 |
+ * | 有 subagent 时提供切换入口 | 舞台上方复用紧凑的 `AgentTabs` |
+ * | 主列右侧剩余区是画布（点阵背景） | `.rest` 承载 `DockCanvas`（2026-07-31 恢复） |
+ *
+ * **不要**把主列改成 `1fr`：旧实现里它永远是 26%/520 上限的窄列，撑满会彻底改变
+ * dock 的信息布局（这是我第一版犯的错）。
+ *
+ * 分隔条只**覆写**用户调整后的宽度，默认值与旧几何一致。
+ */
+
+.dock {
+  display: flex;
+  min-block-size: 0;
+  block-size: 100%;
+  overflow: hidden;
+  background: var(--console-canvas-bg);
+}
+
+/**
+ * 左栏：全高 flex 兄弟（旧 `index.tsx:680` 的位置语义）。
+ *
+ * 宽度 **240px**，不是旧值 186 —— **用户特批的唯一一处 dock 尺寸变更**
+ * （2026-07-30："这次特批按照原来 thread 的宽度修改 dock 模式，dock 模式本身的太小了"）。
+ * 与 thread 左栏取同一个值，切换模式时主屏不横向跳位。
+ * 收起态仍是 52（旧值，未变）。
+ */
+.sessions {
+  flex: 0 0 auto;
+  inline-size: var(--col-sessions, 240px);
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--console-canvas-bg);
+}
+
+.dock[data-sessions-collapsed='true'] .sessions {
+  inline-size: 52px;
+}
+
+/* 画布区：旧 `flex-1 min-w-0 bg-console-canvas` */
+.work {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  background: var(--console-canvas-bg);
+
+  /* 点阵背景（保留清单）——旧实现由 ReactFlow 的 <Background> 画 */
+  background-image: radial-gradient(color-mix(in srgb, var(--cyber-text-muted) 14%, transparent) 1px, transparent 0);
+  background-size: 22px 22px;
+  background-position: -11px -11px;
+}
+
+/* 空态：整块占满工作区（旧 `index.tsx:731-744` 是用 WelcomeScreen **替换**
+   整个画布区，不是塞进 26% 的主列）。 */
+.emptySlot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+/* 面板舞台：主列 + 选中 sub 列 + 剩余空区。
+   节点是浮卡(16px 圆角+投影),舞台给一圈呼吸边距——玻璃衬底摘除后
+   两侧同透壁纸,贴边会让节点与左栏黏连(2026-08-19 用户反馈) */
+.stage {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: 10px 12px 12px;
+}
+
+/* 主列：恒定窄列，与旧 `clamp(floor(W*0.26), 26%, 520px)` 同档。
+   列缘竖线已摘(2026-08-19 用户反馈):浮卡化后贯穿线悬在半空,
+   节点自身描边即分界;拖宽把手(Divider)是透明命中区,不受影响 */
+.mainCol {
+  position: relative;
+  flex: 0 0 auto;
+  inline-size: var(--col-main, clamp(260px, 26%, 520px));
+  min-inline-size: 0;
+  min-block-size: 0;
+  background: var(--console-canvas-bg);
+}
+
+/* 选中 worker 的列：同宽度带；面板在上、辅助行在下（旧 reserveFollowingBottomRow） */
+.subCol {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  inline-size: var(--col-sub, clamp(260px, 26%, 520px));
+  min-inline-size: 0;
+  min-block-size: 0;
+  background: var(--console-canvas-bg);
+}
+
+.subPanel {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+/* 屏幕预览辅助行，最小高度 160px。 */
+.subAux {
+  display: flex;
+  flex: 0 0 auto;
+  min-block-size: 160px;
+  max-block-size: 42%;
+  border-block-start: 1px solid var(--line-1);
+}
+
+
+/* 屏幕预览占满辅助行，并允许随窄列收缩。 */
+.auxSlot {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+/* 主列右侧的剩余区：**节点画布**（用户 2026-07-31 裁决恢复）。
+    曾删掉节点树，导致这里是一片空白、未选中的 worker 完全看不到；
+   现在恢复画布形态，但节点内部一律新树组件（`canvas/nodes.tsx`）。
+   点阵背景与聚光灯由 `canvas.module.css` 画，这里只负责让它铺满剩余空间。 */
+.rest {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+/* 面板槽：切走即跳过 layout/paint */
+.panel {
+  min-inline-size: 0;
+  min-block-size: 0;
+  block-size: 100%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px auto 480px;
+}
+
+/* 分隔条落在列边界上，绝对定位不占宽度 */
+.dividerMain {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -3px;
+  z-index: 1;
+}
+
+/* 与 thread 侧栏一致，会话列直接透出壁纸，可读性由背景遮罩控制。 */

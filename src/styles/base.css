@@ -1,0 +1,119 @@
+/* 基础样式：重置、根元素、字体、原生输入框、滚动条 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--cyber-bg);
+  color: var(--cyber-text);
+}
+
+/* 主题背景激活时：body/#root 的实底会画在壁纸层
+   （z-index:-1 fixed，绘制序早于所有 in-flow 块背景）之上，必须让透。
+   body 也在列：html 自带背景时 body 背景不再提升为画布背景、按普通元素绘制。
+   html 保持实底：它才是真正的画布背景，画在壁纸层之下，作图片加载前的兜底 */
+:root[data-app-bg] body,
+:root[data-app-bg] #root {
+  background-color: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* 输入框基础样式 */
+input[type="text"],
+input[type="password"],
+input[type="search"],
+textarea {
+  background-color: var(--cyber-bg);
+  border: 1px solid var(--cyber-border);
+  color: var(--cyber-text);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--cyber-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyber-primary) 20%, transparent);
+}
+
+/* Scrollbar styling - 深色主题 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--cyber-text-muted) 45%, transparent);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--cyber-text-muted) 65%, transparent);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--cyber-text-muted);
+}
+
+/* ============================================================
+ * 主题背景切换动效（2026-08-06 用户裁决改淡入淡出）
+ * appBackgroundFade.ts 发起 view transition 前给 <html> 挂 .app-bg-fading，
+ * 结束后移除。动画就是 view transition 默认的交叉淡化，这里只调
+ * 时长与曲线——作用域限定在该 class 下，不影响将来其他 view transition。
+ * ============================================================ */
+:root.app-bg-fading::view-transition-old(root),
+:root.app-bg-fading::view-transition-new(root) {
+  animation-duration: 500ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* ============================================================
+ * 分栏条拖动中：`Divider` 在 <html> 上标 data-divider-dragging=方向。
+ *
+ * 指针捕获只保证事件流向分隔条，**不阻止浏览器选择文字** —— 横穿中栏拖一次
+ * 就把整段正文刷蓝了；同时光标会随经过的元素在 col-resize / 文本光标之间闪。
+ * 拖动是个瞬时状态，全局压掉这两件事最省心，松手即恢复。
+ * ============================================================ */
+:root[data-divider-dragging] {
+  user-select: none;
+}
+
+:root[data-divider-dragging='vertical'] * {
+  cursor: col-resize !important; /* 覆盖沿途元素自己的 cursor style-token-ignore */
+}
+
+:root[data-divider-dragging='horizontal'] * {
+  cursor: row-resize !important; /* 同上 style-token-ignore */
+}

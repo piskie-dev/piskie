@@ -1,0 +1,1246 @@
+/**
+ * EnvStudio · Lumen 皮肤与导播台布局
+ *
+ * Lumen 语言（用户定稿）：近黑中性舞台 + 无边框明度分层 + 光是唯一装饰
+ * （border beam / 粒子 orb / 状态光点 / 文字扫光）。
+ *
+ * 色值收敛在 .studio 的 --st-* 变量块（本模块唯一色值来源，"模块皮肤层"先例）；
+ * 组件只消费 --st-*，TSX 内零色值。深色为主设计面，浅色经 html[data-theme='light'] 覆盖。
+ */
+
+@property --st-beam-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.studio {
+  /* ── Lumen 色板（深色默认）── */
+  --st-stage: #0a0a0c;
+  --st-pane: #131317;
+  --st-pane-hi: #17171c;
+  --st-well: #1c1c22;
+  --st-ink: #ededf2;
+  --st-soft: #b9b9c2;
+  --st-mut: #8a8a94;
+  --st-faint: #5b5b64;
+  --st-hairline: rgba(255, 255, 255, 0.045);
+  --st-beam-a: #6f8dff;
+  --st-beam-b: #a78bfa;
+  --st-live: #3ecf8e;
+  --st-hold: #e0b263;
+  --st-halt: #e58a7b;
+  --st-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  position: relative;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  background:
+    radial-gradient(1000px 560px at 74% -14%, rgba(111, 141, 255, 0.085), transparent 60%),
+    radial-gradient(760px 500px at 6% 110%, rgba(167, 139, 250, 0.055), transparent 55%),
+    var(--st-stage);
+  color: var(--st-ink);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 主题背景在场(壁纸/弥散光,data-app-bg 常态存在)时舞台让位:
+   实底与自带氛围光一并转透明,与控制台的结构层同规则;
+   2026-08-19 用户裁决,与摘除侧栏玻璃同一批 */
+:global(:root[data-app-bg]) .studio {
+  background: transparent;
+}
+
+:global(html[data-theme='light']) .studio {
+  --st-stage: #f4f4f5;
+  --st-pane: #ffffff;
+  --st-pane-hi: #ffffff;
+  --st-well: #ececee;
+  --st-ink: #161619;
+  --st-soft: #3e414b;
+  --st-mut: #6d707b;
+  --st-faint: #a2a4ac;
+  --st-hairline: rgba(255, 255, 255, 0.85);
+  --st-beam-a: #4a6fd6;
+  --st-beam-b: #7c5fd6;
+  --st-live: #149463;
+  --st-hold: #a5761d;
+  --st-halt: #c25545;
+
+  background:
+    radial-gradient(1000px 560px at 74% -14%, rgba(111, 141, 255, 0.1), transparent 60%),
+    radial-gradient(760px 500px at 6% 110%, rgba(167, 139, 250, 0.07), transparent 55%),
+    var(--st-stage);
+}
+
+/* 噪点纹理层（极弱，加"材质"） */
+.grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+:global(html[data-theme='light']) .grain {
+  opacity: 0.016;
+}
+
+/* ── 工作面：满幅铺开（应用页不是 demo 版心，动作要贴住窗口边缘）── */
+.deck {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  inline-size: 100%;
+  padding: 20px 26px 24px;
+}
+
+/* ── 顶栏：quiet metadata + 动作 ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.crumb {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--st-faint);
+  text-transform: uppercase;
+}
+
+.meta {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  color: var(--st-faint);
+}
+
+.meta b {
+  color: var(--st-mut);
+  font-weight: 500;
+}
+
+.actions {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ── 无边框按钮（ActPill）── */
+.pill {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--st-well);
+  color: var(--st-soft);
+  cursor: pointer;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    transform 0.18s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+
+.pill:hover {
+  background: color-mix(in srgb, var(--st-well) 70%, var(--st-mut) 12%);
+  color: var(--st-ink);
+}
+
+.pill:active {
+  transform: scale(0.97);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--st-beam-a);
+  outline-offset: 2px;
+}
+
+.pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pillPrime {
+  background: var(--st-ink);
+  color: var(--st-stage);
+  font-weight: 600;
+}
+
+.pillPrime:hover {
+  background: #fff;
+  color: var(--st-stage);
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--st-beam-a) 25%, transparent);
+}
+
+:global(html[data-theme='light']) .pillPrime:hover {
+  background: #000;
+  color: #fff;
+}
+
+.pillHush {
+  background: transparent;
+  color: var(--st-mut);
+}
+
+.pillHush:hover {
+  background: var(--st-well);
+}
+
+.pillHalt {
+  background: transparent;
+  color: var(--st-halt);
+}
+
+.pillHalt:hover {
+  background: color-mix(in srgb, var(--st-halt) 12%, transparent);
+  color: var(--st-halt);
+}
+
+/* ── 状态光点（GlowDot）── */
+.dot {
+  display: inline-block;
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.dotLive {
+  background: var(--st-live);
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--st-live) 70%, transparent),
+    0 0 3px var(--st-live);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.dotHold {
+  background: var(--st-hold);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--st-hold) 60%, transparent);
+}
+
+.dotIdle {
+  background: var(--st-faint);
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* 进行中文字扫光 */
+.shimmer {
+  background: linear-gradient(90deg, var(--st-mut) 35%, var(--st-ink) 50%, var(--st-mut) 65%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sweep 2.8s linear infinite;
+}
+
+@keyframes sweep {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+/* ── 面板（无边框，顶缘内高光 + 明度分层）── */
+.pane {
+  position: relative;
+  background: var(--st-pane);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 var(--st-hairline);
+}
+
+:global(html[data-theme='light']) .pane {
+  box-shadow:
+    0 2px 14px rgba(25, 30, 50, 0.06),
+    inset 0 1px 0 var(--st-hairline);
+}
+
+/* 运行卡边框流光 */
+.beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--st-beam-angle),
+    transparent 0turn,
+    transparent 0.7turn,
+    color-mix(in srgb, var(--st-beam-a) 90%, transparent) 0.82turn,
+    color-mix(in srgb, var(--st-beam-b) 95%, transparent) 0.88turn,
+    transparent 0.98turn
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: orbit 6s linear infinite;
+}
+
+.beamHold::before {
+  background: conic-gradient(
+    from var(--st-beam-angle),
+    transparent 0turn,
+    transparent 0.7turn,
+    color-mix(in srgb, var(--st-hold) 85%, transparent) 0.82turn,
+    color-mix(in srgb, var(--st-hold) 55%, #fff 18%) 0.88turn,
+    transparent 0.98turn
+  );
+  animation-duration: 8s;
+}
+
+@keyframes orbit {
+  to {
+    --st-beam-angle: 1turn;
+  }
+}
+
+/* ── 导播台布局 ── */
+.switchboard {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr clamp(240px, 18vw, 300px);
+  gap: 18px;
+  padding-block-start: 20px;
+  align-items: stretch;
+  min-block-size: 0;
+}
+
+/* 主屏 */
+.program {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-block-size: 0;
+}
+
+.programView {
+  flex: 1;
+  position: relative;
+  background: var(--st-well);
+  overflow: hidden;
+  min-block-size: 260px;
+}
+
+.programView img {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  /* 填满舞台不留黑边（与预监砖、主会话投屏同口径）；顶部对齐保住页头 */
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* 右上角标：单行 HUD 胶囊（运行时长 + 遥测），白页面上也要清晰可读 */
+.viewCap {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--st-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--st-ink);
+  background: color-mix(in srgb, var(--st-stage) 78%, transparent);
+  padding: 4px 11px;
+  border-radius: 999px;
+}
+
+/* 运行态：画面底部的悬浮字幕层（导播台 PGM 语言） */
+.stageOverlay {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 44px 22px 18px;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--st-stage) 82%, transparent) 72%);
+}
+
+.overlayLead {
+  min-inline-size: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.overlayTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-inline-size: 0;
+}
+
+.overlayName {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  color: var(--st-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlayState {
+  font-size: 12px;
+  color: var(--st-mut);
+  white-space: nowrap;
+}
+
+.overlayUse {
+  margin: 0;
+  font-size: 12px;
+  color: var(--st-mut);
+  max-inline-size: 52ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlayOps {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.useVoid {
+  color: var(--st-hold);
+}
+
+/* 预监列 */
+.rackSide {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.rackCap {
+  font-family: var(--st-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: var(--st-faint);
+  text-transform: uppercase;
+  margin-block-end: 10px;
+  flex: 0 0 auto;
+}
+
+.rack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-block-size: 0;
+  padding-block-end: 4px;
+  /* 预监列滚动条:默认隐藏、悬停显现(与控制台左栏树同款,2026-08-19 用户裁决) */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.rack:hover {
+  scrollbar-color: color-mix(in srgb, var(--st-ink) 28%, transparent) transparent;
+}
+
+.pv {
+  display: block;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.2s;
+  flex: 0 0 auto;
+}
+
+.pv:hover {
+  transform: translateY(-2px);
+}
+
+.pv:focus-visible {
+  outline: 2px solid var(--st-beam-a);
+  outline-offset: 2px;
+}
+
+.pvOn {
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--st-beam-a) 75%, transparent),
+    0 8px 26px color-mix(in srgb, var(--st-beam-a) 25%, transparent);
+}
+
+.pvView {
+  display: block;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--st-well);
+  overflow: hidden;
+}
+
+.pvView img {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.pvLab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 12px;
+  min-inline-size: 0;
+}
+
+.pvName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pvStat {
+  font-size: 10.5px;
+  color: var(--st-faint);
+  margin-inline-start: auto;
+  font-family: var(--st-mono);
+  white-space: nowrap;
+}
+
+.pvAdd {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 6.4;
+  color: var(--st-faint);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-mut) 16%, transparent);
+  font-size: 12.5px;
+}
+
+.pvAdd:hover {
+  color: var(--st-ink);
+  background: var(--st-pane);
+}
+
+/* ── 空闲封面 ── */
+.idleCover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* ── 主屏空闲 · 待命档案（编辑排版：左文右星云的非对称构图）── */
+.idleScene {
+  position: absolute;
+  inset: 0;
+}
+
+/* 右侧配重：大粒子星云，faint 色 + 边缘径向渐隐，极慢漂移 */
+.idleOrbDeco {
+  position: absolute;
+  inset-inline-end: 7%;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--st-faint);
+  opacity: 0.6;
+  -webkit-mask-image: radial-gradient(circle, #000 52%, transparent 76%);
+  mask-image: radial-gradient(circle, #000 52%, transparent 76%);
+  pointer-events: none;
+}
+
+/* 左栏档案组：垂直居中，左对齐，限宽 */
+.dossier {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: clamp(28px, 6vw, 76px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+  max-inline-size: 56ch;
+  padding-inline-end: 40px;
+  /* 底部字幕层（操作条）的净空，避免长用途与之相撞 */
+  padding-block-end: 64px;
+}
+
+.dossierCap {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: var(--st-mut);
+  text-transform: uppercase;
+}
+
+/* 眉标里的上次使用时间：比 STANDBY 关键字再亮一档，保证可读 */
+.dossierCapTime {
+  color: var(--st-soft);
+}
+
+/* 用途即主角：编辑排版的大字陈述 */
+.dossierText {
+  margin: 0;
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: -0.015em;
+  color: var(--st-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.purposeVoid {
+  color: var(--st-hold);
+}
+
+/* 登录痕迹：无标签帽的一行安静脚注 */
+.trailLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trailWord {
+  font-size: 11.5px;
+  color: var(--st-faint);
+}
+
+.siteChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 12px 3px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--st-pane) 55%, var(--st-well));
+  box-shadow: inset 0 1px 0 var(--st-hairline);
+}
+
+/* 站点首字徽章 */
+.siteBadge {
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--st-pane-hi);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-mut) 22%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--st-soft);
+  flex: 0 0 auto;
+}
+
+/* 已识别站点：品牌名（正文字体） */
+.siteName {
+  font-size: 12px;
+  color: var(--st-soft);
+  white-space: nowrap;
+}
+
+/* 未识别站点：域名（等宽，弱一档） */
+.siteHost {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  color: var(--st-mut);
+  white-space: nowrap;
+}
+
+.siteChipMore {
+  padding-inline-start: 12px;
+  font-family: var(--st-mono);
+  font-size: 11px;
+  color: var(--st-faint);
+}
+
+@media (max-width: 980px) {
+  .idleOrbDeco {
+    display: none;
+  }
+}
+
+/* 预监空闲：与运行砖同尺寸的用途面板——金属盘锚材质、排印分层、hover 被"唤醒" */
+.pvBrief {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 16px 18px;
+}
+
+.pvBrief::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    240px 150px at 16% 6%,
+    color-mix(in srgb, var(--st-beam-a) 7%, transparent),
+    transparent 70%
+  );
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.pv:hover .pvBrief::before {
+  opacity: 1;
+}
+
+.pvBriefDisc {
+  flex: 0 0 auto;
+  position: relative;
+  color: var(--st-soft); /* 迷你粒子球取色于此 */
+  transition: color 0.25s;
+}
+
+/* 球后垫一层极弱光斑，把点阵从井底色上托出来 */
+.pvBriefDisc::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--st-beam-a) 13%, transparent), transparent 68%);
+}
+
+.pv:hover .pvBriefDisc {
+  color: var(--st-ink);
+}
+
+.pvBriefBody {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.pvBriefCap {
+  font-family: var(--st-mono);
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  color: var(--st-faint);
+  text-transform: uppercase;
+}
+
+.pvBriefText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--st-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.2s;
+}
+
+.pv:hover .pvBriefText {
+  color: var(--st-ink);
+}
+
+.disc {
+  position: relative;
+  display: inline-grid;
+  inline-size: 46px;
+  block-size: 46px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 210deg,
+    #3a3d45,
+    #9aa1b0 12%,
+    #232429 32%,
+    #6d7380 52%,
+    #191a1f 70%,
+    #8b90a0 88%,
+    #3a3d45
+  );
+}
+
+:global(html[data-theme='light']) .disc {
+  background: conic-gradient(
+    from 210deg,
+    #c9ccd4,
+    #f5f6f8 12%,
+    #a8acb6 32%,
+    #e2e4e9 52%,
+    #9b9fa9 70%,
+    #eef0f3 88%,
+    #c9ccd4
+  );
+}
+
+.discCore {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--st-pane);
+  display: grid;
+  place-items: center;
+  font-family: var(--st-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--st-faint);
+}
+
+.discBig {
+  inline-size: 64px;
+  block-size: 64px;
+}
+
+/* ── 空态舞台 ── */
+.voidStage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 50px 30px;
+}
+
+.orbWrap {
+  position: relative;
+  display: inline-block;
+  margin-block-end: 24px;
+}
+
+.orbHalo {
+  position: absolute;
+  inset: -34px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--st-beam-a) 16%, transparent), transparent 65%);
+  filter: blur(4px);
+}
+
+.voidTitle {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.voidSay {
+  margin: 0 0 24px;
+  font-size: 13.5px;
+  color: var(--st-mut);
+  max-inline-size: 44ch;
+  line-height: 1.9;
+}
+
+/* ── 页脚状态行 ── */
+.footline {
+  display: flex;
+  gap: 20px;
+  font-family: var(--st-mono);
+  font-size: 10.5px;
+  color: var(--st-faint);
+  padding-block-start: 16px;
+  flex: 0 0 auto;
+}
+
+.footRight {
+  margin-inline-start: auto;
+}
+
+/* 内核安装进度（footline 内） */
+.kernelBusy {
+  color: var(--st-hold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dotLive,
+  .shimmer,
+  .beam::before,
+  .beamHold::before,
+  .pvBriefDisc {
+    transition: none;
+  }
+
+  .pill,
+  .pv {
+    transition: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .switchboard {
+    grid-template-columns: 1fr;
+  }
+
+  .rack {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .pv {
+    inline-size: 200px;
+  }
+}
+
+/* ═══ 侧滑面板（Sheet：Forge/Depot/Vault 共用骨架）═══ */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--st-stage) 62%, transparent);
+  backdrop-filter: blur(2px);
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.sheet {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 21;
+  inline-size: min(460px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--st-pane);
+  box-shadow:
+    -24px 0 60px rgba(0, 0, 0, 0.45),
+    inset 1px 0 0 var(--st-hairline);
+  animation: sheetIn 0.22s cubic-bezier(0.3, 1.1, 0.4, 1);
+}
+
+:global(html[data-theme='light']) .sheet {
+  box-shadow:
+    -24px 0 60px rgba(25, 30, 50, 0.18),
+    inset 1px 0 0 var(--st-hairline);
+}
+
+@keyframes sheetIn {
+  from {
+    translate: 40px 0;
+    opacity: 0;
+  }
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 14px;
+  flex: 0 0 auto;
+}
+
+.sheetTitle {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sheetSub {
+  font-family: var(--st-mono);
+  font-size: 10.5px;
+  color: var(--st-faint);
+}
+
+.sheetClose {
+  margin-inline-start: auto;
+}
+
+.sheetBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 24px 20px;
+  min-block-size: 0;
+}
+
+.sheetFoot {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 24px 20px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 1px 0 var(--st-hairline);
+}
+
+/* ═══ 表单控件（Lumen：无边框，井底色分层）═══ */
+.field {
+  margin-block-end: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 12px;
+  color: var(--st-mut);
+  margin-block-end: 6px;
+}
+
+.fieldLabel b {
+  color: var(--st-soft);
+  font-weight: 500;
+}
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--st-faint);
+  line-height: 1.7;
+  margin-block-start: 6px;
+}
+
+.fieldWarn {
+  font-size: 11px;
+  color: var(--st-hold);
+  line-height: 1.7;
+  margin-block-start: 6px;
+}
+
+.textInput,
+.textArea,
+.selectBox {
+  inline-size: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--st-ink);
+  background: var(--st-well);
+  border: 0;
+  border-radius: 11px;
+  padding: 9px 13px;
+  outline: 0;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+
+.textInput::placeholder,
+.textArea::placeholder {
+  color: var(--st-faint);
+}
+
+.textInput:focus-visible,
+.textArea:focus-visible,
+.selectBox:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--st-beam-a) 60%, transparent);
+}
+
+.textArea {
+  resize: vertical;
+  min-block-size: 72px;
+  line-height: 1.7;
+}
+
+.selectBox {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--st-faint) 50%),
+    linear-gradient(135deg, var(--st-faint) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-end: 32px;
+}
+
+.selectBox option {
+  background: var(--st-pane);
+  color: var(--st-ink);
+}
+
+/* 分段选择（指纹三态） */
+.seg {
+  display: inline-flex;
+  background: var(--st-well);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.segBtn {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--st-mut);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segBtn:hover {
+  color: var(--st-ink);
+}
+
+.segBtn:focus-visible {
+  outline: 2px solid var(--st-beam-a);
+  outline-offset: 1px;
+}
+
+.segOn {
+  background: var(--st-pane);
+  color: var(--st-ink);
+  box-shadow: inset 0 1px 0 var(--st-hairline);
+}
+
+.rowSplit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rowTriple {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.hostPort {
+  display: grid;
+  grid-template-columns: 1fr 96px;
+  gap: 8px;
+}
+
+.inputAffix {
+  position: relative;
+}
+
+.inputAffix .textInput {
+  padding-inline-end: 72px;
+}
+
+.affixOps {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.affixBtn {
+  font: inherit;
+  font-size: 11px;
+  border: 0;
+  border-radius: 7px;
+  padding: 3px 8px;
+  background: transparent;
+  color: var(--st-mut);
+  cursor: pointer;
+}
+
+.affixBtn:hover {
+  color: var(--st-ink);
+  background: var(--st-pane);
+}
+
+/* 分组标（Forge 的 基础/网络/指纹） */
+.formCap {
+  font-family: var(--st-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: var(--st-faint);
+  text-transform: uppercase;
+  margin: 20px 0 12px;
+}
+
+.formCap:first-child {
+  margin-block-start: 8px;
+}
+
+/* ═══ Depot（代理池）行 ═══ */
+.depotRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--st-well);
+  margin-block-end: 10px;
+  min-inline-size: 0;
+}
+
+.depotMain {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.depotName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-ink);
+}
+
+.depotAddr {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  color: var(--st-faint);
+  margin-block-start: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.depotTest {
+  font-family: var(--st-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.testOk {
+  color: var(--st-live);
+}
+
+.testBad {
+  color: var(--st-halt);
+}
+
+.depotOps {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.depotOps .affixBtn {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.affixHalt {
+  color: var(--st-halt);
+}
+
+.affixHalt:hover {
+  color: var(--st-halt);
+  background: color-mix(in srgb, var(--st-halt) 12%, transparent);
+}
+
+.sheetNote {
+  font-size: 11.5px;
+  color: var(--st-faint);
+  line-height: 1.8;
+  margin-block-end: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}

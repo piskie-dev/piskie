@@ -1,0 +1,6 @@
+{
+  "name": "piskie-feishu-vendor",
+  "private": true,
+  "type": "commonjs",
+  "description": "Vendored @larksuite/openclaw-lark CJS build (MIT) — see UPSTREAM.md"
+}

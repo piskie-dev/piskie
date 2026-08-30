@@ -1,0 +1,35 @@
+@keyframes pending-queue-reveal {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+/* 120ms 内已经出队的事件会在占用布局前直接卸载，避免短暂闪现。 */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  flex: 0 0 auto;
+  opacity: 0;
+  animation: pending-queue-reveal 150ms cubic-bezier(0.2, 0.75, 0.25, 1) 120ms both;
+}
+
+.clip {
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.event[data-priority='high'] {
+  color: color-mix(in srgb, var(--status-error) 72%, var(--cyber-text-muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation-duration: 1ms;
+  }
+}

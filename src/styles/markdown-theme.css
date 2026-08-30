@@ -1,0 +1,34 @@
+/**
+ * XMarkdown 主题定制(原 antd-overrides.css 遗产)。
+ * 2026-08-25 antd 依赖清零后,本文件只剩 x-markdown 渲染内容的主题化规则;
+ * `.ant-markdown` 等类名是 @ant-design/x-markdown 的历史命名,与 antd 组件库无关。
+ */
+
+/* ===== 定制类：XMarkdown 主题（历史类名 .markdown-dark-theme） ===== */
+.markdown-dark-theme .ant-markdown,
+.markdown-dark-theme [class*="x-markdown"],
+.markdown-dark-theme [class*="markdown"] {
+  color: var(--cyber-text) !important;
+}
+
+.markdown-dark-theme .ant-markdown *,
+.markdown-dark-theme [class*="x-markdown"] *,
+.markdown-dark-theme [class*="markdown"] * {
+  color: inherit !important;
+}
+
+.markdown-dark-theme .ant-markdown code,
+.markdown-dark-theme [class*="x-markdown"] code,
+.markdown-dark-theme [class*="markdown"] code {
+  color: var(--cyber-text) !important;
+}
+
+.markdown-dark-theme .ant-markdown pre code,
+.markdown-dark-theme [class*="x-markdown"] pre code,
+.markdown-dark-theme [class*="markdown"] pre code {
+  color: var(--cyber-text) !important;
+  background: transparent !important;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}

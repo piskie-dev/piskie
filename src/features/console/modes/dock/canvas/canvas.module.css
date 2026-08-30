@@ -1,0 +1,169 @@
+/**
+ * dock 画布样式。
+ *
+ * 复刻目标是**老版 dock 的视觉效果**（用户 2026-07-31），所以这里的数值来自旧
+ * `AgentCanvas` 的 react-flow 装配与 `FlowSpotlightBackground`：点阵背景、
+ * 小地图外观、聚光灯跟随。节点内框由被包组件自带，本文件只管画布与节点外壳。
+ *
+ * 聚光灯用 CSS 变量 + `radial-gradient` 实现，不引 framer-motion
+ * （新树的动画一律 CSS，见 `.eslintrc.cjs` 的依赖封禁）。
+ */
+
+.canvas {
+  position: relative;
+  min-block-size: 0;
+  min-inline-size: 0;
+  block-size: 100%;
+  inline-size: 100%;
+  overflow: hidden;
+
+  /* 点阵背景：旧版是 react-flow 的 Background 组件，这里直接用 CSS 画，少一层节点 */
+  background-color: var(--console-canvas-bg);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in srgb, var(--cyber-border) 55%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
+/* 聚光灯：跟随指针的柔光，坐标由 JS 写到 --spot-x / --spot-y */
+.canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  background: radial-gradient(
+    420px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in srgb, var(--cyber-primary) 10%, transparent),
+    transparent 70%
+  );
+}
+
+.canvas[data-spotlight='true']::before {
+  opacity: 1;
+}
+
+/* ── 节点外壳 ── */
+
+.node {
+  position: relative;
+  /* 内框由被包组件自带；这里只提供定尺与选中描边的挂点，16px 与面板圆角一致。 */
+  border-radius: 16px;
+}
+
+.node[data-selected='true'] {
+  outline: 2px solid color-mix(in srgb, var(--cyber-primary) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── 屏幕节点的缩放手柄（NodeResizer,仅选中时可见）── */
+
+.resizeLine {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent) !important;
+}
+
+.resizeHandle {
+  inline-size: 9px !important;
+  block-size: 9px !important;
+  border-radius: 3px !important;
+  border: 0 !important;
+  background: var(--cyber-primary) !important;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--cyber-primary) 60%, transparent) !important;
+}
+
+/* 连线锚点必须存在（react-flow 靠它定位边端点），但不该被看见 */
+.handle {
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  min-inline-size: 1px !important;
+  min-block-size: 1px !important;
+  border: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ── 空画布提示（旧版同文案）── */
+
+.empty {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.emptyPill {
+  padding: 8px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 18%);
+  font-size: 13px;
+  color: var(--cyber-text-muted);
+}
+
+/* 小地图外观（旧版：14px 圆角 + 描边 + 半透明底 + 投影） */
+.minimap {
+  border: 1px solid var(--line-2) !important;
+  border-radius: 14px !important;
+  background: color-mix(in srgb, var(--surface-2) 95%, transparent) !important;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 34%) !important;
+}
+
+/* ── 工具栏（竖排，贴右缘居中；旧版同位置）── */
+
+.toolbar {
+  position: absolute;
+  z-index: 40;
+  inset-inline-end: 8px;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(12px);
+}
+
+.toolButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.toolButton:hover {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.toolDivider {
+  block-size: 1px;
+  margin-inline: 4px;
+  background: var(--line-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas::before,
+  .toolButton {
+    transition: none;
+  }
+}

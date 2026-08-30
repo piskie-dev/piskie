@@ -1,0 +1,631 @@
+/**
+ * 会话输入器样式 —— 「光边」设计。
+ *
+ * 一圈渐变光描边（primary→accent，conic）镶在边框上：常态低亮、静止，是安静的
+ * 品牌轮廓；聚焦时描边转亮并沿框流动一周（@property --composer-beam-angle 旋转，
+ * 复用 EnvStudio 的 --st-beam 语汇），外加一层柔和外发光。光是唯一装饰，无高度跳变。
+ * prefers-reduced-motion 时只加亮不旋转。
+ */
+
+@property --composer-beam-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes composer-beam-spin {
+  to {
+    --composer-beam-angle: 360deg;
+  }
+}
+
+.composer {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* 与上方 TaskList 同宽（通栏，不内缩）——宽度由列容器统一管 */
+  margin: 4px 0 12px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: var(--surface-1);
+  transition: box-shadow 200ms ease;
+  /* 工具行按容器宽度自适应，不看视口 */
+  container-type: inline-size;
+}
+
+/* 渐变光边：镶在 1px 边框上，用 mask 抠出中空只留边（不遮内容） */
+.composer::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--composer-beam-angle),
+    var(--cyber-primary),
+    var(--cyber-accent),
+    var(--cyber-primary),
+    color-mix(in srgb, var(--cyber-primary) 60%, var(--cyber-accent)),
+    var(--cyber-primary)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.composer:focus-within {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--cyber-primary) 26%, transparent);
+}
+
+.composer:focus-within::after {
+  opacity: 1;
+  animation: composer-beam-spin 3.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer:focus-within::after {
+    animation: none;
+  }
+}
+
+/* ── 附件（有才出现，贴容器顶部） ── */
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+
+.thumbWrap {
+  position: relative;
+}
+
+.thumb {
+  display: block;
+  inline-size: 52px;
+  block-size: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--line-2);
+  cursor: zoom-in;
+}
+
+.thumbRemove,
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+}
+
+.thumbRemove {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-end: -5px;
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+}
+
+.thumbRemove:hover,
+.chipRemove:hover {
+  color: var(--cyber-text);
+}
+
+.fileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 26px;
+  padding-inline: 10px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--cyber-text-muted);
+  font-size: 11.5px;
+}
+
+.fileName {
+  max-inline-size: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cyber-text);
+}
+
+/* ── 输入区 ── */
+
+.inputZone {
+  padding: 12px 14px 4px;
+  cursor: text;
+}
+
+.textarea {
+  display: block;
+  inline-size: 100%;
+  border: 0;
+  padding: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+
+  /* 自动增高交给平台；变高只由内容驱动，聚焦不改高度 */
+  field-sizing: content;
+  min-block-size: 22px;
+  max-block-size: min(40vh, 240px);
+  overflow-y: auto;
+}
+
+.textarea::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 65%, transparent);
+}
+
+/*
+ * 全局 `textarea:focus`（base.css）带蓝描边 + 2px box-shadow 光环，元素选择器
+ * 优先级压过单类 —— 聚焦时输入区中间会浮出一个"小框"。这里按同伪类加一级
+ * 特异度压掉：聚焦态只由容器的 `:focus-within` 描边表达。
+ */
+.textarea:focus {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ── 工具行：模型 · 模式 · 审批 · 上下文 · 主操作 ── */
+
+/*
+ * 工具行**永不换行**（用户 2026-08-05：换行很丑）。挤不下时的让位次序：
+ * 1. 模型触发器收缩、文字省略号截断（`.modelTrigger`，唯一弹性项）
+ * 2. 容器 <380px 时模式与审批药丸只留图标（见下方 @container）
+ * 模式/审批药丸和发送钮是短定宽项，恒不缩。
+ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  gap: 2px;
+  padding: 4px 10px 8px 10px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-block-size: 24px;
+  max-inline-size: 220px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+/* Popover 的锚点 span 才是工具行里的 flex item，收缩约束必须落在这一层。 */
+.modelTrigger {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-inline-size: 44px;
+  max-inline-size: 220px;
+}
+
+/* 模型药丸：工具行唯一的弹性项——空间不够时它先缩，文字截断。 */
+.pillShrink {
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-inline-size: 44px;
+}
+
+.pillShrink .pillStrong,
+.pillShrink .pillSoft {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pillStrong {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.pillSoft {
+  color: var(--cyber-text-muted);
+  white-space: nowrap;
+}
+
+.pillChevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+}
+
+.compactIcon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--cyber-text-muted);
+}
+
+.contextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-inline-size: 42px;
+  min-block-size: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+}
+
+button.contextButton {
+  cursor: pointer;
+}
+
+button.contextButton:hover,
+button.contextButton:focus-visible {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  outline: none;
+}
+
+.contextUsage {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  color: var(--status-thinking);
+}
+
+.contextUsage[data-level='warning'] { color: var(--status-waiting); }
+.contextUsage[data-level='critical'] { color: var(--status-error); }
+
+.contextRing {
+  display: block;
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  rotate: -90deg;
+}
+
+.contextTrack,
+.contextValue {
+  fill: none;
+  stroke-width: 2;
+}
+
+.contextTrack {
+  stroke: color-mix(in srgb, var(--cyber-text-muted) 22%, transparent);
+}
+
+.contextValue {
+  stroke: currentColor;
+  stroke-linecap: round;
+}
+
+.contextLabel {
+  min-inline-size: 2.3em;
+  color: var(--cyber-text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: end;
+}
+
+.mainAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 28px;
+  block-size: 28px;
+  margin-inline-start: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.mainAction:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.mainAction:disabled {
+  background: var(--surface-2);
+  color: var(--cyber-text-muted);
+  cursor: not-allowed;
+}
+
+@container (max-width: 379px) {
+  .toolbar {
+    gap: 0;
+    padding-inline: 6px;
+  }
+
+  .pill {
+    gap: 2px;
+    padding-inline: 5px;
+  }
+
+  .pill[data-compact='true'] {
+    min-inline-size: 32px;
+    max-inline-size: 32px;
+    padding-inline: 3px;
+  }
+
+  .pill[data-compact='true'] .compactIcon {
+    display: inline-flex;
+  }
+
+  .pill[data-compact='true'] .pillSoft {
+    display: none;
+  }
+
+  .contextButton {
+    min-inline-size: 42px;
+    padding-inline: 2px;
+  }
+
+  .mainAction {
+    margin-inline-start: 2px;
+  }
+}
+
+/* ── 下拉菜单（计划 / 审批） ── */
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 148px;
+  padding: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 28px;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.option:hover {
+  background: var(--surface-2);
+}
+
+.option[data-selected='true'] {
+  background: color-mix(in srgb, var(--cyber-primary) 10%, transparent);
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCheck {
+  flex: 0 0 auto;
+  color: var(--cyber-primary);
+}
+
+/* ── 模型面板 ── */
+
+.modelPanel {
+  display: flex;
+  flex-direction: column;
+  inline-size: 320px;
+  max-inline-size: calc(100vw - 24px);
+  padding: 10px;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 30px;
+  padding-inline: 9px;
+  border: 1px solid var(--line-1);
+  border-radius: 9px;
+  background: var(--cyber-bg);
+  color: var(--cyber-text-muted);
+}
+
+.searchBox:focus-within {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.searchInput::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 60%, transparent);
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: 8px;
+  max-block-size: 216px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.modelGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.modelGroupLabel {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  padding: 5px 6px 3px;
+  background: var(--cyber-surface);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--cyber-text-muted) 80%, transparent);
+}
+
+.panelEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 64px;
+  font-size: 11.5px;
+  color: var(--cyber-text-muted);
+}
+
+/* ── 思考程度分区 ── */
+
+.reasoningSection {
+  margin-block-start: 10px;
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--line-1);
+}
+
+.sectionLabel {
+  margin-block-end: 6px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cyber-text-muted);
+}
+
+.reasoningChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-block-size: 26px;
+  padding-inline: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.chip:hover {
+  border-color: color-mix(in srgb, var(--cyber-primary) 35%, transparent);
+  color: var(--cyber-text);
+}
+
+.chip[data-selected='true'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 50%, transparent);
+  background: color-mix(in srgb, var(--cyber-primary) 14%, transparent);
+  color: var(--cyber-text);
+}
+
+.budgetRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.budgetInput {
+  inline-size: 132px;
+  min-block-size: 28px;
+  padding-inline: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--cyber-bg);
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.budgetInput:focus {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.panelNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-block-start: 6px;
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer,
+  .pill,
+  .mainAction,
+  .option,
+  .chip {
+    transition: none;
+  }
+}

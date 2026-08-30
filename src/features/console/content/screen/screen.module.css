@@ -1,0 +1,510 @@
+/** 浏览器流预览与沉浸式监看共用的视觉层。 */
+
+/* 外框：dock 的辅助槽里是 `h-full w-full rounded-lg border-gray-700 bg-gray-900`
+   （`ScreenStreamNode` 的 standalone 分支），不是裸填充 */
+.view {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: 100%;
+  overflow: hidden;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #111827;
+}
+
+/* 连接状态点 */
+.statusDot {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 999px;
+  background: #6b7280;
+}
+
+.statusDot[data-state='ready'] {
+  background: #4ade80;
+  animation: screenPulse 2s ease-in-out infinite;
+}
+
+.statusDot[data-state='error'] {
+  background: #f87171;
+}
+
+@keyframes screenPulse {
+  50% { opacity: 0.45; }
+}
+
+/* 视口：`contain: paint` + `isolation` 是 OffscreenCanvas 合成的既有要求，照旧 */
+.viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
+  background: #000; /* 视频底色恒为黑，与主题无关 style-token-ignore */
+  contain: paint;
+  isolation: isolate;
+}
+
+/* 画面内悬浮控件：常态可发现，悬停时增强，不再把全屏入口完全藏起来。 */
+
+.floatBar {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.78;
+  pointer-events: auto;
+  transition: opacity 160ms ease, translate 160ms ease;
+}
+
+.viewport:hover .floatBar,
+.floatBar:focus-within {
+  opacity: 1;
+  translate: 0 -1px;
+}
+
+.floatChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  block-size: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  /* 浮在视频画面上，底色恒深、文字恒浅，与主题无关 style-token-ignore */
+  background: rgba(10, 10, 14, 0.72);
+  color: rgba(237, 237, 242, 0.85); /* style-token-ignore */
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.floatButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 10, 14, 0.72); /* style-token-ignore */
+  color: rgba(237, 237, 242, 0.85); /* style-token-ignore */
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cyber-text) 9%, transparent);
+  transition: background-color 140ms ease, color 140ms ease, scale 100ms ease;
+}
+
+.floatButton:hover {
+  background: rgba(10, 10, 14, 0.9); /* style-token-ignore */
+  color: #fff; /* style-token-ignore */
+}
+
+.floatButton:active {
+  scale: 0.92;
+}
+
+.floatButton:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: 2px;
+}
+
+/* 画面填满面板（用户裁决"宁可出滚动条也不要黑边"）。
+
+   `object-fit: contain` 只能等比装进去，面板与画面比例不同就必然留边。这里改成
+   **cover 语义 + 可滚动**：舞台在两个方向上都不小于视口，溢出的那一维由视口滚动。
+
+   方向判断交给 CSS，不用 JS 比比例：`container-type: size` 让子元素能用 `cqh`
+   拿到视口高度，于是舞台宽度 = max(视口宽, 视口高 × 画面比例)——前者保证不窄于
+   视口，后者保证按高铺满；高度由 aspect-ratio 推出。两种溢出方向自动成立。
+
+   overscroll-behavior: contain —— 滚到边界不把外层流水一起带走。 */
+.viewport[data-fit='fill'] {
+  container-type: size;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.stage {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.viewport[data-fit='fill'] .stage {
+  inline-size: max(100%, calc(100cqh * var(--frame-ratio, 1.7777)));
+  block-size: auto;
+  aspect-ratio: var(--frame-ratio, 1.7777);
+}
+
+.canvas {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  transition: opacity 200ms ease;
+}
+
+.canvas[data-visible='false'] {
+  opacity: 0;
+}
+
+/* 输入转发宿主（浏览器可交互投屏）：盖住画面接管指针/键盘。
+   touch-action:none 让触控板手势不被本地滚动吃掉；focus 环用 token 色 */
+.inputHost {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: default;
+  outline: none;
+}
+
+.inputHost[data-active='true']:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cyber-primary) 60%, transparent);
+  outline-offset: -2px;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-inline: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  transition: opacity 200ms ease;
+}
+
+.overlay[data-tone='loading'] {
+  color: #60a5fa;
+}
+
+@starting-style {
+  .overlay {
+    opacity: 0;
+  }
+}
+
+.overlay[data-tone='error'] {
+  color: #f87171;
+}
+
+.overlay[data-tone='warn'] {
+  background: color-mix(in srgb, var(--cyber-bg) 80%, transparent);
+  color: var(--status-waiting);
+}
+
+.overlayTitle {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.overlayHint {
+  max-inline-size: 320px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+/* 沉浸式监看：接近整窗，但保留清晰的 top-layer 边界与退出路径。 */
+.fullscreenDialog {
+  max-inline-size: none;
+  max-block-size: none;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  box-shadow: 0 32px 100px rgb(0 0 0 / 52%); /* style-token-ignore */
+}
+
+.fullscreenDialog::backdrop {
+  background-color: rgb(0 0 0 / 0.76); /* style-token-ignore */
+  backdrop-filter: blur(10px) saturate(0.72);
+}
+
+.fullscreenDialogBody {
+  max-block-size: none;
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.fullscreen {
+  display: flex;
+  flex-direction: column;
+  inline-size: min(96vw, 1680px);
+  block-size: min(92dvh, 1000px);
+  overflow: clip;
+  border: 1px solid var(--line-3);
+  border-radius: 22px;
+  background: var(--cyber-bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 7%, transparent);
+}
+
+.fullscreenHeader {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex: 0 0 auto;
+  min-block-size: 70px;
+  padding: 12px 14px 12px 20px;
+  border-block-end: 1px solid var(--line-1);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--cyber-primary) 7%, transparent), transparent 38%),
+    var(--cyber-surface);
+}
+
+.fullscreenIdentity {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.fullscreenKicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  inline-size: max-content;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  color: var(--cyber-text-muted);
+  text-transform: uppercase;
+}
+
+.fullscreenKicker[data-ready='true'] {
+  color: var(--status-running);
+}
+
+.fullscreenSignalDot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.fullscreenKicker[data-ready='true'] .fullscreenSignalDot {
+  animation: fullscreenSignal 1.8s ease-in-out infinite;
+}
+
+.fullscreenTitle {
+  min-inline-size: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(15px, 1.4vw, 19px);
+  font-weight: 560;
+  letter-spacing: -0.015em;
+  color: var(--cyber-text);
+}
+
+.fullscreenTelemetry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.fullscreenMetric {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 82px;
+  padding: 7px 10px;
+  border-inline-start: 1px solid var(--line-1);
+}
+
+.fullscreenMetricLabel {
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  color: var(--cyber-text-muted);
+  text-transform: uppercase;
+}
+
+.fullscreenMetricValue {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyber-text);
+}
+
+.fullscreenWindowButton,
+.fullscreenCloseButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  block-size: 36px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, scale 100ms ease;
+}
+
+.fullscreenWindowButton {
+  gap: 7px;
+  padding-inline: 12px;
+  border-radius: var(--radius-control);
+}
+
+.fullscreenCloseButton {
+  inline-size: 36px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.fullscreenWindowButton:hover,
+.fullscreenCloseButton:hover {
+  border-color: var(--line-3);
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.fullscreenWindowButton:active,
+.fullscreenCloseButton:active {
+  scale: 0.94;
+}
+
+.fullscreenWindowButton:focus-visible,
+.fullscreenCloseButton:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: 2px;
+}
+
+.fullscreenButtonText {
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.fullscreenStage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  padding: clamp(10px, 1.5vw, 22px);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--cyber-primary) 12%, transparent), transparent 52%),
+    linear-gradient(var(--line-1) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-1) 1px, transparent 1px),
+    var(--cyber-bg);
+  background-size: auto, 28px 28px, 28px 28px, auto;
+}
+
+.fullscreenStage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px color-mix(in srgb, var(--cyber-bg) 82%, transparent);
+}
+
+.fullscreenViewport {
+  position: relative;
+  z-index: 1;
+  inline-size: min(100%, calc((92dvh - 124px) * var(--frame-ratio, 1.7777)));
+  max-block-size: 100%;
+  aspect-ratio: var(--frame-ratio, 1.7777);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cyber-text) 14%, transparent);
+  border-radius: 10px;
+  background: #000; /* 视频舞台必须保持纯黑，避免首帧闪烁 style-token-ignore */
+  box-shadow:
+    0 22px 64px rgb(0 0 0 / 38%), /* style-token-ignore */
+    0 0 0 1px rgb(0 0 0 / 20%), /* style-token-ignore */
+    inset 0 1px 0 color-mix(in srgb, var(--cyber-text) 8%, transparent);
+}
+
+.fullscreenCanvas {
+  position: absolute;
+  inset: 0;
+}
+
+.fullscreenOverlay {
+  z-index: 2;
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--cyber-primary) 10%, transparent), transparent 46%),
+    color-mix(in srgb, var(--cyber-bg) 92%, transparent);
+}
+
+.fullscreenStageMeta {
+  position: absolute;
+  z-index: 2;
+  inset-inline: clamp(14px, 1.8vw, 28px);
+  inset-block-end: 8px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.15em;
+  color: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+}
+
+@keyframes fullscreenSignal {
+  50% {
+    opacity: 0.45;
+    scale: 0.88;
+  }
+}
+
+@media (max-width: 720px), (max-height: 620px) {
+  .fullscreenDialog,
+  .fullscreen {
+    border-radius: 14px;
+  }
+
+  .fullscreen {
+    inline-size: 98vw;
+    block-size: 94dvh;
+  }
+
+  .fullscreenHeader {
+    min-block-size: 58px;
+    gap: 10px;
+    padding: 9px 10px 9px 14px;
+  }
+
+  .fullscreenMetric:first-of-type,
+  .fullscreenButtonText {
+    display: none;
+  }
+
+  .fullscreenMetric {
+    min-inline-size: 58px;
+    padding-inline: 8px;
+  }
+
+  .fullscreenWindowButton {
+    inline-size: 36px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .fullscreenViewport {
+    inline-size: min(100%, calc((94dvh - 98px) * var(--frame-ratio, 1.7777)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas,
+  .overlay,
+  .floatBar,
+  .floatButton,
+  .fullscreenWindowButton,
+  .fullscreenCloseButton {
+    transition: none;
+  }
+
+  .fullscreenKicker[data-ready='true'] .fullscreenSignalDot {
+    animation: none;
+  }
+}

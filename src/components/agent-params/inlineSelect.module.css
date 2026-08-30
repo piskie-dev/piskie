@@ -1,0 +1,82 @@
+/**
+ * 内联参数下拉的样式 —— Chromium 可定制 <select>（appearance: base-select）。
+ * 触发钮无边框贴合工具行，选项弹层走 ::picker 深色定制（top-layer，无 z-index 冲突）。
+ * 全部色值取自设计 token。
+ */
+
+.select,
+.select::picker(select) {
+  appearance: base-select;
+}
+
+/* 触发钮：小号、无边框、透明底，贴合 composer 工具行 */
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 24px;
+  padding-inline: 6px;
+  border: 0;
+  border-radius: var(--radius-badge, 8px);
+  background: transparent;
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.select:hover {
+  background: var(--surface-2);
+}
+
+.select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.select::picker-icon {
+  color: var(--cyber-text-muted);
+  transition: rotate 160ms ease;
+}
+
+.select:open::picker-icon {
+  rotate: 180deg;
+}
+
+/* 选项弹层：深色浮层，脱离触发钮宽度 */
+.select::picker(select) {
+  min-inline-size: 120px;
+  padding: 4px;
+  border: 1px solid var(--cyber-border);
+  border-radius: var(--radius-control, 12px);
+  background: var(--cyber-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.select option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-badge, 8px);
+  color: var(--cyber-text-secondary, var(--cyber-text));
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.select option:hover,
+.select option:focus {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.select option:checked {
+  color: var(--cyber-text);
+}
+
+/* 勾选标记用品牌色，替代默认对钩色 */
+.select option::checkmark {
+  color: var(--cyber-primary);
+}

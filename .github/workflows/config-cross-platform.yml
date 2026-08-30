@@ -1,0 +1,51 @@
+name: Config cross-platform
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/config-cross-platform.yml'
+      - 'electron/config/**'
+      - 'electron/inference/config-cli/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/config-cross-platform.yml'
+      - 'electron/config/**'
+      - 'electron/inference/config-cli/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  config-kernel:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: >-
+          npx vitest run
+          electron/config/core/__tests__/atomic-file-writer.test.ts
+          electron/config/core/__tests__/versioned-file-repository.test.ts
+          electron/config/core/__tests__/history-store.test.ts
+          electron/config/core/__tests__/single-transaction-kernel.contract.test.ts
+          electron/config/domains/__tests__/all-domains.integration.test.ts
+          electron/inference/config-cli/__tests__/launcher.test.ts
+          electron/inference/config-cli/__tests__/main.test.ts
+      - run: npx tsc -p tsconfig.electron.json --noEmit

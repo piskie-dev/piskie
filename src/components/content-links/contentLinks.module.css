@@ -1,0 +1,49 @@
+.target {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit !important;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  vertical-align: baseline;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.target:hover,
+.target:hover code,
+:global(.markdown-dark-theme) .target:hover,
+:global(.markdown-dark-theme) .target:hover code {
+  color: var(--cyber-accent) !important;
+  text-decoration: underline;
+}
+
+.target:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid color-mix(in srgb, var(--cyber-accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.hint {
+  position: fixed;
+  z-index: 2000;
+  max-width: 320px;
+  padding: 4px 8px;
+  border: 1px solid var(--cyber-border);
+  border-radius: 6px;
+  background: var(--cyber-elevated);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 55%);
+  color: var(--cyber-text);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.hint[data-placement='above'] {
+  transform: translateY(-100%);
+}

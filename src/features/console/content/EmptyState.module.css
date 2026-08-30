@@ -1,0 +1,183 @@
+/**
+ * 空态样式。
+ *
+ * **不变量：composer 恒在底部。** 空态/活跃态 × dock/thread 四种组合里 composer 的
+ * 纵向位置不变——旧 `WelcomeScreen` 把 composer 居中（`centerStage` 垂直居中），
+ * 于是"无会话 → 有会话"和"dock ⇄ thread"两个方向都会让输入框跳位。
+ *
+ * 上半区（logo / tagline / tip / 模板卡片）纵向居中，下半区就是 composer 插槽。
+ */
+
+.empty {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  min-inline-size: 0;
+  block-size: 100%;
+  /* 空态自身不产生横向滚动（模板网格与 composer 工具条都可能撑宽） */
+  overflow-x: clip;
+  background: var(--console-canvas-bg);
+}
+
+/* 数值对齐旧 `.centerStage`：gap 26 / 宽 min(100%,908px) / padding 48 16 84。
+   区别只有 composer 不在这一层（已贴底），故底部内边距收到 24。 */
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  inline-size: min(100%, 908px);
+  min-inline-size: 0;
+  margin-inline: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 48px 16px 24px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+
+  /* 进场：无需 framer-motion */
+  transition: opacity 500ms ease-out, translate 500ms ease-out;
+  opacity: 1;
+  translate: 0 0;
+}
+
+@starting-style {
+  .hero {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+
+.logo {
+  /* 旧 `clamp(64px, 4.8vw, 76px)` */
+  inline-size: clamp(64px, 4.8vw, 76px);
+  block-size: clamp(64px, 4.8vw, 76px);
+  object-fit: contain;
+}
+
+.tagline {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(17px, 1.4vw, 21px);
+  font-weight: 560;
+  line-height: 1.35;
+  letter-spacing: 0.035em;
+  color: color-mix(in srgb, var(--cyber-text-muted) 72%, transparent);
+}
+
+/* 旧 tip 是**无边框的一行居中文字**，不是胶囊 */
+.tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-inline-size: 676px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  color: color-mix(in srgb, var(--cyber-text) 90%, transparent);
+}
+
+.tipIcon {
+  flex-shrink: 0;
+  color: rgba(250, 204, 21, 0.6);
+}
+
+.templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: 8px;
+  inline-size: 100%;
+  max-inline-size: 720px;
+}
+
+/* 窄容器（thread 中栏被右栏挤窄时）退成单列 */
+@container (max-width: 420px) {
+  .templates {
+    grid-template-columns: 1fr;
+  }
+}
+
+.template {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.template:hover {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+}
+
+.templateTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.templateDescription {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cyber-text-muted);
+}
+
+.templateMeta {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  color: var(--cyber-text-muted);
+}
+
+/* composer 插槽：贴底，但**必须沿用与上半区相同的居中约束**。
+   旧 composer 在 `.centerStage` 内（`width: min(100%,908px); margin: 0 auto;
+   align-items: center`），移到贴底时这份约束忘了带过来 —— 结果它左对齐并顶到窗口底边。 */
+.footer {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: min(100%, 908px);
+  min-inline-size: 0;
+  margin-inline: auto;
+  padding: 0 16px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .template {
+    transition: none;
+  }
+}
+
+/* 用户壁纸下给模板卡增加半透明衬底，避免文字直接压在复杂图案上；
+   默认弥散光背景保持全屏同色调，不额外套玻璃。 */
+:global(:root[data-app-bg='image']) .template {
+  background: var(--glass-1);
+}
+
+:global(:root[data-app-bg='image']) .template:hover {
+  background: var(--glass-2);
+}

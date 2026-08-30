@@ -1,0 +1,146 @@
+/**
+ * 原生 select 的定制外观（`appearance: base-select`）。
+ *
+ * 不写这套样式的原生 select，弹出列表由系统渲染：深色主题下是浅底白字，
+ * 选项几乎看不见。全站的 select 都应该走 Select 组件。
+ */
+
+.select {
+  appearance: base-select;
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+  block-size: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12px;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.select:hover,
+.select:focus-visible {
+  background: var(--surface-2);
+}
+
+/* 表单里的选择器：和相邻的 input 一样有边框和实底 */
+.select.field {
+  justify-content: space-between;
+  gap: 8px;
+  block-size: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.select.field:hover,
+.select.field:focus-visible {
+  border-color: var(--line-2);
+  background: var(--surface-1);
+}
+
+.select::picker-icon {
+  display: none;
+}
+
+.select.field::picker-icon {
+  display: block;
+  color: var(--cyber-text-muted);
+  transition: rotate 180ms ease;
+}
+
+.select.field:open::picker-icon {
+  rotate: 180deg;
+}
+
+.select::picker(select) {
+  appearance: base-select;
+  min-inline-size: anchor-size(inline);
+  padding: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--cyber-surface);
+  box-shadow: var(--shadow-card-active);
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block;
+  margin-block: 6px;
+
+  opacity: 0;
+  translate: 0 -4px;
+  transition-property: opacity, translate, display, overlay;
+  transition-duration: 160ms;
+  transition-behavior: allow-discrete;
+}
+
+.select:open::picker(select) {
+  opacity: 1;
+  translate: 0 0;
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.select option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-badge);
+  color: var(--cyber-text);
+  font-size: 12px;
+}
+
+.select option:hover {
+  background: var(--surface-2);
+}
+
+/* UA 默认焦点环是黑/白描边，与整页配色不搭 */
+.select option:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: -2px;
+}
+
+/* 选中态不只靠颜色区分：加粗 + 背景 + 左侧标记（对比度与色盲友好） */
+.select option:checked {
+  background: var(--surface-3);
+  font-weight: 600;
+}
+
+.select option::checkmark {
+  content: '';
+  inline-size: 4px;
+  block-size: 4px;
+  border-radius: 999px;
+  background: var(--cyber-text);
+}
+
+.select option:disabled {
+  color: var(--cyber-text-muted);
+  opacity: 0.55;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .select::picker(select) {
+    translate: none;
+    transition-duration: 80ms;
+  }
+
+  .select:open::picker(select) {
+    @starting-style {
+      translate: none;
+    }
+  }
+}

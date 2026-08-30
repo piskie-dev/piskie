@@ -1,0 +1,43 @@
+/** 操作区按内容自然占宽，导航区只使用真实剩余空间。 */
+
+.rail {
+  position: relative;
+  z-index: 2;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-inline-size: 0;
+  block-size: var(--console-top-rail-size, 41px);
+  padding: 6px 8px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+.rail[data-has-actions='true'] {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: 8px;
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 右栏被窗口压窄时保留完整面板标签，模式图标仍提供同一切换能力。 */
+@container (max-width: 240px) {
+  .actions [data-mode-label] {
+    display: none;
+  }
+
+  .actions [data-console-mode-switch] button {
+    padding-inline: 6px;
+  }
+}

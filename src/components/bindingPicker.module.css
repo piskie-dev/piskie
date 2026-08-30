@@ -1,0 +1,114 @@
+/**
+ * 浏览器环境绑定选择器皮肤(去 antd:原 Dropdown/Popover/Tag/Tooltip 自绘)。
+ * 观感对齐原 antd 深浅主题;色值全走 token,tint 用 color-mix 派生。
+ */
+
+/* ── 环境标签(原 antd Tag 蓝/橙/默认三色) ── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  block-size: 22px;
+  padding-inline: 7px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.tag[data-tone='blue'] {
+  color: var(--cyber-primary);
+  background: color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--cyber-primary) 32%, transparent);
+}
+
+.tag[data-tone='orange'] {
+  color: var(--status-waiting);
+  background: color-mix(in srgb, var(--status-waiting) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-waiting) 32%, transparent);
+}
+
+.tag[data-tone='default'] {
+  color: var(--cyber-text-muted);
+  background: color-mix(in srgb, var(--cyber-text) 6%, transparent);
+  border-color: var(--line-2);
+}
+
+.tagClose {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  margin-inline-start: 2px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.65;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.tagClose:hover {
+  opacity: 1;
+}
+
+/* ── 悬停说明(原 antd Tooltip,主题桥定制为 surface 底) ── */
+.tip {
+  max-inline-size: 300px;
+  padding: 5px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--cyber-surface);
+  color: var(--cyber-text);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  overflow-wrap: anywhere;
+}
+
+/* ── 追加菜单(原 antd Dropdown) ── */
+.menu {
+  min-inline-size: 160px;
+  max-inline-size: 360px;
+  padding: 4px;
+  border: 1px solid var(--cyber-border);
+  border-radius: 10px;
+  background: var(--cyber-surface);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+}
+
+.menuItem {
+  display: block;
+  inline-size: 100%;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.menuItem:hover {
+  background: color-mix(in srgb, var(--cyber-primary) 16%, transparent);
+}
+
+.menuItem:disabled {
+  color: var(--cyber-text-muted);
+  cursor: default;
+  background: transparent;
+}
+
+/* ── 收拢清单(原 antd Popover,elevated 底) ── */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--cyber-elevated, var(--cyber-surface));
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+}

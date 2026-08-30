@@ -1,0 +1,99 @@
+/** 两种工作台共用的单行会话标签。 */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.page:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.page:disabled {
+  color: color-mix(in srgb, var(--cyber-text-muted) 32%, transparent);
+  cursor: default;
+}
+
+.page:disabled:hover {
+  background: transparent;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  max-inline-size: 180px;
+  min-block-size: 26px;
+  padding-inline: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.tab:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.tab:disabled {
+  cursor: default;
+}
+
+.tab[data-selected='true'] {
+  border-color: var(--line-2);
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+/* ≥7 个时收窄标签，不改高度。 */
+.tabs[data-compact='true'] .tab {
+  max-inline-size: 128px;
+}
+
+.label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,303 @@
+/**
+ * chrome 原语样式。
+ *
+ * 状态色统一走 `--status-*` token 的 **100% / 12% / 30% 三件套**
+ * （文字 100%、背景 12%、边框 30%）——
+ * 由 `[data-tone]` 选择器分发，调用侧不出现任何色值。
+ */
+
+/* ==================== StatusBadge ==================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 20px;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge[data-tone='running'] {
+  color: var(--status-running);
+  background: color-mix(in srgb, var(--status-running) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-running) 30%, transparent);
+}
+
+.badge[data-tone='thinking'] {
+  color: var(--status-thinking);
+  background: color-mix(in srgb, var(--status-thinking) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-thinking) 30%, transparent);
+}
+
+.badge[data-tone='waiting'] {
+  color: var(--status-waiting);
+  background: color-mix(in srgb, var(--status-waiting) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-waiting) 30%, transparent);
+}
+
+.badge[data-tone='error'] {
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 30%, transparent);
+}
+
+/* 状态点：可独立使用（折叠态侧栏只显示点） */
+.dot {
+  display: inline-block;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.dot[data-tone='running'] { background: var(--status-running); }
+.dot[data-tone='thinking'] { background: var(--status-thinking); }
+.dot[data-tone='waiting'] { background: var(--status-waiting); }
+.dot[data-tone='error'] { background: var(--status-error); }
+
+.dot[data-pulse='true'] {
+  animation: statusPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ==================== ErrorBar ==================== */
+
+.errorBar {
+  padding: 6px 10px;
+  border-block-end: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+}
+
+.errorBar[data-retrying='true'] {
+  border-block-end-color: color-mix(in srgb, var(--status-waiting) 30%, transparent);
+  background: color-mix(in srgb, var(--status-waiting) 10%, transparent);
+}
+
+.errorLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.errorMessage {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--status-error);
+}
+
+.errorBar[data-retrying='true'] .errorMessage {
+  color: var(--status-waiting);
+}
+
+.errorCode {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--status-error);
+}
+
+.retryLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-start: 4px;
+  font-size: 9px;
+  color: color-mix(in srgb, var(--status-waiting) 80%, transparent);
+}
+
+.errorReason {
+  margin-block-start: 4px;
+  padding: 3px 6px;
+  border-radius: var(--radius-badge);
+  background: rgb(0 0 0 / 0.24);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 9px;
+  color: var(--cyber-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==================== Divider ==================== */
+
+.divider {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  inline-size: 5px;
+  /* 必须显式给高度：三处用法（thread 左/右栏、dock 主列）的父容器都是
+     `position:absolute; inset-block:0` 的**块级**盒，空 button 的内容高度是 0 ——
+     命中区域 5×0，分隔条形同不存在（"右栏不能拖"的真因，非本次改动引入）。
+     `flex: 0 0 auto` 是早期作为 flex 项时的遗留，块级父容器下不产生拉伸。 */
+  block-size: 100%;
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  touch-action: none;
+  transition: background-color 160ms ease;
+}
+
+.divider[data-orientation='horizontal'] {
+  inline-size: 100%;
+  block-size: 5px;
+  cursor: row-resize;
+}
+
+/* 指示线常态隐形,悬停/拖拽才显形——与滚动条同一套「默认隐藏」语言
+   (2026-08-19 用户反馈:浮卡化后常显的把手线像一根悬空竖线) */
+.divider::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 2px;
+  inline-size: 1px;
+  background: transparent;
+  transition: background-color 160ms ease;
+}
+
+.divider[data-orientation='horizontal']::after {
+  inset-inline: 0;
+  inset-block-start: 2px;
+  inline-size: auto;
+  block-size: 1px;
+}
+
+.divider:hover::after,
+.divider:focus-visible::after,
+.divider[data-dragging='true']::after {
+  background: var(--line-3);
+}
+
+.divider:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--cyber-primary) 50%, transparent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-pulse='true'] {
+    animation: none;
+  }
+}
+
+/* ── 溢出菜单（MenuButton）──
+   取代 AntD `Dropdown` 的 menu：一组描述符渲染成按钮列，
+   开合与 light-dismiss 由 `Popover` 的原生 popover 承担。 */
+
+.menuTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.menuTrigger:hover {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.menuList {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 152px;
+  padding: 2px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 28px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.menuItem:hover {
+  background: var(--surface-2);
+}
+
+.menuItem[data-danger='true'] {
+  color: var(--status-error);
+}
+
+.menuIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--cyber-text-muted);
+}
+
+.menuItem[data-danger='true'] .menuIcon {
+  color: var(--status-error);
+}
+
+/* ── 模式切换胶囊（ModeSwitch）── */
+
+.modeSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.modeOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 22px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.modeOption:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.modeOption[data-selected='true'] {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}

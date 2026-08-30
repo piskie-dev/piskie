@@ -1,0 +1,233 @@
+"use strict";
+/**
+ * Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
+ * SPDX-License-Identifier: MIT
+ *
+ * Context enrichment for inbound Feishu messages.
+ *
+ * Enrichment phases:
+ *
+ * - **resolveSenderInfo** (lightweight, before gate) — resolves sender
+ *   display name and tracks permission errors.
+ * - **prefetchUserNames** (after gate, before content resolution) — batch
+ *   pre-warm the account-scoped user-name cache for the sender and all
+ *   non-bot mentions so that downstream merge_forward expansion and
+ *   quoted-message formatting can read names synchronously.
+ * - **resolveMedia** (after gate) — downloads binary media attachments
+ *   using ResourceDescriptors from the converter phase.
+ * - **resolveQuotedContent** (after gate) — fetches the replied-to
+ *   message text for context.
+ *
+ * Note: merge_forward expansion for the primary message is now handled
+ * at parse time in {@link parseMessageEvent}. Quoted merge_forward
+ * messages are still expanded here via {@link resolveQuotedContent}.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveSenderInfo = resolveSenderInfo;
+exports.prefetchUserNames = prefetchUserNames;
+exports.resolveMedia = resolveMedia;
+exports.substituteMediaPaths = substituteMediaPaths;
+exports.resolveQuotedContent = resolveQuotedContent;
+const permission_1 = require("./permission.js");
+const user_name_cache_1 = require("./user-name-cache.js");
+const media_resolver_1 = require("./media-resolver.js");
+const fetch_1 = require("../outbound/fetch.js");
+const user_name_cache_2 = require("./user-name-cache.js");
+// ---------------------------------------------------------------------------
+// Phase 1: Sender info (lightweight, before gate)
+// ---------------------------------------------------------------------------
+/**
+ * Resolve the sender display name and track permission errors.
+ *
+ * This must run before the gate check because per-group sender
+ * allowlists may match on senderName.
+ */
+async function resolveSenderInfo(params) {
+    const { account, log } = params;
+    let ctx = params.ctx;
+    // Only resolve display name for real users — the contact API
+    // does not return results for app/bot accounts.
+    if (ctx.rawSender?.sender_type !== 'user') {
+        log(`sender_type is "${ctx.rawSender?.sender_type}", skipping name resolution`);
+        return { ctx };
+    }
+    // Resolve sender display name (best-effort)
+    const senderResult = await (0, user_name_cache_1.resolveUserName)({
+        account,
+        openId: ctx.senderId,
+        log,
+    });
+    if (senderResult.name) {
+        ctx = { ...ctx, senderName: senderResult.name };
+        log(`sender resolved: ${senderResult.name}`);
+    }
+    else if (senderResult.permissionError) {
+        log(`sender resolve failed: permission error code=${senderResult.permissionError.code}`);
+    }
+    // Track permission errors (with cooldown)
+    let permissionError;
+    if (senderResult.permissionError) {
+        const appKey = account.appId ?? 'default';
+        const now = Date.now();
+        const lastNotified = permission_1.permissionErrorNotifiedAt.get(appKey) ?? 0;
+        if (now - lastNotified > permission_1.PERMISSION_ERROR_COOLDOWN_MS) {
+            permission_1.permissionErrorNotifiedAt.set(appKey, now);
+            permissionError = senderResult.permissionError;
+        }
+    }
+    return { ctx, permissionError };
+}
+// ---------------------------------------------------------------------------
+// Phase 1.5: Batch pre-warm user name cache (after gate)
+// ---------------------------------------------------------------------------
+/**
+ * Batch-prefetch user display names for the sender and all non-bot
+ * mentions. Mention names that are already known from the event payload
+ * are written into the cache for free.
+ */
+async function prefetchUserNames(params) {
+    const { ctx, account, log } = params;
+    if (!account.configured)
+        return;
+    const cache = (0, user_name_cache_2.getUserNameCache)(account.accountId);
+    // Seed cache with mention names already present in the event payload
+    for (const m of ctx.mentions) {
+        if (!m.isBot && m.openId && m.name) {
+            cache.set(m.openId, m.name);
+        }
+    }
+    // Collect all openIds we care about
+    const openIds = new Set();
+    if (ctx.senderId)
+        openIds.add(ctx.senderId);
+    for (const m of ctx.mentions) {
+        if (!m.isBot && m.openId)
+            openIds.add(m.openId);
+    }
+    // Batch-resolve any that are still missing
+    const toResolve = cache.filterMissing([...openIds]);
+    if (toResolve.length > 0) {
+        await (0, user_name_cache_2.batchResolveUserNames)({ account, openIds: toResolve, log });
+    }
+}
+/**
+ * Download and save binary media attachments (images, files, audio,
+ * video, stickers) from the inbound message.
+ *
+ * Uses ResourceDescriptors extracted by content converters during the
+ * parse phase — no re-parsing of rawMessage.content needed.
+ *
+ * Returns a payload object whose keys (`MediaPath`, `MediaType`, …)
+ * are spread directly into the agent envelope, plus the raw mediaList
+ * for content substitution.
+ */
+async function resolveMedia(params) {
+    const { ctx, accountScopedCfg, account, log } = params;
+    const accountFeishuCfg = account.config;
+    const mediaMaxBytes = (accountFeishuCfg?.mediaMaxMb ?? 30) * 1024 * 1024;
+    const mediaList = await (0, media_resolver_1.downloadResources)({
+        cfg: accountScopedCfg,
+        messageId: ctx.messageId,
+        resources: ctx.resources,
+        maxBytes: mediaMaxBytes,
+        log,
+        accountId: account.accountId,
+    });
+    if (mediaList.length > 0) {
+        log(`media resolved: ${mediaList.length} attachment(s)`);
+    }
+    return {
+        payload: (0, media_resolver_1.buildFeishuMediaPayload)(mediaList),
+        mediaList,
+    };
+}
+// ---------------------------------------------------------------------------
+// Media content substitution
+// ---------------------------------------------------------------------------
+/**
+ * Replace Feishu file-key references in message content with actual
+ * local file paths after download.
+ *
+ * This is critical for:
+ * - **Images / stickers**: The SDK's `detectAndLoadPromptImages` scans
+ *   the prompt text for local file paths with image extensions.
+ * - **Audio / video / files**: Gives the AI meaningful context about
+ *   what was received (the SDK reads these via `MediaPath` directly,
+ *   but the text body should still reflect the actual attachments).
+ */
+function substituteMediaPaths(content, mediaList) {
+    // PISKIE 本地改动（49号 §4.3.5/§11.7）：正文不得包含本地媒体路径、远程 URL 或
+    // 媒体占位符——原实现把下载后的本地路径替换进正文（泄露主机临时目录且不是用户
+    // 语义）。改为剥除占位符：图片经 MediaPaths 走 ExternalEvent.images，其他类型
+    // 由核心层整条明确拒绝，正文只保留用户真实文本
+    let result = content;
+    for (const media of mediaList) {
+        const { fileKey, resourceType } = media;
+        switch (resourceType) {
+            case 'image':
+                result = result.replace(`![image](${fileKey})`, '');
+                break;
+            case 'sticker':
+                result = result.replace(`<sticker key="${fileKey}"/>`, '');
+                break;
+            case 'audio': {
+                const audioRe = new RegExp(`<audio key="${escapeRegExp(fileKey)}"[^/]*/>`);
+                result = result.replace(audioRe, '');
+                break;
+            }
+            case 'file': {
+                const fileRe = new RegExp(`<file key="${escapeRegExp(fileKey)}"[^/]*/>`);
+                result = result.replace(fileRe, '');
+                break;
+            }
+            case 'video': {
+                const videoRe = new RegExp(`<video key="${escapeRegExp(fileKey)}"[^/]*/>`);
+                result = result.replace(videoRe, '');
+                break;
+            }
+        }
+    }
+    return result.trim();
+}
+function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// ---------------------------------------------------------------------------
+// Phase 2b: Quoted / replied-to message (text context)
+// ---------------------------------------------------------------------------
+/**
+ * Fetch the text content of the message that the user replied to.
+ *
+ * If the quoted message is itself a merge_forward, its sub-messages are
+ * fetched and formatted as a single text block.
+ *
+ * Returns `"senderName: content"` when the sender name is available so
+ * the AI knows who originally wrote the quoted message.
+ */
+async function resolveQuotedContent(params) {
+    const { ctx, accountScopedCfg, account, log } = params;
+    if (!ctx.parentId)
+        return undefined;
+    try {
+        const quotedMsg = await (0, fetch_1.getMessageFeishu)({
+            cfg: accountScopedCfg,
+            messageId: ctx.parentId,
+            accountId: account.accountId,
+            expandForward: true,
+        });
+        if (!quotedMsg)
+            return undefined;
+        log(`feishu[${account.accountId}]: fetched quoted message: ${quotedMsg.content?.slice(0, 100)}`);
+        // Build quoted text with message_id prefix so AI can correlate
+        // file_key / image_key with the source message for resource download.
+        const prefix = `[message_id=${ctx.parentId}]`;
+        if (quotedMsg.senderName) {
+            return `${prefix} ${quotedMsg.senderName}: ${quotedMsg.content}`;
+        }
+        return `${prefix} ${quotedMsg.content}`;
+    }
+    catch (err) {
+        log(`feishu[${account.accountId}]: failed to fetch quoted message: ${String(err)}`);
+        return undefined;
+    }
+}

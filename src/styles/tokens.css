@@ -1,0 +1,190 @@
+/* 设计 token 单一来源：@theme（Tailwind 4 自动生成工具类）+ :root 别名（var() 兜底场景） */
+
+/*
+ * Lumen 色板：深色主题使用近黑中性舞台（#0a0a0c 系 + 微弱蓝紫光晕），
+ * 色值与 src/features/envstudio 的 --st-* 同源。
+ * 弥散蓝雾背景提供以下两套配色：
+ * 深色 = 深海蓝玻璃（深蓝底 + 蓝紫弥散辉光 + 蓝调半透明表面）；
+ * 浅色 = 晨雾蓝白（雾蓝底 + 冷调近白卡 + 深藏青强调）。
+ * 旧赛博深黑色系（#0a0a0f 系）整体退役；token 名保持不变（cyber-* 历史名沿用）。
+ * 无壁纸时的默认底是 --app-ambient 弥散光渐变（AppBackground 层展示）。
+ */
+@theme {
+  --color-cyber-bg: #0a0a0c;
+  --color-cyber-surface: #131317;
+  --color-cyber-border: #2b2b32;
+  --color-cyber-primary: #6f8dff;
+  --color-cyber-secondary: #6f8dff;
+  --color-cyber-accent: #a78bfa;
+  --color-cyber-text: #ededf2;
+  --color-cyber-text-muted: #8a8a94;
+  --color-cyber-success: #3ecf8e;
+  --color-cyber-warning: #e0b263;
+  --color-cyber-error: #e58a7b;
+  --color-cyber-purple: #a78bfa;
+  --color-console-canvas-bg: #0a0a0c;
+
+  /* 表面递阶（蓝调 alpha 三阶）：常态 → hover → 选中/激活 */
+  --color-surface-1: rgba(237, 237, 242, 0.055);
+  --color-surface-2: rgba(237, 237, 242, 0.09);
+  --color-surface-3: rgba(237, 237, 242, 0.13);
+  /* 边框递阶：常态 → hover → 选中 */
+  --color-line-1: rgba(237, 237, 242, 0.08);
+  --color-line-2: rgba(237, 237, 242, 0.13);
+  --color-line-3: rgba(237, 237, 242, 0.19);
+
+  /* 状态语义色（透明度递阶用修饰符：bg-status-running/12、border-status-running/30） */
+  --color-status-running: #3ecf8e;
+  --color-status-thinking: #6f8dff;
+  --color-status-waiting: #e0b263;
+  --color-status-error: #e58a7b;
+
+  /* 圆角梯级：卡片/面板 16、按钮/输入框 12、徽章 8、composer 28 */
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-badge: 8px;
+  --radius-composer: 28px;
+
+  /* 选中卡片阴影（外投影 + 内高光） */
+  --shadow-card-active: 0 16px 40px rgba(4, 10, 30, 0.45), inset 0 1px 0 rgba(160, 180, 255, 0.08);
+}
+
+/* CSS 变量备份（用于非 Tailwind 场景） */
+:root {
+  /* 让系统自己画的那部分（滚动条、表单控件、autofill）跟着主题走 */
+  color-scheme: dark;
+
+  --cyber-bg: #0a0a0c;
+  --cyber-surface: #131317;
+  /* 抬升面：浮层箭头、悬停行和滚动条槽等共用。 */
+  --cyber-elevated: #1c1c22;
+  --cyber-border: #2b2b32;
+  --cyber-primary: #6f8dff;
+  --cyber-secondary: #6f8dff;
+  --cyber-accent: #a78bfa;
+  --cyber-text: #ededf2;
+  --cyber-text-muted: #8a8a94;
+  --cyber-success: #3ecf8e;
+  --cyber-warning: #e0b263;
+  --cyber-error: #e58a7b;
+  --cyber-purple: #a78bfa;
+  --console-canvas-bg: #0a0a0c;
+  --surface-1: rgba(237, 237, 242, 0.055);
+  --surface-2: rgba(237, 237, 242, 0.09);
+  --surface-3: rgba(237, 237, 242, 0.13);
+  --line-1: rgba(237, 237, 242, 0.08);
+  --line-2: rgba(237, 237, 242, 0.13);
+  --line-3: rgba(237, 237, 242, 0.19);
+  --status-running: #3ecf8e;
+  --status-thinking: #6f8dff;
+  --status-waiting: #e0b263;
+  --status-error: #e58a7b;
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-badge: 8px;
+  --radius-composer: 28px;
+  --shadow-card-active: 0 16px 40px rgba(4, 10, 30, 0.45), inset 0 1px 0 rgba(160, 180, 255, 0.08);
+
+  /* 主题背景：AppBackground 层消费；由 appBackgroundFade.ts 在 <html> 上写入 */
+  --app-bg-image: none;
+  --app-bg-mask: 0.65;
+
+  /* 玻璃材质：壁纸/弥散光上的统一半透衬底。
+     全应用只允许三种材质——透（不衬）/ 玻璃（--glass-1，hover 态 --glass-2）/ 实底（--cyber-bg）。
+     所有承载文字的容器一律用同一块玻璃，禁止各自发明透明度（会支离破碎，用户反馈） */
+  --glass-1: color-mix(in srgb, var(--cyber-bg) 55%, transparent);
+  --glass-2: color-mix(in srgb, var(--cyber-bg) 70%, transparent);
+
+  /* 弥散光环境底：无用户壁纸时的默认背景，随主题自动切换。
+     消费方式：appBackgroundFade.ts 在无壁纸时把 --app-bg-image 指向 var(--app-ambient) */
+  --app-ambient:
+    radial-gradient(1100px 750px at 82% -8%, rgba(111, 141, 255, 0.13), transparent 62%),
+    radial-gradient(950px 700px at -8% 108%, rgba(167, 139, 250, 0.09), transparent 55%),
+    radial-gradient(700px 500px at 50% 115%, rgba(111, 141, 255, 0.05), transparent 60%),
+    linear-gradient(180deg, #0a0a0c, #09090b);
+}
+
+/*
+ * 浅色主题使用晨雾蓝白色板：<html data-theme="light"> 时整套翻转。
+ * 深色是默认值（@theme + :root 别名），这里只写浅色差异——两套都覆盖：
+ * --color-*（Tailwind 工具类消费）与裸别名（CSS Modules / var() 消费）。
+ * surface 不用纯白（纯白组件板扎眼，用户反馈）；强调色用深藏青（参考 Planner/Payno）。
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-cyber-bg: #e9eef5;
+  --color-cyber-surface: #f5f8fc;
+  --color-cyber-border: #d3dce8;
+  --color-cyber-primary: #34558b;
+  --color-cyber-secondary: #34558b;
+  --color-cyber-accent: #4a6fd6;
+  --color-cyber-text: #1e2940;
+  --color-cyber-text-muted: #66738c;
+  --color-cyber-success: #178f5c;
+  --color-cyber-warning: #a16207;
+  --color-cyber-error: #d23b47;
+  --color-cyber-purple: #6d59c8;
+  --color-console-canvas-bg: #e4eaf2;
+  --color-surface-1: rgba(30, 41, 64, 0.04);
+  --color-surface-2: rgba(30, 41, 64, 0.07);
+  --color-surface-3: rgba(30, 41, 64, 0.1);
+  --color-line-1: rgba(30, 41, 64, 0.08);
+  --color-line-2: rgba(30, 41, 64, 0.12);
+  --color-line-3: rgba(30, 41, 64, 0.17);
+  --color-status-running: #178f5c;
+  --color-status-thinking: #3b62c4;
+  --color-status-waiting: #a16207;
+  --color-status-error: #d23b47;
+
+  --cyber-bg: #e9eef5;
+  --cyber-surface: #f5f8fc;
+  --cyber-elevated: #f9fbfe;
+  --cyber-border: #d3dce8;
+  --cyber-primary: #34558b;
+  --cyber-secondary: #34558b;
+  --cyber-accent: #4a6fd6;
+  --cyber-text: #1e2940;
+  --cyber-text-muted: #66738c;
+  --cyber-success: #178f5c;
+  --cyber-warning: #a16207;
+  --cyber-error: #d23b47;
+  --cyber-purple: #6d59c8;
+  --console-canvas-bg: #e4eaf2;
+  --surface-1: rgba(30, 41, 64, 0.04);
+  --surface-2: rgba(30, 41, 64, 0.07);
+  --surface-3: rgba(30, 41, 64, 0.1);
+  --line-1: rgba(30, 41, 64, 0.08);
+  --line-2: rgba(30, 41, 64, 0.12);
+  --line-3: rgba(30, 41, 64, 0.17);
+  --status-running: #178f5c;
+  --status-thinking: #3b62c4;
+  --status-waiting: #a16207;
+  --status-error: #d23b47;
+  --shadow-card-active: 0 14px 34px rgba(40, 60, 100, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  --app-ambient:
+    radial-gradient(1000px 700px at 85% -6%, rgba(140, 170, 255, 0.5), transparent 60%),
+    radial-gradient(900px 700px at -5% 102%, rgba(175, 198, 235, 0.6), transparent 55%),
+    radial-gradient(600px 420px at 55% 118%, rgba(120, 160, 230, 0.25), transparent 60%),
+    linear-gradient(180deg, #eef2f8, #dfe7f1);
+}
+
+/*
+ * 主题背景激活态：壁纸/弥散光展示时 <html> 带 data-app-bg
+ * （弥散光是无壁纸时的默认底，因此该属性常态存在），
+ * 结构性底色（Tailwind bg-cyber-bg / Console 的 --console-canvas-bg 消费点）
+ * 置为透明，让底层透出来。
+ * 注意：:root 别名 --cyber-bg 保持实底，供必须不透明的场景
+ * （按钮文字色、投屏遮罩、画布节点衬底等）继续使用。
+ */
+:root[data-app-bg] {
+  /* 结构底色全透明而非半透明：Layout 根、main、Console shell 等结构层是**嵌套**的，
+     各留 50% 会叠乘（0.5×0.5×…），底图实际只剩个位数可见度。
+     暗度只有一个来源：AppBackground 遮罩（壁纸=遮罩浓度滑杆；弥散光=0）。
+     需要局部实底的组件（如 dock 节点）各自垫 var(--cyber-bg)。 */
+  --color-cyber-bg: transparent;
+  /* 别名本体也要覆盖：Console 页结构面（shell/侧栏/画布列）经 var(--console-canvas-bg) 消费 */
+  --console-canvas-bg: transparent;
+  --color-console-canvas-bg: transparent;
+}

@@ -1,0 +1,28 @@
+/* 主题背景层：全屏壁纸/弥散光 + 遮罩，垫在整个应用之下。
+   无壁纸时展示 --app-ambient 弥散光渐变，因此 data-app-bg 常态存在。 */
+
+/* data-app-bg 缺席只出现在 applyAppBackgroundVars 运行前的首帧之前 */
+.layer {
+  display: none;
+}
+
+:global(:root[data-app-bg]) .layer {
+  display: block;
+  position: fixed;
+  inset: 0;
+  /* 负 z-index：画在 #root 背景之上、所有 in-flow 兄弟内容之下 */
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--app-bg-image, none);
+  background-size: cover;
+  background-position: center;
+}
+
+/* 暗色遮罩：不透明度即设置页的滑杆值，保证前景文字可读 */
+:global(:root[data-app-bg]) .layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--cyber-bg);
+  opacity: var(--app-bg-mask, 0.65);
+}

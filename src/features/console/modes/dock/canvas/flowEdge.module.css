@@ -1,0 +1,78 @@
+/**
+ * 连线的四层描边 + 动画渐变的色标。
+ *
+ * 数值由旧全局连线规则迁入，并改为从 `--cyber-text` 派生；效果等价，换肤时会跟着走。
+ *
+ * `vector-effect: non-scaling-stroke` 是关键：画布缩放时线宽不跟着缩，
+ * 否则缩到 0.5× 线就细得看不见了。
+ */
+
+.halo,
+.rail,
+.inner,
+.glow {
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 最外层：极淡 + 外发光，给线一点体积 */
+.halo {
+  stroke: color-mix(in srgb, var(--cyber-text) 5.5%, transparent);
+  stroke-width: 6;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--cyber-text) 12%, transparent));
+}
+
+.halo[data-selected='true'] {
+  stroke: color-mix(in srgb, var(--cyber-text) 10%, transparent);
+  stroke-width: 8;
+}
+
+/* 主体 */
+.rail {
+  stroke: color-mix(in srgb, var(--cyber-text) 22%, transparent);
+  stroke-width: 1.55;
+}
+
+.rail[data-selected='true'] {
+  stroke: color-mix(in srgb, var(--cyber-text) 38%, transparent);
+  stroke-width: 1.75;
+}
+
+/* 芯线 */
+.inner {
+  stroke: color-mix(in srgb, var(--cyber-text) 10%, transparent);
+  stroke-width: 0.75;
+}
+
+/* 高光：描边是动画渐变（见 FlowEdge.tsx），这里只定宽度与发光 */
+.glow {
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cyber-text) 58%, transparent));
+  opacity: 0.95;
+}
+
+/* ── 渐变色标（SVG 的 stop-color 可以由 CSS 给，故 TSX 里零色值）── */
+
+.stopEdge {
+  stop-color: var(--cyber-text);
+  stop-opacity: 0;
+}
+
+.stopSoft {
+  stop-color: var(--cyber-text);
+  stop-opacity: 0.18;
+}
+
+.stopPeak {
+  stop-color: var(--cyber-text);
+  stop-opacity: 0.96;
+}
+
+/* 降低动效偏好：高光压暗（老版同做法，不整条去掉——否则线的层次也没了） */
+@media (prefers-reduced-motion: reduce) {
+  .glow {
+    opacity: 0.38;
+  }
+}

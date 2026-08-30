@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "package": "chrome-devtools-mcp",
+  "version": "1.7.0",
+  "commit": "774d78f5eef5e610407a0c92fa6ec5ed74b027e8",
+  "npmIntegrity": "sha512-6xFW7oiUxTxZuHcfyYBkKQtmttjCbfifKZMSEk5CV8H2FucvKweYiJr8CblddYHtYjA4C14K9VAs1r49906RBA==",
+  "npmShasum": "b20e2ee77afb585e2e762535c37ca9336e7445a4",
+  "tarballSha256": "895733586a0ece138493790c07e8b083b8571b1d2037a73124334d968d1046d0",
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE",
+  "noticeFile": "NOTICE",
+  "upstreamPuppeteer": "25.5.0",
+  "runtimePuppeteerCore": "25.9.0",
+  "derivedFiles": [
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-registry.ts",
+      "upstreamSha256": "9a0b6090e95a8239b923e6d9429eaac9f1fe9080d9ef4c21907888a1876f48f0",
+      "modifications": "Reduced to page identity, selection fallback, event journaling, and deterministic disposal."
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "upstreamSha256": "9a0b6090e95a8239b923e6d9429eaac9f1fe9080d9ef4c21907888a1876f48f0",
+      "modifications": "Removed MCP transport, emulation, and server response concerns; retained session ownership, page/snapshot access, text waiting, and page-scoped observation access."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "upstreamSha256": "cf0f259927fe9914e85776b57203358380365e897894941e1c769c6ff7ce5e95",
+      "modifications": "Collapsed page-scoped snapshot, dialog, action, text-wait, and collector access into Piskie's session contract; observed dialogs remain recoverable even when a Puppeteer locator stays pending until timeout."
+    },
+    {
+      "upstreamPath": "src/TextSnapshot.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/text-snapshot.ts",
+      "upstreamSha256": "19f9ee42c5d21991c741b76e6b29028cdbbef44dad988b285606ebefac3397a7",
+      "modifications": "Removed DevTools-selected and third-party extra nodes; preserved Piskie's globally invalidated snapshot UID format."
+    },
+    {
+      "upstreamPath": "src/WaitForHelper.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/action-waiter.ts",
+      "upstreamSha256": "3921cf3056cfe94451348d867a5540377b5f7fef60365c6864ffd97247886484",
+      "modifications": "Retains the upstream CDP navigation-start probe, navigation completion wait, stable-DOM sequence, and post-action error boundary; Promise.withResolvers, using syntax, logging, telemetry, and MCP response types were replaced with ES2022-compatible resolvers, explicit non-blocking handle disposal, and Piskie ActionReceipt values."
+    },
+    {
+      "upstreamPath": "src/utils/keyboard.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/keyboard.ts",
+      "upstreamSha256": "7ffb098bbf548a7f2e7f4f28e1f3c408d5f518ee1db0663b3f40588821d224cd",
+      "modifications": "Retained the upstream valid-key set, validation timing, and combination parsing under the Piskie session API."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/core/browser/browser-operations.ts",
+      "upstreamSha256": "aa2669dbe7586981ef3831afabc4561bb1eff3eb1d5bc3fab1fd7ec87675330e",
+      "modifications": "Adapted navigation to BrowserManager.runExclusive and structured Piskie results; omitted MCP schemas and response content."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "upstreamSha256": "a4d6ae3d925da9ffac7485b206035c462a057824a81e6c0b306b2d92d45c6ae2",
+      "modifications": "Retained option, select, toggle, fill, click, hover, drag/drop, upload/file-chooser fallback, form-fill, action-error, and reverse modifier-release semantics behind Piskie's session API; option lookup traverses Chromium 148 accessibility wrapper nodes while preserving upstream text-to-DOM-value selection, and remote handles use explicit non-blocking disposal."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "a4d6ae3d925da9ffac7485b206035c462a057824a81e6c0b306b2d92d45c6ae2",
+      "modifications": "Adapted UID actions, drag, and upload to Piskie's camelCase browser names, output text, trusted workspace roots, and one-active-snapshot lifecycle; MCP handler dispatch and response objects were removed."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "aa2669dbe7586981ef3831afabc4561bb1eff3eb1d5bc3fab1fd7ec87675330e",
+      "modifications": "Kept browser page/navigation compatibility, exposed handleDialog, and replaced MCP handler dispatch with direct session calls."
+    },
+    {
+      "upstreamPath": "src/tools/screenshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "d1b639cca41e6fc3eea5646aedba60db9cdf7b65a2366ba8e741bd9117e61c94",
+      "modifications": "Retained page/UID screenshot behavior, the two-megabyte temporary-file boundary, and non-blocking element-handle disposal without exposing unrestricted file paths."
+    },
+    {
+      "upstreamPath": "src/tools/script.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "02d9897ece63cefe0a8bcad4646047d616034dc98e5d34d55ff88e50bb767e64",
+      "modifications": "Retained function-expression evaluation, JSON serialization, result text, and non-blocking function-handle disposal without MCP response types or element arguments."
+    },
+    {
+      "upstreamPath": "src/PageCollector.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-collector.ts",
+      "upstreamSha256": "e1cda747217de65203f21f22f39e7110313448e434f08a95d64e8370ae8bbb68",
+      "modifications": "Retained per-page stable IDs, main-frame navigation buckets, the three-navigation preservation window, the 1000-request cap, and navigation-request reassignment; DevTools issue aggregation was omitted and the previous Piskie pageerror observation was retained."
+    },
+    {
+      "upstreamPath": "src/formatters/ConsoleFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-formatter.ts",
+      "upstreamSha256": "b93a30f8031e427f63d081801dafc93e673b0f6346254a1d299593756b56e1fa",
+      "modifications": "Retained concise/detailed console text, argument resolution, unavailable-argument markers, and consecutive-message grouping; DevTools source-map symbolization and aggregated issue formatting were omitted."
+    },
+    {
+      "upstreamPath": "src/formatters/NetworkFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/network-formatter.ts",
+      "upstreamSha256": "d09cdfb888c7d2c65f740ed0c679e516f6f3704ebfeacfbfcce10164b3c33a6f",
+      "modifications": "Retained concise/detailed request formatting, request and response body retrieval, UTF-8/binary detection, 10000-character truncation, failures, and redirect chains; body file writes, DevTools selection, and bundled DevTools header formatting were removed."
+    },
+    {
+      "upstreamPath": "src/utils/pagination.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/pagination.ts",
+      "upstreamSha256": "d8a2fdb5c963097b451a513be49eb3f790b309be543fc8b96be67160f4b9eea9",
+      "modifications": "Retained page-size defaults, invalid-page fallback, indices, and page metadata under a transport-free helper."
+    },
+    {
+      "upstreamPath": "src/McpResponse.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/pagination.ts",
+      "upstreamSha256": "029e5208d283cb4f9820b6ec0a420959015845cc74eaaf10d42cadcb7e0530d5",
+      "modifications": "Retained the upstream human-readable pagination lines without MCP Content or structuredContent response objects."
+    },
+    {
+      "upstreamPath": "src/utils/files.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/file-roots.ts",
+      "upstreamSha256": "2e8aec6b15f05cf378a893295a17ca2f3b9dd091f117011903903bed57bb84ff",
+      "modifications": "Retained canonical realpath resolution including nearest-existing-parent handling for path validation."
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/file-roots.ts",
+      "upstreamSha256": "9a0b6090e95a8239b923e6d9429eaac9f1fe9080d9ef4c21907888a1876f48f0",
+      "modifications": "Adapted MCP root containment validation to the existing Piskie workspace and task temporary-directory owners; unrestricted-path mode was omitted."
+    },
+    {
+      "upstreamPath": "src/tools/snapshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "754a8e7bd5cb823a0c555399f107fc3bb5ee5ef7c30aa781518889d0034a557e",
+      "modifications": "Exposed waitFor with upstream any-text matching and post-wait snapshot text through Piskie's direct session adapter."
+    },
+    {
+      "upstreamPath": "src/tools/console.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "6953f7b5d3ce245277ad344501b5966d7a44c286f6917015356e5d5d3dfb9bdf",
+      "modifications": "Adapted read-only list/get console handlers, filters, preserved-navigation selection, pagination, grouping, and output to Piskie's string-returning browser adapter."
+    },
+    {
+      "upstreamPath": "src/tools/network.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "upstreamSha256": "394f3cb814022bd3be2de18316ffd25d3bf39e722e0961606fc5a5f61637a4f6",
+      "modifications": "Adapted read-only list/get network handlers, resource filters, preserved-navigation selection, pagination, and inline body output; body file path parameters and writes were removed."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "upstreamSha256": "a4d6ae3d925da9ffac7485b206035c462a057824a81e6c0b306b2d92d45c6ae2",
+      "modifications": "Adapted drag and upload schemas to camelCase and supplied trusted workspace roots outside the model-visible schema."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "upstreamSha256": "aa2669dbe7586981ef3831afabc4561bb1eff3eb1d5bc3fab1fd7ec87675330e",
+      "modifications": "Adapted handleDialog schema and descriptions to the trusted browser Skill contract."
+    },
+    {
+      "upstreamPath": "src/tools/snapshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "upstreamSha256": "754a8e7bd5cb823a0c555399f107fc3bb5ee5ef7c30aa781518889d0034a557e",
+      "modifications": "Adapted waitFor schema and any-text semantics to the browser Skill contract."
+    },
+    {
+      "upstreamPath": "src/tools/console.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "upstreamSha256": "6953f7b5d3ce245277ad344501b5966d7a44c286f6917015356e5d5d3dfb9bdf",
+      "modifications": "Adapted read-only console list/get schemas and filter enums to camelCase browser names."
+    },
+    {
+      "upstreamPath": "src/tools/network.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "upstreamSha256": "394f3cb814022bd3be2de18316ffd25d3bf39e722e0961606fc5a5f61637a4f6",
+      "modifications": "Adapted read-only network list/get schemas and removed body file-write parameters."
+    }
+  ],
+  "behavioralReferences": [
+    "src/McpContext.ts",
+    "src/McpPage.ts",
+    "src/TextSnapshot.ts",
+    "src/WaitForHelper.ts",
+    "src/PageCollector.ts",
+    "src/McpResponse.ts",
+    "src/formatters/ConsoleFormatter.ts",
+    "src/formatters/NetworkFormatter.ts",
+    "src/formatters/SnapshotFormatter.ts",
+    "src/tools/console.ts",
+    "src/tools/input.ts",
+    "src/tools/network.ts",
+    "src/tools/pages.ts",
+    "src/tools/screenshot.ts",
+    "src/tools/script.ts",
+    "src/tools/snapshot.ts",
+    "src/utils/files.ts",
+    "src/utils/keyboard.ts",
+    "src/utils/pagination.ts"
+  ]
+}
