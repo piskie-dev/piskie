@@ -1,0 +1,18 @@
+{
+  "version": "2026.07.10.4",
+  "verifiedAt": "2026-07-10",
+  "policy": {
+    "outputModality": "text",
+    "requireExclusiveOutputModality": true,
+    "requireToolCall": true
+  },
+  "fallbackProviders": {
+    "baidu": "models.dev 无对应 Provider，保留百度官方目录",
+    "volcengine": "models.dev 无对应 Provider，保留火山引擎官方目录",
+    "ollama": "本地运行时发现",
+    "vllm": "本地运行时发现",
+    "llama-cpp": "本地运行时发现",
+    "openai-compatible": "使用用户凭据发现并手工声明",
+    "anthropic-compatible": "使用用户凭据发现并手工声明"
+  }
+}

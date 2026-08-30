@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false
+  },
+  "include": ["electron/piskiepilot/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-electron",
+    "**/*.test.ts"
+  ]
+}

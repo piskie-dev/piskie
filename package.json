@@ -1,0 +1,237 @@
+{
+  "name": "piskie",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "面向复杂任务的 AI 智能体桌面工作台，统一组织计划、工具与执行过程",
+  "homepage": "https://piskie.dev",
+  "desktopName": "dev.piskie.desktop",
+  "main": "dist-electron/electron/bootstrap.js",
+  "bin": {
+    "piskie": "dist-electron/electron/cli/main.js"
+  },
+  "author": "Piskie Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5174 && npm run build:electron && cross-env NODE_ENV=development node scripts/electron-launcher.mjs --app . -- --remote-debugging-port=9223",
+    "build": "npm run build:vite && npm run build:electron",
+    "build:vite": "vite build",
+    "build:electron": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && tsc -p tsconfig.electron.json && tsc-alias -p tsconfig.electron.json && tsc -p tsconfig.piskiepilot-dts.json && tsc-alias -p tsconfig.piskiepilot-dts.json && node scripts/copy-piskiepilot-assets.mjs && node scripts/copy-im-channel-assets.mjs && npm run build:preload && node scripts/assert-electron-import-specifiers.mjs",
+    "build:preload": "esbuild electron/preload.ts --bundle --platform=node --conditions=browser --target=node24 --format=cjs --outfile=dist-electron/electron/preload.cjs --external:electron && node scripts/assert-sandboxed-preload.mjs",
+    "dist": "node scripts/assert-supported-kernel-host.mjs && npm run build && electron-builder",
+    "dist:win": "node scripts/assert-supported-kernel-host.mjs win32-x64 && npm run build && node scripts/package-windows-installer.mjs",
+    "dist:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 && node scripts/verify-native-package.mjs",
+    "dist:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 && node scripts/verify-native-package.mjs",
+    "kill": "node scripts/kill-all.mjs",
+    "restart": "npm run kill && npm run dev",
+    "lint": "eslint . --ext .ts,.tsx",
+    "check:i18n": "node scripts/check-i18n-literals.mjs",
+    "test:i18n-check": "node --test scripts/check-i18n-literals.test.mjs",
+    "check:styles": "node scripts/check-style-tokens.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:electron-host:live": "node scripts/verify-electron-host-live.mjs",
+    "catalog:sync": "node scripts/model-catalog/sync-models-dev.mjs && node scripts/model-catalog/sync-image-models-dev.mjs && npm run catalog:generate",
+    "catalog:generate": "node scripts/model-catalog/generate.mjs",
+    "catalog:validate": "node scripts/model-catalog/generate.mjs --check"
+  },
+  "keywords": [
+    "electron",
+    "ai-agent",
+    "multi-agent",
+    "agent-orchestration",
+    "puppeteer",
+    "browser-automation",
+    "desktop-app"
+  ],
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@larksuiteoapi/node-sdk": "^1.73.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@sinclair/typebox": "^0.34.48",
+    "@vscode/ripgrep": "^1.18.0",
+    "@wecom/aibot-node-sdk": "^1.0.7",
+    "cheerio": "^1.1.2",
+    "core-js": "3.46.0",
+    "debug": "4.4.3",
+    "diff": "^8.0.2",
+    "file-type": "^21.3.4",
+    "https-proxy-agent": "^7.0.6",
+    "js-yaml": "^4.3.2",
+    "mpg123-decoder": "^1.0.3",
+    "nanoid": "^5.1.6",
+    "openai": "^7.1.0",
+    "puppeteer-core": "25.9.0",
+    "qrcode-terminal": "^0.12.0",
+    "silk-wasm": "^3.7.1",
+    "socks": "^2.8.9",
+    "socks-proxy-agent": "^8.0.5",
+    "typescript": "^5.9.3",
+    "undici": "^7.29.0",
+    "winston": "^3.18.3",
+    "ws": "^8.18.0",
+    "yargs": "^18.0.0",
+    "yauzl": "3.4.0",
+    "zod": "^4.3.5"
+  },
+  "build": {
+    "appId": "dev.piskie.desktop",
+    "productName": "Piskie",
+    "asar": true,
+    "buildDependenciesFromSource": false,
+    "nodeGypRebuild": false,
+    "npmRebuild": true,
+    "asarUnpack": [
+      "node_modules/@vscode/ripgrep-*/bin/**"
+    ],
+    "icon": "logos/piskie/app/piskie-brand-on-dark-1024.png",
+    "compression": "maximum",
+    "afterPack": "build/after-pack.cjs",
+    "files": [
+      "logos/piskie/app/piskie-brand-on-dark-256.png",
+      "logos/piskie/app/piskie-brand-on-light-256.png",
+      "logos/piskie/app/piskie-brand.ico",
+      "logos/piskie/app/piskie-tray-glyph-128.png",
+      "logos/piskie/app/piskie-tray-glyph-dark-128.png",
+      "dist/**/*",
+      "dist-electron/**/*",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "electron/im-gateway/channels/*/UPSTREAM.md",
+      "electron/im-gateway/channels/*/vendor/LICENSE*",
+      "electron/im-gateway/core/openclaw-compat/README.md",
+      "electron/im-gateway/core/openclaw-compat/LICENSE*",
+      "electron/piskiepilot/browser/third_party/**/LICENSE*",
+      "electron/piskiepilot/browser/third_party/**/NOTICE*",
+      "electron/piskiepilot/browser/third_party/**/provenance.json",
+      "package.json",
+      "!reports/**/*",
+      "!docs/**/*",
+      "!docs-outside/**/*",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/*.map",
+      "!node_modules/**/docs/**/*",
+      "!node_modules/**/test/**/*",
+      "!node_modules/**/tests/**/*",
+      "!node_modules/**/example/**/*",
+      "!node_modules/**/examples/**/*",
+      "!node_modules/**/.github/**/*",
+      "!node_modules/**/CHANGELOG*",
+      "!node_modules/**/changelog*",
+      "!node_modules/**/README*",
+      "!node_modules/**/readme*",
+      "!node_modules/**/*.d.ts.map",
+      {
+        "from": "dist-electron",
+        "to": "dist-electron",
+        "filter": [
+          "**/*.d.ts"
+        ]
+      },
+      {
+        "from": "node_modules/typescript/lib",
+        "to": "node_modules/typescript/lib",
+        "filter": [
+          "*.d.ts"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "release/artifacts"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Piskie uses Apple Events to bring managed browser windows to the foreground."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "logos/piskie/app/piskie-brand.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "uninstallDisplayName": "Piskie",
+      "shortcutName": "Piskie"
+    },
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "icon": "logos/piskie/app/piskie-brand-on-dark-256.png",
+      "syncDesktopName": true
+    },
+    "deb": {
+      "maintainer": "Piskie Team"
+    }
+  },
+  "devDependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@ant-design/x-markdown": "^2.1.1",
+    "@lobehub/icons": "^5.0.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/debug": "^4.1.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.10.1",
+    "@types/react": "^18.3.26",
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
+    "@types/yargs": "^17.0.35",
+    "@types/yauzl": "3.4.0",
+    "@types/yazl": "3.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@xyflow/react": "^12.9.3",
+    "concurrently": "^9.2.4",
+    "cross-env": "^7.0.3",
+    "electron": "^42.6.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "express": "^5.2.1",
+    "framer-motion": "^12.23.25",
+    "i18next": "^25.8.0",
+    "jsdom": "^26.1.0",
+    "lucide-react": "^0.555.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^16.5.3",
+    "react-router-dom": "^7.18.2",
+    "tailwindcss": "^4.1.17",
+    "tsc-alias": "^1.8.16",
+    "vite": "^7.2.2",
+    "vitest": "^4.0.18",
+    "wait-on": "^8.0.5",
+    "yazl": "3.3.1",
+    "zustand": "^5.0.8"
+  },
+  "packageManager": "npm@11.16.0"
+}

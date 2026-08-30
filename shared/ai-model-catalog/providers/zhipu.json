@@ -1,0 +1,718 @@
+{
+  "provider": "zhipu",
+  "version": "2026.07.10.4+image.64791e754a58",
+  "verifiedAt": "2026-08-24",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://docs.bigmodel.cn/cn/guide/capabilities/thinking",
+    "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
+  ],
+  "models": [
+    {
+      "id": "glm-5.2",
+      "name": "GLM-5.2",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-13"
+    },
+    {
+      "id": "glm-5v-turbo",
+      "name": "GLM-5V-Turbo",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 22
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-01"
+    },
+    {
+      "id": "glm-5.1",
+      "name": "GLM-5.1",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-03-27"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM-5",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://docs.bigmodel.cn/cn/guide/capabilities/thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 204800,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 3.2
+      },
+      "releaseDate": "2026-02-11"
+    },
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM-4.7-Flash",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-01-19"
+    },
+    {
+      "id": "glm-4.7-flashx",
+      "name": "GLM-4.7-FlashX",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.07,
+        "outputPerMillion": 0.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-01-19"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM-4.7",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://docs.bigmodel.cn/cn/guide/capabilities/thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 204800,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 2.2
+      },
+      "releaseDate": "2025-12-22"
+    },
+    {
+      "id": "glm-4.6v",
+      "name": "GLM-4.6V",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 0.9
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-12-08"
+    },
+    {
+      "id": "glm-4.6",
+      "name": "GLM-4.6",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 204800,
+      "maxContextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 2.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-09-30"
+    },
+    {
+      "id": "glm-4.5v",
+      "name": "GLM-4.5V",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 64000,
+      "maxContextWindow": 64000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 1.8
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-08-11"
+    },
+    {
+      "id": "glm-4.5",
+      "name": "GLM-4.5",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-28",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 98304,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 2.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "glm-4.5-air",
+      "name": "GLM-4.5-Air",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-28",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 98304,
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 1.1
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "glm-4.5-flash",
+      "name": "GLM-4.5-Flash",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-28",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 98304,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "cogview-4-250304",
+      "name": "CogView 4 250304",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2025-03-04",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "zhipu",
+      "provenance": {
+        "sourceUrls": [
+          "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+      }
+    },
+    {
+      "id": "cogview-3-flash",
+      "name": "CogView 3 Flash",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "zhipu",
+      "provenance": {
+        "sourceUrls": [
+          "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+      }
+    },
+    {
+      "id": "cogview-4",
+      "name": "CogView 4",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "zhipu",
+      "provenance": {
+        "sourceUrls": [
+          "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+      }
+    },
+    {
+      "id": "glm-image",
+      "name": "GLM Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "zhipu",
+      "provenance": {
+        "sourceUrls": [
+          "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  },
+  "imageInventorySource": {
+    "id": "zhipu-docs",
+    "url": "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md",
+    "sha256": "64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+  }
+}

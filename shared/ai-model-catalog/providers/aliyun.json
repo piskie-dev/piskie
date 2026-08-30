@@ -1,0 +1,1499 @@
+{
+  "provider": "aliyun",
+  "version": "2026.07.10.4+image.04f4354eec5f",
+  "verifiedAt": "2026-08-24",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://help.aliyun.com/zh/model-studio/coding-plan",
+    "https://help.aliyun.com/zh/model-studio/deep-thinking",
+    "https://help.aliyun.com/zh/model-studio/image-model.md"
+  ],
+  "models": [
+    {
+      "id": "qwen3.7-plus",
+      "name": "Qwen3.7 Plus",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-02"
+    },
+    {
+      "id": "qwen3.7-max",
+      "name": "Qwen3.7 Max",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 2.5,
+        "outputPerMillion": 7.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-21"
+    },
+    {
+      "id": "qwen3.6-flash",
+      "name": "Qwen3.6 Flash",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.1875,
+        "outputPerMillion": 1.125
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-27"
+    },
+    {
+      "id": "qwen3.6-plus",
+      "name": "Qwen3.6 Plus",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-02"
+    },
+    {
+      "id": "qwen3.5-plus",
+      "name": "Qwen3.5 Plus",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2026-02-16"
+    },
+    {
+      "id": "MiniMax-M2.5",
+      "name": "MiniMax-M2.5",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 196608,
+      "maxOutputTokens": 24576,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 196608,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2026-02-12"
+    },
+    {
+      "id": "glm-5",
+      "name": "GLM-5",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 202752,
+      "maxOutputTokens": 16384,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 202752,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2026-02-11"
+    },
+    {
+      "id": "qwen3-coder-next",
+      "name": "Qwen3 Coder Next",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 262144,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2026-02-03"
+    },
+    {
+      "id": "kimi-k2.5",
+      "name": "Kimi K2.5",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 262144,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2026-01-27"
+    },
+    {
+      "id": "qwen3-max-2026-01-23",
+      "name": "Qwen3 Max",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-01-23"
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM-4.7",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 202752,
+      "maxOutputTokens": 16384,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 202752,
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2025-12-22"
+    },
+    {
+      "id": "qwen3-coder-plus",
+      "name": "Qwen3 Coder Plus",
+      "provider": "aliyun",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "dashscope-enable-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://help.aliyun.com/zh/model-studio/coding-plan",
+          "https://help.aliyun.com/zh/model-studio/deep-thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      },
+      "releaseDate": "2025-07-23"
+    },
+    {
+      "id": "qwen-image-2.0-pro-2026-06-22",
+      "name": "Qwen Image 2.0 Pro 2026 06 22",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-06-22",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-2.0-pro-2026-04-22",
+      "name": "Qwen Image 2.0 Pro 2026 04 22",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-04-22",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-2.0-2026-03-03",
+      "name": "Qwen Image 2.0 2026 03 03",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-03-03",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-2.0-pro-2026-03-03",
+      "name": "Qwen Image 2.0 Pro 2026 03 03",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-03-03",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit-max-2026-01-16",
+      "name": "Qwen Image Edit Max 2026 01 16",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-01-16",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-plus-2026-01-09",
+      "name": "Qwen Image Plus 2026 01 09",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2026-01-09",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-max-2025-12-30",
+      "name": "Qwen Image Max 2025 12 30",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2025-12-30",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit-plus-2025-12-15",
+      "name": "Qwen Image Edit Plus 2025 12 15",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2025-12-15",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit-plus-2025-10-30",
+      "name": "Qwen Image Edit Plus 2025 10 30",
+      "kind": "image",
+      "lifecycle": "active",
+      "releaseDate": "2025-10-30",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image",
+      "name": "Qwen Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-2.0",
+      "name": "Qwen Image 2.0",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-2.0-pro",
+      "name": "Qwen Image 2.0 Pro",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-3.0",
+      "name": "Qwen Image 3.0",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-3.0-pro",
+      "name": "Qwen Image 3.0 Pro",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit",
+      "name": "Qwen Image Edit",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit-max",
+      "name": "Qwen Image Edit Max",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-edit-plus",
+      "name": "Qwen Image Edit Plus",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 6
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-max",
+      "name": "Qwen Image Max",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "qwen-image-plus",
+      "name": "Qwen Image Plus",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.1-t2i-plus",
+      "name": "Wan2.1 T2I Plus",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.1-t2i-turbo",
+      "name": "Wan2.1 T2I Turbo",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.2-t2i-flash",
+      "name": "Wan2.2 T2I Flash",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.2-t2i-plus",
+      "name": "Wan2.2 T2I Plus",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.5-i2i-preview",
+      "name": "Wan2.5 I2I Preview",
+      "kind": "image",
+      "lifecycle": "preview",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.5-t2i-preview",
+      "name": "Wan2.5 T2I Preview",
+      "kind": "image",
+      "lifecycle": "preview",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.6-image",
+      "name": "Wan2.6 Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.6-t2i",
+      "name": "Wan2.6 T2I",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.7-image",
+      "name": "Wan2.7 Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wan2.7-image-pro",
+      "name": "Wan2.7 Image Pro",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 4
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "wanx2.1-imageedit",
+      "name": "Wanx2.1 Imageedit",
+      "kind": "image",
+      "lifecycle": "deprecated",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    },
+    {
+      "id": "z-image-turbo",
+      "name": "Z Image Turbo",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "limits": {
+        "maxImages": 1
+      },
+      "provider": "aliyun",
+      "provenance": {
+        "sourceUrls": [
+          "https://help.aliyun.com/zh/model-studio/image-model.md"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "aliyun-docs:04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  },
+  "imageInventorySource": {
+    "id": "aliyun-docs",
+    "url": "https://help.aliyun.com/zh/model-studio/image-model.md",
+    "sha256": "04f4354eec5fbfdf8b36a438d7fa820849a4c749d50e2186a9cc0d9165b329ad"
+  }
+}

@@ -1,0 +1,1283 @@
+{
+  "provider": "together",
+  "version": "2026.07.10.4",
+  "verifiedAt": "2026-07-10",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://docs.together.ai/docs/inference/chat/reasoning"
+  ],
+  "models": [
+    {
+      "id": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "name": "DeepSeek V4 Pro 0813",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-12",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 1.32,
+        "outputPerMillion": 3.96
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "name": "DeepSeek V4 Flash 0731",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-31",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "moonshotai/Kimi-K3",
+      "name": "Kimi K3",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-16",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "thinkingmachines/Inkling",
+      "name": "Inkling",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-15",
+      "contextWindow": 524288,
+      "maxContextWindow": 524288,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 4.05
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "zai-org/GLM-5.2",
+      "name": "GLM-5.2",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 512000,
+      "maxContextWindow": 512000,
+      "maxOutputTokens": 164000,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-16"
+    },
+    {
+      "id": "moonshotai/Kimi-K2.7-Code",
+      "name": "Kimi K2.7 Code",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.95,
+        "outputPerMillion": 4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-14"
+    },
+    {
+      "id": "MiniMaxAI/MiniMax-M3",
+      "name": "MiniMax-M3",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 524288,
+      "maxContextWindow": 524288,
+      "maxOutputTokens": 250000,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-12"
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "name": "Nemotron 3 Ultra 550B A55B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 512300,
+      "maxContextWindow": 512300,
+      "maxOutputTokens": 512300,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 3.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-04"
+    },
+    {
+      "id": "Qwen/Qwen3.7-Max",
+      "name": "Qwen3.7 Max",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 3.75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-21"
+    },
+    {
+      "id": "Qwen/Qwen3.6-Plus",
+      "name": "Qwen3.6 Plus",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-30"
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V4-Pro",
+      "name": "DeepSeek V4 Pro",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 512000,
+      "maxContextWindow": 512000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 1.74,
+        "outputPerMillion": 3.48
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-24"
+    },
+    {
+      "id": "moonshotai/Kimi-K2.6",
+      "name": "Kimi K2.6",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131000,
+      "pricing": {
+        "inputPerMillion": 1.2,
+        "outputPerMillion": 4.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-21"
+    },
+    {
+      "id": "google/gemma-4-31B-it",
+      "name": "Gemma 4 31B Instruct",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.39,
+        "outputPerMillion": 0.97
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-07"
+    },
+    {
+      "id": "zai-org/GLM-5.1",
+      "name": "GLM-5.1",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 202752,
+      "maxContextWindow": 202752,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-07"
+    },
+    {
+      "id": "MiniMaxAI/MiniMax-M2.7",
+      "name": "MiniMax-M2.7",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 202752,
+      "maxContextWindow": 202752,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-03-18"
+    },
+    {
+      "id": "Qwen/Qwen3.5-9B",
+      "name": "Qwen3.5 9B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.17,
+        "outputPerMillion": 0.25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-03-03"
+    },
+    {
+      "id": "Qwen/Qwen3.5-397B-A17B",
+      "name": "Qwen3.5 397B A17B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262144,
+      "maxOutputTokens": 130000,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 3.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://docs.together.ai/docs/inference/chat/reasoning"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 262144,
+      "releaseDate": "2026-02-16"
+    },
+    {
+      "id": "MiniMaxAI/MiniMax-M2.5",
+      "name": "MiniMax-M2.5",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 204800,
+      "maxContextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-12"
+    },
+    {
+      "id": "zai-org/GLM-5",
+      "name": "GLM-5",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 202752,
+      "maxContextWindow": 202752,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 3.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-11"
+    },
+    {
+      "id": "Qwen/Qwen3-Coder-Next-FP8",
+      "name": "Qwen3 Coder Next FP8",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-03",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "moonshotai/Kimi-K2.5",
+      "name": "Kimi K2.5",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-01-27",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 2.8
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "essentialai/Rnj-1-Instruct",
+      "name": "Rnj-1 Instruct",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-05",
+      "contextWindow": 32768,
+      "maxContextWindow": 32768,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V3-1",
+      "name": "DeepSeek V3.1",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-21",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 1.7
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "name": "GPT OSS 120B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai/gpt-oss-20b",
+      "name": "GPT OSS 20B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.05,
+        "outputPerMillion": 0.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
+      "name": "Qwen3 235B A22B Instruct 2507 FP8",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-25",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "name": "Qwen3 Coder 480B A35B Instruct",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-23",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V3",
+      "name": "DeepSeek-V3",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-26",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 1.25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "name": "Llama 3.3 70B",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-06",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.04,
+        "outputPerMillion": 1.04
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "Qwen/Qwen2.5-7B-Instruct-Turbo",
+      "name": "Qwen 2.5 7B Instruct Turbo",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-09-19",
+      "contextWindow": 32768,
+      "maxContextWindow": 32768,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 0.3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  }
+}

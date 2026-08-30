@@ -1,0 +1,1145 @@
+{
+  "provider": "gemini",
+  "version": "2026.07.10.4+image.cac66563dfa1",
+  "verifiedAt": "2026-08-24",
+  "sourceUrls": [
+    "https://ai.google.dev/gemini-api/docs/models",
+    "https://ai.google.dev/gemini-api/docs/thinking",
+    "https://models.dev/api.json"
+  ],
+  "models": [
+    {
+      "id": "gemini-3.7-flash",
+      "name": "Gemini 3.7 Flash",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-13",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.75,
+        "outputPerMillion": 3.75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemini-flash-latest",
+      "name": "Gemini Flash Latest",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.75,
+        "outputPerMillion": 3.75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-08-13"
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "name": "Gemini 3.5 Flash Lite",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-21",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "Gemini 3.6 Flash",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-21",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.75,
+        "outputPerMillion": 3.75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemini-flash-lite-latest",
+      "name": "Gemini Flash-Lite Latest",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-07-21"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 1.5,
+        "outputPerMillion": 9
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-19"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "name": "Gemini 3.1 Flash Lite",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.25,
+        "outputPerMillion": 1.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-07"
+    },
+    {
+      "id": "gemini-robotics-er-1.6-preview",
+      "name": "Gemini Robotics-ER 1.6 Preview",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-14",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "name": "Gemma 4 26B A4B IT",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-02",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "name": "Gemma 4 31B IT",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-02",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 32768,
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "name": "Gemini 3.1 Flash Lite Preview",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.25,
+        "outputPerMillion": 1.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-03-03"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "Gemini 3.1 Pro Preview",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 12
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://ai.google.dev/gemini-api/docs/models",
+          "https://ai.google.dev/gemini-api/docs/thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-19"
+    },
+    {
+      "id": "gemini-3.1-pro-preview-customtools",
+      "name": "Gemini 3.1 Pro Preview Custom Tools",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 12
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-19"
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "name": "Gemini 3 Flash Preview",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-12-17"
+    },
+    {
+      "id": "gemini-2.5-computer-use-preview-10-2025",
+      "name": "Gemini 2.5 Computer Use Preview 10-2025",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-07",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "cost-effective"
+      ],
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://ai.google.dev/gemini-api/docs/models",
+          "https://ai.google.dev/gemini-api/docs/thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1048576,
+      "releaseDate": "2025-06-17"
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "name": "Gemini 2.5 Flash-Lite",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.1,
+        "outputPerMillion": 0.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-06-17"
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro",
+      "provider": "gemini",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": true,
+        "transportPreset": "gemini-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://ai.google.dev/gemini-api/docs/models",
+          "https://ai.google.dev/gemini-api/docs/thinking"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-06-17"
+    },
+    {
+      "id": "gemini-3.1-flash-lite-image",
+      "name": "Nano Banana 2 Lite",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-06-30",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "gemini-3-pro-image",
+      "name": "Nano Banana Pro",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-05-28",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "gemini-3.1-flash-image",
+      "name": "Nano Banana 2",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-05-28",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image",
+        "video",
+        "pdf"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "deep-research-max-preview-04-2026",
+      "name": "Deep Research Max Preview (Apr-21-2026)",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-04-21",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "pdf"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "deep-research-preview-04-2026",
+      "name": "Deep Research Preview (Apr-21-2026)",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-04-21",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "pdf"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "gemini-3.1-flash-image-preview",
+      "name": "Nano Banana 2",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2026-02-26",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "gemini-3-pro-image-preview",
+      "name": "Nano Banana Pro",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2025-11-20",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    },
+    {
+      "id": "gemini-2.5-flash-image",
+      "name": "Nano Banana",
+      "provider": "gemini",
+      "kind": "image",
+      "releaseDate": "2025-08-26",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "text",
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  },
+  "imageInventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  }
+}

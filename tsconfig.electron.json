@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "outDir": "dist-electron",
+    "rootDir": ".",
+    "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@electron/*": ["./electron/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  },
+  "tsc-alias": {
+    "replacers": {
+      "base-url": {
+        "enabled": false
+      }
+    }
+  },
+  "include": ["electron/**/*", "shared/**/*"],
+  "exclude": ["node_modules", "dist", "dist-electron", "**/*.test.ts", "**/__tests__", "electron/testing"]
+}

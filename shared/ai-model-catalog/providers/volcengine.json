@@ -1,0 +1,233 @@
+{
+  "provider": "volcengine",
+  "version": "2026.07.10.1",
+  "verifiedAt": "2026-07-10",
+  "sourceUrls": [
+    "https://www.volcengine.com/docs/82379/1449737"
+  ],
+  "models": [
+    {
+      "id": "doubao-seed-2-0-code",
+      "name": "Doubao Seed 2.0 Code",
+      "provider": "volcengine",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "volcengine-reasoning",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 256000,
+      "maxOutputTokens": 64000,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://www.volcengine.com/docs/82379/1449737"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    },
+    {
+      "id": "kimi-k2.5",
+      "name": "Kimi K2.5",
+      "provider": "volcengine",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "volcengine-reasoning",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 256000,
+      "maxOutputTokens": 96000,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://www.volcengine.com/docs/82379/1449737"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    },
+    {
+      "id": "deepseek-v3.2",
+      "name": "DeepSeek V3.2",
+      "provider": "volcengine",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "tags": [
+        "cost-effective"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://www.volcengine.com/docs/82379/1449737"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    },
+    {
+      "id": "glm-4.7",
+      "name": "GLM-4.7",
+      "provider": "volcengine",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "minimal"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "volcengine-reasoning",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://www.volcengine.com/docs/82379/1449737"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    }
+  ]
+}

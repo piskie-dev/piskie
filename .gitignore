@@ -1,0 +1,62 @@
+# Dependencies
+/node_modules/
+
+# Local project state and internal documentation
+/reports/
+/docs/
+/docs-outside/
+/AGENTS.md
+/CLAUDE.md
+/temp/
+/.webpilot/
+/.piskiepilot/
+/.agents/
+/skills-lock.json
+/.refactor-baselines/
+
+# Build outputs
+/dist/
+/dist-electron/
+/release/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+/logs/
+*.log
+
+# Environment
+/.env
+/.env.*
+!/.env.example
+!/.env.*.example
+
+# Cache
+/.cache/
+/.ruff_cache/
+/.temp/
+*.tsbuildinfo
+
+# Local tooling
+/.claude/
+
+# Vendor build artifacts
+# vendor/openclaw 整目录已随 IM 内置化（commit f5a7132）退出仓库，本地残留不再纳入版本控制
+/vendor/openclaw/
+/promo-video/
+
+# 设计对照 demo（本地预览产物，不入库）
+/design-demos/

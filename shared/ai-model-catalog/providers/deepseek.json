@@ -1,0 +1,239 @@
+{
+  "provider": "deepseek",
+  "version": "2026.07.10.4",
+  "verifiedAt": "2026-07-10",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://api-docs.deepseek.com/guides/thinking_mode"
+  ],
+  "models": [
+    {
+      "id": "deepseek-v4-flash-vision-exp",
+      "name": "DeepSeek V4 Flash Vision Exp",
+      "provider": "deepseek",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-21",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro",
+      "provider": "deepseek",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 0.435,
+        "outputPerMillion": 0.87
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-08-12"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "provider": "deepseek",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-07-31"
+    },
+    {
+      "id": "deepseek-chat",
+      "name": "DeepSeek Chat",
+      "provider": "deepseek",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "tags": [
+        "cost-effective"
+      ],
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://api-docs.deepseek.com/guides/thinking_mode"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1000000,
+      "releaseDate": "2025-12-01"
+    },
+    {
+      "id": "deepseek-reasoner",
+      "name": "DeepSeek Reasoner",
+      "provider": "deepseek",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://api-docs.deepseek.com/guides/thinking_mode"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1000000,
+      "releaseDate": "2025-12-01"
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  }
+}

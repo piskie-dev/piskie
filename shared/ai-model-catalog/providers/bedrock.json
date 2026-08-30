@@ -1,0 +1,5695 @@
+{
+  "provider": "bedrock",
+  "version": "2026.07.10.4",
+  "verifiedAt": "2026-07-10",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html"
+  ],
+  "models": [
+    {
+      "id": "xai.grok-4.6",
+      "name": "Grok 4.6",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-12",
+      "contextWindow": 500000,
+      "maxContextWindow": 500000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "inputPerMillion": 2.2,
+        "outputPerMillion": 6.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-5",
+      "name": "Claude Opus 5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "au.anthropic.claude-opus-5",
+      "name": "Claude Opus 5 (AU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-opus-5",
+      "name": "Claude Opus 5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 27.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-opus-5",
+      "name": "Claude Opus 5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-opus-5",
+      "name": "Claude Opus 5 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-5",
+      "name": "Claude Opus 5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.openai.gpt-5.6-luna",
+      "name": "GPT-5.6 Luna (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 1.32
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.openai.gpt-5.6-sol",
+      "name": "GPT-5.6 Sol (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 33
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.openai.gpt-5.6-terra",
+      "name": "GPT-5.6 Terra (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2.2,
+        "outputPerMillion": 13.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-5.6-luna",
+      "name": "GPT-5.6 Luna",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 1.32
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-5.6-sol",
+      "name": "GPT-5.6 Sol",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 33
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-5.6-terra",
+      "name": "GPT-5.6 Terra",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-09",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2.2,
+        "outputPerMillion": 13.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-30"
+    },
+    {
+      "id": "au.anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5 (AU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-30",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-30",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2.2,
+        "outputPerMillion": 11
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-30",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-30",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-sonnet-5",
+      "name": "Claude Sonnet 5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-30",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-fable-5",
+      "name": "Claude Fable 5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-09"
+    },
+    {
+      "id": "eu.anthropic.claude-fable-5",
+      "name": "Claude Fable 5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-09",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 11,
+        "outputPerMillion": 55
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-fable-5",
+      "name": "Claude Fable 5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-09",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-fable-5",
+      "name": "Claude Fable 5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-06-09",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-28"
+    },
+    {
+      "id": "au.anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8 (AU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-05-28",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-05-28",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 27.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-05-28",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-05-28",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-4-8",
+      "name": "Claude Opus 4.8 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-05-28",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-5.5",
+      "name": "GPT-5.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-23",
+      "contextWindow": 272000,
+      "maxContextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 33
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "xai.grok-4.3",
+      "name": "Grok 4.3",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-4-7",
+      "name": "Claude Opus 4.7",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-16"
+    },
+    {
+      "id": "eu.anthropic.claude-opus-4-7",
+      "name": "Claude Opus 4.7 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 27.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-7",
+      "name": "Claude Opus 4.7 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-opus-4-7",
+      "name": "Claude Opus 4.7 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-4-7",
+      "name": "Claude Opus 4.7 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "minimax.minimax-m2.5",
+      "name": "MiniMax M2.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-18",
+      "contextWindow": 196608,
+      "maxContextWindow": 196608,
+      "maxOutputTokens": 98304,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "zai.glm-5",
+      "name": "GLM-5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-18",
+      "contextWindow": 202752,
+      "maxContextWindow": 202752,
+      "maxOutputTokens": 101376,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 3.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "nvidia.nemotron-super-3-120b",
+      "name": "NVIDIA Nemotron 3 Super 120B A12B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-11",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.65
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-5.4",
+      "name": "GPT-5.4",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-05",
+      "contextWindow": 272000,
+      "maxContextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2.75,
+        "outputPerMillion": 16.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-17"
+    },
+    {
+      "id": "au.anthropic.claude-sonnet-4-6",
+      "name": "AU Anthropic Claude Sonnet 4.6",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 3.3,
+        "outputPerMillion": 16.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3.3,
+        "outputPerMillion": 16.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.devstral-2-123b",
+      "name": "Devstral 2 123B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 256000,
+      "maxContextWindow": 256000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.4,
+        "outputPerMillion": 2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek.v3.2",
+      "name": "DeepSeek-V3.2",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-06",
+      "contextWindow": 163840,
+      "maxContextWindow": 163840,
+      "maxOutputTokens": 81920,
+      "pricing": {
+        "inputPerMillion": 0.62,
+        "outputPerMillion": 1.85
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "moonshotai.kimi-k2.5",
+      "name": "Kimi K2.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-06",
+      "contextWindow": 262143,
+      "maxContextWindow": 262143,
+      "maxOutputTokens": 16000,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-coder-next",
+      "name": "Qwen3 Coder Next",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-06",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 1.8
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-4-6-v1",
+      "name": "Claude Opus 4.6",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-02-05"
+    },
+    {
+      "id": "au.anthropic.claude-opus-4-6-v1",
+      "name": "AU Anthropic Claude Opus 4.6",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 16.5,
+        "outputPerMillion": 82.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-opus-4-6-v1",
+      "name": "Claude Opus 4.6 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 27.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-6-v1",
+      "name": "Claude Opus 4.6 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-4-6-v1",
+      "name": "Claude Opus 4.6 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-02-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "zai.glm-4.7-flash",
+      "name": "GLM-4.7-Flash",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-01-19",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.07,
+        "outputPerMillion": 0.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "minimax.minimax-m2.1",
+      "name": "MiniMax M2.1",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-23",
+      "contextWindow": 204800,
+      "maxContextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "nvidia.nemotron-nano-3-30b",
+      "name": "NVIDIA Nemotron Nano 3 30B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-23",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.06,
+        "outputPerMillion": 0.24
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "zai.glm-4.7",
+      "name": "GLM-4.7",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-22",
+      "contextWindow": 204800,
+      "maxContextWindow": 204800,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 2.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.magistral-small-2509",
+      "name": "Magistral Small 1.2",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-02",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 40000,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 1.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.ministral-3-3b-instruct",
+      "name": "Ministral 3 3B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-02",
+      "contextWindow": 256000,
+      "maxContextWindow": 256000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.1,
+        "outputPerMillion": 0.1
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.mistral-large-3-675b-instruct",
+      "name": "Mistral Large 3",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-02",
+      "contextWindow": 256000,
+      "maxContextWindow": 256000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 1.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "moonshot.kimi-k2-thinking",
+      "name": "Kimi K2 Thinking",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-12-02",
+      "contextWindow": 262143,
+      "maxContextWindow": 262143,
+      "maxOutputTokens": 16000,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-4-5-20251101-v1:0",
+      "name": "Claude Opus 4.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-11-24"
+    },
+    {
+      "id": "eu.anthropic.claude-opus-4-5-20251101-v1:0",
+      "name": "Claude Opus 4.5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-11-24",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5.5,
+        "outputPerMillion": 27.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+      "name": "Claude Opus 4.5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-11-24",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+      "name": "Claude Opus 4.5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-11-24",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-oss-safeguard-120b",
+      "name": "GPT OSS Safeguard 120B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-29",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-oss-safeguard-20b",
+      "name": "GPT OSS Safeguard 20B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-29",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.07,
+        "outputPerMillion": 0.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "minimax.minimax-m2",
+      "name": "MiniMax M2",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-27",
+      "contextWindow": 204608,
+      "maxContextWindow": 204608,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-10-15"
+    },
+    {
+      "id": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5 (AU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1.1,
+        "outputPerMillion": 5.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "name": "Claude Haiku 4.5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-vl-235b-a22b",
+      "name": "Qwen/Qwen3-VL-235B-A22B-Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-10-04",
+      "contextWindow": 262000,
+      "maxContextWindow": 262000,
+      "maxOutputTokens": 262000,
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-09-29"
+    },
+    {
+      "id": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5 (AU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-29",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5 (EU)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-29",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3.3,
+        "outputPerMillion": 16.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5 (Global)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-29",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "jp.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5 (JP)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-29",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "name": "Claude Sonnet 4.5 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-29",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek.v3-v1:0",
+      "name": "DeepSeek-V3.1",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 163840,
+      "maxContextWindow": 163840,
+      "maxOutputTokens": 81920,
+      "pricing": {
+        "inputPerMillion": 0.58,
+        "outputPerMillion": 1.68
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-235b-a22b-2507-v1:0",
+      "name": "Qwen3 235B A22B 2507",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 0.88
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-32b-v1:0",
+      "name": "Qwen3 32B (dense)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 16384,
+      "maxContextWindow": 16384,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-coder-30b-a3b-v1:0",
+      "name": "Qwen3 Coder 30B A3B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-coder-480b-a35b-v1:0",
+      "name": "Qwen3 Coder 480B A35B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 1.8
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "qwen.qwen3-next-80b-a3b",
+      "name": "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-09-18",
+      "contextWindow": 262000,
+      "maxContextWindow": 262000,
+      "maxOutputTokens": 262000,
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 1.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "anthropic.claude-opus-4-1-20250805-v1:0",
+      "name": "Claude Opus 4.1",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "pricing": {
+        "inputPerMillion": 15,
+        "outputPerMillion": 75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-08-05"
+    },
+    {
+      "id": "openai.gpt-oss-120b",
+      "name": "gpt-oss-120b",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-oss-120b-1:0",
+      "name": "gpt-oss-120b",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-oss-20b",
+      "name": "gpt-oss-20b",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.07,
+        "outputPerMillion": 0.3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "openai.gpt-oss-20b-1:0",
+      "name": "gpt-oss-20b",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.07,
+        "outputPerMillion": 0.3
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.anthropic.claude-opus-4-1-20250805-v1:0",
+      "name": "Claude Opus 4.1 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-08-05",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "pricing": {
+        "inputPerMillion": 15,
+        "outputPerMillion": 75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "google.gemma-3-27b-it",
+      "name": "Google Gemma 3 27B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-27",
+      "contextWindow": 202752,
+      "maxContextWindow": 202752,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.12,
+        "outputPerMillion": 0.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.voxtral-small-24b-2507",
+      "name": "Voxtral Small 24B 2507",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-07-01",
+      "contextWindow": 32000,
+      "maxContextWindow": 32000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.35
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "writer.palmyra-x4-v1:0",
+      "name": "Palmyra X4",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-28",
+      "contextWindow": 122880,
+      "maxContextWindow": 122880,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 2.5,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "writer.palmyra-x5-v1:0",
+      "name": "Palmyra X5",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-28",
+      "contextWindow": 1040000,
+      "maxContextWindow": 1040000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.pixtral-large-2502-v1:0",
+      "name": "Pixtral Large (25.02)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-08",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta.llama4-maverick-17b-instruct-v1:0",
+      "name": "Llama 4 Maverick 17B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.24,
+        "outputPerMillion": 0.97
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta.llama4-scout-17b-instruct-v1:0",
+      "name": "Llama 4 Scout 17B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-05",
+      "contextWindow": 3500000,
+      "maxContextWindow": 3500000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.17,
+        "outputPerMillion": 0.66
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.meta.llama4-maverick-17b-instruct-v1:0",
+      "name": "Llama 4 Maverick 17B Instruct (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-05",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.24,
+        "outputPerMillion": 0.97
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.meta.llama4-scout-17b-instruct-v1:0",
+      "name": "Llama 4 Scout 17B Instruct (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-04-05",
+      "contextWindow": 3500000,
+      "maxContextWindow": 3500000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMillion": 0.17,
+        "outputPerMillion": 0.66
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "deepseek.r1-v1:0",
+      "name": "DeepSeek-R1",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-01-20",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 1.35,
+        "outputPerMillion": 5.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "us.deepseek.r1-v1:0",
+      "name": "DeepSeek-R1 (US)",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2025-01-20",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 1.35,
+        "outputPerMillion": 5.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta.llama3-3-70b-instruct-v1:0",
+      "name": "Llama 3.3 70B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-06",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.72,
+        "outputPerMillion": 0.72
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "amazon.nova-lite-v1:0",
+      "name": "Nova Lite",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-03",
+      "contextWindow": 300000,
+      "maxContextWindow": 300000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.06,
+        "outputPerMillion": 0.24
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "amazon.nova-micro-v1:0",
+      "name": "Nova Micro",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-03",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.035,
+        "outputPerMillion": 0.14
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "amazon.nova-pro-v1:0",
+      "name": "Nova Pro",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-03",
+      "contextWindow": 300000,
+      "maxContextWindow": 300000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMillion": 0.8,
+        "outputPerMillion": 3.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "amazon.nova-2-lite-v1:0",
+      "name": "Nova 2 Lite",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.33,
+        "outputPerMillion": 2.75
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "google.gemma-3-4b-it",
+      "name": "Gemma 3 4B IT",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.04,
+        "outputPerMillion": 0.08
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.ministral-3-14b-instruct",
+      "name": "Ministral 14B 3.0",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.ministral-3-8b-instruct",
+      "name": "Ministral 3 8B",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "mistral.voxtral-mini-3b-2507",
+      "name": "Voxtral Mini 3B 2507",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.04,
+        "outputPerMillion": 0.04
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "nvidia.nemotron-nano-12b-v2",
+      "name": "NVIDIA Nemotron Nano 12B v2 VL BF16",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "nvidia.nemotron-nano-9b-v2",
+      "name": "NVIDIA Nemotron Nano 9B v2",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-12-01",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.06,
+        "outputPerMillion": 0.23
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta.llama3-1-70b-instruct-v1:0",
+      "name": "Llama 3.1 70B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-07-23",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.72,
+        "outputPerMillion": 0.72
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "meta.llama3-1-8b-instruct-v1:0",
+      "name": "Llama 3.1 8B Instruct",
+      "provider": "bedrock",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2024-07-23",
+      "contextWindow": 128000,
+      "maxContextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 0.22
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  }
+}

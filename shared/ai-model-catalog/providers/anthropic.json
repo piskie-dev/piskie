@@ -1,0 +1,695 @@
+{
+  "provider": "anthropic",
+  "version": "2026.07.10.4",
+  "verifiedAt": "2026-07-10",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://platform.claude.com/docs/en/about-claude/models/overview"
+  ],
+  "models": [
+    {
+      "id": "claude-opus-5",
+      "name": "Claude Opus 5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-24",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      }
+    },
+    {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 10
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-29"
+    },
+    {
+      "id": "claude-fable-5",
+      "name": "Claude Fable 5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-06-07"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "name": "Claude Opus 4.8",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-05-28"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "name": "Claude Opus 4.7",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2026-04-14"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://platform.claude.com/docs/en/about-claude/models/overview"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1000000,
+      "releaseDate": "2026-02-17"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "name": "Claude Opus 4.6",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tags": [
+        "high-performance"
+      ],
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://platform.claude.com/docs/en/about-claude/models/overview"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1000000,
+      "releaseDate": "2026-02-04"
+    },
+    {
+      "id": "claude-opus-4-5",
+      "name": "Claude Opus 4.5 (latest)",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-11-24"
+    },
+    {
+      "id": "claude-opus-4-5-20251101",
+      "name": "Claude Opus 4.5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-11-24"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Claude Haiku 4.5 (latest)",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxContextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-10-15"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "budget",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "budget",
+            "tokens": 8000
+          }
+        ],
+        "defaultSelection": {
+          "kind": "budget",
+          "tokens": 8000
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-budget",
+        "replayPolicy": "opaque-required",
+        "minBudgetTokens": 1024,
+        "maxBudgetTokens": 32000
+      },
+      "lifecycle": "active",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "tags": [
+        "cost-effective"
+      ],
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://platform.claude.com/docs/en/about-claude/models/overview"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 200000,
+      "releaseDate": "2025-10-15"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5 (latest)",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "releaseDate": "2025-09-29"
+    },
+    {
+      "id": "claude-sonnet-4-5-20250929",
+      "name": "Claude Sonnet 4.5",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "budget",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "budget",
+            "tokens": 8000
+          }
+        ],
+        "defaultSelection": {
+          "kind": "budget",
+          "tokens": 8000
+        },
+        "mandatory": false,
+        "transportPreset": "anthropic-budget",
+        "replayPolicy": "opaque-required",
+        "minBudgetTokens": 1024,
+        "maxBudgetTokens": 32000
+      },
+      "lifecycle": "active",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "tags": [
+        "balanced"
+      ],
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 15
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev",
+          "https://platform.claude.com/docs/en/about-claude/models/overview"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.4"
+      },
+      "maxContextWindow": 1000000,
+      "releaseDate": "2025-09-29"
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+  }
+}

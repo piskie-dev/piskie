@@ -1,0 +1,4 @@
+interface:
+  display_name: "Piskie Control"
+  short_description: "Safely manage Piskie settings and capabilities"
+  default_prompt: "Use $piskie-control to inspect and safely manage Piskie configuration or installed capabilities."

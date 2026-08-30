@@ -1,0 +1,169 @@
+{
+  "provider": "baidu",
+  "version": "2026.07.10.1+image.eb70f8daf84e",
+  "verifiedAt": "2026-08-24",
+  "sourceUrls": [
+    "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
+    "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
+  ],
+  "models": [
+    {
+      "id": "ernie-5.0",
+      "name": "ERNIE 5.0",
+      "provider": "baidu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "fixed",
+        "options": [
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": true,
+        "transportPreset": "none",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 128000,
+      "maxOutputTokens": 65536,
+      "tags": [
+        "high-performance"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    },
+    {
+      "id": "ernie-4.5-turbo-128k",
+      "name": "ERNIE 4.5 Turbo 128K",
+      "provider": "baidu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "contextWindow": 128000,
+      "maxOutputTokens": 12288,
+      "tags": [
+        "balanced"
+      ],
+      "provenance": {
+        "sourceUrls": [
+          "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya"
+        ],
+        "verifiedAt": "2026-07-10",
+        "catalogVersion": "2026.07.10.1"
+      }
+    },
+    {
+      "id": "musesteamer-air-image",
+      "name": "MuseSteamer Air Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "provider": "baidu",
+      "provenance": {
+        "sourceUrls": [
+          "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+      }
+    },
+    {
+      "id": "qwen-image",
+      "name": "Qwen Image",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "supported",
+        "edit": "unsupported",
+        "referenceImages": "unsupported",
+        "mask": "unknown"
+      },
+      "provider": "baidu",
+      "provenance": {
+        "sourceUrls": [
+          "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+      }
+    },
+    {
+      "id": "qwen-image-edit",
+      "name": "Qwen Image Edit",
+      "kind": "image",
+      "lifecycle": "active",
+      "inputModalities": [
+        "text",
+        "image"
+      ],
+      "outputModalities": [
+        "image"
+      ],
+      "capabilityProfile": {
+        "generate": "unsupported",
+        "edit": "supported",
+        "referenceImages": "supported",
+        "mask": "unknown"
+      },
+      "provider": "baidu",
+      "provenance": {
+        "sourceUrls": [
+          "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
+        ],
+        "verifiedAt": "2026-08-24",
+        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+      }
+    }
+  ],
+  "imageInventorySource": {
+    "id": "baidu-docs",
+    "url": "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j",
+    "sha256": "eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+  }
+}
