@@ -4,6 +4,7 @@ export const ELECTRON_PROTOCOL_VERSION = 1 as const;
 export const ELECTRON_CONNECT_CHANNEL = 'piskie.desktop.connect.v1' as const;
 
 export type CapabilityId =
+  | 'account'
   | 'agent-runs'
   | 'agents'
   | 'capabilities'
@@ -15,7 +16,8 @@ export type CapabilityId =
   | 'observability'
   | 'pilot'
   | 'runtime'
-  | 'task-definitions';
+  | 'task-definitions'
+  | 'updates';
 
 export interface BackendRuntimeSnapshot {
   readonly phase: 'ready' | 'stopping';

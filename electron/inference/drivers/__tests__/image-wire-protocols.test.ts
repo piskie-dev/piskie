@@ -596,7 +596,7 @@ describe('OpenRouter image wire protocol', () => {
     expect(receivedHeaders).toMatchObject({
       authorization: 'Bearer plain-image-key',
       'content-type': 'application/json',
-      'http-referer': 'https://piskie.dev',
+      'http-referer': 'https://www.piskie.dev',
       'x-title': 'Piskie',
       'x-piskie-test': 'openrouter-image',
     });

@@ -9,6 +9,9 @@ import { appLog, installAppLogSink } from '../observability/logging/app-log.js';
 import { createBootstrapLogSink } from './bootstrap-log-sink.js';
 import { installEarlyElectronPolicy } from './early-policy.js';
 import { resolveRuntimeProfile } from './runtime-profile.js';
+import { createElectronUpdateProvider } from '../updates/electron-update-provider.js';
+
+const UPDATE_PLATFORMS = new Set<NodeJS.Platform>(['darwin', 'linux', 'win32']);
 
 export function createElectronApplication(): DesktopRuntime | undefined {
   const earlyPolicy = installEarlyElectronPolicy();
@@ -61,16 +64,29 @@ export function createElectronApplication(): DesktopRuntime | undefined {
     platform: process.platform,
   });
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const updateDisabledReason = profile.development
+    ? 'development'
+    : !app.isPackaged
+      ? 'unpackaged'
+      : !UPDATE_PLATFORMS.has(process.platform)
+        ? 'unsupported-platform'
+        : undefined;
 
   return new DesktopRuntime({
     backend,
     windows,
     appInfo: {
+      accountBaseUrl: profile.accountBaseUrl,
       name: app.getName(),
       version,
       development: profile.development,
     },
     platform: process.platform,
+    updates: {
+      ...(updateDisabledReason
+        ? { disabledReason: updateDisabledReason }
+        : { createProvider: createElectronUpdateProvider }),
+    },
     mainWindow: {
       rendererUrl: profile.rendererEntryUrl,
       preloadPath: path.resolve(currentDirectory, '..', 'preload.cjs'),

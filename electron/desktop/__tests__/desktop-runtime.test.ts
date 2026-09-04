@@ -64,6 +64,7 @@ const harness = vi.hoisted(() => {
       capabilities: [],
     },
     releaseConnection: vi.fn(),
+    dispose: vi.fn(),
   }));
   const configServer = { stop: vi.fn(async () => undefined) };
   const startLocalConfigServer = vi.fn(async () => configServer);
@@ -169,7 +170,12 @@ function fixture(options: {
       dark: '/app/icon-on-dark.png',
       windows: '/app/icon-windows.ico',
     },
-    appInfo: { name: 'Piskie', version: '0.1.0', development: false },
+    appInfo: {
+      accountBaseUrl: 'https://www.piskie.dev',
+      name: 'Piskie',
+      version: '0.1.0',
+      development: false,
+    },
     platform: options.platform ?? 'linux',
   });
   return { runtime, backend, windows };

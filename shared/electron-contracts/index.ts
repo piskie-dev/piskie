@@ -1,3 +1,4 @@
+export * from './account.js';
 export * from './agents.js';
 export * from './agent-runs.js';
 export * from './api.js';
@@ -13,3 +14,4 @@ export * from './protocol.js';
 export * from './public-fault.js';
 export * from './runtime.js';
 export * from './task-definitions.js';
+export * from './updates.js';

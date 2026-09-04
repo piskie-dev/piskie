@@ -3,7 +3,7 @@
  *
  * 全路由共用一条栏，不显示模块标题；模块身份由导航坞/棱镜承担。
  * 左=品牌 + 任务广播位(busy 会话轮播头条,多任务 6 秒轮换 + 「+N」签);
- * 右=token 汇总遥测 + 灯签族(授权/待批/错误/全部中断/内核)+ 系统时钟。
+ * 右=token 汇总遥测 + 灯签族(授权/待批/错误/全部中断/内核)+ 系统时钟 + 账户。
  * 整条栏是窗口拖拽区;macOS 红绿灯与栏同层,由窗口 trafficLightPosition 垂直对中。
  */
 
@@ -20,6 +20,7 @@ import KernelDownloadIndicator from '../../components/KernelDownloadIndicator';
 import { createConsoleHeaderAction } from '../console/shell/headerAction';
 import { isMacOSPlatform } from '../../utils/platform';
 import { absorbTargets, sessionTokenTally } from './tally';
+import { AccountControl } from './AccountControl';
 import styles from './skybar.module.css';
 
 import logo64 from '/logo-64.png';
@@ -182,6 +183,7 @@ export const SkyBar: React.FC = () => {
       </div>
 
       <span className={styles.clock}>{formatClock(now)}</span>
+      <AccountControl />
     </header>
   );
 };

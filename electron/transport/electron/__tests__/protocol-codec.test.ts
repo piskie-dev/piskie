@@ -5,6 +5,7 @@ import { ELECTRON_PROTOCOL_VERSION } from '../../../../shared/electron-contracts
 import { decodeHostFrame } from '../protocol-codec.js';
 
 const CURRENT_CAPABILITIES: CapabilityId[] = [
+  'account',
   'agent-runs',
   'agents',
   'capabilities',
@@ -17,6 +18,7 @@ const CURRENT_CAPABILITIES: CapabilityId[] = [
   'pilot',
   'runtime',
   'task-definitions',
+  'updates',
 ];
 
 function welcome(capabilities: unknown[]) {

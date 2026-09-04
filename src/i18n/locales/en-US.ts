@@ -25,6 +25,15 @@ export default {
     unnamedTask: 'Untitled task',
     thisRun: 'This run',
     tokenTotal: 'Tokens',
+    account: {
+      loading: 'Loading account',
+      signedOut: 'Not signed in',
+      waiting: 'Waiting for sign-in',
+      signedIn: 'Signed in',
+      signedInAs: 'Signed in as {{name}}',
+      openMenu: 'Account menu: {{status}}',
+      settings: 'Account Settings',
+    },
   },
 
   // Navigation menu
@@ -120,6 +129,7 @@ export default {
       networkGroup: 'Network',
       proxy: 'Proxy',
       applicationGroup: 'Application',
+      account: 'Piskie Account',
       appearance: 'Appearance & Language',
       browserRuntime: 'Browser Runtime',
     },
@@ -410,6 +420,34 @@ export default {
 
     selectPlaceholder: 'Select an option',
 
+    account: {
+      pageTitle: 'Piskie Account',
+      pageSubtitle: 'Identity and sign-in status on this device',
+      loading: 'Loading account status…',
+      signedOutTitle: 'Not signed in',
+      signedOutNote: 'Verify your identity by email on the Piskie website.',
+      signIn: 'Sign in to Piskie',
+      connecting: 'Connecting…',
+      pendingTitle: 'Waiting for browser sign-in',
+      pendingNote: 'Finish email verification and authorization in the browser. The result returns to this Piskie automatically.',
+      expiresIn: 'Expires in {{time}}',
+      reopen: 'Reopen Browser',
+      cancel: 'Cancel Sign-in',
+      verified: 'Verified',
+      offline: 'Offline',
+      credentialStorage: 'Credential',
+      secureStorage: 'System Secure Storage',
+      sessionStorage: 'This Run Only',
+      signOut: 'Sign Out',
+      signingOut: 'Signing Out…',
+      errors: {
+        denied: 'You denied this sign-in in the browser.',
+        expired: 'The sign-in request expired. Start sign-in again.',
+        network: 'The account service is unavailable. Check your network and try again.',
+        generic: 'Sign-in did not finish. Try again shortly.',
+      },
+    },
+
 
     // About
     about: {
@@ -418,7 +456,28 @@ export default {
       releaseStage: 'Preview Stage',
       version: 'Version',
       status: 'Status',
-      website: 'piskie.dev',
+      update: 'App Update',
+      updateLoading: 'Reading status…',
+      updateIdle: 'Automatic checks enabled',
+      updateChecking: 'Checking for updates…',
+      updateCurrent: 'Up to date',
+      updateAvailable: 'v{{version}} found, preparing download',
+      updateDownloading: 'Downloading v{{version}} · {{percent}}%',
+      updateDownloaded: 'v{{version}} is ready',
+      updateDisabled: {
+        development: 'Updates are off in development',
+        unpackaged: 'Updates require an installed build',
+        'unsupported-platform': 'Updates are unavailable on this platform',
+        unavailable: 'Update service unavailable',
+      },
+      updateErrors: {
+        'no-release': 'No published release yet',
+        network: 'Update service cannot be reached',
+        generic: 'Update check failed',
+      },
+      checkForUpdates: 'Check for Updates',
+      restartAndUpdate: 'Restart and Update',
+      website: 'www.piskie.dev',
       credit: 'Crafted by the Piskie team',
     },
   },

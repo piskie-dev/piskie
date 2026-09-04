@@ -17,6 +17,7 @@ import {
   ScrollText,
   Settings,
   ShieldHalf,
+  UserRound,
 } from 'lucide-react';
 
 import type { GatewayKind } from './data/vendor-atlas';
@@ -32,7 +33,7 @@ export interface CatalogProviderItem {
 
 export type DeckSect =
   | 'ai' | 'image' | 'ai-tuning' | 'image-tuning'
-  | 'proxy' | 'look' | 'kernel' | 'logs' | 'about';
+  | 'proxy' | 'account' | 'look' | 'kernel' | 'logs' | 'about';
 
 export interface CatalogPaneProps {
   readonly sect: DeckSect;
@@ -131,6 +132,7 @@ export const CatalogPane: React.FC<CatalogPaneProps> = ({
         <div className={styles.branch}>{t('settings.catalog.networkGroup')}</div>
         {plainLeaf('proxy', <ShieldHalf size={15} />, t('settings.catalog.proxy'))}
         <div className={styles.branch}>{t('settings.catalog.applicationGroup')}</div>
+        {plainLeaf('account', <UserRound size={15} />, t('settings.catalog.account'))}
         {plainLeaf('look', <Palette size={15} />, t('settings.catalog.appearance'))}
         {plainLeaf('kernel', <Chrome size={15} />, t('settings.catalog.browserRuntime'))}
         {plainLeaf('logs', <ScrollText size={15} />, t('settings.tabs.logs'))}

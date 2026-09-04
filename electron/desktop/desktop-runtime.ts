@@ -2,7 +2,10 @@ import { app, dialog } from 'electron';
 import type { BackendComposition } from '../runtime/backend-composition.js';
 import { ShutdownCoordinator } from '../runtime/lifecycle/shutdown-coordinator.js';
 import type { ShutdownReport } from '../runtime/lifecycle/runtime-state.js';
-import { createApplicationComposition } from '../capabilities/application-composition.js';
+import {
+  createApplicationComposition,
+  type ApplicationComposition,
+} from '../capabilities/application-composition.js';
 import { backendRuntimeSnapshot } from '../capabilities/runtime/runtime-controller.js';
 import { PortRouter } from '../transport/electron/port-router.js';
 import { ElectronPortServer } from '../transport/electron/bootstrap-listener.js';
@@ -16,6 +19,8 @@ import { DesktopTray } from './desktop-tray.js';
 import { appLog, closeAppLog } from '../observability/logging/app-log.js';
 import type { DesktopColorScheme } from '../../shared/electron-contracts/desktop.js';
 import type { DesktopAppearancePort } from './desktop-presentation-port.js';
+import type { UpdateDisabledReason } from '../../shared/electron-contracts/updates.js';
+import type { UpdateProvider } from '../updates/update-provider.js';
 
 const log = appLog.child({ scope: 'desktop.runtime' });
 
@@ -29,6 +34,7 @@ export class DesktopRuntime implements DesktopAppearancePort {
   private portServer?: ElectronPortServer;
   private configServer?: LocalConfigServer;
   private tray?: DesktopTray;
+  private application?: ApplicationComposition;
   private ready = false;
   private quitting = false;
   private runPromise?: Promise<void>;
@@ -39,7 +45,16 @@ export class DesktopRuntime implements DesktopAppearancePort {
       backend: BackendComposition;
       windows: WindowRegistry;
       mainWindow: Omit<MainWindowOptions, 'iconPath'>;
-      appInfo: { name: string; version: string; development: boolean };
+      appInfo: {
+        accountBaseUrl: string;
+        name: string;
+        version: string;
+        development: boolean;
+      };
+      updates?: {
+        disabledReason?: UpdateDisabledReason;
+        createProvider?: () => UpdateProvider;
+      };
       platform?: NodeJS.Platform;
       icons: {
         light: string;
@@ -102,13 +117,18 @@ export class DesktopRuntime implements DesktopAppearancePort {
       const report = await this.options.backend.runtime.start();
       if (this.quitting) return;
       const capabilities = this.options.backend.runtime.capabilities();
+      const updateRuntime = this.createUpdateRuntime();
       const application = createApplicationComposition({
         backend: this.options.backend.runtime,
         capabilities,
         presentation: this.options.windows,
         appearance: this,
-        app: this.options.appInfo,
+        app: {
+          ...this.options.appInfo,
+          ...updateRuntime,
+        },
       });
+      this.application = application;
       this.options.windows.setConnectionReleaseHandler(application.releaseConnection);
       const router = new PortRouter(application.catalog, {
         phase: () => {
@@ -275,6 +295,29 @@ export class DesktopRuntime implements DesktopAppearancePort {
     return this.options.icons[this.colorScheme];
   }
 
+  private createUpdateRuntime(): {
+    updateProvider?: UpdateProvider;
+    updateDisabledReason?: UpdateDisabledReason;
+  } {
+    const createProvider = this.options.updates?.createProvider;
+    if (!createProvider) {
+      return {
+        updateDisabledReason: this.options.updates?.disabledReason
+          ?? (this.options.appInfo.development ? 'development' : 'unpackaged'),
+      };
+    }
+    try {
+      return { updateProvider: createProvider() };
+    } catch (error) {
+      log.warn({
+        event: 'desktop.updates.initialize.failed',
+        message: 'Desktop update provider could not be initialized',
+        error,
+      });
+      return { updateDisabledReason: 'unavailable' };
+    }
+  }
+
   private mainWindowOptions(): MainWindowOptions {
     return {
       ...this.options.mainWindow,
@@ -284,6 +327,12 @@ export class DesktopRuntime implements DesktopAppearancePort {
 
   private async stopNow(reason: string): Promise<DesktopShutdownResult> {
     const failures: unknown[] = [];
+    try {
+      this.application?.dispose();
+      this.application = undefined;
+    } catch (error) {
+      failures.push(error);
+    }
     try {
       this.tray?.dispose();
       this.tray = undefined;

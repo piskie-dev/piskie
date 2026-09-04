@@ -16,6 +16,7 @@ describe('RuntimeProfile', () => {
     });
 
     expect(profile).toMatchObject({
+      accountBaseUrl: 'https://www.piskie.dev',
       development: true,
       sandboxFallback: false,
       rendererEntryUrl: 'http://127.0.0.1:5174/',
@@ -51,6 +52,25 @@ describe('RuntimeProfile', () => {
 
     expect(profile.rendererEntryUrl).toBe('https://localhost:6000/ui');
     expect(profile.logLevel).toBe('warn');
+  });
+
+  it('allows an HTTPS account service override only in development', () => {
+    const preview = 'https://piskie-site-preview.example.workers.dev';
+    expect(resolveRuntimeProfile({
+      ...baseInput,
+      env: { NODE_ENV: 'development', PISKIE_ACCOUNT_BASE_URL: preview },
+    }).accountBaseUrl).toBe(preview);
+    expect(resolveRuntimeProfile({
+      ...baseInput,
+      env: { NODE_ENV: 'production', PISKIE_ACCOUNT_BASE_URL: preview },
+    }).accountBaseUrl).toBe('https://www.piskie.dev');
+  });
+
+  it('rejects an insecure remote account service override', () => {
+    expect(() => resolveRuntimeProfile({
+      ...baseInput,
+      env: { NODE_ENV: 'development', PISKIE_ACCOUNT_BASE_URL: 'http://example.com' },
+    })).toThrow('HTTPS');
   });
 
   it("accepts only the launcher's exact sandbox fallback marker", () => {

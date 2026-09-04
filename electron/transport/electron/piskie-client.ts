@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_OPERATIONS,
   AGENT_RUN_OPERATIONS,
   AGENT_OPERATIONS,
   AGENT_TOPICS,
@@ -18,6 +19,8 @@ import {
   PILOT_TOPICS,
   RUNTIME_OPERATIONS,
   TASK_DEFINITION_OPERATIONS,
+  UPDATE_OPERATIONS,
+  UPDATE_TOPICS,
   type PiskieDesktopApi,
 } from '../../../shared/electron-contracts/index.js';
 import type { ElectronPreloadClient } from './preload-client.js';
@@ -34,6 +37,12 @@ export function createElectronPiskieClient(options: {
   const waitForUser = <T>(operation: string, ...args: unknown[]): Promise<T> => (
     transport.request<T>(operation, args, { timeoutMs: 0 })
   );
+  const accountRequest = <T>(operation: string, ...args: unknown[]): Promise<T> => (
+    transport.request<T>(operation, args, { timeoutMs: 60_000 })
+  );
+  const updateRequest = <T>(operation: string, ...args: unknown[]): Promise<T> => (
+    transport.request<T>(operation, args, { timeoutMs: 120_000 })
+  );
   const observe = <T>(topic: string, listener: (event: T) => void): (() => void) => (
     transport.subscribe<unknown, T>(topic, {
       onChange: listener,
@@ -41,6 +50,23 @@ export function createElectronPiskieClient(options: {
   );
 
   const api: PiskieDesktopApi = {
+    account: {
+      status: () => accountRequest(ACCOUNT_OPERATIONS.status),
+      beginSignIn: () => accountRequest(ACCOUNT_OPERATIONS.beginSignIn),
+      waitForSignIn: (flowId) => waitForUser(ACCOUNT_OPERATIONS.waitForSignIn, flowId),
+      reopenSignIn: (flowId) => accountRequest(ACCOUNT_OPERATIONS.reopenSignIn, flowId),
+      cancelSignIn: (flowId) => accountRequest(ACCOUNT_OPERATIONS.cancelSignIn, flowId),
+      signOut: () => accountRequest(ACCOUNT_OPERATIONS.signOut),
+    },
+    updates: {
+      status: () => updateRequest(UPDATE_OPERATIONS.status),
+      check: () => updateRequest(UPDATE_OPERATIONS.check),
+      restartAndInstall: () => updateRequest(UPDATE_OPERATIONS.restartAndInstall),
+      observeStatus: (listener) => transport.subscribe(UPDATE_TOPICS.status, {
+        onSnapshot: listener,
+        onChange: listener,
+      }),
+    },
     runtime: {
       host: 'electron',
       protocolVersion: 1,

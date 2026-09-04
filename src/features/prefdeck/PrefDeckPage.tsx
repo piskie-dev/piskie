@@ -22,6 +22,7 @@ import { useInferenceStore } from '../../store/inferenceStore';
 import { useProxyStore } from '../../store/proxyStore';
 import { CatalogPane, type CatalogProviderItem, type DeckSect } from './CatalogPane';
 import { AboutDesk } from './desks/AboutDesk';
+import { AccountDesk } from './desks/AccountDesk';
 import { KernelDesk } from './desks/KernelDesk';
 import { LogDesk } from './desks/LogDesk';
 import { LookDesk } from './desks/LookDesk';
@@ -35,7 +36,7 @@ import { matchVendor, type GatewayKind, type VendorSpec } from './data/vendor-at
 import styles from './deck.module.css';
 
 const SECTS: readonly DeckSect[] = [
-  'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'look', 'kernel', 'logs', 'about',
+  'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'about',
 ];
 
 /** 旧 /settings 的 ?tab= 值映射 */
@@ -214,6 +215,7 @@ export const PrefDeckPage: React.FC = () => {
     if (sect === 'proxy') {
       return <ProxyDesk onEdit={(proxy) => setProxyForge({ editing: proxy })} onFlash={onFlash} />;
     }
+    if (sect === 'account') return <AccountDesk />;
     if (sect === 'look') return <LookDesk onFlash={onFlash} />;
     if (sect === 'kernel') return <KernelDesk onFlash={onFlash} />;
     if (sect === 'logs') return <LogDesk onFlash={onFlash} />;

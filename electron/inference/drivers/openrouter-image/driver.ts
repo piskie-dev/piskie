@@ -169,7 +169,7 @@ function createClient(
       ...init,
       headers: configuredHeaders(
         connection.auth,
-        { 'HTTP-Referer': 'https://piskie.dev', 'X-Title': 'Piskie', ...connection.headers },
+        { 'HTTP-Referer': 'https://www.piskie.dev', 'X-Title': 'Piskie', ...connection.headers },
         init?.headers ?? (request instanceof Request ? request.headers : undefined),
       ),
     }),
