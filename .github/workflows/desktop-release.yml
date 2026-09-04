@@ -70,7 +70,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run release:verify -- "${{ github.ref_name }}"
-      - name: Build and upload release assets
+      - name: Build and upload Windows release assets
+        if: runner.os == 'Windows'
+        run: npm run ${{ matrix.command }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Build, notarize, and upload macOS release assets
+        if: runner.os == 'macOS'
         run: npm run ${{ matrix.command }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,8 +87,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Build and upload Linux release assets
+        if: runner.os == 'Linux'
+        run: npm run ${{ matrix.command }}
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   verify-draft:
     needs: build

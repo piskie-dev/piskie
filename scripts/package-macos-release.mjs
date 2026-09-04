@@ -73,8 +73,11 @@ try {
 
   await run(process.execPath, ['scripts/assert-supported-kernel-host.mjs', 'darwin-arm64'], { env });
   await run('npm', ['run', 'build'], { env });
-  await run('npx', ['electron-builder', '--mac', '--arm64'], { env });
+  const builderArgs = ['electron-builder', '--mac', '--arm64'];
+  if (env.PISKIE_PUBLISH === 'always') builderArgs.push('--publish', 'always');
+  await run('npx', builderArgs, { env });
   await run(process.execPath, ['scripts/verify-native-package.mjs'], { env });
+  await run(process.execPath, ['scripts/verify-update-artifacts.mjs', 'mac'], { env });
   await run(process.execPath, ['scripts/verify-macos-release.mjs'], { env });
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

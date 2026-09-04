@@ -36,7 +36,7 @@
     "dist:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:win": "cross-env PISKIE_PUBLISH=always npm run dist:win",
-    "release:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
+    "release:mac": "cross-env PISKIE_PUBLISH=always npm run dist:mac",
     "release:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
     "kill": "node scripts/kill-all.mjs",
     "restart": "npm run kill && npm run dev",
