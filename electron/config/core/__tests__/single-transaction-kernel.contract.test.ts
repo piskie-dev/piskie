@@ -71,7 +71,7 @@ describe('single configuration transaction kernel contract', () => {
   it('keeps filesystem replacement inside one platform-neutral Atomic Writer', () => {
     const sources = typescriptFiles(configRoot).map((filePath) => ({
       filePath,
-      relativePath: path.relative(configRoot, filePath),
+      relativePath: path.relative(configRoot, filePath).split(path.sep).join('/'),
       source: fs.readFileSync(filePath, 'utf8'),
     }));
     const replacementOwners = sources
