@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -15,6 +15,7 @@ import {
 } from '../launcher.js';
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
@@ -126,9 +127,9 @@ describe('Piskie CLI launcher', () => {
         platform: 'win32',
       });
 
-      const execution = await execFileAsync(result.commandPath, [
-        'config', 'show', 'value with spaces',
-      ], { shell: true });
+      const execution = await execAsync('piskie.cmd config show "value with spaces"', {
+        cwd: result.directory,
+      });
       expect(JSON.parse(execution.stdout)).toEqual({
         args: ['config', 'show', 'value with spaces'],
         root: userDataDirectory,
