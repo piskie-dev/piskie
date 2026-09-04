@@ -25,6 +25,15 @@ export default {
     unnamedTask: '未命名任务',
     thisRun: '本次',
     tokenTotal: '总消耗',
+    account: {
+      loading: '正在读取账户',
+      signedOut: '未登录',
+      waiting: '等待登录',
+      signedIn: '已登录',
+      signedInAs: '已登录：{{name}}',
+      openMenu: '账户菜单：{{status}}',
+      settings: '账户设置',
+    },
   },
 
   // 导航菜单
@@ -120,6 +129,7 @@ export default {
       networkGroup: '网络',
       proxy: '代理配置',
       applicationGroup: '应用',
+      account: 'Piskie 账户',
       appearance: '外观与语言',
       browserRuntime: '浏览器内核',
     },
@@ -410,6 +420,34 @@ export default {
 
     selectPlaceholder: '请选择',
 
+    account: {
+      pageTitle: 'Piskie 账户',
+      pageSubtitle: '身份与本机登录状态',
+      loading: '正在读取账户状态…',
+      signedOutTitle: '尚未登录',
+      signedOutNote: '使用邮箱在官网完成身份验证。',
+      signIn: '登录 Piskie',
+      connecting: '正在连接…',
+      pendingTitle: '等待浏览器登录',
+      pendingNote: '请在浏览器中完成邮箱验证和授权，结果会自动返回当前 Piskie。',
+      expiresIn: '{{time}} 后失效',
+      reopen: '重新打开浏览器',
+      cancel: '取消登录',
+      verified: '已验证',
+      offline: '离线',
+      credentialStorage: '登录凭据',
+      secureStorage: '系统安全存储',
+      sessionStorage: '仅本次运行',
+      signOut: '退出登录',
+      signingOut: '正在退出…',
+      errors: {
+        denied: '你已在浏览器中拒绝这次登录。',
+        expired: '登录请求已失效，请重新发起登录。',
+        network: '账户服务暂时无法连接，请检查网络后重试。',
+        generic: '登录没有完成，请稍后重试。',
+      },
+    },
+
 
     // 关于
     about: {
@@ -418,7 +456,28 @@ export default {
       releaseStage: '预览阶段',
       version: '版本',
       status: '状态',
-      website: 'piskie.dev',
+      update: '应用更新',
+      updateLoading: '正在读取状态…',
+      updateIdle: '自动检查已启用',
+      updateChecking: '正在检查更新…',
+      updateCurrent: '已是最新版本',
+      updateAvailable: '发现 v{{version}}，准备下载',
+      updateDownloading: '正在下载 v{{version}} · {{percent}}%',
+      updateDownloaded: 'v{{version}} 已准备好',
+      updateDisabled: {
+        development: '开发环境不检查更新',
+        unpackaged: '仅安装版支持更新',
+        'unsupported-platform': '当前平台不支持更新',
+        unavailable: '更新服务不可用',
+      },
+      updateErrors: {
+        'no-release': '尚未发布可用版本',
+        network: '暂时无法连接更新服务',
+        generic: '检查更新失败',
+      },
+      checkForUpdates: '检查更新',
+      restartAndUpdate: '重启并更新',
+      website: 'www.piskie.dev',
       credit: '由 Piskie 团队用心打造',
     },
   },

@@ -1,3 +1,4 @@
+import type { AccountClient } from './account.js';
 import type { AgentClient } from './agents.js';
 import type { AgentRunClient } from './agent-runs.js';
 import type { CapabilityMarketClient } from './market.js';
@@ -10,8 +11,10 @@ import type { ObservabilityClient } from './observability.js';
 import type { PilotClient } from './pilot.js';
 import type { RuntimeClient } from './runtime.js';
 import type { TaskDefinitionClient } from './task-definitions.js';
+import type { UpdateClient } from './updates.js';
 
 export interface PiskieDesktopApi {
+  readonly account: AccountClient;
   readonly runtime: RuntimeClient;
   readonly agents: AgentClient;
   readonly modes: ModesClient;
@@ -24,4 +27,5 @@ export interface PiskieDesktopApi {
   readonly messaging: MessagingClient;
   readonly observability: ObservabilityClient;
   readonly desktop: DesktopClient;
+  readonly updates: UpdateClient;
 }

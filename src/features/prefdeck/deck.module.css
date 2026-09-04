@@ -12,6 +12,7 @@
   --pd-soft: #c0c0c9;
   --pd-mut: #8e8e98;
   --pd-faint: #5f5f69;
+  --pd-copy: var(--pd-mut);
 
   --pd-sheet: rgba(13, 13, 20, 0.52);
   --pd-sheet-edge: rgba(255, 255, 255, 0.1);
@@ -38,6 +39,7 @@ html[data-theme='light'] .skinVars {
   --pd-soft: #43434d;
   --pd-mut: #6d707b;
   --pd-faint: #a2a4ac;
+  --pd-copy: #62656d;
 
   --pd-sheet: rgba(250, 250, 252, 0.6);
   --pd-sheet-edge: rgba(255, 255, 255, 0.75);
@@ -337,6 +339,7 @@ html[data-theme='light'] .pane {
 }
 
 .deskTitle {
+  margin: 0;
   font-size: 16px;
   font-weight: 650;
   display: flex;
@@ -353,7 +356,7 @@ html[data-theme='light'] .pane {
 
 .deskSub {
   font-size: 11.5px;
-  color: var(--pd-mut);
+  color: var(--pd-copy);
   margin-block-start: 1px;
   display: flex;
   gap: 8px;
@@ -1078,6 +1081,175 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
   color: var(--pd-faint);
 }
 
+/* ── Piskie 账户 ── */
+
+.accountSlab {
+  inline-size: min(100%, 620px);
+  min-block-size: 330px;
+  margin: 12px auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.accountCentered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-block-size: 250px;
+  text-align: center;
+  color: var(--pd-copy);
+}
+
+.accountHeroIcon {
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pd-prime-ink);
+  background: color-mix(in srgb, var(--pd-beam) 14%, var(--pd-cell));
+  border: 1px solid color-mix(in srgb, var(--pd-beam) 30%, transparent);
+}
+
+.accountHeroIcon[data-tone='waiting'] {
+  color: var(--pd-hold);
+  background: color-mix(in srgb, var(--pd-hold) 12%, var(--pd-cell));
+  border-color: color-mix(in srgb, var(--pd-hold) 32%, transparent);
+}
+
+.accountTitle {
+  margin: 0;
+  color: var(--pd-ink);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.accountCopy {
+  max-inline-size: 440px;
+  margin: 5px 0 0;
+  color: var(--pd-copy);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.accountActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accountSignedIn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accountIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-inline-size: 0;
+  padding-block-end: 16px;
+  border-block-end: 1px solid var(--pd-hairline);
+}
+
+.accountAvatar {
+  inline-size: 42px;
+  block-size: 42px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--pd-prime-ink);
+  background: color-mix(in srgb, var(--pd-beam) 17%, var(--pd-cell));
+  border: 1px solid color-mix(in srgb, var(--pd-beam) 28%, transparent);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.accountIdentityText {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+}
+
+.accountIdentityText strong,
+.accountIdentityText span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountIdentityText strong {
+  color: var(--pd-ink);
+  font-size: 14px;
+}
+
+.accountIdentityText span {
+  color: var(--pd-copy);
+  font-size: 11.5px;
+}
+
+.accountFact {
+  min-block-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--pd-copy);
+  font-size: 11.5px;
+}
+
+.accountFact span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.accountFact strong {
+  color: var(--pd-soft);
+  font-size: 11.5px;
+  font-weight: 550;
+  text-align: end;
+}
+
+.accountSignOut {
+  align-self: flex-start;
+}
+
+.accountExpiry {
+  color: var(--pd-copy);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountError {
+  margin: 14px 0 0;
+  color: var(--pd-halt);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.accountSpin {
+  animation: pd-account-spin 900ms linear infinite;
+}
+
+@keyframes pd-account-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── 关于 ── */
 
 .aboutStack {
@@ -1116,6 +1288,58 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
   border: 1px solid var(--pd-hairline);
   font-size: 12.5px;
   color: var(--pd-soft);
+}
+
+.aboutUpdateRow {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 7px;
+}
+
+.aboutUpdateCopy {
+  min-inline-size: 0;
+  display: flex;
+  flex: 1 1 210px;
+  align-items: center;
+  gap: 10px;
+  text-align: start;
+}
+
+.aboutUpdateText {
+  min-inline-size: 0;
+  color: var(--pd-copy);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.aboutUpdateButton {
+  flex: 0 0 auto;
+}
+
+.aboutUpdateProgress {
+  flex: 1 0 100%;
+  block-size: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--pd-well);
+}
+
+.aboutUpdateProgress > span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--pd-beam);
+  transition: inline-size 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accountSpin {
+    animation: none;
+  }
+
+  .aboutUpdateProgress > span {
+    transition: none;
+  }
 }
 
 /* ── 自绘下拉 / 联想输入 ── */

@@ -13,6 +13,7 @@ import type {
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const ROUTE_PATTERN = /^[a-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*)+$/;
 const CAPABILITIES = new Set([
+  'account',
   'agent-runs',
   'agents',
   'capabilities',
@@ -25,6 +26,7 @@ const CAPABILITIES = new Set([
   'pilot',
   'runtime',
   'task-definitions',
+  'updates',
 ]);
 const FAULT_CODES = new Set<PublicFaultCode>([
   'aborted',

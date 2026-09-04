@@ -11,6 +11,8 @@ const unpackedDirectory = path.join(outputDirectory, 'win-unpacked');
 const temporaryUnpackedDirectory = `${unpackedDirectory}.tmp`;
 const builderCli = path.join(projectRoot, 'node_modules', 'electron-builder', 'cli.js');
 const packageVerifier = path.join(projectRoot, 'scripts', 'verify-packaged-app.mjs');
+const updateArtifactVerifier = path.join(projectRoot, 'scripts', 'verify-update-artifacts.mjs');
+const PUBLISH_MODES = new Set(['always', 'never', 'onTag', 'onTagOrDraft']);
 
 async function cleanStagingDirectories() {
   await Promise.all([
@@ -99,7 +101,15 @@ export async function moveDirectoryAcrossDevices(source, destination, operations
 }
 
 function runBuilder() {
-  return runProcess(process.execPath, [builderCli, '--win', 'nsis', '--x64'], 'electron-builder');
+  const publishMode = process.env.PISKIE_PUBLISH ?? 'never';
+  if (!PUBLISH_MODES.has(publishMode)) {
+    throw new Error(`Unsupported PISKIE_PUBLISH mode: ${publishMode}`);
+  }
+  return runProcess(
+    process.execPath,
+    [builderCli, '--win', 'nsis', '--x64', '--publish', publishMode],
+    'electron-builder',
+  );
 }
 
 function runProcess(executable, args, label, options = {}) {
@@ -145,6 +155,8 @@ async function validatePackage(stagingDirectory, smokeRoot) {
   const packagedExecutable = path.join(stagingDirectory, 'Piskie.exe');
   await Promise.all([
     assertRegularFile(installerPath, 'NSIS installer'),
+    assertRegularFile(`${installerPath}.blockmap`, 'NSIS differential update blockmap'),
+    assertRegularFile(path.join(outputDirectory, 'latest.yml'), 'Windows update metadata'),
     assertRegularFile(packagedExecutable, 'Packaged application executable'),
     assertRegularFile(path.join(packagedResources, 'app.asar'), 'ASAR application archive'),
     assertRegularFile(
@@ -175,11 +187,17 @@ async function validatePackage(stagingDirectory, smokeRoot) {
   return installerPath;
 }
 
-async function keepOnlyInstaller(installerPath) {
+async function keepOnlyReleaseArtifacts(installerPath) {
   const entries = await fs.readdir(outputDirectory, { withFileTypes: true });
+  const installerName = path.basename(installerPath);
+  const retainedFiles = new Set([
+    installerName,
+    `${installerName}.blockmap`,
+    'latest.yml',
+  ]);
   await Promise.all(entries.map(async (entry) => {
     const entryPath = path.join(outputDirectory, entry.name);
-    if (entryPath === installerPath) return;
+    if (entry.isFile() && retainedFiles.has(entry.name)) return;
     await fs.rm(entryPath, {
       recursive: entry.isDirectory(),
       force: true,
@@ -204,7 +222,12 @@ export async function packageWindowsInstaller() {
     );
     await removeDirectory(detachedRoot);
     detachedRoot = undefined;
-    await keepOnlyInstaller(installerPath);
+    await keepOnlyReleaseArtifacts(installerPath);
+    await runProcess(
+      process.execPath,
+      [updateArtifactVerifier, 'win'],
+      'Windows update artifact verification',
+    );
     succeeded = true;
     console.log(`Windows installer created: ${installerPath}`);
   } finally {

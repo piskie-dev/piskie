@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "description": "面向复杂任务的 AI 智能体桌面工作台，统一组织计划、工具与执行过程",
-  "homepage": "https://piskie.dev",
+  "homepage": "https://www.piskie.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/piskie-dev/piskie.git"
+  },
   "desktopName": "dev.piskie.desktop",
   "main": "dist-electron/electron/bootstrap.js",
   "bin": {
@@ -17,16 +21,21 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:auth-preview": "cross-env PISKIE_ACCOUNT_BASE_URL=https://piskie-site-preview.568082260.workers.dev npm run dev",
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5174 && npm run build:electron && cross-env NODE_ENV=development node scripts/electron-launcher.mjs --app . -- --remote-debugging-port=9223",
     "build": "npm run build:vite && npm run build:electron",
     "build:vite": "vite build",
     "build:electron": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && tsc -p tsconfig.electron.json && tsc-alias -p tsconfig.electron.json && tsc -p tsconfig.piskiepilot-dts.json && tsc-alias -p tsconfig.piskiepilot-dts.json && node scripts/copy-piskiepilot-assets.mjs && node scripts/copy-im-channel-assets.mjs && npm run build:preload && node scripts/assert-electron-import-specifiers.mjs",
     "build:preload": "esbuild electron/preload.ts --bundle --platform=node --conditions=browser --target=node24 --format=cjs --outfile=dist-electron/electron/preload.cjs --external:electron && node scripts/assert-sandboxed-preload.mjs",
-    "dist": "node scripts/assert-supported-kernel-host.mjs && npm run build && electron-builder",
+    "dist": "node scripts/assert-supported-kernel-host.mjs && npm run build && electron-builder --publish never",
     "dist:win": "node scripts/assert-supported-kernel-host.mjs win32-x64 && npm run build && node scripts/package-windows-installer.mjs",
-    "dist:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 && node scripts/verify-native-package.mjs",
-    "dist:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 && node scripts/verify-native-package.mjs",
+    "dist:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
+    "dist:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
+    "release:verify": "node scripts/verify-release-version.mjs",
+    "release:win": "cross-env PISKIE_PUBLISH=always npm run dist:win",
+    "release:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
+    "release:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
     "kill": "node scripts/kill-all.mjs",
     "restart": "npm run kill && npm run dev",
     "lint": "eslint . --ext .ts,.tsx",
@@ -61,6 +70,7 @@
     "core-js": "3.46.0",
     "debug": "4.4.3",
     "diff": "^8.0.2",
+    "electron-updater": "^6.8.9",
     "file-type": "^21.3.4",
     "https-proxy-agent": "^7.0.6",
     "js-yaml": "^4.3.2",
@@ -93,6 +103,15 @@
     "icon": "logos/piskie/app/piskie-brand-on-dark-1024.png",
     "compression": "maximum",
     "afterPack": "build/after-pack.cjs",
+    "electronUpdaterCompatibility": ">=2.16",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "piskie-dev",
+        "repo": "piskie",
+        "releaseType": "draft"
+      }
+    ],
     "files": [
       "logos/piskie/app/piskie-brand-on-dark-256.png",
       "logos/piskie/app/piskie-brand-on-light-256.png",

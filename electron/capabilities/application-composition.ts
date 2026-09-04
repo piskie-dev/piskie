@@ -1,3 +1,4 @@
+import { safeStorage } from 'electron';
 import { specRegistry } from '../agent/specs/index.js';
 import {
   AgentModeCatalog,
@@ -37,10 +38,18 @@ import { createPilotController } from './pilot/pilot-controller.js';
 import { createRuntimeController } from './runtime/runtime-controller.js';
 import { DesktopApplication } from '../desktop/capabilities/desktop-application.js';
 import { createDesktopController } from '../desktop/capabilities/desktop-controller.js';
+import { AccountApplication } from '../account/account-application.js';
+import { createAccountController } from '../account/account-controller.js';
+import { ElectronAccountCredentialVault } from '../account/credential-store.js';
+import { UpdateApplication } from '../updates/update-application.js';
+import { createUpdateController } from '../updates/update-controller.js';
+import type { UpdateProvider } from '../updates/update-provider.js';
+import type { UpdateDisabledReason } from '../../shared/electron-contracts/updates.js';
 
 export interface ApplicationComposition {
   readonly catalog: ControllerCatalog;
   releaseConnection(connectionId: string): void;
+  dispose(): void;
 }
 
 export function createApplicationComposition(options: {
@@ -49,9 +58,12 @@ export function createApplicationComposition(options: {
   presentation: DesktopPresentationPort;
   appearance: DesktopAppearancePort;
   app: {
+    accountBaseUrl: string;
     name: string;
     version: string;
     development: boolean;
+    updateProvider?: UpdateProvider;
+    updateDisabledReason?: UpdateDisabledReason;
   };
 }): ApplicationComposition {
   const { capabilities } = options;
@@ -118,7 +130,7 @@ export function createApplicationComposition(options: {
     presentation: options.presentation,
   });
   const observability = createObservabilityController(observabilityApplication);
-  const desktop = createDesktopController(new DesktopApplication({
+  const desktopApplication = new DesktopApplication({
     name: options.app.name,
     version: options.app.version,
     userDataDirectory: capabilities.userDataDirectory,
@@ -126,12 +138,31 @@ export function createApplicationComposition(options: {
     presentation: options.presentation,
     appearance: options.appearance,
     theme: themeService,
-  }));
+  });
+  const desktop = createDesktopController(desktopApplication);
+  const accountApplication = new AccountApplication({
+    baseUrl: options.app.accountBaseUrl,
+    credentials: new ElectronAccountCredentialVault({
+      userDataDirectory: capabilities.userDataDirectory,
+      safeStorage,
+    }),
+    openExternal: (url) => desktopApplication.openExternal(url),
+  });
+  const account = createAccountController(accountApplication);
   const inference = createInferenceController(capabilities.inference.inferenceHost);
   const runtime = createRuntimeController(() => options.backend.snapshot());
+  const updateApplication = new UpdateApplication({
+    currentVersion: options.app.version,
+    provider: options.app.updateProvider,
+    disabledReason: options.app.updateDisabledReason,
+  });
+  const updates = createUpdateController(updateApplication);
+  updateApplication.start();
 
   const catalog = createControllerCatalog({
     operations: [
+      ...account.operations,
+      ...updates.operations,
       ...runtime,
       ...agent.operations,
       ...modes,
@@ -146,6 +177,7 @@ export function createApplicationComposition(options: {
       ...desktop.operations,
     ],
     topics: [
+      ...updates.topics,
       ...agent.topics,
       ...configuration.topics,
       ...market.topics,
@@ -160,6 +192,10 @@ export function createApplicationComposition(options: {
     catalog,
     releaseConnection: (connectionId: string) => {
       observabilityApplication.releaseConnection(connectionId);
+    },
+    dispose: () => {
+      accountApplication.dispose();
+      updateApplication.dispose();
     },
   });
 }

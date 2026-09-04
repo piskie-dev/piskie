@@ -216,12 +216,312 @@
   font-size: 11px;
   letter-spacing: 0.05em;
   color: var(--cyber-text-muted);
+  flex: 0 0 auto;
+}
+
+/* ── 全局账户位:身份常驻,细节按需展开 ── */
+.accountAnchor {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.accountTrigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-inline-size: 0;
+  block-size: 30px;
+  max-inline-size: 154px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  background: var(--sb-cell);
+  color: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.accountTrigger:hover,
+.accountTrigger[aria-expanded='true'] {
+  border-color: var(--line-2);
+  background: var(--sb-cell-hi);
+}
+
+.accountTrigger:focus-visible,
+.accountPanel button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cyber-primary) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.accountTriggerAvatar {
+  position: relative;
+  inline-size: 22px;
+  block-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cyber-text) 8%, transparent);
+  color: var(--cyber-text);
+  font-family: var(--sb-mono);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.accountPresence {
+  position: absolute;
+  inset-inline-end: -1px;
+  inset-block-end: -1px;
+  inline-size: 7px;
+  block-size: 7px;
+  border: 1.5px solid var(--cyber-bg);
+  border-radius: 50%;
+  background: var(--cyber-text-muted);
+}
+
+.accountTrigger[data-tone='verified'] .accountPresence {
+  background: var(--status-running);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--status-running) 70%, transparent);
+}
+
+.accountTrigger[data-tone='offline'] .accountPresence,
+.accountTrigger[data-tone='waiting'] .accountPresence {
+  background: var(--status-waiting);
+}
+
+.accountTriggerText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.accountChevron {
+  flex: 0 0 auto;
+  color: var(--cyber-text-muted);
+  transition: rotate 160ms ease;
+}
+
+.accountTrigger[aria-expanded='true'] .accountChevron {
+  rotate: 180deg;
+}
+
+.accountPanel {
+  inline-size: min(292px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--glass-2);
+  color: var(--cyber-text);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--cyber-bg) 68%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+
+.accountPanelHead {
+  min-block-size: 64px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+.accountPanelAvatar {
+  inline-size: 36px;
+  block-size: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cyber-primary) 14%, var(--cyber-surface));
+  color: var(--cyber-primary);
+  font-family: var(--sb-mono);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.accountPanelAvatar[data-tone='waiting'] {
+  background: color-mix(in srgb, var(--status-waiting) 12%, var(--cyber-surface));
+  color: var(--status-waiting);
+}
+
+.accountPanelIdentity {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accountPanelIdentity strong,
+.accountPanelIdentity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountPanelIdentity strong {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.accountPanelIdentity span {
+  color: var(--cyber-text-muted);
+  font-size: 10.5px;
+}
+
+.accountConnection {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--cyber-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.accountConnection i {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--status-waiting);
+}
+
+.accountConnection[data-tone='verified'] i {
+  background: var(--status-running);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--status-running) 65%, transparent);
+}
+
+.accountPanelError {
+  margin: 0;
+  padding: 9px 12px;
+  border-block-end: 1px solid color-mix(in srgb, var(--status-error) 18%, transparent);
+  background: color-mix(in srgb, var(--status-error) 7%, transparent);
+  color: color-mix(in srgb, var(--status-error) 74%, var(--cyber-text));
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.accountPanelState {
+  min-block-size: 44px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cyber-text-muted);
+  font-size: 11.5px;
+}
+
+.accountPanelPending {
+  padding-block-end: 6px;
+}
+
+.accountPanelTimer {
+  display: block;
+  padding: 0 12px 10px 34px;
+  color: var(--status-waiting);
+  font-family: var(--sb-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.accountPanelActions {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accountPanelActions button,
+.accountPanelSplitActions button {
+  min-block-size: 32px;
+  padding-inline: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--cyber-text) 82%, transparent);
+  cursor: pointer;
+  font-size: 11.5px;
+  text-align: start;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.accountPanelActions button:hover,
+.accountPanelSplitActions button:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.accountPanelActions button:disabled,
+.accountPanelSplitActions button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.accountPanelActions .accountPanelPrimary {
+  background: color-mix(in srgb, var(--cyber-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--cyber-primary) 62%, var(--cyber-text));
+}
+
+.accountPanelActions .accountPanelPrimary:hover {
+  background: color-mix(in srgb, var(--cyber-primary) 22%, transparent);
+}
+
+.accountPanelActions .accountPanelRisk {
+  color: color-mix(in srgb, var(--status-error) 64%, var(--cyber-text));
+}
+
+.accountPanelSplitActions {
+  padding: 0 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.accountPanelSplitActions button {
+  justify-content: center;
+  min-inline-size: 0;
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+
+.accountSpin {
+  animation: sb-account-spin 900ms linear infinite;
+}
+
+@keyframes sb-account-spin {
+  to { rotate: 360deg; }
+}
+
+@media (max-width: 1040px) {
+  .tele {
+    display: none;
+  }
+
+  .castName {
+    max-width: 220px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .castDot,
   .lamp i,
-  .castSwap {
+  .castSwap,
+  .accountSpin {
     animation: none;
+  }
+
+  .accountTrigger,
+  .accountChevron,
+  .accountPanelActions button,
+  .accountPanelSplitActions button {
+    transition: none;
   }
 }
