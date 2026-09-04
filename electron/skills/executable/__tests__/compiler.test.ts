@@ -148,12 +148,14 @@ describe('compileExecutableSkill', () => {
     expect(await readFile(path.join(first.buildDir, 'install-count.txt'), 'utf8')).toBe('1');
 
     const bridgePath = path.join(first.buildDir, 'node_modules', 'piskiepilot', 'core-skill.js');
+    const typeBridgePath = path.join(first.buildDir, 'node_modules', 'piskiepilot', 'core-skill.d.ts');
     await writeFile(bridgePath, "export const stale = true\n", 'utf8');
 
     const cached = await compileExecutableSkill(source, 'dependency-demo', { profile: 'standard' });
     expect(cached.buildDir).toBe(first.buildDir);
     expect(await readFile(path.join(first.buildDir, 'install-count.txt'), 'utf8')).toBe('1');
     expect(await readFile(bridgePath, 'utf8')).toContain('author-api');
+    expect(await readFile(typeBridgePath, 'utf8')).toContain('author-api.ts');
 
     await rm(path.join(first.buildDir, 'node_modules', 'fixture-dep'), { recursive: true, force: true });
     const repaired = await compileExecutableSkill(source, 'dependency-demo', { profile: 'standard' });

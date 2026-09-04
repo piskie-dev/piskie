@@ -14,20 +14,27 @@ export async function writeExecutableSkillShim(
   piskiepilotRoot = path.resolve(import.meta.dirname, '../../piskiepilot'),
 ): Promise<ExecutableSkillShim> {
   const shimDir = path.join(buildDir, 'node_modules', 'piskiepilot');
-  const emittedTarget = path.join(piskiepilotRoot, AUTHOR_API_TARGET);
   const runtimeTarget = await resolveHostModule(piskiepilotRoot);
+  const typeTarget = runtimeTarget.endsWith('.js')
+    ? runtimeTarget.replace(/\.js$/u, '.d.ts')
+    : runtimeTarget;
 
   await fs.rm(shimDir, { recursive: true, force: true });
   await fs.mkdir(shimDir, { recursive: true });
+  const canonicalShimDir = await fs.realpath(shimDir);
 
   await fs.writeFile(
     path.join(shimDir, 'core-skill.js'),
     `export * from '${pathToFileURL(runtimeTarget).href}';\n`,
   );
-  const typeTarget = path.relative(shimDir, emittedTarget).split(path.sep).join('/');
+  const relativeTypeTarget = path.relative(canonicalShimDir, typeTarget).split(path.sep).join('/');
   await fs.writeFile(
     path.join(shimDir, 'core-skill.d.ts'),
-    `export * from '${typeTarget}';\n`,
+    [
+      `export { bool, defineSkill, fail, int, num, ok, skillToolName, z } from '${relativeTypeTarget}';`,
+      `export type { BrowserSkillRuntime, DefinedSkill, ImageRef, SkillContext, SkillContextBase, SkillDomain, SkillFunction, SkillFunctions, ToolOutput } from '${relativeTypeTarget}';`,
+      '',
+    ].join('\n'),
   );
   await fs.writeFile(
     path.join(shimDir, 'package.json'),

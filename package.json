@@ -30,11 +30,13 @@
     "build:preload": "esbuild electron/preload.ts --bundle --platform=node --conditions=browser --target=node24 --format=cjs --outfile=dist-electron/electron/preload.cjs --external:electron && node scripts/assert-sandboxed-preload.mjs",
     "dist": "node scripts/assert-supported-kernel-host.mjs && npm run build && electron-builder --publish never",
     "dist:win": "node scripts/assert-supported-kernel-host.mjs win32-x64 && npm run build && node scripts/package-windows-installer.mjs",
-    "dist:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
+    "dist:mac": "node scripts/package-macos-release.mjs",
+    "dist:mac:preflight": "node scripts/package-macos-release.mjs --preflight-only",
+    "dist:mac:unsigned": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
     "dist:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish never && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:win": "cross-env PISKIE_PUBLISH=always npm run dist:win",
-    "release:mac": "node scripts/assert-supported-kernel-host.mjs darwin-arm64 && npm run build && electron-builder --mac --arm64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs mac",
+    "release:mac": "cross-env PISKIE_PUBLISH=always npm run dist:mac",
     "release:linux": "node scripts/assert-supported-kernel-host.mjs linux-x64 && npm run build && electron-builder --linux --x64 --publish always && node scripts/verify-native-package.mjs && node scripts/verify-update-artifacts.mjs linux",
     "kill": "node scripts/kill-all.mjs",
     "restart": "npm run kill && npm run dev",
@@ -174,6 +176,8 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true,
       "extendInfo": {
         "NSAppleEventsUsageDescription": "Piskie uses Apple Events to bring managed browser windows to the foreground."
       }
