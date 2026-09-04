@@ -185,6 +185,7 @@
       "icon": "logos/piskie/app/piskie-brand.ico"
     },
     "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
