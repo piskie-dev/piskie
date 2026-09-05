@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { applyElectronBuilderMacKeychainPatch } from './patch-electron-builder-macos-keychain.mjs';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const preflightOnly = process.argv.includes('--preflight-only');
@@ -71,6 +72,7 @@ try {
   console.log('macOS signing and notarization preflight passed.');
   if (preflightOnly) process.exit(0);
 
+  await applyElectronBuilderMacKeychainPatch();
   await run(process.execPath, ['scripts/assert-supported-kernel-host.mjs', 'darwin-arm64'], { env });
   await run('npm', ['run', 'build'], { env });
   const builderArgs = ['electron-builder', '--mac', '--arm64'];

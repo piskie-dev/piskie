@@ -35,6 +35,7 @@ jobs:
       - run: npm run type-check
       - run: npx tsc -p tsconfig.electron.json --noEmit
       - run: npm test
+      - run: npm run test:macos-signing-patch
       - run: npm run test:release-notes
       - name: Create the draft release
         env:
