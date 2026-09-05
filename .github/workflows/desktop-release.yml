@@ -102,6 +102,7 @@ jobs:
       - name: Verify the draft release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = "true"
           assets="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
