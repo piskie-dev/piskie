@@ -1296,12 +1296,6 @@ export abstract class AgentEngine {
       const response = await this.callAI(systemPrompt, toolList, messages, signal);
       const toolUses = response.content.filter((c: ContentBlock) => c.type === 'tool_use');
 
-      if (response.content.length === 0) {
-        throw new Error(
-          'AI returned empty response (no content blocks); upstream stream likely truncated'
-        );
-      }
-
       for (const t of toolUses) {
         if (typeof t.input === 'string' && t.input.length > 0) {
           throw new Error(

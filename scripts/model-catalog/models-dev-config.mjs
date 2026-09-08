@@ -5,6 +5,7 @@ export const MODELS_DEV_PROVIDER_MAP = {
   openai: 'openai',
   anthropic: 'anthropic',
   google: 'gemini',
+  xai: 'xai',
   deepseek: 'deepseek',
   zhipuai: 'zhipu',
   minimax: 'minimax',

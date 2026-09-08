@@ -40,6 +40,7 @@ describe('browser screenshot model/host boundary', () => {
     });
     const takeScreenshot = vi.fn(async () => `Saved screenshot to ${finalPath}.`);
     const finalizeScreenshot = vi.fn(async () => undefined);
+    const signal = new AbortController().signal;
     const output = await entry.tool.execute({ format: 'png' }, {
       agentType: 'worker',
       agentSpec: 'browser-worker',
@@ -47,7 +48,7 @@ describe('browser screenshot model/host boundary', () => {
       mainAgentId: 'main-1',
       runConfig: { name: 'Run', description: '', promptTemplate: '' },
       resourceIds: { browserId: 'browser-1' },
-      signal: new AbortController().signal,
+      signal,
       log: vi.fn(),
       browser: {
         core: { takeScreenshot },
@@ -62,6 +63,7 @@ describe('browser screenshot model/host boundary', () => {
       format: 'png',
       filePath: finalPath,
       browserId: 'browser-1',
+      signal,
     });
     expect(finalizeScreenshot).toHaveBeenCalledOnce();
     expect(output).toEqual({ ok: true, text: `Saved screenshot to ${finalPath}.` });

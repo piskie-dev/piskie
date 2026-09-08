@@ -1,12 +1,98 @@
 {
   "provider": "together",
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://docs.together.ai/docs/inference/chat/reasoning"
   ],
   "models": [
+    {
+      "id": "zai-org/GLM-5.3-Flash",
+      "name": "GLM-5.3-Flash",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-26",
+      "contextWindow": 1048575,
+      "maxContextWindow": 1048575,
+      "maxOutputTokens": 400000,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "zai-org/GLM-5.3",
+      "name": "GLM-5.3",
+      "provider": "together",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "together-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-14",
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 262144,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
     {
       "id": "deepseek-ai/DeepSeek-V4-Pro-0813",
       "name": "DeepSeek V4 Pro 0813",
@@ -46,8 +132,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -89,8 +175,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -132,8 +218,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -175,8 +261,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -217,8 +303,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-16"
     },
@@ -260,8 +346,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-14"
     },
@@ -303,8 +389,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-12"
     },
@@ -346,8 +432,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-04"
     },
@@ -386,8 +472,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-05-21"
     },
@@ -429,8 +515,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-30"
     },
@@ -472,8 +558,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-24"
     },
@@ -515,8 +601,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-21"
     },
@@ -558,8 +644,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-07"
     },
@@ -589,7 +675,7 @@
         "transportPreset": "together-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 202752,
       "maxContextWindow": 202752,
       "maxOutputTokens": 131072,
@@ -601,8 +687,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-07"
     },
@@ -644,8 +730,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-03-18"
     },
@@ -687,8 +773,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-03-03"
     },
@@ -715,7 +801,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 262144,
       "maxOutputTokens": 130000,
       "tags": [
@@ -730,8 +816,8 @@
           "https://models.dev",
           "https://docs.together.ai/docs/inference/chat/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 262144,
       "releaseDate": "2026-02-16"
@@ -762,7 +848,7 @@
         "transportPreset": "together-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 204800,
       "maxContextWindow": 204800,
       "maxOutputTokens": 131072,
@@ -774,8 +860,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-02-12"
     },
@@ -805,7 +891,7 @@
         "transportPreset": "together-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 202752,
       "maxContextWindow": 202752,
       "maxOutputTokens": 131072,
@@ -817,8 +903,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-02-11"
     },
@@ -845,7 +931,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2026-02-03",
       "contextWindow": 262144,
       "maxContextWindow": 262144,
@@ -858,8 +944,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -888,7 +974,7 @@
         "transportPreset": "together-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2026-01-27",
       "contextWindow": 262144,
       "maxContextWindow": 262144,
@@ -901,8 +987,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -928,7 +1014,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-12-05",
       "contextWindow": 32768,
       "maxContextWindow": 32768,
@@ -941,8 +1027,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -971,7 +1057,7 @@
         "transportPreset": "together-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-08-21",
       "contextWindow": 131072,
       "maxContextWindow": 131072,
@@ -984,8 +1070,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1027,8 +1113,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1070,8 +1156,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1097,7 +1183,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-07-25",
       "contextWindow": 262144,
       "maxContextWindow": 262144,
@@ -1110,8 +1196,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1137,7 +1223,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-07-23",
       "contextWindow": 262144,
       "maxContextWindow": 262144,
@@ -1150,8 +1236,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1177,7 +1263,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2024-12-26",
       "contextWindow": 131072,
       "maxContextWindow": 131072,
@@ -1190,8 +1276,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1230,8 +1316,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1270,14 +1356,14 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     }
   ],
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

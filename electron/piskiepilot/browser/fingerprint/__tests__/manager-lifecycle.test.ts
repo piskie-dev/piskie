@@ -13,6 +13,7 @@ const runtime = vi.hoisted(() => ({
   spawn: vi.fn(),
   execFileSync: vi.fn(),
   connectError: undefined as Error | undefined,
+  connectWait: undefined as Promise<void> | undefined,
   controls: [] as Array<{
     close: ReturnType<typeof vi.fn>;
     connect: ReturnType<typeof vi.fn>;
@@ -37,6 +38,7 @@ vi.mock('../cdp-control.js', () => ({
     close = vi.fn();
     connect = vi.fn(async () => {
       if (runtime.connectError) throw runtime.connectError;
+      await runtime.connectWait;
     });
 
     constructor() {
@@ -104,6 +106,7 @@ describe('FingerprintBrowser managed process lifecycle', () => {
     runtime.spawn.mockReset();
     runtime.execFileSync.mockReset();
     runtime.connectError = undefined;
+    runtime.connectWait = undefined;
     runtime.controls.length = 0;
     root = mkdtempSync(join(tmpdir(), 'fp-manager-lifecycle-'));
     nextPid = 4100;
@@ -172,6 +175,56 @@ describe('FingerprintBrowser managed process lifecycle', () => {
 
     expect(runtime.controls.every((control) => control.close.mock.calls.length === 1)).toBe(true);
     expect(browser.has('cdp-failure')).toBe(false);
+  });
+
+  it('cancels before executable resolution without spawning a late process', async () => {
+    let resolveBinary!: (value: string) => void;
+    binary.resolveExecutable.mockImplementationOnce(() => new Promise((resolve) => { resolveBinary = resolve; }));
+    const browser = new FingerprintBrowser();
+    const controller = new AbortController();
+    const reason = new Error('Task stopped');
+    const starting = browser.launch('cancelled-profile', { userDataDir: join(root, 'cancelled-profile') }, controller.signal);
+    controller.abort(reason);
+    await expect(starting).rejects.toBe(reason);
+    resolveBinary('/tmp/example-chromium');
+    await Promise.resolve();
+    expect(runtime.spawn).not.toHaveBeenCalled();
+    expect(browser.has('cancelled-profile')).toBe(false);
+  });
+
+  it('terminates a process when cancellation interrupts CDP initialization', async () => {
+    const browser = new FingerprintBrowser();
+    const controller = new AbortController();
+    runtime.connectWait = new Promise(() => {});
+    const starting = browser.launch('cancelled-profile', { userDataDir: join(root, 'cancelled-profile') }, controller.signal);
+    vi.spyOn(browser as never, 'killTree').mockImplementation((process: FakeProcess) => {
+      process.signalCode = 'SIGKILL';
+      process.stderr.end();
+      process.emit('exit', null, 'SIGKILL');
+    });
+    await vi.waitFor(() => expect(runtime.controls).toHaveLength(1));
+    const reason = new Error('Task stopped');
+    controller.abort(reason);
+    await expect(starting).rejects.toBe(reason);
+    expect(runtime.controls[0].close).toHaveBeenCalled();
+    expect(browser.has('cancelled-profile')).toBe(false);
+  });
+
+  it('rejects forced shutdown when the process has not exited and retains its ownership', async () => {
+    const browser = new FingerprintBrowser();
+    await browser.launch('profile-a', { userDataDir: join(root, 'profile-a') });
+    const proc = runtime.spawn.mock.results[0].value as FakeProcess;
+    vi.spyOn(browser as never, 'killTree').mockImplementation(() => {});
+    vi.useFakeTimers();
+    const listenersBeforeStop = proc.listenerCount('exit');
+    const stopping = expect(browser.stop('profile-a')).rejects.toThrow('did not exit');
+    await vi.advanceTimersByTimeAsync(4000);
+    await stopping;
+    expect(browser.has('profile-a')).toBe(true);
+    expect(proc.listenerCount('exit')).toBe(listenersBeforeStop);
+    proc.signalCode = 'SIGKILL';
+    proc.emit('exit', null, 'SIGKILL');
+    expect(browser.has('profile-a')).toBe(false);
   });
 
   it.runIf(process.platform === 'linux')(

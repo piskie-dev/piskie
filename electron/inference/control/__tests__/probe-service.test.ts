@@ -176,6 +176,17 @@ describe('InferenceProbeService', () => {
         },
       });
       writeAnthropicEvent(response, {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'text', text: '' },
+      });
+      writeAnthropicEvent(response, {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text: 'ok' },
+      });
+      writeAnthropicEvent(response, { type: 'content_block_stop', index: 0 });
+      writeAnthropicEvent(response, {
         type: 'message_delta',
         delta: { stop_reason: 'end_turn', stop_sequence: null },
         usage: { output_tokens: 1 },
@@ -209,7 +220,7 @@ describe('InferenceProbeService', () => {
     expect(receivedBody).toMatchObject({
       model: 'wire-probe-model',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      max_tokens: 16,
+      max_tokens: 128,
       stream: true,
       cache_control: { type: 'ephemeral' },
     });
@@ -283,7 +294,7 @@ describe('InferenceProbeService', () => {
     expect(receivedBody).toMatchObject({
       model: 'wire-probe-model',
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
-      max_output_tokens: 16,
+      max_output_tokens: 128,
       stream: true,
       store: false,
       include: ['reasoning.encrypted_content'],
@@ -326,7 +337,7 @@ describe('InferenceProbeService', () => {
     expect(receivedBody).toMatchObject({
       model: 'wire-probe-model',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      max_completion_tokens: 16,
+      max_completion_tokens: 128,
       stream: true,
       stream_options: { include_usage: true },
     });
@@ -343,6 +354,41 @@ describe('InferenceProbeService', () => {
           requestId: 'probe-request-422',
           body: { detail: 'probe rejected verbatim', vendor_field: 42 },
         }),
+      }),
+    })]);
+  });
+
+  it('fails a Chat Completions smoke probe when a wrong route returns an empty 200 response', async () => {
+    let requestCount = 0;
+    const baseUrl = await serve(async (incoming, response) => {
+      requestCount++;
+      expect(incoming.url).toBe('/chat/completions');
+      await readJsonRequest(incoming);
+      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      response.end('<!doctype html><title>Gateway console</title>');
+    });
+    const definition = model('openai', 'openai/empty-chat', 'openai');
+    const candidate = config('openai', baseUrl, definition);
+    candidate.providers.primary!.driverOptions = { wireApi: 'chat_completions' };
+    const drivers = new DriverRegistry();
+    drivers.register(createOpenAiDriver());
+    const snapshot = compileInferenceConfig(candidate, testCatalog(definition), drivers);
+
+    const receipts = await (await probeService(drivers)).run(
+      candidate,
+      snapshot,
+      'smoke',
+      { providerId: 'primary', modelId: 'chat' },
+      new AbortController().signal,
+    );
+
+    expect(requestCount).toBe(1);
+    expect(receipts).toEqual([expect.objectContaining({
+      success: false,
+      error: expect.objectContaining({
+        source: 'local',
+        stage: 'collect',
+        localCode: 'AI_RESULT_EMPTY',
       }),
     })]);
   });

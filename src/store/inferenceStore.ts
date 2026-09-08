@@ -2,8 +2,9 @@ import { createUuid } from '@shared/utils/identifiers.js';
 import { create } from 'zustand';
 import type {
   InferenceAvailableTarget,
-  InferenceCatalogModelInput,
   InferenceArtifactPreview,
+  InferenceCatalogModelInput,
+  InferenceCatalogRefreshResult,
   InferenceConfig,
   InferenceDriverSummary,
   InferenceLocalCatalogDocument,
@@ -64,11 +65,13 @@ interface InferenceState {
   selections: InferenceSelections | null;
   drivers: InferenceDriverSummary[];
   models: Record<InferenceGatewayKind, InferenceModelDefinition[]>;
+  catalogModels: Record<InferenceGatewayKind, InferenceModelDefinition[]>;
   availableTargets: Record<InferenceGatewayKind, InferenceAvailableTarget[]>;
   isLoading: boolean;
   isApplying: boolean;
   error: PresentationText | null;
   refresh: () => Promise<void>;
+  refreshCatalog: () => Promise<InferenceCatalogRefreshResult>;
   subscribeToConfigChanges: () => () => void;
   addProvider: (
     gateway: InferenceGatewayKind,
@@ -185,6 +188,7 @@ async function refreshState(set: StoreSet): Promise<void> {
     selections,
     drivers,
     models: { ai: aiModels.models, image: imageModels.models },
+    catalogModels: { ai: aiModels.catalogModels, image: imageModels.catalogModels },
     availableTargets: {
       ai: aiModels.availableTargets,
       image: imageModels.availableTargets,
@@ -294,6 +298,7 @@ export const useInferenceStore = create<InferenceState>((set, get) => ({
   selections: null,
   drivers: [],
   models: { ai: [], image: [] },
+  catalogModels: { ai: [], image: [] },
   availableTargets: { ai: [], image: [] },
   isLoading: false,
   isApplying: false,
@@ -308,6 +313,14 @@ export const useInferenceStore = create<InferenceState>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  refreshCatalog: async () => {
+    const result = await window.piskie.inference.refreshCatalog();
+    const pendingRefresh = refreshInFlight;
+    if (pendingRefresh) await pendingRefresh.catch(() => undefined);
+    await refreshStateCoalesced(set);
+    return result;
   },
 
   subscribeToConfigChanges: () => subscribeToConfigDomainRevisions({

@@ -1,4 +1,5 @@
 import type { EmbeddedBrowserState } from '../types/embedded-browser.js';
+import type { AgentTarget } from '../types/agent-control.js';
 import type {
   BrowserEnvironment,
   CreateBrowserEnvironmentRequest,
@@ -25,6 +26,8 @@ export const PILOT_OPERATIONS = Object.freeze({
   screenSnapshot: 'pilot.screen.snapshot',
   showScreen: 'pilot.screen.show',
   requestScreenStream: 'pilot.screen.requestStream',
+  openEmbeddedBrowser: 'pilot.embeddedBrowser.open',
+  closeEmbeddedBrowser: 'pilot.embeddedBrowser.close',
   navigateEmbeddedBrowser: 'pilot.embeddedBrowser.navigate',
   openLocalHtmlInEmbeddedBrowser: 'pilot.embeddedBrowser.openLocalHtml',
   backEmbeddedBrowser: 'pilot.embeddedBrowser.back',
@@ -80,16 +83,18 @@ interface ScreenClient {
 }
 
 interface EmbeddedBrowserClient {
-  navigate(url: string): Promise<void>;
-  openLocalHtml(path: string): Promise<void>;
-  back(): Promise<void>;
-  forward(): Promise<void>;
-  reload(): Promise<void>;
-  stop(): Promise<void>;
-  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
-  setVisible(visible: boolean): Promise<void>;
-  state(): Promise<EmbeddedBrowserState>;
-  observeState(listener: (state: EmbeddedBrowserState) => void): () => void;
+  open(target: AgentTarget): Promise<void>;
+  close(target: AgentTarget): Promise<void>;
+  navigate(target: AgentTarget, url: string): Promise<void>;
+  openLocalHtml(target: AgentTarget, path: string): Promise<void>;
+  back(target: AgentTarget): Promise<void>;
+  forward(target: AgentTarget): Promise<void>;
+  reload(target: AgentTarget): Promise<void>;
+  stop(target: AgentTarget): Promise<void>;
+  setBounds(target: AgentTarget, bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  setVisible(target: AgentTarget, visible: boolean): Promise<void>;
+  state(target: AgentTarget): Promise<EmbeddedBrowserState>;
+  observeState(target: AgentTarget, listener: (state: EmbeddedBrowserState) => void): () => void;
 }
 
 export interface PilotClient {

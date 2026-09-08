@@ -1,4 +1,5 @@
 import { appLog } from '@electron/observability/logging/app-log.js';
+import { app, net } from 'electron';
 import { DefaultAgentInferencePort } from '../../inference/application/agent-inference-port.js';
 import { DefaultImageApplicationPort } from '../../inference/application/image-application-port.js';
 import { InferenceRuntimeHost } from '../../inference/composition/runtime-host.js';
@@ -42,6 +43,18 @@ export function createInferenceComponent(options: {
       });
       host = new InferenceRuntimeHost({
         rootDirectory: options.userDataDirectory,
+        remoteCatalog: {
+          autoRefresh: true,
+          baseUrl: process.env.PISKIE_MODEL_CATALOG_BASE_URL ?? 'https://www.piskie.dev',
+          clientVersion: app.getVersion(),
+          fetch: (input, init) => net.fetch(input instanceof Request ? input : String(input), init),
+          onError: (error) => appLog.warn({
+            event: 'inference.catalog.update.failed',
+            message: 'Model catalog update failed; retaining the current catalog',
+            context: { scope: 'inference.catalog' },
+            error,
+          }),
+        },
         configIntegrations: createElectronConfigDomainIntegrations(),
         openAi: { resolveFetch: resolveElectronInferenceFetch },
         anthropic: { resolveFetch: resolveElectronInferenceFetch },

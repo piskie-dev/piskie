@@ -90,9 +90,10 @@ describe('SubagentTool Assignment create', () => {
     expect(schema.properties).not.toHaveProperty('contextFiles');
     expect(schema.required).toEqual(['action']);
     expect(schema.properties.type.description).toContain('create 必填');
-    expect(tool.def.description).toContain('刚走进房间的聪明同事');
-    expect(tool.def.description).toContain('能力完整，可以自主判断');
-    expect(tool.def.description).toContain('可观察结果');
+    expect(tool.def.description).toContain('创建 Worker 完成交付目标明确的 Assignment');
+    expect(schema.properties.prompt.description).toContain('刚走进房间的聪明同事');
+    expect(schema.properties.prompt.description).toContain('能力完整，可以自主判断');
+    expect(schema.properties.prompt.description).toContain('不知道当前对话和既有进展');
     expect(tool.def.description).not.toContain('不要委派理解');
     expect(schema.properties.skills.description).toContain('Skill 名称列表');
     expect(schema.properties.skills.description).not.toContain('skillId');
@@ -133,7 +134,7 @@ describe('SubagentTool Assignment create', () => {
     expect(type.description).toContain('site-scout：侦察网站能力与风险');
     expect(type.description).toContain('不得自行改名');
     expect(JSON.stringify(definition?.input_schema.oneOf)).not.toContain('description');
-    expect(JSON.stringify(definition?.input_schema).match(/完整、自包含的任务简报/g)).toHaveLength(1);
+    expect(JSON.stringify(definition?.input_schema).match(/完整、自包含的任务prompt/g)).toHaveLength(1);
     expect(definition?.input_schema.properties.browserEnvironmentId).toMatchObject({
       enum: ['environment-a', 'environment-b'],
     });

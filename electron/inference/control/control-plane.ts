@@ -1,7 +1,7 @@
 import type { ModelTarget } from '../execution/contracts.js';
 import { findCompiledTarget } from '../execution/runtime-snapshot.js';
 import { CatalogQuery, resolveBoundModelDefinition } from '../catalog/query.js';
-import { CanonicalCatalogSource } from '../catalog/canonical-source.js';
+import { CanonicalCatalogSource, type CanonicalCatalogSourceOptions } from '../catalog/canonical-source.js';
 import {
   type CatalogSnapshot,
   type LocalCatalogDocument,
@@ -57,6 +57,7 @@ export interface InferenceControlPlaneOptions {
   probes?: InferenceProbeService;
   publisher?: RuntimeReceipt['publisher'];
   now?: () => Date;
+  remoteCatalog?: CanonicalCatalogSourceOptions['remote'];
 }
 
 export interface VerificationReport {
@@ -79,6 +80,7 @@ export interface ModelQueryResult {
   gateway: ModelDefinition['kind'];
   operation?: 'generate' | 'edit';
   models: readonly (ModelDefinition & { operationCapability?: 'supported' | 'unsupported' | 'unknown' })[];
+  catalogModels: readonly ModelDefinition[];
   availableTargets: readonly (ModelTarget & { catalogId: string })[];
   issues: readonly ValidationIssue[];
 }
@@ -105,6 +107,7 @@ export class InferenceControlPlane {
     this.catalogSource = new CanonicalCatalogSource({
       rootDirectory: options.repository.paths.rootDirectory,
       now: this.now,
+      remote: options.remoteCatalog,
     });
     this.probes = options.probes ?? new InferenceProbeService({
       drivers: options.drivers,
@@ -174,13 +177,14 @@ export class InferenceControlPlane {
     signal?: AbortSignal,
   ): Promise<ModelQueryResult> {
     const config = await this.options.repository.read();
-    const catalog = await this.loadCatalogSnapshot(signal);
+    const { system, effective: catalog } = await this.catalogSource.loadViews(signal);
     const projection = projectInferenceRuntime(config, catalog, this.options.drivers, this.now);
     const query = new CatalogQuery(resolveConfiguredBindings(config, catalog));
     return {
       catalogVersion: catalog.version,
       gateway,
       ...(operation && { operation }),
+      catalogModels: new CatalogQuery(system).list(gateway),
       models: query.list(gateway).map((model) => ({
         ...model,
         ...(operation && { operationCapability: query.capability(model.id, operation) }),

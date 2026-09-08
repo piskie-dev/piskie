@@ -46,6 +46,7 @@ export type {
   InferenceModelDefinition,
   InferenceCatalogModelInput,
   InferenceLocalCatalogDocument,
+  InferenceCatalogRefreshResult,
   InferenceModelQueryResult,
   InferenceDriverSummary,
   InferenceDriverSchema,

@@ -19,6 +19,7 @@ export function createFakeDriver(): InferenceDriver {
       configRevision: input.configRevision,
       ai: {
         openAttempt: async function* () {
+          yield { kind: 'text.delta', text: 'ok' };
           yield { kind: 'response.completed', stopReason: 'end_turn' };
         },
       },

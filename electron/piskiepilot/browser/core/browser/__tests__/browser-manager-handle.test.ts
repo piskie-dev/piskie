@@ -200,7 +200,7 @@ describe('BrowserHandle 有界终止（条目寿命 = rawCreation ∪ terminatio
 
     const settlement = handle.terminate('stop');
     const outcome = expect(settlement).rejects.toThrow(/did not settle/);
-    vi.advanceTimersByTime(120_000);   // 宽限期耗尽
+    await vi.advanceTimersByTimeAsync(120_000);
     await outcome;
     expect(BM.instances.get('b1')).toBe(handle);   // 无边界终止凭据 → 条目保留
   });

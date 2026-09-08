@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { retainRetiredModels } from './retired-models.mjs';
 import {
   PISKIE_TO_MODELS_DEV_PROVIDER,
   MODELS_DEV_URL,
@@ -12,6 +13,8 @@ const root = path.resolve(import.meta.dirname, '../..');
 const providerDir = path.join(root, 'shared/ai-model-catalog/providers');
 const selectionPath = path.join(import.meta.dirname, 'models-dev-selection.json');
 const selection = JSON.parse(await fs.readFile(selectionPath, 'utf8'));
+const verifiedAt = new Date().toISOString().slice(0, 10);
+const version = verifiedAt.replaceAll('-', '.');
 
 const catalogProviders = new Set(
   (await fs.readdir(providerDir))
@@ -26,6 +29,7 @@ if (missingCatalogs.length > 0) {
 
 const response = await fetch(MODELS_DEV_URL, {
   headers: { 'user-agent': 'piskie-model-catalog-sync' },
+  signal: AbortSignal.timeout(30_000),
 });
 if (!response.ok) throw new Error(`models.dev: HTTP ${response.status}`);
 const sourceText = await response.text();
@@ -63,6 +67,7 @@ const reasoningTransports = {
   openai: ['openai-effort', 'opaque-required'],
   anthropic: ['anthropic-adaptive-effort', 'visible'],
   gemini: ['gemini-effort', 'visible'],
+  xai: ['openai-effort', 'opaque-required'],
   deepseek: ['deepseek-thinking', 'opaque-required'],
   zhipu: ['deepseek-thinking', 'opaque-required'],
   minimax: ['minimax-thinking', 'opaque-required'],
@@ -99,12 +104,23 @@ function reasoningFor(provider, sourceModel, existingReasoning) {
     const selections = efforts.map((effort) => effort === 'none'
       ? { kind: 'disabled' }
       : { kind: 'effort', effort });
-    const preferred = ['medium', 'high', 'low'].find((effort) => efforts.includes(effort));
+    const preferred = (provider === 'xai' ? ['high', 'medium', 'low'] : ['medium', 'high', 'low'])
+      .find((effort) => efforts.includes(effort));
     return {
       mode: 'effort',
       options: selections,
       defaultSelection: preferred ? { kind: 'effort', effort: preferred } : selections[0],
       mandatory: !efforts.includes('none'),
+      transportPreset,
+      replayPolicy,
+    };
+  }
+  if (provider === 'xai') {
+    return {
+      mode: 'fixed',
+      options: [{ kind: 'enabled' }],
+      defaultSelection: { kind: 'enabled' },
+      mandatory: true,
       transportPreset,
       replayPolicy,
     };
@@ -154,7 +170,8 @@ function toEntry(provider, sourceModel, base) {
       streaming: base?.capabilityProfile?.streaming ?? 'unknown',
     },
     reasoning,
-    lifecycle: base?.lifecycle ?? 'active',
+    lifecycle: sourceModel.status === 'deprecated' ? 'deprecated'
+      : base?.lifecycle === 'retired' ? 'active' : base?.lifecycle ?? 'active',
     ...(releaseDate ? { releaseDate } : {}),
     ...(contextWindow ? { contextWindow, maxContextWindow: contextWindow } : {}),
     ...(maxOutputTokens ? { maxOutputTokens } : {}),
@@ -170,8 +187,8 @@ function toEntry(provider, sourceModel, base) {
         'https://models.dev',
         ...(base?.provenance?.sourceUrls ?? []),
       ]),
-      verifiedAt: selection.verifiedAt,
-      catalogVersion: selection.version,
+      verifiedAt,
+      catalogVersion: version,
     },
   };
 }
@@ -195,15 +212,15 @@ for (const [provider, sourceProviderId] of Object.entries(PISKIE_TO_MODELS_DEV_P
 
   const next = {
     ...current,
-    version: selection.version,
-    verifiedAt: selection.verifiedAt,
+    version,
+    verifiedAt,
     sourceUrls: unique(['https://models.dev', ...current.sourceUrls]),
     inventorySource: {
       id: 'models.dev',
       url: MODELS_DEV_URL,
       sha256: sourceHash,
     },
-    models: [...nextModels, ...currentImageModels],
+    models: [...retainRetiredModels(currentAiModels, nextModels), ...currentImageModels],
   };
   await fs.writeFile(filePath, `${JSON.stringify(next, null, 2)}\n`);
   console.log(`[catalog:sync] ${provider}: ${nextModels.length} models from models.dev (${sourceHash.slice(0, 12)})`);

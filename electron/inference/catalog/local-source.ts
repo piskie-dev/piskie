@@ -5,7 +5,9 @@ import {
   catalogOverlayDocumentSchema,
   modelDefinitionSchema,
   type CatalogOverlayDocument,
+  type CatalogDocument,
   type CatalogSnapshot,
+  type CatalogViews,
   type ModelCatalogSource,
   type ModelDefinition,
 } from './contracts.js';
@@ -15,6 +17,7 @@ export interface LocalCatalogSourceOptions {
   basePath: string;
   overlayPaths?: readonly string[];
   overlayOverrides?: ReadonlyMap<string, CatalogOverlayDocument>;
+  remoteCatalog?: CatalogDocument;
   now?: () => Date;
 }
 
@@ -38,6 +41,10 @@ export class LocalCatalogSource implements ModelCatalogSource {
   }
 
   async load(signal?: AbortSignal): Promise<CatalogSnapshot> {
+    return (await this.loadViews(signal)).effective;
+  }
+
+  async loadViews(signal?: AbortSignal): Promise<CatalogViews> {
     signal?.throwIfAborted();
     const basePath = this.resolve(this.options.basePath);
     const base = catalogDocumentSchema.parse(await readJson(basePath));
@@ -51,6 +58,15 @@ export class LocalCatalogSource implements ModelCatalogSource {
     }
 
     const versions = [base.version];
+    if (this.options.remoteCatalog) {
+      for (const model of this.options.remoteCatalog.models) models.set(model.id, model);
+      versions.push(this.options.remoteCatalog.version);
+    }
+    const system: CatalogSnapshot = {
+      version: versions.join('+'),
+      loadedAt: this.now().toISOString(),
+      models: new Map(models),
+    };
     for (const configuredPath of this.options.overlayPaths ?? []) {
       signal?.throwIfAborted();
       const overlayPath = this.resolve(configuredPath);
@@ -61,9 +77,8 @@ export class LocalCatalogSource implements ModelCatalogSource {
     }
 
     return {
-      version: versions.join('+'),
-      loadedAt: this.now().toISOString(),
-      models,
+      system,
+      effective: { version: versions.join('+'), loadedAt: system.loadedAt, models },
     };
   }
 

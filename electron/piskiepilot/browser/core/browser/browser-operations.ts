@@ -121,30 +121,33 @@ export class BrowserOperations {
   static async getAllCookies(request: {
     browserId: string;
     urls?: readonly string[];
+    signal?: AbortSignal;
   }): Promise<BrowserCookiesResult> {
     return this.#withCdp(request.browserId, async (client) => {
       const result = request.urls?.length
         ? await client.send('Network.getCookies', { urls: [...request.urls] })
         : await client.send('Network.getAllCookies');
       return { success: true, count: result.cookies.length, cookies: result.cookies };
-    });
+    }, request.signal);
   }
 
   static async setCookies(request: {
     browserId: string;
     cookies: readonly Record<string, unknown>[];
+    signal?: AbortSignal;
   }): Promise<Readonly<{ success: true; count: number }>> {
     return this.#withCdp(request.browserId, async (client) => {
       await client.send('Network.setCookies', {
         cookies: request.cookies as unknown as Protocol.Network.CookieParam[],
       });
       return { success: true, count: request.cookies.length };
-    });
+    }, request.signal);
   }
 
   static async deleteCookies(request: {
     browserId: string;
     cookies: readonly Record<string, unknown>[];
+    signal?: AbortSignal;
   }): Promise<Readonly<{ success: true; count: number }>> {
     return this.#withCdp(request.browserId, async (client) => {
       for (const cookie of request.cookies) {
@@ -154,26 +157,27 @@ export class BrowserOperations {
         );
       }
       return { success: true, count: request.cookies.length };
-    });
+    }, request.signal);
   }
 
-  static async clearCookies(browserId: string): Promise<Readonly<{ success: true }>> {
+  static async clearCookies(browserId: string, signal?: AbortSignal): Promise<Readonly<{ success: true }>> {
     return this.#withCdp(browserId, async (client) => {
       await client.send('Network.clearBrowserCookies');
       return { success: true };
-    });
+    }, signal);
   }
 
-  static async getWindowBounds(browserId: string): Promise<Protocol.Browser.Bounds> {
+  static async getWindowBounds(browserId: string, signal?: AbortSignal): Promise<Protocol.Browser.Bounds> {
     return this.#withWindow(browserId, async (client, windowId) => {
       const result = await client.send('Browser.getWindowBounds', { windowId });
       return result.bounds;
-    });
+    }, signal);
   }
 
   static async setWindowBounds(
     browserId: string,
-    bounds: BrowserWindowBoundsInput
+    bounds: BrowserWindowBoundsInput,
+    signal?: AbortSignal
   ): Promise<Protocol.Browser.Bounds> {
     return this.#withWindow(browserId, async (client, windowId) => {
       const geometry: Protocol.Browser.Bounds = {};
@@ -201,7 +205,7 @@ export class BrowserOperations {
       }
       const result = await client.send('Browser.getWindowBounds', { windowId });
       return result.bounds;
-    });
+    }, signal);
   }
 
   static async captureJpeg(
@@ -222,7 +226,11 @@ export class BrowserOperations {
     return BrowserManager.close(browserId);
   }
 
-  static #withCdp<T>(browserId: string, action: (client: CDPSession) => Promise<T>): Promise<T> {
+  static #withCdp<T>(
+    browserId: string,
+    action: (client: CDPSession) => Promise<T>,
+    signal?: AbortSignal
+  ): Promise<T> {
     return BrowserManager.runExclusive(browserId, async ({ automation }) => {
       const client = await automation.getSelectedPage().createCDPSession();
       try {
@@ -231,12 +239,13 @@ export class BrowserOperations {
       } finally {
         await client.detach().catch(() => undefined);
       }
-    });
+    }, signal);
   }
 
   static #withWindow<T>(
     browserId: string,
-    action: (client: CDPSession, windowId: number) => Promise<T>
+    action: (client: CDPSession, windowId: number) => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
     return BrowserManager.runExclusive(browserId, async ({ automation }) => {
       const client = await automation.getSelectedPage().createCDPSession();
@@ -246,7 +255,7 @@ export class BrowserOperations {
       } finally {
         await client.detach().catch(() => undefined);
       }
-    });
+    }, signal);
   }
 }
 

@@ -24,6 +24,7 @@ import type {
   EmbeddedBrowserPresentation,
 } from './desktop-presentation-port.js';
 import { WindowSession } from './window-session.js';
+import type { AgentObservationSource } from '../agent/observations.js';
 import { THEME_BACKGROUND_HOST } from '../../shared/constants/theme-background.js';
 import {
   ATTACHMENT_PREVIEW_HOST,
@@ -59,6 +60,7 @@ export class WindowRegistry implements DesktopPresentationPort {
   /** 应用真正退出中:主窗口关闭不再被拦成隐藏 */
   private quitting = false;
   private onConnectionClosed?: (connectionId: string) => void;
+  private readonly releaseAgentObservations: (() => void)[] = [];
 
   constructor(
     private readonly options: {
@@ -70,6 +72,23 @@ export class WindowRegistry implements DesktopPresentationPort {
 
   setConnectionReleaseHandler(handler: (connectionId: string) => void): void {
     this.onConnectionClosed = handler;
+  }
+
+  observeAgentLifetimes(observations: Pick<AgentObservationSource, 'runtimeReleases' | 'controlStateChanges'>): void {
+    for (const release of this.releaseAgentObservations.splice(0)) release();
+    this.releaseAgentObservations.push(
+      observations.runtimeReleases.subscribe(({ agentId }) => {
+        for (const session of this.sessionsByWindowId.values()) {
+          session.embeddedBrowser.releaseAgent(agentId);
+        }
+      }),
+      observations.controlStateChanges.subscribe(({ agentId, state }) => {
+        const workers = new Set(state.children.map((child) => child.id));
+        for (const session of this.sessionsByWindowId.values()) {
+          session.embeddedBrowser.retainWorkers(agentId, workers);
+        }
+      }),
+    );
   }
 
   async createMainWindow(options: MainWindowOptions): Promise<WindowSession> {
@@ -334,6 +353,7 @@ export class WindowRegistry implements DesktopPresentationPort {
   }
 
   async stop(reason: string): Promise<void> {
+    for (const release of this.releaseAgentObservations.splice(0)) release();
     if (this.stopped) return;
     this.stopped = true;
     const sessions = [...this.sessionsByWindowId.values()];

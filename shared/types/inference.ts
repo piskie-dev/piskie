@@ -139,8 +139,13 @@ export interface InferenceModelQueryResult {
   gateway: 'ai' | 'image';
   operation?: 'generate' | 'edit';
   models: InferenceModelDefinition[];
+  catalogModels: InferenceModelDefinition[];
   availableTargets: InferenceAvailableTarget[];
   issues: InferenceAvailabilityIssue[];
+}
+
+export interface InferenceCatalogRefreshResult {
+  updated: boolean;
 }
 
 export interface InferenceDriverSummary {

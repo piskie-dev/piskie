@@ -75,6 +75,7 @@ export const PrefDeckPage: React.FC = () => {
   const config = useInferenceStore((s) => s.config);
   const drivers = useInferenceStore((s) => s.drivers);
   const models = useInferenceStore((s) => s.models);
+  const catalogModels = useInferenceStore((s) => s.catalogModels);
   const selections = useInferenceStore((s) => s.selections);
   const inferenceError = useInferenceStore((s) => s.error);
   const clearInferenceError = useInferenceStore((s) => s.clearError);
@@ -293,6 +294,7 @@ export const PrefDeckPage: React.FC = () => {
           provider={forgeProvider}
           editingModelId={forge.modelId}
           definitions={models[forge.gateway]}
+          catalogDefinitions={catalogModels[forge.gateway]}
           providerNames={Object.values(config?.providers ?? {}).map((provider) => provider.displayName)}
           onClose={() => setForge(null)}
           onSaved={(providerId) => {

@@ -147,10 +147,29 @@ vi.mock('electron', () => ({
 
 import { WindowRegistry } from '../window-registry.js';
 import type { WindowConnection } from '../../transport/electron/window-connection.js';
+import { createAgentObservations } from '../../agent/observations.js';
 
 beforeEach(() => {
   electron.FakeBrowserWindow.reset();
   vi.clearAllMocks();
+});
+
+it('releases previews through agent lifetime observations and detaches on shutdown', async () => {
+  const { registry, session } = await registryFixture();
+  const observations = createAgentObservations();
+  const release = vi.spyOn(session.embeddedBrowser, 'releaseAgent');
+  const retain = vi.spyOn(session.embeddedBrowser, 'retainWorkers');
+  registry.observeAgentLifetimes(observations.source);
+  observations.publisher.controlStateChanged({
+    agentId: 'session-alpha',
+    state: { children: [{ id: 'worker-one' }] } as never,
+  });
+  expect(retain).toHaveBeenCalledWith('session-alpha', new Set(['worker-one']));
+  observations.publisher.runtimeReleased({ agentId: 'session-alpha', reason: 'deleted' });
+  expect(release).toHaveBeenCalledWith('session-alpha');
+  await registry.stop('test-complete');
+  observations.publisher.runtimeReleased({ agentId: 'session-beta', reason: 'stopped' });
+  expect(release).toHaveBeenCalledOnce();
 });
 
 async function registryFixture(development = false): Promise<{

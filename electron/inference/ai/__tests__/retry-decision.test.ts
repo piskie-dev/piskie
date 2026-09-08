@@ -57,4 +57,42 @@ describe('AI retry policy', () => {
 
     expect(canRetryAiAttempt(error)).toBe(true);
   });
+
+  it('retries a structured stream read error without an HTTP status', () => {
+    const error = new GatewayCallError({
+      source: 'provider',
+      gateway: 'ai',
+      providerId: 'provider',
+      modelId: 'model',
+      driverId: 'openai',
+      stage: 'request',
+      attempt: 1,
+      traceId: 'trace-stream-read',
+      message: 'stream_read_error',
+      upstream: {
+        code: 'stream_read_error',
+        type: 'upstream_error',
+        message: 'stream_read_error',
+      },
+    });
+
+    expect(canRetryAiAttempt(error)).toBe(true);
+  });
+
+  it('does not infer a stream read retry from provider message text', () => {
+    const error = new GatewayCallError({
+      source: 'provider',
+      gateway: 'ai',
+      providerId: 'provider',
+      modelId: 'model',
+      driverId: 'openai',
+      stage: 'request',
+      attempt: 1,
+      traceId: 'trace-stream-read-message',
+      message: 'stream_read_error',
+      upstream: { message: 'stream_read_error' },
+    });
+
+    expect(canRetryAiAttempt(error)).toBe(false);
+  });
 });

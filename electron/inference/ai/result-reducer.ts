@@ -136,6 +136,21 @@ export async function collectAiResult(
   }
 
   const finalizedToolCalls = [...attemptResult.toolCalls.values()].map(finalizeToolCall);
+  const content = attemptResult.content.map(finalizeAssistantPart);
+  if (!content.some(hasMeaningfulContent)) {
+    throw new GatewayCallError({
+      source: 'local',
+      gateway: 'ai',
+      providerId: expectedModel.providerId,
+      modelId: expectedModel.modelId,
+      driverId: 'inference-core',
+      stage: 'collect',
+      attempt: 0,
+      traceId,
+      message: 'AI returned empty response (no content blocks); upstream stream likely truncated',
+      localCode: 'AI_RESULT_EMPTY',
+    });
+  }
   return {
     runId,
     model: expectedModel,
@@ -145,12 +160,16 @@ export async function collectAiResult(
     ...(attemptResult.reasoningSignature && {
       reasoningSignature: attemptResult.reasoningSignature,
     }),
-    content: attemptResult.content.map(finalizeAssistantPart),
+    content,
     reasoningItems: attemptResult.reasoningItems,
     toolCalls: finalizedToolCalls,
     usage: attemptResult.usage,
     stopReason: attemptResult.stopReason,
   };
+}
+
+function hasMeaningfulContent(part: AiAssistantPart): boolean {
+  return part.kind !== 'text' || part.text.length > 0;
 }
 
 function createAttemptResultAccumulator(): AttemptResultAccumulator {

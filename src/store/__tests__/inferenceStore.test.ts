@@ -175,18 +175,20 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
     },
   };
   let planSequence = 0;
+  let catalogByGateway = { ai: [definition], image: [imageDefinition] };
   const plans = new Map<string, { domain: keyof typeof descriptors; request: ConfigPlanRequest }>();
   const inference = {
     listDrivers: vi.fn(async () => (
       [{ id: 'openai', supportedGateways: ['ai', 'image'], acceptedAuth: ['bearer', 'none'] }]
     )),
     queryModels: vi.fn(async ({ gateway }: { gateway: 'ai' | 'image' }) => {
-      const gatewayModels = gateway === 'ai' ? [definition] : [imageDefinition];
+      const gatewayModels = catalogByGateway[gateway];
       const catalogIds = new Set(gatewayModels.map((model) => model.id));
       return {
         catalogVersion: 'test',
         gateway,
         models: gatewayModels,
+        catalogModels: gatewayModels,
         availableTargets: Object.entries(currentConfig.providers).flatMap(([providerId, configured]) => (
           configured.enabled
             ? Object.entries(configured.models).flatMap(([modelId, binding]) => (
@@ -199,6 +201,7 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
         issues: [],
       };
     }),
+    refreshCatalog: vi.fn(async () => ({ updated: true })),
     probe: vi.fn(),
     artifact: vi.fn(async (artifactId: string) => (
       { artifactId, mimeType: 'image/png', dataUrl: 'data:image/png;base64,cGl4ZWxz' }
@@ -277,6 +280,7 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
   return {
     inference,
     config: configClient,
+    setCatalogModels: (models: typeof catalogByGateway) => { catalogByGateway = models; },
     emitConfigChanged: (event: ConfigDomainRevisionChangedEvent) => configChangeListener?.(event),
     unsubscribeConfig,
   };
@@ -319,6 +323,7 @@ function resetStore(currentConfig: InferenceConfig, currentSelections: Inference
     selections: currentSelections,
     drivers: [{ id: 'openai', supportedGateways: ['ai', 'image'], acceptedAuth: ['bearer', 'none'] }],
     models: { ai: [definition], image: [] },
+    catalogModels: { ai: [definition], image: [imageDefinition] },
     availableTargets: {
       ai: [{ providerId: 'provider-main', modelId: 'model-main', catalogId: definition.id }],
       image: [],
@@ -331,6 +336,40 @@ function resetStore(currentConfig: InferenceConfig, currentSelections: Inference
 
 describe('inferenceStore configuration mutations', () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it('refreshes the official catalog and replaces both gateway suggestion lists', async () => {
+    const currentConfig = config();
+    const currentSelections = selections();
+    const gateway = api(currentConfig, currentSelections);
+    const latestAi = { ...definition, id: 'provider/model-latest', displayName: 'Model Latest' };
+    const latestImage = { ...imageDefinition, id: 'provider/image-latest', displayName: 'Image Latest' };
+    resetStore(currentConfig, currentSelections);
+    gateway.setCatalogModels({ ai: [latestAi], image: [latestImage] });
+
+    await expect(useInferenceStore.getState().refreshCatalog()).resolves.toEqual({ updated: true });
+
+    expect(gateway.inference.refreshCatalog).toHaveBeenCalledOnce();
+    expect(gateway.inference.queryModels).toHaveBeenCalledWith({ gateway: 'ai' });
+    expect(gateway.inference.queryModels).toHaveBeenCalledWith({ gateway: 'image' });
+    expect(useInferenceStore.getState().catalogModels).toEqual({
+      ai: [latestAi],
+      image: [latestImage],
+    });
+  });
+
+  it('keeps the last suggestion lists when the official catalog refresh fails', async () => {
+    const currentConfig = config();
+    const currentSelections = selections();
+    const gateway = api(currentConfig, currentSelections);
+    resetStore(currentConfig, currentSelections);
+    gateway.inference.refreshCatalog.mockRejectedValueOnce(new Error('Catalog unavailable'));
+    const previous = useInferenceStore.getState().catalogModels;
+
+    await expect(useInferenceStore.getState().refreshCatalog()).rejects.toThrow('Catalog unavailable');
+
+    expect(gateway.inference.queryModels).not.toHaveBeenCalled();
+    expect(useInferenceStore.getState().catalogModels).toBe(previous);
+  });
 
   it('refreshes revision 14 to 15 when another config entry point commits', async () => {
     const currentSelections = selections();

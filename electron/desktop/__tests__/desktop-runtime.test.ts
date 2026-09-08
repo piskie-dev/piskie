@@ -142,12 +142,14 @@ function fixture(options: {
       degradedCapabilities: [],
     })),
     capabilities: vi.fn(() => ({
+      agent: { observations: { kind: 'agent-observations' } },
       userDataDirectory: '/tmp/piskie-desktop-runtime-test',
       inference: { inferenceHost: { configHost: { kind: 'test-config-host' } } },
     })),
     generation: 'generation-test',
   };
   const windows = {
+    observeAgentLifetimes: vi.fn(),
     setConnectionReleaseHandler: vi.fn(),
     setMainWindowIcon: vi.fn(),
     createMainWindow: vi.fn(options.createWindow ?? (async () => ({ window: {} }))),

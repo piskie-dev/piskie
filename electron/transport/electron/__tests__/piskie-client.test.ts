@@ -4,6 +4,7 @@ import { OBSERVABILITY_TOPICS } from '../../../../shared/electron-contracts/obse
 import { ACCOUNT_OPERATIONS } from '../../../../shared/electron-contracts/account.js';
 import { DESKTOP_OPERATIONS } from '../../../../shared/electron-contracts/desktop.js';
 import { PILOT_OPERATIONS } from '../../../../shared/electron-contracts/pilot.js';
+import { INFERENCE_OPERATIONS } from '../../../../shared/electron-contracts/inference.js';
 import {
   UPDATE_OPERATIONS,
   UPDATE_TOPICS,
@@ -12,6 +13,18 @@ import { createElectronPiskieClient } from '../piskie-client.js';
 import type { ElectronPreloadClient } from '../preload-client.js';
 
 describe('createElectronPiskieClient', () => {
+  it('forwards an explicit official model catalog refresh', async () => {
+    const request = vi.fn(async () => ({ updated: true }));
+    const client = createElectronPiskieClient({
+      transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient,
+      version: 'test',
+      platform: 'linux',
+    });
+
+    await expect(client.inference.refreshCatalog()).resolves.toEqual({ updated: true });
+    expect(request).toHaveBeenCalledWith(INFERENCE_OPERATIONS.refreshCatalog, []);
+  });
+
   it('keeps the account wait open while bounding regular account requests', async () => {
     const request = vi.fn(async () => ({ state: 'signed-out' }));
     const transport = {
@@ -92,12 +105,27 @@ describe('createElectronPiskieClient', () => {
       platform: 'linux',
     });
 
-    await client.pilot.embeddedBrowser.openLocalHtml('/tmp/example.html');
+    const target = { agentId: 'session-alpha', workerId: 'worker-one' };
+    await client.pilot.embeddedBrowser.openLocalHtml(target, '/tmp/example.html');
 
     expect(request).toHaveBeenCalledWith(
       PILOT_OPERATIONS.openLocalHtmlInEmbeddedBrowser,
-      ['/tmp/example.html'],
+      [target, '/tmp/example.html'],
     );
+  });
+
+  it('subscribes to preview snapshots and changes for an explicit target', () => {
+    const subscribe = vi.fn(() => vi.fn());
+    const client = createElectronPiskieClient({
+      transport: { subscribe } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux',
+    });
+    const target = { agentId: 'session-alpha', workerId: 'worker-one' };
+    const listener = vi.fn();
+    client.pilot.embeddedBrowser.observeState(target, listener);
+    expect(subscribe).toHaveBeenCalledWith('pilot.embeddedBrowser.state', {
+      payload: target, onSnapshot: listener, onChange: listener,
+    });
   });
 
   it('does not impose a transport deadline on file and workspace selection', async () => {

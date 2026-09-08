@@ -50,6 +50,7 @@ export const WING_ORDER: readonly VendorWing[] = ['flagship', 'openhub', 'onprem
 const AI_ATLAS: readonly VendorSpec[] = [
   { key: 'anthropic', title: 'Anthropic', brand: 'anthropic', wing: 'flagship', driver: 'anthropic-messages', baseUrl: 'https://api.anthropic.com', keyHint: 'sk-ant-api...', keyRequired: true, authKind: 'api_key', hostHints: ['api.anthropic.com'] },
   { key: 'openai', title: 'OpenAI', brand: 'openai', wing: 'flagship', driver: 'openai', baseUrl: 'https://api.openai.com/v1', keyHint: 'sk-...', keyRequired: true, authKind: 'bearer', hostHints: ['api.openai.com'] },
+  { key: 'xai', title: 'Grok', brand: 'grok', wing: 'flagship', driver: 'openai', baseUrl: 'https://api.x.ai/v1', keyHint: 'xai-...', keyRequired: true, authKind: 'bearer', hostHints: ['api.x.ai'] },
   { key: 'gemini', title: 'Google Gemini', brand: 'gemini', wing: 'flagship', driver: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyHint: 'AI...', keyRequired: true, authKind: 'bearer', hostHints: ['generativelanguage.googleapis.com'] },
   { key: 'deepseek', title: 'DeepSeek', brand: 'deepseek', wing: 'flagship', driver: 'anthropic-messages', baseUrl: 'https://api.deepseek.com/anthropic', keyHint: 'sk-...', keyRequired: true, authKind: 'api_key', hostHints: ['api.deepseek.com'] },
   { key: 'zhipu', title: '智谱 AI', brand: 'zhipu', wing: 'flagship', driver: 'anthropic-messages', baseUrl: 'https://open.bigmodel.cn/api/anthropic', keyHint: 'API Key', keyRequired: true, authKind: 'api_key', hostHints: ['open.bigmodel.cn'] },
@@ -104,6 +105,7 @@ export function vendorLocaleKey(spec: VendorSpec, field: 'title' | 'brief'): str
 const TRANSPORT_DEFAULTS: Readonly<Record<string, ReasoningTransportPreset>> = {
   anthropic: 'anthropic-adaptive-effort',
   openai: 'openai-effort',
+  xai: 'openai-effort',
   gemini: 'gemini-effort',
   deepseek: 'deepseek-thinking',
   zhipu: 'deepseek-thinking',

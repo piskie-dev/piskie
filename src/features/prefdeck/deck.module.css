@@ -1720,6 +1720,33 @@ html[data-theme='light'] .dropCard {
   color: var(--pd-ink);
 }
 
+.catalogRefreshBtn {
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  margin-block: -6px;
+}
+
+.catalogRefreshBtn:disabled {
+  color: var(--pd-faint);
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.catalogRefreshSpin {
+  animation: pd-catalog-spin 800ms linear infinite;
+}
+
+@keyframes pd-catalog-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalogRefreshSpin {
+    animation: none;
+  }
+}
+
 /* 两列排布(弹窗与页内共用) */
 .duoGrid {
   display: grid;

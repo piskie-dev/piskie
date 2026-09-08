@@ -1,5 +1,6 @@
 import type {
   InferenceArtifactPreview,
+  InferenceCatalogRefreshResult,
   InferenceComfyWorkflowAsset,
   InferenceComfyWorkflowBindingCandidates,
   InferenceComfyWorkflowBindingReport,
@@ -14,6 +15,7 @@ export const INFERENCE_OPERATIONS = Object.freeze({
   listDrivers: 'inference.listDrivers',
   driverSchema: 'inference.driverSchema',
   queryModels: 'inference.queryModels',
+  refreshCatalog: 'inference.refreshCatalog',
   importWorkflow: 'inference.importWorkflow',
   inspectWorkflow: 'inference.inspectWorkflow',
   detectBindings: 'inference.detectBindings',
@@ -29,6 +31,7 @@ export interface InferenceClient {
     gateway: 'ai' | 'image';
     operation?: 'generate' | 'edit';
   }): Promise<InferenceModelQueryResult>;
+  refreshCatalog(): Promise<InferenceCatalogRefreshResult>;
   importWorkflow(source: string): Promise<InferenceComfyWorkflowAsset>;
   inspectWorkflow(assetId: string): Promise<InferenceComfyWorkflowInspection>;
   detectBindings(assetId: string): Promise<InferenceComfyWorkflowBindingCandidates>;

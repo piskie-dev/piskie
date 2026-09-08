@@ -1,7 +1,7 @@
 {
   "provider": "minimax",
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://platform.minimaxi.com/docs/api-reference/text-anthropic-api"
@@ -34,9 +34,9 @@
         "replayPolicy": "opaque-required"
       },
       "lifecycle": "active",
-      "contextWindow": 1000000,
-      "maxContextWindow": 1000000,
-      "maxOutputTokens": 128000,
+      "contextWindow": 1048576,
+      "maxContextWindow": 1048576,
+      "maxOutputTokens": 512000,
       "pricing": {
         "inputPerMillion": 0.3,
         "outputPerMillion": 1.2
@@ -45,8 +45,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-01"
     },
@@ -88,8 +88,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-03-18"
     },
@@ -131,8 +131,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-03-18"
     },
@@ -174,8 +174,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-02-13"
     },
@@ -217,8 +217,8 @@
           "https://models.dev",
           "https://platform.minimaxi.com/docs/api-reference/text-anthropic-api"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 204800,
       "releaseDate": "2026-02-12"
@@ -261,8 +261,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-12-23"
     },
@@ -290,8 +290,8 @@
         "replayPolicy": "none"
       },
       "lifecycle": "active",
-      "contextWindow": 196608,
-      "maxOutputTokens": 128000,
+      "contextWindow": 204800,
+      "maxOutputTokens": 131072,
       "tags": [
         "balanced"
       ],
@@ -304,16 +304,16 @@
           "https://models.dev",
           "https://platform.minimaxi.com/docs/api-reference/text-anthropic-api"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
-      "maxContextWindow": 196608,
+      "maxContextWindow": 204800,
       "releaseDate": "2025-10-27"
     }
   ],
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

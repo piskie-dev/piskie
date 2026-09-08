@@ -30,8 +30,8 @@ items 表示你责任范围写入后的最终状态。提交当前属于你的�
 
 const taskItemSchema = z.object({
   id: z.string().describe('看板内稳定且唯一的逻辑任务 ID'),
-  subject: z.string().describe('短而具体的可交付成果名称'),
-  description: z.string().describe('单项范围、产出、验收与必要交接事实'),
+  subject: z.string().describe('短而具体的任务名称'),
+  description: z.string().describe('单项目标、预期产出、完成标准与必要交接事实'),
   status: z.enum(['pending', 'in_progress', 'completed'])
     .describe('工作义务的当前进度；同一 owner 同时最多一个任务为 in_progress'),
   owner: z.string().nullable()

@@ -1,5 +1,6 @@
 import type { ChangeSource } from '../core/change-channel.js';
 import type { EmbeddedBrowserState } from '../../shared/types/embedded-browser.js';
+import type { AgentTarget } from '../../shared/types/agent-control.js';
 import type { CallerWindowConfig } from '../../shared/types/index.js';
 import type { BrowserLaunchWindowSize } from '../piskiepilot/browser/core/browser/browser-launch-spec.js';
 import type { DesktopColorScheme } from '../../shared/electron-contracts/desktop.js';
@@ -8,8 +9,7 @@ export interface DesktopAppearancePort {
   setColorScheme(colorScheme: DesktopColorScheme): void;
 }
 
-export interface EmbeddedBrowserPresentation {
-  readonly changes: ChangeSource<EmbeddedBrowserState>;
+export interface EmbeddedBrowserPage {
   state(): EmbeddedBrowserState;
   navigate(address: string): Promise<boolean>;
   openLocalHtml(filePath: string): Promise<void>;
@@ -17,8 +17,16 @@ export interface EmbeddedBrowserPresentation {
   forward(): void;
   reload(): void;
   stop(): void;
-  setBounds(bounds: { x: number; y: number; width: number; height: number }): void;
-  setVisible(visible: boolean): void;
+}
+
+export interface EmbeddedBrowserPresentation {
+  readonly changes: ChangeSource<{ target: AgentTarget; state: EmbeddedBrowserState }>;
+  open(target: AgentTarget): EmbeddedBrowserPage;
+  get(target: AgentTarget): EmbeddedBrowserPage | undefined;
+  state(target: AgentTarget): EmbeddedBrowserState;
+  close(target: AgentTarget): void;
+  setBounds(target: AgentTarget, bounds: { x: number; y: number; width: number; height: number }): void;
+  setVisible(target: AgentTarget, visible: boolean): void;
 }
 
 export interface DesktopPresentationPort {

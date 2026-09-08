@@ -18,7 +18,7 @@ const MAX_CONTEXT_FIELDS = 12;
 const MAX_ARRAY_ITEMS = 20;
 const MAX_STRING_LENGTH = 256;
 const MAX_DEPTH = 6;
-const MAX_ERROR_CAUSE_DEPTH = 3;
+const MAX_ERROR_CAUSE_DEPTH = 16;
 const MAX_STACK_LENGTH = 8 * 1024;
 
 interface NormalizeOptions {
@@ -60,7 +60,7 @@ export function normalizeLogEvent(
   const normalizedContext = normalizeRecord(mergedContext, knownSecrets, MAX_CONTEXT_FIELDS);
   const normalizedError = record.error === undefined
     ? undefined
-    : normalizeLogError(record.error, knownSecrets);
+    : normalizeLogError(record.error);
   const event: LogEvent = {
     id: (options.createId ?? createUuid)(),
     timestamp: (options.now ?? (() => new Date()))().toISOString(),
@@ -77,8 +77,8 @@ export function normalizeLogEvent(
 
 export function normalizeLogError(
   thrown: unknown,
-  knownSecrets: readonly string[] = [],
   depth = 0,
+  seen = new WeakSet<object>(),
 ): NormalizedLogError {
   if (depth >= MAX_ERROR_CAUSE_DEPTH) {
     return { name: 'Error', message: '[Cause depth exceeded]' };
@@ -86,35 +86,47 @@ export function normalizeLogError(
   if (!isObject(thrown)) {
     return {
       name: thrown === null ? 'null' : typeof thrown,
-      message: normalizeString(safeString(thrown), knownSecrets),
+      message: normalizeString(safeString(thrown)),
     };
   }
+  if (seen.has(thrown)) return { name: 'Error', message: '[Circular]' };
 
-  const name = normalizeString(safePropertyString(thrown, 'name') ?? 'Error', knownSecrets);
+  const name = normalizeString(safePropertyString(thrown, 'name') ?? 'Error');
   const message = normalizeString(
     safePropertyString(thrown, 'message') ?? safeString(thrown),
-    knownSecrets,
   );
   const stackValue = safePropertyString(thrown, 'stack');
   const codeValue = safePropertyString(thrown, 'code');
   const causeValue = safeProperty(thrown, 'cause');
-  const fields = normalizeRecord(thrown, knownSecrets, MAX_CONTEXT_FIELDS, new WeakSet(), 0, new Set([
-    'name', 'message', 'stack', 'code', 'cause',
+  // AggregateError.errors is non-enumerable and contains per-address connection failures.
+  const errorsValue = thrown instanceof AggregateError ? safeProperty(thrown, 'errors') : undefined;
+  const aggregateErrors = Array.isArray(errorsValue) ? errorsValue : undefined;
+  const fields = normalizeRecord(thrown, undefined, MAX_CONTEXT_FIELDS, seen, depth, new Set([
+    'name', 'message', 'stack', 'code', 'cause', ...(aggregateErrors ? ['errors'] : []),
   ]));
 
-  return {
+  seen.add(thrown);
+  const errors = aggregateErrors?.slice(0, MAX_ARRAY_ITEMS)
+    .map((error) => normalizeLogError(error, depth + 1, seen));
+  if (errors && aggregateErrors && aggregateErrors.length > errors.length) {
+    errors.push({ name: 'Error', message: `[${aggregateErrors.length - errors.length} additional errors omitted]` });
+  }
+  const result: NormalizedLogError = {
     name,
     message,
-    ...(stackValue && { stack: redactLogString(stackValue, knownSecrets).slice(0, MAX_STACK_LENGTH) }),
-    ...(codeValue && { code: normalizeString(codeValue, knownSecrets) }),
-    ...(causeValue !== undefined && { cause: normalizeLogError(causeValue, knownSecrets, depth + 1) }),
+    ...(stackValue && { stack: stackValue.slice(0, MAX_STACK_LENGTH) }),
+    ...(codeValue && { code: normalizeString(codeValue) }),
+    ...(causeValue !== undefined && { cause: normalizeLogError(causeValue, depth + 1, seen) }),
+    ...(errors && { errors }),
     ...(Object.keys(fields).length > 0 && { fields }),
   };
+  seen.delete(thrown);
+  return result;
 }
 
 function normalizeRecord(
   input: object,
-  knownSecrets: readonly string[],
+  knownSecrets: readonly string[] | undefined,
   maxFields: number,
   seen = new WeakSet<object>(),
   depth = 0,
@@ -131,7 +143,7 @@ function normalizeRecord(
   const selected = keys.slice(0, maxFields);
   const result: Record<string, JsonLogValue> = {};
   for (const key of selected) {
-    if (isSensitiveLogKey(key)) {
+    if (knownSecrets !== undefined && isSensitiveLogKey(key)) {
       result[key] = REDACTED;
       continue;
     }
@@ -147,7 +159,7 @@ function normalizeRecord(
 
 function normalizeValue(
   value: unknown,
-  knownSecrets: readonly string[],
+  knownSecrets: readonly string[] | undefined,
   seen: WeakSet<object>,
   depth: number,
 ): JsonLogValue {
@@ -159,8 +171,9 @@ function normalizeValue(
   if (typeof value === 'function') return `[Function${value.name ? `: ${value.name}` : ''}]`;
   if (typeof value === 'symbol') return `[Symbol: ${value.description ?? ''}]`;
   if (!isObject(value)) return normalizeString(safeString(value), knownSecrets);
-  if (depth > MAX_DEPTH) return '[Depth exceeded]';
   if (seen.has(value)) return '[Circular]';
+  if (value instanceof Error) return normalizeLogError(value, depth, seen) as unknown as JsonLogValue;
+  if (depth > MAX_DEPTH) return '[Depth exceeded]';
   if (value instanceof Date) {
     try {
       return value.toISOString();
@@ -168,7 +181,6 @@ function normalizeValue(
       return '[Invalid Date]';
     }
   }
-  if (value instanceof Error) return normalizeLogError(value, knownSecrets) as unknown as JsonLogValue;
   if (ArrayBuffer.isView(value)) {
     return { type: value.constructor.name, byteLength: value.byteLength };
   }
@@ -194,21 +206,30 @@ function normalizeValue(
 
 function enforceEventBudget(event: LogEvent): LogEvent {
   if (Buffer.byteLength(JSON.stringify(event), 'utf8') <= MAX_LOG_EVENT_BYTES) return event;
-  const withoutContext: LogEvent = {
+  // Repeated wrapper stacks can exceed the budget before the transport cause is reached.
+  const compacted: LogEvent = {
     ...event,
+    context: { ...event.context, truncated: true },
+    ...(event.error && { error: compactLogError(event.error) }),
+  };
+  if (Buffer.byteLength(JSON.stringify(compacted), 'utf8') <= MAX_LOG_EVENT_BYTES) return compacted;
+
+  const withoutContext: LogEvent = {
+    ...compacted,
     context: { truncated: true },
-    ...(event.error && {
-      error: {
-        name: event.error.name,
-        message: event.error.message,
-        ...(event.error.code && { code: event.error.code }),
-        ...(event.error.stack && { stack: event.error.stack.slice(0, 2_048) }),
-      },
-    }),
   };
   if (Buffer.byteLength(JSON.stringify(withoutContext), 'utf8') <= MAX_LOG_EVENT_BYTES) {
     return withoutContext;
   }
+  const withoutFields: LogEvent = {
+    ...withoutContext,
+    ...(event.error && { error: compactLogError(event.error, false) }),
+  };
+  if (Buffer.byteLength(JSON.stringify(withoutFields), 'utf8') <= MAX_LOG_EVENT_BYTES) {
+    return withoutFields;
+  }
+  let root = event.error;
+  while (root?.cause) root = root.cause;
   return {
     id: event.id,
     timestamp: event.timestamp,
@@ -218,11 +239,32 @@ function enforceEventBudget(event: LogEvent): LogEvent {
     ...(event.scope && { scope: event.scope }),
     origin: event.origin,
     context: { truncated: true },
+    ...(root && { error: errorSummary(root) }),
   };
 }
 
-function normalizeString(value: string, knownSecrets: readonly string[]): string {
-  const redacted = redactLogString(value, knownSecrets);
+function errorSummary(error: NormalizedLogError): NormalizedLogError {
+  return {
+    name: error.name,
+    message: error.message,
+    ...(error.code && { code: error.code }),
+  };
+}
+
+function compactLogError(error: NormalizedLogError, keepFields = true): NormalizedLogError {
+  const fields = keepFields && error.fields
+    ? Object.fromEntries(Object.entries(error.fields).filter(([, value]) => value === null || typeof value !== 'object'))
+    : {};
+  return {
+    ...errorSummary(error),
+    ...(error.cause && { cause: compactLogError(error.cause, keepFields) }),
+    ...(error.errors && { errors: error.errors.map((item) => compactLogError(item, keepFields)) }),
+    ...(Object.keys(fields).length > 0 && { fields }),
+  };
+}
+
+function normalizeString(value: string, knownSecrets?: readonly string[]): string {
+  const redacted = knownSecrets === undefined ? value : redactLogString(value, knownSecrets);
   return redacted.length > MAX_STRING_LENGTH
     ? `${redacted.slice(0, MAX_STRING_LENGTH)}[truncated]`
     : redacted;

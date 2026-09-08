@@ -2,6 +2,7 @@ export type CatalogProviderId =
   | 'anthropic'
   | 'openai'
   | 'gemini'
+  | 'xai'
   | 'deepseek'
   | 'zhipu'
   | 'minimax'

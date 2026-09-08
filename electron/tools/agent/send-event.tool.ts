@@ -61,7 +61,7 @@ function roleSpecificSchema(
         },
         message: {
           ...(schema.properties.message as Record<string, unknown>),
-          description: '发送给 Worker 的完整、自包含更新',
+          description: 'Worker 继续工作所需的新事实或要求。涉及新增或变更任务时，明确交付要求及原任务如何处理。',
         },
         summary,
       },
@@ -76,11 +76,11 @@ function roleSpecificSchema(
       type: {
         ...(schema.properties.type as Record<string, unknown>),
         enum: [...EVENT_TYPES],
-        description: 'message 为普通报告；completed、failed、user_stopped 为终态；need_user_action 表示需要用户介入',
+        description: 'message 为协作请求；completed、failed、user_stopped 为终态；need_user_action 表示需要用户介入',
       },
       message: {
         ...(schema.properties.message as Record<string, unknown>),
-        description: '发给 Director 的完整、自包含报告',
+        description: '完整、自包含的事件正文',
       },
       summary,
     },
@@ -89,16 +89,11 @@ function roleSpecificSchema(
   };
 }
 
-const DIRECTOR_DESCRIPTION = `向正在运行的 Worker 发送新的信息或要求。只发送 type="message"，并指定目标 Worker 的完整 subagentId。
+const DIRECTOR_DESCRIPTION = `当用户要求变化、需要解决 Worker 的协作请求，或已确认的新事实使原有任务安排不再适用时，向对应 Worker 发送继续执行所需的信息或调整。只发送 type="message"，并指定目标 Worker 的完整 subagentId。
 
-message 应完整说明变化后的目标、范围、约束以及继续执行所需事实。send_event 必须单独调用，不得与其他工具混在同一响应中。
+send_event 必须单独调用，不得与其他工具混在同一响应中。`;
 
-任务范围变化示例：
-\`send_event({ type: "message", targetId: "<subagentId>", message: "保留已经完成并验证的部分。新增要求是……；新的范围边界是……；接下来按……验收并回报。" })\``;
-
-const WORKER_DESCRIPTION = `向 Director 报告 Assignment 状态或请求用户介入。
-
-- message：发送不结束 Assignment 的普通报告。
+const WORKER_DESCRIPTION = `- message：普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。
 - completed：当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径和验证结论。
 - failed：当前 Assignment 无法完成；message 写明原因、原始错误、已完成部分和未完成项。
 - user_stopped：用户明确停止当前 Assignment。

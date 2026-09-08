@@ -81,7 +81,7 @@ export class WorkerRole implements AgentRole {
       if (!snapshot) {
         throw new Error('Worker 缺少创建期 Task Board 快照');
       }
-      // [提示词锚点] SubagentTool“编写 prompt”说明依赖此处只注入 Assignment，不继承 Parent 对话。
+      // [提示词锚点] SubagentTool 的 prompt 参数说明依赖此处只注入 Assignment，不继承 Parent 对话。
       host.addUserMessage({
         text: renderAssignmentInitialMessage(subConfig, snapshot),
         subtype: 'assignment',

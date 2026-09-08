@@ -63,10 +63,12 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   private isBrowserMode = false;
   /** navigateTo 成功后才为 true，防止 ScreenPreview 提前订阅 */
   private browserLaunched = false;
-  /** false 表示接管手动已打开的浏览器，普通 teardown 只松手不关窗。 */
+  /** Whether startup needs to launch a browser or reuse the current instance. */
   private ownsBrowser = false;
   /** 绑定环境只有成功声明占用后才取得关闭权，避免冲突回滚误关当前占用者。 */
   private environmentOccupancyClaimed = false;
+  private instanceOccupancyClaimed = false;
+  private stopped = false;
 
   init(host: AgentHost, config: Record<string, unknown>): void {
     this.host = host;
@@ -79,6 +81,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   // ─── 生命周期 ──────────────────────────────────────────
 
   async onStart(): Promise<void> {
+    if (this.stopped) return;
     const agentId = this.host.id;
     const skills = this.host.getSkillCatalog();
     const browser = this.host.getBrowserControl();
@@ -128,6 +131,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
           `浏览器实例 ${this.browserId} 当前被 ${instanceClaim.heldBy.occupantName} 占用，请先处理冲突或稍后重试`
         );
       }
+      this.instanceOccupancyClaimed = true;
 
       // 占用齐全后再做唯一一次 owned/borrowed 判定；失败回滚阶段尚未取得关闭权。
       this.ownsBrowser = !browser.hasBrowser(this.browserId);
@@ -154,8 +158,9 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
               fingerprint: this.config.advancedSettings?.fingerprint,
               backgroundMode: this.config.advancedSettings?.backgroundMode ?? true,
             });
-        // owned 才显式启动；borrowed 保持现有 generation。
+        if (this.stopped) return;
         await browser.launch(spec);
+        if (this.stopped) return;
         if (this.config.browserEnvironmentId) {
           browserEnvironmentRuntime.recordAgentBrowserStarted(
             this.config.browserEnvironmentId,
@@ -202,13 +207,11 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
    * （errors 非空 → 租约保留）。不碰租约（释放唯一归 releaseResources）。
    */
   async onDestroyBegin(): Promise<void> {
+    this.stopped = true;
     const agentId = this.host.id;
     const browser = this.host.getBrowserControl();
     if (!browser) return;
-    if (!this.ownsBrowser) {
-      return;
-    }
-    if (this.config.browserEnvironmentId && !this.environmentOccupancyClaimed) {
+    if (!this.environmentOccupancyClaimed || !this.instanceOccupancyClaimed) {
       return;
     }
 
@@ -247,6 +250,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
     this.browserId = undefined;
     this.browserLaunched = false;
     this.environmentOccupancyClaimed = false;
+    this.instanceOccupancyClaimed = false;
   }
 
   // ─── 工具上下文贡献 ──────────────────────────────────────

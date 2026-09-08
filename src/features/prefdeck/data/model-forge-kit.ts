@@ -14,8 +14,9 @@ import type {
   InferenceModelBinding,
   InferenceModelCapabilities,
   InferenceModelDefinition,
+  InferenceProviderInstance,
 } from '../../../../shared/types/inference';
-import type { GatewayKind } from './vendor-atlas';
+import { familyOf, type GatewayKind, type VendorSpec } from './vendor-atlas';
 import { recordOf } from './record-shape';
 
 /* ── 能力三态 ── */
@@ -163,6 +164,19 @@ export function wireIdOf(definition: InferenceModelDefinition): string {
   return prefix && definition.id.startsWith(prefix) ? definition.id.slice(prefix.length) : definition.id;
 }
 
+export function compatibleModelDefinitions(
+  definitions: readonly InferenceModelDefinition[],
+  spec: VendorSpec,
+  provider?: InferenceProviderInstance,
+): InferenceModelDefinition[] {
+  const bound = new Set(Object.values(provider?.models ?? {}).map((binding) => binding.catalogId));
+  return definitions.filter((model) => (
+    model.compatibleDrivers.includes(spec.driver)
+    && (spec.wing === 'diy' ? bound.has(model.id) : model.family === familyOf(spec))
+    && model.lifecycle !== 'retired'
+  )).sort(freshFirst);
+}
+
 /** 目录排序:发布日期新→旧,再按目录更新时间,再按 id */
 export function freshFirst(
   left: InferenceModelDefinition,
@@ -171,13 +185,13 @@ export function freshFirst(
   if (left.releaseDate && right.releaseDate && left.releaseDate !== right.releaseDate) {
     return right.releaseDate.localeCompare(left.releaseDate);
   }
-  if (left.releaseDate) return -1;
-  if (right.releaseDate) return 1;
+  if (left.releaseDate && !right.releaseDate) return -1;
+  if (!left.releaseDate && right.releaseDate) return 1;
   if (left.source.updatedAt && right.source.updatedAt && left.source.updatedAt !== right.source.updatedAt) {
     return right.source.updatedAt.localeCompare(left.source.updatedAt);
   }
-  if (left.source.updatedAt) return -1;
-  if (right.source.updatedAt) return 1;
+  if (left.source.updatedAt && !right.source.updatedAt) return -1;
+  if (!left.source.updatedAt && right.source.updatedAt) return 1;
   return left.id.localeCompare(right.id);
 }
 

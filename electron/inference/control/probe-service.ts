@@ -169,7 +169,7 @@ function aiSmokeRequest(target: CompiledTarget): AiRequest {
     model: target.ref,
     messages: [{ role: 'user', content: [{ kind: 'text', text: 'hi' }] }],
     generation: {
-      maxOutputTokens: 16,
+      maxOutputTokens: 128,
       ...(reasoning && { reasoning }),
     },
   };

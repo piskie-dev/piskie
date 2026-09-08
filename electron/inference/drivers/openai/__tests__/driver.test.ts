@@ -7,6 +7,8 @@ import { AIErrorType } from '../../../../../shared/constants/index.js';
 import { classifyGatewayCallError, GatewayCallError } from '../../../execution/call-error.js';
 import type { AttemptContext } from '../../../execution/contracts.js';
 import { createOpenAiDriver } from '../driver.js';
+import { normalizeAIRequestFailure, RecordedAIRequestError } from '../../../../core/ai/ai-request-error.js';
+import { createAppLog, MemoryLogSink } from '../../../../observability/logging/app-log.js';
 
 const servers: http.Server[] = [];
 
@@ -534,8 +536,11 @@ describe('OpenAI SDK driver', () => {
   });
 
   it('keeps an actual SDK connection failure classified as transport', async () => {
+    const root = Object.assign(new Error('connect ECONNREFUSED 192.0.2.10:443'), {
+      code: 'ECONNREFUSED', syscall: 'connect', address: '192.0.2.10', port: 443,
+    });
     const fetch = vi.fn(async () => {
-      throw new TypeError('socket unavailable');
+      throw new TypeError('fetch failed', { cause: root });
     }) as unknown as typeof globalThis.fetch;
     const configuredProvider = provider('http://127.0.0.1:1/v1');
     configuredProvider.driverOptions = { wireApi: 'chat_completions' };
@@ -558,5 +563,22 @@ describe('OpenAI SDK driver', () => {
     expect(failure).toMatchObject({ source: 'transport' });
     expect((failure as GatewayCallError).upstream).toBeUndefined();
     expect(classifyGatewayCallError(failure as GatewayCallError)).toBe(AIErrorType.NETWORK);
+
+    const sink = new MemoryLogSink();
+    createAppLog({ sink }).error({
+      event: 'agent.pump.run.failed',
+      message: 'Agent pump failed',
+      error: new RecordedAIRequestError(normalizeAIRequestFailure(failure), failure),
+    });
+    expect(sink.events).toHaveLength(1);
+    expect(sink.events[0].error?.cause?.cause?.cause).toMatchObject({
+      name: 'TypeError',
+      message: 'fetch failed',
+      cause: {
+        message: root.message,
+        code: 'ECONNREFUSED',
+        fields: { syscall: 'connect', address: '192.0.2.10', port: 443 },
+      },
+    });
   });
 });

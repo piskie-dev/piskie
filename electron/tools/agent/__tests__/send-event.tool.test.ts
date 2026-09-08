@@ -119,7 +119,9 @@ describe('send_event ToolDefinition', () => {
     ]);
     expect(director?.input_schema.properties.type).toMatchObject({ const: 'message' });
     expect(director?.input_schema.required).toEqual(['type', 'targetId', 'message']);
-    expect(director?.description).toContain('变化后的目标、范围、约束');
+    expect(director?.input_schema.properties.message).toMatchObject({
+      description: 'Worker 继续工作所需的新事实或要求。涉及新增或变更任务时，明确交付要求及原任务如何处理。',
+    });
     expect(director?.description).not.toContain('completed：');
 
     const worker = definition('worker');
@@ -131,6 +133,9 @@ describe('send_event ToolDefinition', () => {
       enum: ['message', 'completed', 'failed', 'user_stopped', 'need_user_action'],
     });
     expect(worker?.input_schema.required).toEqual(['type', 'message']);
+    const workerReportGuidance = '普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。';
+    expect(worker?.description).toContain(workerReportGuidance);
+    expect(director?.description).not.toContain(workerReportGuidance);
     expect(worker?.description).toContain(
       '之后收到新的用户要求或 Director 消息时，继续按新要求处理',
     );

@@ -1,13 +1,71 @@
 {
   "provider": "openai",
-  "version": "2026.07.10.4+image.cac66563dfa1",
-  "verifiedAt": "2026-08-24",
+  "version": "2026.09.05+image.0ec013ae43fa",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://developers.openai.com/api/docs/models",
     "https://developers.openai.com/api/docs/guides/reasoning",
     "https://models.dev/api.json"
   ],
   "models": [
+    {
+      "id": "gpt-6-astra",
+      "name": "GPT-6 Astra",
+      "provider": "openai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-09-04",
+      "contextWindow": 1050000,
+      "maxContextWindow": 1050000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
     {
       "id": "gpt-5.6",
       "name": "GPT-5.6",
@@ -58,15 +116,15 @@
       "maxContextWindow": 1050000,
       "maxOutputTokens": 128000,
       "pricing": {
-        "inputPerMillion": 5,
-        "outputPerMillion": 30
+        "inputPerMillion": 4,
+        "outputPerMillion": 20
       },
       "provenance": {
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -123,8 +181,8 @@
           "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
           "https://developers.openai.com/api/docs/guides/latest-model"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "contextWindow": 1050000,
       "maxContextWindow": 1050000,
@@ -189,15 +247,15 @@
           "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
           "https://developers.openai.com/api/docs/guides/latest-model"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "contextWindow": 1050000,
       "maxContextWindow": 1050000,
       "maxOutputTokens": 128000,
       "pricing": {
-        "inputPerMillion": 5,
-        "outputPerMillion": 30
+        "inputPerMillion": 4,
+        "outputPerMillion": 20
       },
       "releaseDate": "2026-07-09"
     },
@@ -255,8 +313,8 @@
           "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
           "https://developers.openai.com/api/docs/guides/latest-model"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "contextWindow": 1050000,
       "maxContextWindow": 1050000,
@@ -320,8 +378,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -370,8 +428,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -427,8 +485,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -484,8 +542,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -541,8 +599,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -591,8 +649,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -618,7 +676,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2026-03-03",
       "contextWindow": 128000,
       "maxContextWindow": 128000,
@@ -631,8 +689,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -688,8 +746,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -745,8 +803,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -802,8 +860,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -831,7 +889,7 @@
         "transportPreset": "openai-effort",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-12-11",
       "contextWindow": 128000,
       "maxContextWindow": 128000,
@@ -844,8 +902,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -894,8 +952,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -947,8 +1005,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -989,8 +1047,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1053,8 +1111,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 400000,
       "releaseDate": "2025-08-07"
@@ -1119,8 +1177,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 400000,
       "releaseDate": "2025-08-07"
@@ -1175,8 +1233,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1225,8 +1283,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1289,8 +1347,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 200000,
       "releaseDate": "2025-04-16"
@@ -1339,7 +1397,7 @@
         "transportPreset": "openai-effort",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 200000,
       "maxOutputTokens": 100000,
       "tags": [
@@ -1355,8 +1413,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 200000,
       "releaseDate": "2025-04-16"
@@ -1400,8 +1458,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1047576,
       "releaseDate": "2025-04-14"
@@ -1445,8 +1503,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1047576,
       "releaseDate": "2025-04-14"
@@ -1474,7 +1532,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "contextWindow": 1047576,
       "maxOutputTokens": 32768,
       "tags": [
@@ -1490,8 +1548,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1047576,
       "releaseDate": "2025-04-14"
@@ -1529,7 +1587,7 @@
         "transportPreset": "openai-effort",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2025-03-19",
       "contextWindow": 200000,
       "maxContextWindow": 200000,
@@ -1542,8 +1600,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1579,7 +1637,7 @@
         "transportPreset": "openai-effort",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2024-12-20",
       "contextWindow": 200000,
       "maxContextWindow": 200000,
@@ -1592,8 +1650,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1629,7 +1687,7 @@
         "transportPreset": "openai-effort",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2024-12-05",
       "contextWindow": 200000,
       "maxContextWindow": 200000,
@@ -1642,8 +1700,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1682,8 +1740,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1722,8 +1780,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1765,8 +1823,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 128000,
       "releaseDate": "2024-07-18"
@@ -1810,8 +1868,8 @@
           "https://developers.openai.com/api/docs/models",
           "https://developers.openai.com/api/docs/guides/reasoning"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 128000,
       "releaseDate": "2024-05-13"
@@ -1839,7 +1897,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2024-05-13",
       "contextWindow": 128000,
       "maxContextWindow": 128000,
@@ -1852,8 +1910,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1879,7 +1937,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2023-11-06",
       "contextWindow": 8192,
       "maxContextWindow": 8192,
@@ -1892,8 +1950,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1919,7 +1977,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "deprecated",
       "releaseDate": "2023-11-06",
       "contextWindow": 128000,
       "maxContextWindow": 128000,
@@ -1932,8 +1990,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -1960,8 +2018,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "models.dev-image:0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
       }
     },
     {
@@ -1989,8 +2047,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "models.dev-image:0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
       }
     },
     {
@@ -2018,8 +2076,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "models.dev-image:0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
       }
     },
     {
@@ -2047,8 +2105,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "models.dev-image:0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
       }
     },
     {
@@ -2075,19 +2133,19 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "models.dev-image:cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "models.dev-image:0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
       }
     }
   ],
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   },
   "imageInventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

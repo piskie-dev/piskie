@@ -269,7 +269,8 @@ describe('DefaultAgentInferencePort', () => {
             yield { ...base, kind: 'tool.completed', sequence: 6, callId: 'call_1' };
             yield { ...base, kind: 'response.completed', sequence: 7, stopReason: 'tool_use' };
           } else {
-            yield { ...base, kind: 'response.completed', sequence: 2, stopReason: 'end_turn' };
+            yield { ...base, kind: 'text.delta', sequence: 2, text: 'Done.' };
+            yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn' };
           }
         })();
         return { events, statistics: Promise.resolve({}) };
@@ -484,7 +485,8 @@ describe('DefaultAgentInferencePort', () => {
         events: (async function* (): AsyncIterable<AiEvent> {
           const base = { runId: context.runId, emittedAt: 1, attempt: 1 };
           yield { ...base, kind: 'response.started', sequence: 1, model: request.model, configRevision: 5 };
-          yield { ...base, kind: 'response.completed', sequence: 2, stopReason };
+          yield { ...base, kind: 'text.delta', sequence: 2, text: 'Partial response.' };
+          yield { ...base, kind: 'response.completed', sequence: 3, stopReason };
         })(),
         statistics: Promise.resolve({}),
       }),

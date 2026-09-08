@@ -18,7 +18,7 @@ import { TaskBoardError, taskBoardService } from '../../agent-runs/task-board-se
 
 const BASE_TYPES = new Set(['browser', 'local']);
 const BASE_TYPE_DESCRIPTIONS = Object.freeze([
-  { name: 'browser', mode: 'browser' as const, description: '操作网站的通用浏览器 Worker' },
+  { name: 'browser', mode: 'browser' as const, description: '可操作网站、处理本地文件和执行命令的通用 Worker' },
   { name: 'local', mode: 'local' as const, description: '处理本地文件和命令的通用 Worker' },
 ]);
 
@@ -41,8 +41,17 @@ const subagentSchema = z
       .min(1)
       .refine((ids) => new Set(ids).size === ids.length, 'taskIds 不能包含重复 ID')
       .optional()
-      .describe('本次 Assignment 包含的一个或多个当前 Task Board 细任务 ID（create 必填）'),
-    prompt: optionalString('完整、自包含的任务简报（create 必填）'),
+      .describe('将本次交给同一 Worker 的全部任务 ID 一并填写。'),
+    prompt: optionalString(
+      `完整、自包含的任务prompt。
+
+把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断，但不知道当前对话和既有进展。
+
+填写 prompt 时，向 Worker 交代：
+- 要完成的目标、用户已明确的要求、预期产出和完成标准；
+- 已知事实、已有进展，以及已经尝试或排除的做法；
+- 相关材料、入口和环境信息，作为开展工作的线索。`
+    ),
     skills: z
       .array(z.string())
       .optional()
@@ -169,22 +178,8 @@ export class SubagentTool extends BaseTool<SubagentParams> {
     schema: subagentSchema,
     modelInputSchema: (schema, context) =>
       withAvailableWorkerTypes(schema, context.subagentTypes, context.subagentResources),
-    description: `创建 Worker 执行边界清晰的独立 Assignment，或提前终止仍在运行的 Worker。subject
+    description: `创建 Worker 完成交付目标明确的 Assignment，或提前终止仍在运行的 Worker。subject
 使用具体的工作包名称；一个 browser Worker 只负责一个网站或一段连续的业务上下文。
-
-## 编写 prompt
-
-把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断，但不知道当前对话
-和既有进展。prompt 应完整、自包含，并包含：
-
-- 目标、范围和可观察结果；
-- 已知、尝试过和已排除的事实；
-- 安全边界与用户约束；
-- 所需文件路径、网站入口和环境标识；
-- 期望产出、验证标准和需要回报的关键事实；
-- 多项任务之间的边界、依赖和顺序。
-
-一次响应可以并行创建多个互不冲突的 Assignment。
 
 action=stop 只用于提前终止卡死或不再需要的 Worker，并传入创建结果返回的完整 subagentId。`,
   };

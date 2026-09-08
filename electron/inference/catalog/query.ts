@@ -34,9 +34,9 @@ export function resolveBoundModelDefinition(
   input: { catalogId: string; upstreamId: string; driverId: string },
 ): ModelDefinition | undefined {
   const configured = snapshot.models.get(input.catalogId);
-  if (!configured || configured.source.kind === 'bundled') return configured;
+  if (!configured || configured.source.kind !== 'local') return configured;
   const bundledDefinition = [...snapshot.models.values()].find((candidate) => (
-    candidate.source.kind === 'bundled'
+    candidate.source.kind !== 'local'
     && candidate.kind === configured.kind
     && candidate.compatibleDrivers.includes(input.driverId)
     && upstreamId(candidate.id) === input.upstreamId

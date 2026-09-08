@@ -1,7 +1,7 @@
 {
   "provider": "baidu",
-  "version": "2026.07.10.1+image.eb70f8daf84e",
-  "verifiedAt": "2026-08-24",
+  "version": "2026.07.10.1+image.3f596eec3d42",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
     "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
@@ -103,8 +103,8 @@
         "sourceUrls": [
           "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "baidu-docs:3f596eec3d427f4526aba8660c36f8110ab7d4da59c3cde216bcb3dc9e134e01"
       }
     },
     {
@@ -129,8 +129,8 @@
         "sourceUrls": [
           "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "baidu-docs:3f596eec3d427f4526aba8660c36f8110ab7d4da59c3cde216bcb3dc9e134e01"
       }
     },
     {
@@ -156,14 +156,14 @@
         "sourceUrls": [
           "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "baidu-docs:eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "baidu-docs:3f596eec3d427f4526aba8660c36f8110ab7d4da59c3cde216bcb3dc9e134e01"
       }
     }
   ],
   "imageInventorySource": {
     "id": "baidu-docs",
     "url": "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j",
-    "sha256": "eb70f8daf84e6895a46e38382d73e4f97844b5d5dc191c4c3f027cc9257268e5"
+    "sha256": "3f596eec3d427f4526aba8660c36f8110ab7d4da59c3cde216bcb3dc9e134e01"
   }
 }

@@ -8,11 +8,7 @@
  * **配 LRU 上限 5**（只省 CPU 不省内存）。每个槽是独立组件，自己订阅自己的
  * agent（见 `RightPanelSlot`）——否则隐藏槽只能渲染空壳，缓存就只在同一 agent 内生效。
  *
- * ## 关栏的方式：**关 tab，不是按收起键**
- *
- * 右栏是 tab 形态，那么"收起"就该是 tab 的自然结果：每个 tab 可关，
- * **关到没有 tab 时整栏自动消失**。文件、浏览器等内容入口会在用户再次打开内容时
- * 恢复对应 tab，不另设无明确目标的通用展开按钮。
+ * 侧栏可独立收起；关闭标签由模式层按面板用途处理其生命周期。
  *
  * 可见 tab 的清单与关闭集都由模式层（`ThreadMode`）持有：它要用同一份信息决定整栏出不出。
  */
@@ -24,6 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { TopRail } from '../../chrome/TopRail';
 import { useLruCache } from '../../data/useLruCache';
 import type { WorkerVM } from '../../data/vm';
+import type { EmbeddedBrowserState } from '../../../../../shared/types/embedded-browser';
+import type { AgentTarget } from '../../../../../shared/types/agent-control';
 import { BrowserPanel } from './BrowserPanel';
 import type { FileReviewTarget } from '../../content/fileReviewTarget';
 import { resolveSelectedPanel, type PanelKey } from './panels';
@@ -68,6 +66,8 @@ export interface RightPanelProps {
   readonly onPick: (panel: PanelKey) => void;
   /** 用户明确打开的文件操作或正文路径；只决定审阅内容，不锁死选中页。 */
   readonly reviewTarget?: FileReviewTarget;
+  readonly browserState: EmbeddedBrowserState;
+  readonly browserTarget: AgentTarget;
   readonly topRailActions?: React.ReactNode;
 }
 
@@ -80,6 +80,8 @@ export const RightPanel = memo<RightPanelProps>(
     wanted,
     onPick,
     reviewTarget,
+    browserState,
+    browserTarget,
     topRailActions,
   }) => {
     const { t } = useTranslation();
@@ -148,7 +150,11 @@ export const RightPanel = memo<RightPanelProps>(
               React 外壳卸载零成本 */}
           {selected === 'browser' ? (
             <div className={styles.slot}>
-              <BrowserPanel />
+              <BrowserPanel
+                key={`${browserTarget.agentId}|${browserTarget.workerId ?? ''}`}
+                target={browserTarget}
+                state={browserState}
+              />
             </div>
           ) : selected === 'review' ? (
             <div className={styles.slot}>
