@@ -301,6 +301,7 @@ describe('OAuth 凭据存储', () => {
 
 interface FakeAuthServerOptions {
   /** 带 scope 的授权请求回 error=invalid_scope（测无 scope 重试） */
+  grantTypesSupported?: string[]
   rejectScopes?: boolean
   /** 回调里带上的 iss（缺省 = 真实 issuer；用于测 RFC 9207 校验） */
   issOverride?: string
@@ -309,7 +310,7 @@ interface FakeAuthServerOptions {
 
 /** 假 authorization server + 受保护 MCP endpoint（同一 origin） */
 async function startFakeAuthServer(options: FakeAuthServerOptions = {}) {
-  const state = { tokenRequests: [] as URLSearchParams[], issuedCode: 'authcode-1' }
+  const state = { registrations: [] as Record<string, unknown>[], tokenRequests: [] as URLSearchParams[], issuedCode: 'authcode-1' }
   let base = ''
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', base)
@@ -337,12 +338,18 @@ async function startFakeAuthServer(options: FakeAuthServerOptions = {}) {
         token_endpoint: `${base}/token`,
         registration_endpoint: `${base}/register`,
         code_challenge_methods_supported: ['S256'],
+        ...(options.grantTypesSupported ? { grant_types_supported: options.grantTypesSupported } : {}),
       }))
       return
     }
     if (url.pathname === '/register' && req.method === 'POST') {
-      res.writeHead(201, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ client_id: 'registered-client' }))
+      let body = ''
+      req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+      req.on('end', () => {
+        state.registrations.push(JSON.parse(body))
+        res.writeHead(201, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ client_id: 'registered-client' }))
+      })
       return
     }
     if (url.pathname === '/authorize') {
@@ -508,4 +515,40 @@ describe('OAuth 授权流（假 AS 全链）', () => {
     })).rejects.toSatisfy((cause: unknown) =>
       cause instanceof OAuthFlowError && cause.code === 'NOT_HTTP')
   })
+})
+
+
+describe('OAuth provider interoperability and cancellation', () => {
+  it('registers only the grants advertised by the authorization server', async () => {
+    const root = await temporaryDirectory()
+    const { base, state } = await startFakeAuthServer({ grantTypesSupported: ['authorization_code', 'urn:ietf:params:oauth:grant-type:device_code'] })
+    await performOAuthLogin({ serverName: 'sample', config: { url: `${base}/mcp` }, configRoot: root,
+      scopes: ['key:read'], openAuthorizationUrl: fakeBrowser })
+    expect(state.registrations[0]?.grant_types).toEqual(['authorization_code'])
+    expect((await findIssuerRecordByResource(root, `${base}/mcp`))?.tokens.accessToken).toBe('flow-at')
+  })
+
+  it.each(['/mcp', '/.well-known/oauth-protected-resource', '/.well-known/oauth-authorization-server', '/register', '/token'])(
+    'cancels the active %s request and does not save unfinished credentials', async (blockedPath) => {
+      const root = await temporaryDirectory()
+      const { base } = await startFakeAuthServer()
+      const controller = new AbortController()
+      const reason = new Error('sample cancellation')
+      const entered = Promise.withResolvers<void>()
+      const routedFetch: typeof fetch = (input, init) => {
+        if (new URL(String(input)).pathname !== blockedPath) return fetch(input, init)
+        entered.resolve()
+        return new Promise((_resolve, reject) => {
+          init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true })
+        })
+      }
+      const login = performOAuthLogin({ serverName: 'sample', config: { url: `${base}/mcp` }, configRoot: root,
+        fetch: routedFetch, signal: controller.signal, openAuthorizationUrl: fakeBrowser })
+      const rejected = expect(login).rejects.toBe(reason)
+      await entered.promise
+      controller.abort(reason)
+      await rejected
+      expect(await findIssuerRecordByResource(root, `${base}/mcp`)).toBeUndefined()
+    },
+  )
 })

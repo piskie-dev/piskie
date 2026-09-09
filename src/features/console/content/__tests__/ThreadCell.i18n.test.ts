@@ -4,7 +4,7 @@ import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ToolNode } from '@/domains/transcript/nodes';
+import type { NoticeNode, ToolNode, UserNode } from '@/domains/transcript/nodes';
 import '@/i18n';
 import { messageText, rawText } from '../../data/presentationText';
 
@@ -50,6 +50,91 @@ afterAll(() => {
 });
 
 describe('ThreadCell locale presentation', () => {
+  it('renders parent and child flow messages with the same disclosure structure', async () => {
+    const parentNode: UserNode = {
+      kind: 'user',
+      id: 'parent-message-1',
+      ts: 1,
+      sourceIndex: 0,
+      origin: 'parent',
+      titleKey: 'transcript.title.parentEvent',
+      summary: rawText('继续检查构建结果'),
+      text: '请继续检查完整构建结果。',
+      tone: 'neutral',
+      interaction: 'expand',
+      defaultExpanded: false,
+      summaryDuplicatesDetail: false,
+      detail: () => ({ sections: [{ value: '请继续检查完整构建结果。', format: 'text' }] }),
+    };
+    const childNode: NoticeNode = {
+      kind: 'notice',
+      id: 'child-message-1',
+      ts: 2,
+      sourceIndex: 1,
+      source: 'worker-1',
+      text: '构建检查已经完成。',
+      eventType: 'message',
+      titleKey: 'transcript.notice.workerMessage',
+      summary: rawText('构建检查已经完成'),
+      tone: 'neutral',
+      interaction: 'expand',
+      defaultExpanded: false,
+      summaryDuplicatesDetail: false,
+      detail: () => ({ sections: [{ value: '构建检查已经完成。', format: 'text' }] }),
+    };
+
+    await act(async () => {
+      root.render(createElement(
+        'div',
+        null,
+        createElement(ThreadCell, { cell: parentNode }),
+        createElement(ThreadCell, { cell: childNode }),
+      ));
+    });
+
+    const flowEvents = [...container.querySelectorAll<HTMLElement>('[data-flow-event]')];
+    expect(flowEvents).toHaveLength(2);
+    const toggles = flowEvents.map((event) => event.querySelector<HTMLButtonElement>('button'));
+    expect(toggles.every(Boolean)).toBe(true);
+    expect(toggles[0]?.className).toBe(toggles[1]?.className);
+    expect(flowEvents[0]?.dataset.eventType).toBe('message');
+    expect(flowEvents[1]?.dataset.eventType).toBe('message');
+    expect(container.textContent).toContain('收到主流程消息');
+    expect(container.textContent).toContain('收到子流程消息');
+
+    await act(async () => toggles[0]?.click());
+    expect(toggles[0]?.getAttribute('aria-expanded')).toBe('true');
+    expect(flowEvents[0]?.textContent).toContain('请继续检查完整构建结果。');
+  });
+
+  it('renders completed flow events with their success state and icon', async () => {
+    const completedNode: NoticeNode = {
+      kind: 'notice',
+      id: 'child-completed-1',
+      ts: 1,
+      sourceIndex: 0,
+      source: 'worker-1',
+      text: '构建检查已经完成。',
+      eventType: 'completed',
+      titleKey: 'transcript.notice.workerCompleted',
+      summary: rawText('构建检查已经完成'),
+      tone: 'neutral',
+      interaction: 'expand',
+      defaultExpanded: false,
+      summaryDuplicatesDetail: false,
+      detail: () => ({ sections: [{ value: '构建检查已经完成。', format: 'text' }] }),
+    };
+
+    await act(async () => {
+      root.render(createElement(ThreadCell, { cell: completedNode }));
+    });
+
+    const flowEvent = container.querySelector<HTMLElement>('[data-flow-event]');
+    expect(flowEvent?.dataset.eventType).toBe('completed');
+    expect(flowEvent?.querySelector('svg')?.classList.contains('lucide-circle-check')).toBe(true);
+    expect(container.textContent).toContain('子流程完成');
+  });
+
   it('translates the same projected node without rebuilding its semantic title', async () => {
     const titleArgs = { function: 'example.search' } as const;
     const node: ToolNode = {

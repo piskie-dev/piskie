@@ -1,3 +1,8 @@
+import { createUuid } from '@shared/utils/identifiers';
+import { useWebSearchStore } from '../../store/webSearchStore';
+import { SearchDesk } from './desks/SearchDesk';
+import { SearchSettingsDesk } from './desks/SearchSettingsDesk';
+import { SearchPresetForge } from './forge/SearchPresetForge';
 /**
  * 设置页「双玻璃设置台」（路由 /preferences）。
  *
@@ -36,7 +41,7 @@ import { matchVendor, type GatewayKind, type VendorSpec } from './data/vendor-at
 import styles from './deck.module.css';
 
 const SECTS: readonly DeckSect[] = [
-  'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'about',
+  'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'about',
 ];
 
 /** 旧 /settings 的 ?tab= 值映射 */
@@ -71,6 +76,22 @@ export const PrefDeckPage: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const searchConfig = useWebSearchStore((s) => s.config);
+  const searchPresets = useWebSearchStore((s) => s.presets);
+  const searchError = useWebSearchStore((s) => s.error);
+  const canAddSearchProvider = searchPresets.some((preset) => !searchConfig?.providers[preset.id]);
+  const [pickedSearch, setPickedSearch] = useState<string | null>(null);
+  const [searchForge, setSearchForge] = useState(false);
+  const [searchSessionId] = useState(createUuid);
+  const searchProviderId = pickedSearch && searchConfig?.providers[pickedSearch]
+    ? pickedSearch : searchConfig?.defaultProvider ?? Object.keys(searchConfig?.providers ?? {})[0] ?? null;
+  const searchErrorText = searchError ? resolvePresentationText(searchError, (key, values) => t(key, values)) : null;
+  useEffect(() => {
+    const store = useWebSearchStore.getState();
+    void store.refresh().catch(() => undefined);
+    return store.subscribeToConfigChanges();
+  }, []);
 
   const config = useInferenceStore((s) => s.config);
   const drivers = useInferenceStore((s) => s.drivers);
@@ -176,6 +197,14 @@ export const PrefDeckPage: React.FC = () => {
   };
 
   const renderDesk = (): React.ReactNode => {
+    if (sect === 'web-search-settings') return <SearchSettingsDesk />;
+    if (sect === 'web-search') {
+      if (!searchProviderId) return <div className={styles.deskBody}><div className={styles.voidBox}>
+        {t('settings.webSearch.empty')}
+        <button type="button" className={`${styles.btn} ${styles.btnPrime}`} onClick={() => setSearchForge(true)}>{t('settings.preset.addProvider')}</button>
+      </div></div>;
+      return <SearchDesk key={searchProviderId} providerId={searchProviderId} sessionId={searchSessionId} onFlash={onFlash} />;
+    }
     if (sect === 'ai' || sect === 'image') {
       const gateway = sect;
       const providerId = effectivePicked(gateway);
@@ -227,8 +256,12 @@ export const PrefDeckPage: React.FC = () => {
 
   return (
     <div className={styles.stage}>
-      {(inferenceErrorText || flashText) && (
+      {(inferenceErrorText || searchErrorText || flashText) && (
         <div className={styles.stripDock}>
+          {searchErrorText && <div className={styles.strip} data-tone="halt" role="alert">
+            <span className={styles.stripText}>{searchErrorText}</span>
+            <button type="button" className={styles.stripClose} aria-label={t('common.close')} onClick={() => useWebSearchStore.getState().clearError()}><X size={12} /></button>
+          </div>}
           {inferenceErrorText && (
             <div className={styles.strip} data-tone="halt" role="alert">
               <span className={styles.stripText} title={inferenceErrorText}>{inferenceErrorText}</span>
@@ -259,6 +292,10 @@ export const PrefDeckPage: React.FC = () => {
       )}
 
       <CatalogPane
+        searchProviders={Object.entries(searchConfig?.providers ?? {}).map(([id, provider]) => ({ id, title: provider.displayName, active: searchConfig?.defaultProvider === id }))}
+        pickedSearch={searchProviderId}
+        onSearchProvider={(id) => { setPickedSearch(id); gotoSect('web-search'); }}
+        onAddSearchProvider={canAddSearchProvider ? () => setSearchForge(true) : undefined}
         sect={sect}
         providers={catalogs}
         picked={{ ai: effectivePicked('ai'), image: effectivePicked('image') }}
@@ -274,6 +311,9 @@ export const PrefDeckPage: React.FC = () => {
         {renderDesk()}
       </main>
 
+      {searchForge && <SearchPresetForge onClose={() => setSearchForge(false)} onAdded={(id) => {
+        setSearchForge(false); setPickedSearch(id); gotoSect('web-search');
+      }} />}
       {presetGateway && (
         <PresetForge
           gateway={presetGateway}

@@ -8,7 +8,7 @@ export const systemChatSpec: AgentSpec = {
   role: 'director',
   tools: {
     sdkGroups: [],
-    customTools: [...WORKSPACE_TOOL_NAMES, 'subagent', 'send_event', 'plan', 'task_read', 'task', 'ask_user', 'generate_image', 'agent_run'],
+    customTools: ['web_search', ...WORKSPACE_TOOL_NAMES, 'subagent', 'send_event', 'plan', 'task_read', 'task', 'ask_user', 'generate_image', 'agent_run'],
   },
   buildSystemPrompt: (ctx) => assemble(directorIdentity, ctx),
   modules: ['subagent', 'image', 'plan'],

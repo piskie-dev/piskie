@@ -35,6 +35,7 @@ export interface AuthServerMetadata {
   authorization_endpoint: string
   token_endpoint: string
   registration_endpoint?: string
+  grant_types_supported?: string[]
   scopes_supported?: string[]
   code_challenge_methods_supported?: string[]
 }
@@ -43,15 +44,17 @@ async function fetchJson(
   url: string,
   timeoutMs = FETCH_TIMEOUT_MS,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | undefined> {
   try {
     const response = await fetchImpl(url, {
       headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: requestSignal(timeoutMs, signal),
     })
     if (!response.ok) return undefined
     return await response.json() as Record<string, unknown>
   } catch {
+    signal?.throwIfAborted()
     return undefined
   }
 }
@@ -74,6 +77,7 @@ export async function probeOAuthSupport(
   serverUrl: string,
   timeoutMs = FETCH_TIMEOUT_MS,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<OAuthProbeResult> {
   let resourceMetadataUrl: string | undefined
   try {
@@ -81,11 +85,12 @@ export async function probeOAuthSupport(
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: requestSignal(timeoutMs, signal),
     })
     if (response.status !== 401) return { supported: false }
     resourceMetadataUrl = resourceMetadataFromHeader(response.headers.get('www-authenticate'))
   } catch {
+    signal?.throwIfAborted()
     return { supported: false }
   }
 
@@ -99,7 +104,7 @@ export async function probeOAuthSupport(
   let issuer: string | undefined
   let scopesSupported: string[] | undefined
   for (const candidate of candidates) {
-    const resource = await fetchJson(candidate, timeoutMs, fetchImpl)
+    const resource = await fetchJson(candidate, timeoutMs, fetchImpl, signal)
     const servers = resource?.authorization_servers
     if (Array.isArray(servers) && typeof servers[0] === 'string') {
       issuer = servers[0]
@@ -112,7 +117,7 @@ export async function probeOAuthSupport(
   // 无 protected resource metadata 的兼容回退：server origin 即 issuer
   issuer ??= origin
 
-  const metadata = await discoverAuthServerMetadata(issuer, timeoutMs, fetchImpl)
+  const metadata = await discoverAuthServerMetadata(issuer, timeoutMs, fetchImpl, signal)
   if (!metadata) return { supported: true }
   return { supported: true, metadata, scopesSupported }
 }
@@ -122,6 +127,7 @@ export async function discoverAuthServerMetadata(
   issuer: string,
   timeoutMs = FETCH_TIMEOUT_MS,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<AuthServerMetadata | undefined> {
   const base = new URL(issuer)
   const pathSuffix = base.pathname === '/' ? '' : base.pathname
@@ -132,7 +138,7 @@ export async function discoverAuthServerMetadata(
     `${base.origin}${pathSuffix}/.well-known/openid-configuration`,
   ]
   for (const candidate of candidates) {
-    const raw = await fetchJson(candidate, timeoutMs, fetchImpl)
+    const raw = await fetchJson(candidate, timeoutMs, fetchImpl, signal)
     if (raw
       && typeof raw.issuer === 'string'
       && typeof raw.authorization_endpoint === 'string'
@@ -154,6 +160,7 @@ async function registerClient(
   metadata: AuthServerMetadata,
   redirectUri: string,
   fetchImpl: typeof globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!metadata.registration_endpoint) {
     throw new OAuthFlowError(
@@ -167,11 +174,12 @@ async function registerClient(
     body: JSON.stringify({
       client_name: 'piskie',
       redirect_uris: [redirectUri],
-      grant_types: ['authorization_code', 'refresh_token'],
+      grant_types: ['authorization_code', 'refresh_token'].filter((grant) =>
+        !metadata.grant_types_supported || metadata.grant_types_supported.includes(grant)),
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
     }),
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: requestSignal(FETCH_TIMEOUT_MS, signal),
   })
   if (!response.ok) {
     throw new OAuthFlowError(
@@ -307,6 +315,8 @@ export interface OAuthLoginResult {
 }
 
 export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAuthLoginResult> {
+  const signal = options.signal
+  signal?.throwIfAborted()
   const serverUrl = options.config.url
   if (!serverUrl) {
     throw new OAuthFlowError('NOT_HTTP', `MCP server "${options.serverName}" 是 stdio 传输，无 OAuth 登录`)
@@ -314,7 +324,7 @@ export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAu
   const reportProgress = options.onProgress ?? ((_event: OAuthProgressEvent) => undefined)
   const fetchImpl = options.fetch ?? globalThis.fetch
 
-  const probe = await probeOAuthSupport(serverUrl, FETCH_TIMEOUT_MS, fetchImpl)
+  const probe = await probeOAuthSupport(serverUrl, FETCH_TIMEOUT_MS, fetchImpl, signal)
   if (!probe.metadata) {
     throw new OAuthFlowError(
       'DISCOVERY_FAILED',
@@ -335,7 +345,7 @@ export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAu
   const callback = await startCallbackServer()
   try {
     const clientId = options.config.oauth?.client_id
-      ?? await registerClient(metadata, callback.redirectUri, fetchImpl)
+      ?? await registerClient(metadata, callback.redirectUri, fetchImpl, signal)
 
     const attempt = async (
       scope: string | undefined,
@@ -352,6 +362,7 @@ export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAu
       if (scope) authorizeUrl.searchParams.set('scope', scope)
       if (options.config.oauth_resource) authorizeUrl.searchParams.set('resource', options.config.oauth_resource)
 
+      signal?.throwIfAborted()
       reportProgress({ kind: 'authorization_url', url: authorizeUrl.href })
       await (options.openAuthorizationUrl ?? defaultOpenUrl)(authorizeUrl.href)
 
@@ -397,7 +408,7 @@ export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAu
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: requestSignal(FETCH_TIMEOUT_MS, signal),
     })
     if (!tokenResponse.ok) {
       throw new OAuthFlowError(
@@ -424,9 +435,19 @@ export async function performOAuthLogin(options: OAuthLoginOptions): Promise<OAu
       },
       resources: [serverUrl],
     }
-    await saveIssuerRecord(options.configRoot, record)
+    signal?.throwIfAborted()
+    await saveIssuerRecord(options.configRoot, record, signal)
     return { issuer: metadata.issuer, scope: record.tokens.scope, expiresAt: record.tokens.expiresAt }
+  } catch (error) {
+    signal?.throwIfAborted()
+    throw error
   } finally {
     callback.close()
   }
+}
+
+function requestSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
+  signal?.throwIfAborted()
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
 }

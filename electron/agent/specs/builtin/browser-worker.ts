@@ -8,7 +8,7 @@ export const browserWorkerSpec: AgentSpec = {
   role: 'worker',
   tools: {
     sdkGroups: ['browser'],
-    customTools: [...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image'],
+    customTools: ['web_search', ...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image'],
   },
   buildSystemPrompt: (ctx) => assemble(browserWorkerIdentity, ctx),
   modules: ['browser', 'image'],

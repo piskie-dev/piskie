@@ -1,3 +1,4 @@
+import type { SearchService } from '../../search/service.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 import { app, net } from 'electron';
 import { DefaultAgentInferencePort } from '../../inference/application/agent-inference-port.js';
@@ -18,6 +19,7 @@ export interface InferenceComponentState {
 export function createInferenceComponent(options: {
   userDataDirectory: string;
   agentService: AgentService;
+  search: SearchService;
   state: InferenceComponentState;
 }): RuntimeComponent<AgentServiceRuntimeBindings> {
   let host: InferenceRuntimeHost | undefined;
@@ -33,7 +35,7 @@ export function createInferenceComponent(options: {
   return {
     id: 'inference',
     requirement: 'required',
-    dependsOn: ['proxy-transports'],
+    dependsOn: ['proxy-transports', 'web-search'],
     async start(_context, scope) {
       scope.register({
         kind: 'custom',
@@ -55,7 +57,7 @@ export function createInferenceComponent(options: {
             error,
           }),
         },
-        configIntegrations: createElectronConfigDomainIntegrations(),
+        configIntegrations: createElectronConfigDomainIntegrations({ publish: (config) => options.search.publish(config) }),
         openAi: { resolveFetch: resolveElectronInferenceFetch },
         anthropic: { resolveFetch: resolveElectronInferenceFetch },
         imageHttp: { resolveFetch: resolveElectronInferenceFetch },
@@ -75,6 +77,7 @@ export function createInferenceComponent(options: {
       const bindings: AgentServiceRuntimeBindings = {
         userDataDirectory: options.userDataDirectory,
         inferenceHost: host,
+        search: options.search,
         agentInference: new DefaultAgentInferencePort(
           host.aiGateway,
           host.control.runtime,

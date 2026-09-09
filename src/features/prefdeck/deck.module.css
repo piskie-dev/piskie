@@ -2029,3 +2029,33 @@ html[data-theme='light'] .dropCard {
   border-radius: 10px;
   display: block;
 }
+
+
+.searchEvidence {
+  margin-block-start: 14px;
+  padding: 14px;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 12px;
+  max-block-size: 420px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.searchEvidence pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+.searchEvidence article + article {
+  margin-block-start: 18px;
+  padding-block-start: 14px;
+  border-block-start: 1px solid var(--pd-hairline);
+}
+
+.searchEvidence a {
+  color: var(--pd-ink);
+  font-weight: 600;
+}

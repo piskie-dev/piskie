@@ -3,6 +3,8 @@
 /* 外框：dock 的辅助槽里是 `h-full w-full rounded-lg border-gray-700 bg-gray-900`
    （`ScreenStreamNode` 的 standalone 分支），不是裸填充 */
 .view {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-block-size: 0;
@@ -61,7 +63,7 @@
   transition: opacity 160ms ease, translate 160ms ease;
 }
 
-.viewport:hover .floatBar,
+.view:hover .floatBar,
 .floatBar:focus-within {
   opacity: 1;
   translate: 0 -1px;

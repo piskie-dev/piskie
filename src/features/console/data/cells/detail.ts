@@ -171,15 +171,15 @@ export function noticeSections(
   content: unknown,
   options: {
     readonly guidance?: unknown;
-    readonly details?: Readonly<Record<string, unknown>>;
+    readonly detailFile?: unknown;
   } = {},
 ): DetailSection[] {
   const out: DetailSection[] = [];
   if (content !== undefined) {
     pushSection(out, { value: content, format: 'text' });
   }
-  if (options.details && Object.keys(options.details).length > 0) {
-    pushSection(out, { value: options.details, format: 'json' });
+  if (options.detailFile) {
+    pushSection(out, { value: options.detailFile, format: 'text' });
   }
   if (options.guidance) {
     pushSection(out, { value: options.guidance, format: 'text' });

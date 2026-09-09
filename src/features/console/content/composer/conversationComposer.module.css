@@ -289,6 +289,19 @@
   color: var(--cyber-text-muted);
 }
 
+.pill[data-warning='true'] .compactIcon {
+  display: inline-flex;
+}
+
+.pill[data-warning='true'] .compactIcon,
+.pill[data-warning='true'] .pillSoft,
+.pill[data-warning='true'] .pillChevron,
+.option[data-warning='true'],
+.option[data-warning='true'] .optionLabel,
+.option[data-warning='true'] .optionCheck {
+  color: var(--approval-auto);
+}
+
 .contextButton {
   display: inline-flex;
   align-items: center;

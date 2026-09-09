@@ -5,6 +5,7 @@ export type ApprovalDecision =
   | { needs: true; reason: string; modeInvariant: boolean };
 
 const ALWAYS_ALLOWED = new Set([
+  'web_search',
   'ask_user',
   'send_event',
   'plan',
@@ -26,7 +27,7 @@ export function decideApproval(call: PreparedCall<unknown>): ApprovalDecision {
   if (planCreate) {
     return {
       needs: true,
-      reason: '计划正文必须由用户确认。',
+      reason: '确认计划正文后执行；自动执行模式下倒计时结束后批准。',
       modeInvariant: true,
     };
   }

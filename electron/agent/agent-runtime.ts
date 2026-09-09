@@ -781,7 +781,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       ? (this.browserSkillCandidatePin?.candidate ??
         browserSkillCandidateOverlay.candidate(this.mainAgentId, undefined, this.id))
       : undefined;
-    return this.toolCatalog.snapshot(this.toolFace, {
+    return this.toolCatalog.snapshot({ ...this.toolFace, searchCapabilities: this.options.search?.capabilities }, {
       entries: [...(this.mcpSession?.snapshot().entries ?? []), ...(candidate?.entries ?? [])],
       replaceSkills: candidate ? [candidate.skillName] : undefined,
     });
@@ -800,7 +800,9 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         browserSkillCandidateOverlay.candidate(this.mainAgentId)?.id ??
         '')
       : '';
-    const key = `${mcpRevision}:${candidateRevision}:${candidateId}`;
+    const capabilities = this.options.search?.capabilities;
+    const searchKey = `${Boolean(capabilities?.domains)}:${Boolean(capabilities?.publishedAfter)}:${Boolean(capabilities?.publishedBefore)}`;
+    const key = `${mcpRevision}:${candidateRevision}:${candidateId}:${searchKey}`;
     if (key !== this.modelBoundaryProjectionKey) {
       this.modelBoundaryProjectionKey = key;
       this.modelBoundaryProjectionRevision += 1;
@@ -955,6 +957,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
 
   private createToolContext(): ToolActivationContext {
     const builder = new ToolContextBuilder();
+    if (this.options.search) builder.setSearch(this.options.search);
 
     builder.setModes({
       modeId: () => {
@@ -1012,6 +1015,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       subagents: typed.subagents,
       events: typed.events,
       imageOps: typed.imageOps,
+      search: typed.search,
       browser: typed.browser,
       post: (event) => {
         if (info.role === 'worker' && event.source === 'subagent') {

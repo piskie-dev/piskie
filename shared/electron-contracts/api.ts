@@ -1,3 +1,4 @@
+import type { WebSearchClient } from './web-search.js';
 import type { AccountClient } from './account.js';
 import type { AgentClient } from './agents.js';
 import type { AgentRunClient } from './agent-runs.js';
@@ -14,6 +15,7 @@ import type { TaskDefinitionClient } from './task-definitions.js';
 import type { UpdateClient } from './updates.js';
 
 export interface PiskieDesktopApi {
+  readonly webSearch: WebSearchClient;
   readonly account: AccountClient;
   readonly runtime: RuntimeClient;
   readonly agents: AgentClient;

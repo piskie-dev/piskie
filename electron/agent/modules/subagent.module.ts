@@ -1,3 +1,4 @@
+import type { SearchPort } from '../../../shared/types/web-search.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 /**
  * SubagentModule — 子流程管理
@@ -50,6 +51,7 @@ interface SubagentModuleConfig {
     browser: AgentPilotPorts['browser'] | null;
   };
   imageApplication?: ImageApplicationPort;
+  search?: SearchPort;
   imageTarget?: ModelTarget;
 }
 
@@ -109,6 +111,7 @@ export class SubagentModule implements AgentModule {
   private inference?: AgentInferencePort;
   private pilotPorts?: AgentPilotPorts;
   private imageApplication?: ImageApplicationPort;
+  private search?: SearchPort;
   private imageTarget?: ModelTarget;
 
   /** 活跃的子流程 Map */
@@ -143,6 +146,7 @@ export class SubagentModule implements AgentModule {
           ? { skills: ports.skills, browser: ports.browser }
           : undefined,
       imageApplication: settings?.imageApplication,
+      search: settings?.search,
       imageTarget: settings?.imageTarget,
     });
 
@@ -620,6 +624,7 @@ export class SubagentModule implements AgentModule {
           workspace: this.runConfig?.workspace,
           advancedSettings: childAdvancedSettings,
           imageApplication: this.imageApplication,
+          search: this.search,
           imageTarget: this.imageTarget,
           assignmentTaskBoardSnapshot: taskBoardSnapshot,
           onTaskBoardChange: (board: { taskSummary: string; items: TaskItem[] }) =>

@@ -40,6 +40,11 @@ const STRICT_NUMERIC_PARAMS = new Set([
   'browser_getNetworkRequest.reqid',
 ]);
 
+// Cross-field constraints need a valid combination beyond sampling each field independently.
+const BASELINE_OVERRIDES: Record<string, JsonSchema> = {
+  web_search: { publishedAfter: '2026-01-01', publishedBefore: '2026-02-01' },
+};
+
 function selectSchema(schema: JsonSchema): JsonSchema {
   const alternatives = (schema.oneOf ?? schema.anyOf) as JsonSchema[] | undefined;
   if (!alternatives?.[0]) return schema;
@@ -223,7 +228,7 @@ describe('model-facing parameter coercion matrix', () => {
         continue;
       }
       const apiSchema = toApiSchema(entry.tool.def.schema);
-      const baseline = sample(apiSchema);
+      const baseline = { ...sample(apiSchema) as JsonSchema, ...BASELINE_OVERRIDES[definition.name] };
       const baselineResult = parse(entry.tool.def.schema, baseline);
       if (!baselineResult.ok) {
         failures.push(`${definition.name}: generated valid baseline failed: ${baselineResult.errors.join('; ')}`);

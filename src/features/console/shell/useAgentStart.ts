@@ -11,6 +11,7 @@ import { useCallback } from 'react';
 import type { StartAgentRequest } from '../../../../shared/electron-contracts/agents';
 import type { TaskDefinitionSnapshot } from '../../../../shared/electron-contracts/task-definitions';
 import { useRendererRuntime } from '../../../renderer-runtime/hooks';
+import { useComposerDraftStore, type ComposerDraftSettings } from '../data/composer-drafts';
 
 export type StartOutcome =
   | { readonly kind: 'started'; readonly agentId: string }
@@ -20,12 +21,7 @@ export type StartOutcome =
       readonly reason?: 'empty-content';
     };
 
-export interface QuickChatOptions {
-  readonly workspace?: string;
-  readonly model?: string;
-  readonly modeId?: 'normal' | 'plan' | 'browser-skill';
-  readonly approvalMode?: 'auto' | 'confirm';
-  readonly environmentIds?: readonly string[];
+export interface QuickChatOptions extends Partial<ComposerDraftSettings> {
   readonly images?: readonly { data: string; media_type: string }[];
   readonly mcpPrewarmToken?: string;
 }
@@ -55,6 +51,7 @@ export function useAgentStart(onStarted: (agentId: string) => void): AgentStart 
       return startRequest({
         definitionId: definition.definitionId,
         modeId: definition.defaultModeId,
+        approvalMode: useComposerDraftStore.getState().defaults.approvalMode,
       });
     },
     [startRequest],
@@ -69,7 +66,7 @@ export function useAgentStart(onStarted: (agentId: string) => void): AgentStart 
         modeId: options?.modeId ?? 'normal',
         input: message,
         workspace: options?.workspace,
-        approvalMode: options?.approvalMode,
+        approvalMode: options?.approvalMode ?? useComposerDraftStore.getState().defaults.approvalMode,
         environmentIds: options?.environmentIds ? [...options.environmentIds] : undefined,
         launchOptions: {
           initialModel: options?.model,

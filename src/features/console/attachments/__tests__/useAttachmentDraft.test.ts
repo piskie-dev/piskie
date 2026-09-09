@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearAllComposerDrafts } from '../../data/composer-drafts';
+import { clearAllComposerDrafts, useComposerDraftStore, WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { useAttachmentDraft, type AttachmentDraft } from '../useAttachmentDraft';
 
 const clipboardAttachments = vi.fn();
@@ -166,7 +166,8 @@ describe('useAttachmentDraft', () => {
     expect(currentDraft().files).toEqual([expect.objectContaining({ path: '/tmp/notes.md' })]);
   });
 
-  it('ignores a delayed clipboard result after the draft is cleared', async () => {
+  it.each(['clear attachments', 'new draft'])('ignores a delayed clipboard result after %s', async (action) => {
+    await renderProbe(WELCOME_DRAFT_KEY);
     let resolveDescriptors!: (value: Array<{ name: string; path: string; size: number }>) => void;
     clipboardAttachments.mockReturnValue(new Promise((resolve) => {
       resolveDescriptors = resolve;
@@ -175,7 +176,10 @@ describe('useAttachmentDraft', () => {
 
     act(() => currentDraft().handlePaste(event));
     expect(clipboardAttachments).toHaveBeenCalledOnce();
-    act(() => currentDraft().clear());
+    act(() => {
+      if (action === 'new draft') useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY);
+      else currentDraft().clear();
+    });
     await act(async () => {
       resolveDescriptors([{ name: 'notes.md', path: '/tmp/notes.md', size: 5 }]);
       await Promise.resolve();

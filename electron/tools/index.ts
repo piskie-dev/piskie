@@ -1,3 +1,4 @@
+import { WebSearchTool } from './web-search/web-search.tool.js';
 import type { SkillCatalogPort } from '../core/pilot/index.js';
 import type { PilotRuntime } from '../piskiepilot/runtime/pilot-runtime.js';
 import { ToolCatalog } from './catalog.js';
@@ -36,6 +37,7 @@ const builtinTools = (
   new PlanTool(),
   new TaskTool(),
   new TaskReadTool(),
+  new WebSearchTool(),
   new AskUserTool(),
   new SkillCallTool(),
   new LoadSkillTool(skills),

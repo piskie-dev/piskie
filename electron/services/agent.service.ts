@@ -1,3 +1,4 @@
+import type { SearchPort } from '../../shared/types/web-search.js';
 /**
  * AgentService — Agent 调度服务
  * 管理多个 AgentRuntime 的生命周期（支持并发执行）
@@ -57,6 +58,7 @@ export interface AgentServiceRuntimeBindings {
   inferenceHost: InferenceRuntimeHost;
   agentInference: AgentInferencePort;
   imageApplication: ImageApplicationPort;
+  search?: SearchPort;
 }
 
 /**
@@ -95,6 +97,7 @@ export class AgentService {
   private activeRuntimes: Map<string, AgentRuntime> = new Map();
   private agentInference: AgentInferencePort | null = null;
   private inferenceHost: InferenceRuntimeHost | null = null;
+  private search: SearchPort | undefined;
   private imageApplication: ImageApplicationPort | null = null;
   private initialized = false;
   private conversationStore!: ConversationStore;
@@ -281,6 +284,7 @@ export class AgentService {
     this.inferenceHost = bindings.inferenceHost;
     this.agentInference = bindings.agentInference;
     this.imageApplication = bindings.imageApplication;
+    this.search = bindings.search;
     occupancyRegistry.clear();
 
     this.initialized = true;
@@ -425,6 +429,7 @@ export class AgentService {
           createRuntimeObserver: (runtimeId) =>
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
+          search: this.search,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -812,6 +817,7 @@ export class AgentService {
           createRuntimeObserver: (runtimeId) =>
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
+          search: this.search,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -1148,6 +1154,7 @@ export class AgentService {
     this.inferenceHost = null;
     this.agentInference = null;
     this.imageApplication = null;
+    this.search = undefined;
     this.reservedAgentIds.clear();
 
     const failures = results.filter(

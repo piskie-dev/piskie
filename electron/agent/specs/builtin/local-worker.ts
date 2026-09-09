@@ -8,7 +8,7 @@ export const localWorkerSpec: AgentSpec = {
   role: 'worker',
   tools: {
     sdkGroups: [],
-    customTools: [...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image'],
+    customTools: ['web_search', ...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image'],
   },
   buildSystemPrompt: (ctx) => assemble(workerIdentity, ctx),
   modules: ['image'],

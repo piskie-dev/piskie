@@ -21,6 +21,7 @@ import {
   BookOpen,
   Camera,
   ChevronRight,
+  CircleCheck,
   CircleHelp,
   CircleSlash2,
   ClipboardList,
@@ -36,6 +37,7 @@ import {
   ImagePlus,
   ListChecks,
   Loader2,
+  MessageSquareText,
   Network,
   Puzzle,
   Search,
@@ -201,10 +203,89 @@ const ActionLine = memo<{
 
 ActionLine.displayName = 'ActionLine';
 
-function noticeIcon(cell: NoticeNode): React.ReactNode {
+const FlowEventDisclosure = memo<{
+  readonly icon: React.ReactNode;
+  readonly title: string;
+  readonly summary?: string;
+  readonly tone: TranscriptTone;
+  readonly badge?: TranscriptBadge;
+  readonly eventType?: string;
+  readonly meta?: readonly string[];
+  readonly detail?: React.ReactNode;
+  readonly defaultOpen?: boolean;
+}>(({ icon, title, summary, tone, badge, eventType, meta, detail, defaultOpen = false }) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = useCallback(() => setOpen((value) => !value), []);
+  const hasMeta = !!meta && meta.length > 0;
+  const expandable = !!detail || hasMeta;
+
+  const headerContent = (
+    <>
+      <span className={styles.flowEventIcon} aria-hidden>{icon}</span>
+      <span className={styles.flowEventTitle}>{title}</span>
+      {!open && summary && (
+        <>
+          <span className={styles.flowEventSeparator} aria-hidden />
+          <span className={styles.flowEventSummary}>{summary}</span>
+        </>
+      )}
+      {badge && <span className={styles.actionBadge}>{t(BADGE_KEYS[badge])}</span>}
+      {expandable && (
+        <span className={styles.flowEventChevron} aria-hidden>
+          <ChevronRight size={14} />
+        </span>
+      )}
+    </>
+  );
+
+  return (
+    <div
+      className={styles.flowEvent}
+      data-flow-event=""
+      data-tone={tone}
+      data-event-type={eventType}
+    >
+      {expandable ? (
+        <button
+          type="button"
+          className={styles.flowEventHeader}
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div className={styles.flowEventHeader}>{headerContent}</div>
+      )}
+      {expandable && open && (
+        <div className={styles.flowEventBody}>
+          {detail}
+          {hasMeta && (
+            <div className={styles.flowEventMeta}>
+              {meta.map((item) => <span key={item}>{item}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+FlowEventDisclosure.displayName = 'FlowEventDisclosure';
+
+function noticeIcon(cell: NoticeNode, flowEvent = false): React.ReactNode {
+  switch (cell.eventType) {
+    case 'message': return <MessageSquareText size={ICON} />;
+    case 'completed': return <CircleCheck size={ICON} />;
+    case 'failed': return <XCircle size={ICON} />;
+    case 'user_stopped': return <CircleSlash2 size={ICON} />;
+    case 'need_user_action': return <CircleHelp size={ICON} />;
+    case 'stalled': return <Hourglass size={ICON} />;
+  }
   if (cell.tone === 'danger') return <XCircle size={ICON} />;
   if (cell.badge === 'cancelled') return <CircleSlash2 size={ICON} />;
-  return <FileText size={ICON} />;
+  return flowEvent ? <Workflow size={ICON} /> : <FileText size={ICON} />;
 }
 
 // ==================== 详情 format renderer registry ====================
@@ -459,14 +540,23 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
   const summary = cell.summary ? present(cell.summary) : undefined;
   const meta = cell.meta?.map(present);
   switch (cell.kind) {
-    /**
-     * 任务分派 / 父级下发**不是"你说的话"**，不能走右对齐气泡：
-     * worker 的第一条分派消息是一整个工作包正文，铺成满屏气泡观感极差。
-     * 所以走"标题 + 摘要 + 可展开详情"的聚合产物卡片：
-     * 卡头一行 + 三行截断预览，点开才铺全文。
-     */
     case 'user':
-      if (cell.origin !== 'user') {
+      if (cell.origin === 'parent') {
+        return (
+          <FlowEventDisclosure
+            icon={<MessageSquareText size={ICON} />}
+            title={title}
+            summary={summary}
+            tone={cell.tone}
+            eventType="message"
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            defaultOpen={cell.defaultExpanded}
+          />
+        );
+      }
+
+      // 任务分派是完整工作包，不作为用户气泡或过程事件展示。
+      if (cell.origin === 'assignment') {
         return (
           <CollapsibleCard
             icon={<ClipboardList size={16} />}
@@ -641,6 +731,22 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
       );
 
     case 'notice':
+      if (cell.eventType) {
+        return (
+          <FlowEventDisclosure
+            icon={noticeIcon(cell, true)}
+            title={title}
+            summary={summary}
+            tone={cell.tone}
+            badge={cell.badge}
+            eventType={cell.eventType}
+            meta={meta}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            defaultOpen={cell.defaultExpanded}
+          />
+        );
+      }
+
       return (
         <div className={styles.cell}>
           <ActionLine

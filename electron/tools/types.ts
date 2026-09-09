@@ -1,3 +1,4 @@
+import type { SearchCapabilities, SearchPort } from '../../shared/types/web-search.js';
 /**
  * 工具系统类型定义
  */
@@ -196,6 +197,7 @@ export interface ToolContext {
   readonly subagents?: SubagentPort;
   readonly events?: EventPort;
   readonly imageOps?: ImageOpsPort;
+  readonly search?: SearchPort;
   readonly browser?: BrowserHostRuntime;
 }
 
@@ -229,6 +231,7 @@ export type ToolDef<TParams> = {
     schema: ToolInputSchema,
     context: Readonly<{
       agentType: ToolAgentType;
+      searchCapabilities?: SearchCapabilities;
       subagentTypes: readonly SubagentTypeDescriptor[];
       subagentResources: Readonly<{
         browserEnvironmentIds: readonly string[];

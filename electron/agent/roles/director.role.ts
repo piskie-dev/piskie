@@ -132,6 +132,7 @@ export class DirectorRole implements AgentRole {
           browser: host.getBrowserControl(),
         },
         imageApplication: options.imageApplication,
+        search: options.search,
         imageTarget: options.imageTarget,
       },
       plan: {

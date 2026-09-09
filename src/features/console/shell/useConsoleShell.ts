@@ -18,6 +18,7 @@ import { useUIStore, type ConsoleMode } from '../../../store/uiStore';
 import { useConsoleActions } from '../data/actions';
 import { useHistoryRows, useSessionRows, type HistoryRow } from '../data/session';
 import type { SessionMenuSource } from '../data/sessionMenu';
+import { useComposerDraftStore, WELCOME_DRAFT_KEY } from '../data/composer-drafts';
 import { resolveConsoleSelectedAgentId } from './selection';
 
 export type { ConsoleMode };
@@ -32,8 +33,9 @@ export interface ConsoleShell {
   readonly history: readonly HistoryRow[];
   readonly selectedAgentId: string | null;
   readonly selectSession: (agentId: string) => void;
-  /** 回到空态 */
+  /** 重置新会话草稿并打开输入页。 */
   readonly newSession: () => void;
+  readonly newSessionIn: (workspace?: string) => void;
   readonly openHistory: (row: HistoryRow) => void;
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
   readonly mode: ConsoleMode;
@@ -126,9 +128,12 @@ export function useConsoleShell(): ConsoleShell {
     [selectSession],
   );
 
-  const newSession = useCallback(() => {
+  const newSessionIn = useCallback((workspace?: string) => {
+    useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY, { workspace });
     setSelection({ kind: 'empty' });
   }, [setSelection]);
+
+  const newSession = useCallback(() => newSessionIn(), [newSessionIn]);
 
   const openHistory = useCallback(
     (row: HistoryRow) => {
@@ -167,6 +172,7 @@ export function useConsoleShell(): ConsoleShell {
     selectedAgentId,
     selectSession,
     newSession,
+    newSessionIn,
     openHistory,
     menuSourceOf,
     mode,

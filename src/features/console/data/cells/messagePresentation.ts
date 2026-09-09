@@ -55,7 +55,7 @@ export type MessagePresentation =
       readonly eventType?: SubagentEventType;
       readonly errorType?: string;
       readonly metadata?: readonly PresentationText[];
-      readonly details?: Readonly<Record<string, unknown>>;
+      readonly detailFile?: string;
       readonly guidance?: PresentationText;
     };
 
@@ -94,7 +94,7 @@ interface NoticeInput {
   readonly eventType?: SubagentEventType;
   readonly errorType?: string;
   readonly metadata?: readonly PresentationText[];
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly detailFile?: string;
 }
 
 function presentNotice(input: NoticeInput): NoticeMessagePresentation {
@@ -113,7 +113,7 @@ function presentNotice(input: NoticeInput): NoticeMessagePresentation {
     ...(input.eventType && { eventType: input.eventType }),
     ...(input.errorType && { errorType: input.errorType }),
     ...(input.metadata && input.metadata.length > 0 && { metadata: input.metadata }),
-    ...(input.details && Object.keys(input.details).length > 0 && { details: input.details }),
+    ...(input.detailFile && { detailFile: input.detailFile }),
     ...(guidanceKey
       ? { guidance: messageText(guidanceKey) }
       : {}),
@@ -144,12 +144,40 @@ const BY_SUBTYPE = {
 
 // ==================== 信封覆盖 ====================
 
+function readableParentEventText(body: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return body;
+
+  const envelope = parsed as Record<string, unknown>;
+  if (envelope.storage === 'inline') {
+    const data = envelope.data;
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      const message = (data as Record<string, unknown>).message;
+      if (typeof message === 'string') return message;
+    }
+  }
+  if (envelope.storage === 'file' && typeof envelope.summary === 'string') {
+    return envelope.summary;
+  }
+  return body;
+}
+
 /**
  * 外部注入事件：确有来源方，是"别人说的话"，升级为消息气泡。
- * source 以 `parent` 开头时用父级色，其余按普通消息处理。
+ * 父流程当前通过 ATA 信封投递结构化消息；展示层只取其中可读正文。
  */
 function externalOverride(source: string, body: string): MessagePresentation {
-  return { as: 'user', origin: source.startsWith('parent') ? 'parent' : 'user', text: body };
+  const fromParent = source.startsWith('parent');
+  return {
+    as: 'user',
+    origin: fromParent ? 'parent' : 'user',
+    text: fromParent ? readableParentEventText(body) : body,
+  };
 }
 
 function attribute(attributes: string, name: string): string | undefined {
@@ -163,32 +191,40 @@ function attribute(attributes: string, name: string): string | undefined {
     .replaceAll('&amp;', '&');
 }
 
-function eventDiagnostics(
-  attributes: string,
-  source: string,
-  eventType: SubagentEventType | undefined,
-  errorType: string | undefined,
-): { metadata: PresentationText[]; details: Record<string, unknown> } {
+function eventMetadata(attributes: string): PresentationText[] {
   const fields = [
-    ['origin', 'origin', 'transcript.meta.origin'],
-    ['provider', 'provider', 'transcript.meta.provider'],
-    ['model', 'model', 'transcript.meta.model'],
-    ['request_id', 'requestId', 'transcript.meta.requestId'],
-    ['trace_id', 'traceId', 'transcript.meta.traceId'],
+    ['origin', 'transcript.meta.origin'],
+    ['provider', 'transcript.meta.provider'],
+    ['model', 'transcript.meta.model'],
+    ['request_id', 'transcript.meta.requestId'],
+    ['trace_id', 'transcript.meta.traceId'],
   ] as const;
   const metadata: PresentationText[] = [];
-  const details: Record<string, unknown> = {
-    ...(source && { subagentId: source }),
-    ...(eventType && { type: eventType }),
-    ...(errorType && { errorType }),
-  };
-  for (const [attributeName, detailName, messageKey] of fields) {
+  for (const [attributeName, messageKey] of fields) {
     const value = attribute(attributes, attributeName);
     if (!value) continue;
     metadata.push(messageText(messageKey, { value: rawText(value) }));
-    details[detailName] = value;
   }
-  return { metadata, details };
+  return metadata;
+}
+
+interface ParsedSubagentEventBody {
+  readonly text: string;
+  readonly summary?: string;
+  readonly detailFile?: string;
+}
+
+/** 文件型 ATA 载荷由后端渲染为 summary/detail；在展示边界还原为可读内容。 */
+function parseSubagentEventBody(body: string): ParsedSubagentEventBody {
+  const fileBody = body.match(
+    /^<summary>([\s\S]*?)<\/summary>\n<detail\b([^>]*)\/?>[^\n]*$/,
+  );
+  if (!fileBody) return { text: body };
+
+  const summary = (fileBody[1] ?? '').trim();
+  const detailFile = attribute(fileBody[2] ?? '', 'path');
+  if (!summary || !detailFile) return { text: body };
+  return { text: summary, summary, detailFile };
 }
 
 /**
@@ -214,15 +250,15 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
     const rawEventType = attribute(attributes, 'type');
     const eventType = isSubagentEventType(rawEventType) ? rawEventType : undefined;
     const errorType = attribute(attributes, 'error_type');
-    const diagnostics = eventDiagnostics(attributes, source, eventType, errorType);
+    const bodyPresentation = parseSubagentEventBody(body);
     return presentNotice({
       source,
-      text: body,
-      summary: body.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim() || undefined,
+      text: bodyPresentation.text,
+      summary: bodyPresentation.summary,
+      detailFile: bodyPresentation.detailFile,
       eventType,
       errorType,
-      metadata: diagnostics.metadata,
-      details: diagnostics.details,
+      metadata: eventMetadata(attributes),
     });
   }
 

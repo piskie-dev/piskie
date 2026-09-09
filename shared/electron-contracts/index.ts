@@ -15,3 +15,5 @@ export * from './public-fault.js';
 export * from './runtime.js';
 export * from './task-definitions.js';
 export * from './updates.js';
+
+export * from './web-search.js';

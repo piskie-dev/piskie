@@ -1,3 +1,4 @@
+import type { SearchPort } from '../../shared/types/web-search.js';
 /** Activation-scoped values and runtime ports contributed by roles/modules. */
 
 import type {
@@ -40,6 +41,7 @@ export interface TypedToolContext {
   readonly subagents?: SubagentPort;
   readonly events?: EventPort;
   readonly imageOps?: ImageOpsPort;
+  readonly search?: SearchPort;
   readonly browser?: BrowserHostRuntime;
 }
 
@@ -53,6 +55,7 @@ export class ToolContextBuilder {
   private _plan?: PlanPort;
   private _subagents?: SubagentPort;
   private _events?: EventPort;
+  private _search?: SearchPort;
   private _imageOps?: ImageOpsPort;
   private _browser?: BrowserHostRuntime;
 
@@ -111,6 +114,11 @@ export class ToolContextBuilder {
     return this;
   }
 
+  setSearch(port: SearchPort): this {
+    this._search = port;
+    return this;
+  }
+
   setImageOps(ops: ImageOpsPort): this {
     this._imageOps = ops;
     return this;
@@ -160,6 +168,7 @@ export class ToolContextBuilder {
       subagents: this._subagents,
       events: this._events,
       imageOps: this._imageOps,
+      search: this._search,
       browser: this._browser,
     });
   }

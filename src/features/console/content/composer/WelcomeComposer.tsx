@@ -49,7 +49,7 @@ export interface WelcomeComposerProps {
   readonly workspacePath?: string;
   readonly onSelectWorkspace: () => void;
   readonly onUseDefaultWorkspace: () => void;
-  readonly environmentIds: string[];
+  readonly environmentIds: readonly string[];
   readonly onEnvironmentIdsChange: (environmentIds: string[]) => void;
   /** Runtime chrome above the input; never becomes conversation content. */
   readonly statusSlot?: React.ReactNode;

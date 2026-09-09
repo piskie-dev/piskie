@@ -14,6 +14,7 @@ import {
   type ModelOptGroup,
 } from '../../../../store/inferenceStore';
 import { useRendererRuntime } from '../../../../renderer-runtime/hooks';
+import { useComposerDraftStore } from '../../data/composer-drafts';
 
 export interface ComposerSettings {
   readonly modelGroups: ModelOptGroup[];
@@ -65,8 +66,10 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
 
   const onApprovalModeChange = useCallback(
     async (next: ApprovalMode) => {
-      if (workerId) await agentCommands.setSubagentApprovalMode(agentId, workerId, next);
-      else await agentCommands.setApprovalMode(agentId, next);
+      const result = workerId
+        ? await agentCommands.setSubagentApprovalMode(agentId, workerId, next)
+        : await agentCommands.setApprovalMode(agentId, next);
+      if (result.ok) useComposerDraftStore.getState().selectApprovalMode(next);
     },
     [agentCommands, agentId, workerId],
   );

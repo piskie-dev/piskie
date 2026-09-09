@@ -3,6 +3,7 @@ import type {
   SkillProvenance,
 } from '../piskiepilot/core/skill/define.js';
 import type { McpOrigin, McpTransportKind } from '../../shared/types/mcp.js';
+import type { SearchCapabilities } from '../../shared/types/web-search.js';
 import { toToolInputSchema } from './params.js';
 import type {
   DeferredToolsPort,
@@ -69,6 +70,7 @@ export type SkillFunctionResolution =
 export type FinalToolFace = Readonly<{
   scope: ToolScope;
   agentType: ToolAgentType;
+  searchCapabilities?: SearchCapabilities;
   customTools: readonly string[];
   exposedSkillFunctions: readonly string[];
   excluded: ReadonlySet<string>;
@@ -167,6 +169,7 @@ function asDefinition(entry: CatalogEntry, face: FinalToolFace): ToolDefinition 
       : def.description,
     input_schema: def.modelInputSchema?.(inputSchema, {
       agentType: face.agentType,
+      searchCapabilities: face.searchCapabilities,
       subagentTypes: face.subagentTypes ?? [],
       subagentResources: face.subagentResources ?? {
         browserEnvironmentIds: [],

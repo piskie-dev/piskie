@@ -1,3 +1,4 @@
+import { createWebSearchController } from './web-search/web-search-controller.js';
 import { safeStorage } from 'electron';
 import { specRegistry } from '../agent/specs/index.js';
 import {
@@ -149,6 +150,7 @@ export function createApplicationComposition(options: {
     openExternal: (url) => desktopApplication.openExternal(url),
   });
   const account = createAccountController(accountApplication);
+  const webSearch = createWebSearchController(capabilities.webSearch, (url) => desktopApplication.openExternal(url));
   const inference = createInferenceController(capabilities.inference.inferenceHost);
   const runtime = createRuntimeController(() => options.backend.snapshot());
   const updateApplication = new UpdateApplication({
@@ -170,6 +172,7 @@ export function createApplicationComposition(options: {
       ...agentRuns,
       ...configuration.operations,
       ...inference,
+      ...webSearch.operations,
       ...market.operations,
       ...pilot.operations,
       ...messaging.operations,
@@ -194,6 +197,7 @@ export function createApplicationComposition(options: {
       observabilityApplication.releaseConnection(connectionId);
     },
     dispose: () => {
+      webSearch.dispose();
       accountApplication.dispose();
       updateApplication.dispose();
     },

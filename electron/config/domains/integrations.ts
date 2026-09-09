@@ -18,6 +18,9 @@ export interface BrowserEnvironmentsSnapshot {
 export type ConfigDomainReader = (domain: string) => Promise<unknown>;
 
 export interface ConfigDomainIntegrations {
+  webSearch: {
+    publish(config: import('../../../shared/types/web-search.js').WebSearchConfig, context: ConfigDomainPublishContext): Promise<void> | void;
+  };
   appSettings: {
     resolveInitialLanguage(): AppSettings['language'];
     publish(settings: AppSettings, context: ConfigDomainPublishContext): Promise<void> | void;
@@ -58,6 +61,7 @@ export interface ConfigDomainIntegrations {
 
 export function emptyConfigDomainIntegrations(): ConfigDomainIntegrations {
   return {
+    webSearch: { publish: () => undefined },
     appSettings: {
       resolveInitialLanguage: () => DEFAULT_SETTINGS.language,
       publish: () => undefined,

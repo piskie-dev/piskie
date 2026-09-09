@@ -1,4 +1,5 @@
 import {
+  WEB_SEARCH_OPERATIONS,
   ACCOUNT_OPERATIONS,
   AGENT_RUN_OPERATIONS,
   AGENT_OPERATIONS,
@@ -50,6 +51,15 @@ export function createElectronPiskieClient(options: {
   );
 
   const api: PiskieDesktopApi = {
+    webSearch: {
+      listProviders: () => request(WEB_SEARCH_OPERATIONS.listProviders),
+      connectOAuth: (id) => waitForUser(WEB_SEARCH_OPERATIONS.connectOAuth, id),
+      cancelOAuth: (id) => request(WEB_SEARCH_OPERATIONS.cancelOAuth, id),
+      disconnectOAuth: (id) => request(WEB_SEARCH_OPERATIONS.disconnectOAuth, id),
+      checkConnection: (id, testOptions) => updateRequest(WEB_SEARCH_OPERATIONS.checkConnection, id, testOptions),
+      testSearch: (id, query, testOptions) => updateRequest(WEB_SEARCH_OPERATIONS.testSearch, id, query, testOptions),
+      cancelOperation: (id) => request(WEB_SEARCH_OPERATIONS.cancelOperation, id),
+    },
     account: {
       status: () => accountRequest(ACCOUNT_OPERATIONS.status),
       beginSignIn: () => accountRequest(ACCOUNT_OPERATIONS.beginSignIn),

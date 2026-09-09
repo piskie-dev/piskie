@@ -205,10 +205,14 @@ function buildNoticeNode(
     kind: 'notice',
     sections: [],
     noticeContent: presentation.text,
-    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.details,
+    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.detailFile,
   });
   const meta = [
-    ...(presentation.source ? [rawPresentationText(presentation.source)] : []),
+    ...(presentation.source
+      ? [messageText('transcript.summary.fromSource', {
+          source: rawPresentationText(presentation.source),
+        })]
+      : []),
     ...(presentation.metadata ?? []),
   ];
 
@@ -233,7 +237,11 @@ function buildNoticeNode(
       ? () => ({
           sections: noticeSections(presentation.text, {
             guidance: presentation.guidance,
-            details: presentation.details,
+            detailFile: presentation.detailFile
+              ? messageText('transcript.detail.eventFile', {
+                  path: rawPresentationText(presentation.detailFile),
+                })
+              : undefined,
           }),
         })
       : undefined,

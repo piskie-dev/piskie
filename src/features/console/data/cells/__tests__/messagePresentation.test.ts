@@ -76,6 +76,31 @@ describe('信封覆盖', () => {
     ).toEqual({ as: 'user', origin: 'user', text: '群里的消息' });
   });
 
+  it('父流程 ATA 信封只展示可读消息，不暴露传输字段', () => {
+    const inlineEnvelope = JSON.stringify({
+      storage: 'inline',
+      type: 'message',
+      data: { type: 'message', message: '请继续检查构建结果。' },
+      originalSize: 12,
+    });
+    expect(presentUserMessage(
+      'system_event',
+      `<agent_input source="parent" ts="t">${inlineEnvelope}</agent_input>`,
+    )).toEqual({ as: 'user', origin: 'parent', text: '请继续检查构建结果。' });
+
+    const fileEnvelope = JSON.stringify({
+      storage: 'file',
+      type: 'message',
+      summary: '请读取完整检查说明。',
+      filePath: '/tmp/flow-event-1.jsonl',
+      originalSize: 1200,
+    });
+    expect(presentUserMessage(
+      'system_event',
+      `<agent_input source="parent" ts="t">${fileEnvelope}</agent_input>`,
+    )).toEqual({ as: 'user', origin: 'parent', text: '请读取完整检查说明。' });
+  });
+
   it('#5 subagent_event → 事件行，source 取 id', () => {
     expect(presentUserMessage(
       'subagent_notification',
@@ -87,6 +112,29 @@ describe('信封覆盖', () => {
       eventType: 'completed',
       titleKey: 'transcript.notice.workerCompleted',
       tone: 'neutral',
+    });
+  });
+
+  it('文件型子流程事件拆出摘要和详情文件，不暴露 XML 标签', () => {
+    const presented = presentUserMessage(
+      'subagent_notification',
+      [
+        '<subagent_event id="worker-1" type="failed" ts="t">',
+        '<summary>构建检查失败，已保留诊断现场。</summary>',
+        '<detail path="/tmp/flow-event-detail.md"/>（完整内容可用 read 读取）',
+        '</subagent_event>',
+      ].join('\n'),
+    );
+
+    expect(presented).toMatchObject({
+      as: 'notice',
+      source: 'worker-1',
+      text: '构建检查失败，已保留诊断现场。',
+      summary: '构建检查失败，已保留诊断现场。',
+      detailFile: '/tmp/flow-event-detail.md',
+      eventType: 'failed',
+      titleKey: 'transcript.notice.workerFailed',
+      tone: 'danger',
     });
   });
 
@@ -176,14 +224,10 @@ describe('通知 TranscriptNode 漏口', () => {
       eventType: 'failed',
       errorType: 'context_overflow',
       defaultExpanded: false,
+      meta: [messageText('transcript.summary.fromSource', { source: rawText('worker-1') })],
     });
     expect(cell?.detail?.().sections.map((section) => section.value)).toEqual([
       providerMessage,
-      {
-        subagentId: 'worker-1',
-        type: 'failed',
-        errorType: 'context_overflow',
-      },
       messageText('transcript.guidance.contextOverflow'),
     ]);
   });

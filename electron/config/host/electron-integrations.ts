@@ -12,8 +12,9 @@ import { mcpConnectionManager } from '../../mcp/runtime/index.js';
 import { reconcileConfiguredProxyTransports } from '../../core/proxy/proxy-resolver.js';
 import type { ConfigDomainIntegrations } from '../domains/integrations.js';
 
-export function createElectronConfigDomainIntegrations(): ConfigDomainIntegrations {
+export function createElectronConfigDomainIntegrations(webSearch: ConfigDomainIntegrations['webSearch']): ConfigDomainIntegrations {
   return {
+    webSearch,
     appSettings: {
       resolveInitialLanguage: () => resolveInitialAppLanguage(
         app.getPreferredSystemLanguages()[0] ?? app.getLocale(),

@@ -189,6 +189,7 @@ describe('piskie config CLI', () => {
           { id: 'model-catalog' },
           { id: 'proxies' },
           { id: 'task-definitions' },
+          { id: 'web-search' },
         ],
       },
     });

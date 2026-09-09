@@ -301,8 +301,10 @@ export interface PendingToolCall {
   category: 'document' | 'agent' | 'browser' | 'system' | 'local';
   /** 预览信息（dryRun 模式下的预览内容） */
   preview?: PreviewInfo;
-  /** 工作流确认不受工具 Auto 模式影响，例如计划正文批准。 */
+  /** 工作流确认不随工具 Auto 模式立即放行，例如计划正文批准。 */
   modeInvariant?: boolean;
+  /** 自动执行下计划批准的绝对时间，由执行端计时，供页面显示。 */
+  autoApproveAt?: number;
 }
 
 /**

@@ -108,6 +108,7 @@ describe('InferenceRuntimeHost', () => {
       'model-catalog',
       'proxies',
       'task-definitions',
+      'web-search',
     ]);
     for (const domain of host.configHost.domains()) {
       expect(undocumentedWritableFields(host.configHost.describe(domain.id)), domain.id).toEqual([]);
