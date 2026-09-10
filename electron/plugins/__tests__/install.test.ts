@@ -52,6 +52,20 @@ async function makePlugin(name = 'jira-kit', invalidSkill = false): Promise<stri
 }
 
 describe('plugin install transaction', () => {
+  it('checks project member conflicts against standalone .agents skills', async () => {
+    const workspace = path.join(configRoot, 'sample-project')
+    const source = await makePlugin('sample-kit')
+    const skillDir = path.join(workspace, '.agents', 'skills', 'jira-helper')
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, 'SKILL.md'),
+      '---\nname: jira-helper\ndescription: Sample guide\n---\n\nSample project rules.')
+    await expect(installPlugin(configRoot, { source, scope: 'project', workspace }))
+      .rejects.toMatchObject({ code: 'MEMBER_VALIDATION_FAILED' })
+    await rm(skillDir, { recursive: true })
+    const installed = await installPlugin(configRoot, { source, scope: 'project', workspace })
+    expect(installed.path).toBe(path.join(workspace, '.piskie', 'plugins', 'sample-kit'))
+  })
+
   it('installs a local plugin ZIP through the shared archive owner', async () => {
     const archive = path.join(configRoot, 'zipped-kit.zip')
     const zip = new ZipFile()

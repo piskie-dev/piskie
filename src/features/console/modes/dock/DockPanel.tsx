@@ -66,6 +66,7 @@ export interface DockPanelProps {
   /** dev-mode 只开放上下文明细查看器；占用环始终可见 */
   readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
   /** 头部右侧动作（暂停/停止/切模式由模式层给） */
   readonly headerActions?: React.ReactNode;
   /** 待审核的生图节点（模式层从 VM 的 imageNodeIds 取全量态后传入） */
@@ -79,6 +80,7 @@ export const DockPanel = memo<DockPanelProps>(
     fidelity = 'visible',
     devMode,
     onPreviewImage,
+    onOpenWorker,
     headerActions,
     imageNodes,
   }) => {
@@ -205,12 +207,15 @@ export const DockPanel = memo<DockPanelProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          conversationStatus={request?.status}
+          workers={agent?.workers}
+          onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
           onOpenFileChange={openFileChange}
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [onPreviewImage, openFileChange, runCellAction],
+      [agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, runCellAction],
     );
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);

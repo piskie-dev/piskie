@@ -88,7 +88,10 @@ function skillPort(catalog: ToolCatalog): SkillCatalogPort {
     )),
     getSkillResourceRoot: () => '/tmp/piskie-browser-skill-consumption/installed',
     getLoadedSkillModule: (name: string) => name === SKILL ? loaded : undefined,
-    listManagedSkills: vi.fn(async () => []),
+    listManagedSkills: vi.fn(async () => [{
+      name: SKILL, scope: 'user' as const, enabled: true, executionType: 'executable' as const,
+      path: '/tmp/example-installed-skill', description: 'Example Site searches',
+    }]),
   } as SkillCatalogPort;
 }
 

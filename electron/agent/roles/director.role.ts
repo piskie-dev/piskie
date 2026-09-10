@@ -30,7 +30,7 @@ export class DirectorRole implements AgentRole {
     const runConfig = options.runConfig!;
 
     // 确保工作空间目录
-    const workspace = runConfig.workspace;
+    const workspace = runConfig.workspace ?? (options.workspace as string | undefined);
     if (workspace) {
       await pathsService.ensureWorkspace(workspace);
     }
@@ -78,7 +78,8 @@ export class DirectorRole implements AgentRole {
     const runConfig = options.runConfig!;
     ctx.role = 'director';
     ctx.runName = runConfig.name;
-    ctx.workspaceDir = runConfig.workspace || pathsService.getDefaultWorkspaceDir();
+    ctx.workspaceDir = runConfig.workspace ?? (options.workspace as string | undefined)
+      ?? pathsService.getDefaultWorkspaceDir();
     ctx.tempDir = pathsService.getTempDir(host.id);
     if (this.skillInventory.count > 0) {
       ctx.availableSkillsBlock = this.skillInventory.text;

@@ -37,7 +37,7 @@ export const AgentActivityRow = memo<{ activeStartedAt: number }>(({ activeStart
       aria-label={t('sessionWorkbenchUi.agentActivity.elapsedAria', { elapsed })}
     >
       <span className={styles.activityIcon}>
-        <OrbIndicator size={14} />
+        <OrbIndicator size={14} variant="expanding" />
       </span>
       <span className={activeTextStyles.text}>{t('sessionWorkbenchUi.agentActivity.working')}</span>
       <span className={styles.activitySeparator}>·</span>

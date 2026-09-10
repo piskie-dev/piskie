@@ -211,7 +211,21 @@ describe('installSkill：全局知识型', () => {
 })
 
 describe('installSkill：项目级', () => {
-  it('项目级安装落位 {workspace}/.piskie/skills，无 registry 记账', async () => {
+  it('项目覆盖更新和卸载操作同一个新目录', async () => {
+    const workspace = path.join(root, 'sample-project')
+    const source = await makeKnowledgeSource('sample-guide')
+    const first = await installSkill({ source, scope: 'project', workspace })
+    await writeFile(path.join(source, 'SKILL.md'),
+      '---\nname: sample-guide\ndescription: Updated guide\n---\n\nUpdated body.\n')
+    const updated = await installSkill({ source, scope: 'project', workspace, force: true })
+    expect(updated.path).toBe(first.path)
+    expect(await readFile(path.join(updated.path, 'SKILL.md'), 'utf8')).toContain('Updated body.')
+    const removed = await removeSkill({ name: 'sample-guide', scope: 'project', workspace })
+    expect(removed.path).toBe(first.path)
+    expect(existsSync(first.path)).toBe(false)
+  })
+
+  it('项目级安装落位 {workspace}/.agents/skills，无 registry 记账', async () => {
     const workspace = path.join(root, 'my-project')
     await mkdir(workspace, { recursive: true })
     const source = await makeKnowledgeSource('proj-skill')
@@ -223,7 +237,7 @@ describe('installSkill：项目级', () => {
       defaultWorkspaceDir: path.join(root, 'default-ws'),
     })
     expect(outcome.scope).toBe('project')
-    expect(outcome.path).toBe(path.join(workspace, '.piskie', 'skills', 'proj-skill'))
+    expect(outcome.path).toBe(path.join(workspace, '.agents', 'skills', 'proj-skill'))
     expect(existsSync(path.join(outcome.path, 'SKILL.md'))).toBe(true)
 
     const registry = await readRegistry(globalSkillsRoot())

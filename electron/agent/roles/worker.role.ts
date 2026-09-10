@@ -8,7 +8,8 @@ import type { AgentRole, RoleDefaults, RuntimeOptions, LoopConfig, ToolUseInput 
 import type { AgentHost } from '../agent-host.js';
 import type { ToolContextBuilder } from '../tool-context.js';
 import type { PromptContext } from '../prompts/types.js';
-import { renderSkillTeachingDoc } from '../../skills/discovery/teaching.js';
+import { renderAvailableSkillTeaching } from '../../skills/discovery/teaching.js';
+import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
 import { pathsService } from '../../services/paths.service.js';
 import type {
   AgentRunConfig,
@@ -23,6 +24,10 @@ interface BrowserControllerLike {
 }
 
 export class WorkerRole implements AgentRole {
+  private readonly skillInventory: SkillInventorySnapshot = {
+    renderedAt: new Date().toISOString(), entries: {},
+  };
+
   getDefaults(options: RuntimeOptions): RoleDefaults {
     return {
       approvalMode: options.initialApprovalMode || 'auto',
@@ -42,9 +47,13 @@ export class WorkerRole implements AgentRole {
       if (assignedSkills.length) {
         for (const skill of assignedSkills) {
           try {
-            const teaching = await renderSkillTeachingDoc(skills, skill, { forPrompt: true });
-            if (teaching.found) {
+            const teaching = await renderAvailableSkillTeaching(skills, skill, {
+              workspace: options.runConfig?.workspace ?? (options.workspace as string | undefined),
+              defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
+            });
+            if (teaching?.found) {
               host.setSkillDocs(host.getSkillDocs() + '\n\n' + teaching.content);
+              this.skillInventory.entries[skill] = { tier: 'full', scope: teaching.scope };
             } else {
               appLog.warn({
                 event: 'agent.skill_docs.load.degraded',
@@ -111,7 +120,8 @@ export class WorkerRole implements AgentRole {
     ctx.role = 'worker';
     ctx.skills = subConfig.skills as string[];
 
-    ctx.workspaceDir = (options.workspace as string) || pathsService.getDefaultWorkspaceDir();
+    ctx.workspaceDir = options.runConfig?.workspace ?? (options.workspace as string | undefined)
+      ?? pathsService.getDefaultWorkspaceDir();
     ctx.tempDir = pathsService.getTempDir(host.id);
   }
 
@@ -131,15 +141,7 @@ export class WorkerRole implements AgentRole {
       subagentConfig: subConfig,
     });
     // worker 的可见集 = 出生时被授予并注入教学文档的技能（tool_search 互斥基准）
-    builder.setSkillInventory({
-      renderedAt: new Date().toISOString(),
-      entries: Object.fromEntries(
-        (subConfig.skills ?? []).map((skill) => [
-          skill,
-          { tier: 'full' as const, scope: 'user' as const },
-        ])
-      ),
-    });
+    builder.setSkillInventory(this.skillInventory);
     builder
       .setAssignmentSnapshot(
         options.assignmentTaskBoardSnapshot as AssignmentTaskBoardSnapshot | undefined
@@ -175,7 +177,7 @@ export class WorkerRole implements AgentRole {
       browserEnvironmentId: subConfig.browserEnvironmentId,
       binding: options.browserBinding,
       mainAgentId: options.mainAgentId,
-      workspace: options.workspace,
+      workspace: options.runConfig?.workspace ?? options.workspace,
     };
 
     // 通用 Worker 统一注入显式图片执行目标

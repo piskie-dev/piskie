@@ -23,6 +23,7 @@ import {
   buildToolNode,
   isDegradedOutcome,
   resolveToolOutcome,
+  type ToolOutcome,
 } from '@/features/console/data/cells/toolCell';
 import {
   presentUserMessage,
@@ -339,6 +340,7 @@ function buildWorkerNode(
   ts: number,
   sourceIndex: number,
   params: Record<string, unknown>,
+  outcome: ToolOutcome,
 ): WorkerNode {
   const subject = typeof params.subject === 'string' ? params.subject : '';
   const taskIds = Array.isArray(params.taskIds)
@@ -353,7 +355,8 @@ function buildWorkerNode(
     sourceIndex,
     ...title,
     summary: rawSummary(subject, 140),
-    workerId: typeof params.id === 'string' ? params.id : '',
+    workerId: outcome.unpacked?.text?.match(/^subagentId:[ \t]*(\S+)[ \t]*$/m)?.[1] ?? '',
+    creating: outcome.state.phase === 'running',
     workerType: typeof params.type === 'string' ? params.type : '',
     subject,
     mode: typeof params.mode === 'string' ? params.mode : '',
@@ -555,6 +558,7 @@ function buildToolUseNode(
       matched ? matched.entry.ts : entry.ts,
       sourceIndex,
       params ?? {},
+      outcome,
     );
   }
 

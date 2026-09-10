@@ -10,6 +10,7 @@ import '@/i18n';
 vi.mock('@/utils/platform', () => ({ isMacOSPlatform: () => false }));
 
 import type { ThinkNode } from '@/domains/transcript/nodes';
+import activeTextStyles from '../activeText.module.css';
 
 let ThreadCell: typeof import('../ThreadCell').ThreadCell;
 let dom: JSDOM;
@@ -142,6 +143,8 @@ describe('Think disclosure', () => {
   it('follows the latest live line and returns to the first line when settled', async () => {
     await renderNode(think('Inspect the request\nNewest reasoning tokens', true));
     const summary = container.querySelector<HTMLElement>('[data-think-summary]')!;
+    const activeLabel = container.querySelector(`.${activeTextStyles.text}`);
+    expect(activeLabel?.textContent).toBe('Thinking');
     expect(container.querySelector('[data-orb-variant="expanding"]')).not.toBeNull();
     expect(summary.textContent.trimEnd()).toBe('Newest reasoning tokens');
     expect(summary.hasAttribute('data-follow-end')).toBe(true);
@@ -153,9 +156,11 @@ describe('Think disclosure', () => {
     await renderNode(think('Inspect the request\nNewest reasoning tokens keep arriving', true));
     expect(summary.textContent.trimEnd()).toBe('Newest reasoning tokens keep arriving');
     expect(summary.scrollLeft).toBe(200);
+    expect(container.querySelector(`.${activeTextStyles.text}`)).toBe(activeLabel);
 
     await renderNode(think('Inspect the request\nNewest reasoning tokens keep arriving', false));
     expect(container.querySelector('[data-orb-variant]')).toBeNull();
+    expect(container.querySelector(`.${activeTextStyles.text}`)).toBeNull();
     expect(summary.textContent.trimEnd()).toBe('Inspect the request');
     expect(summary.hasAttribute('data-follow-end')).toBe(false);
     expect(summary.scrollLeft).toBe(0);

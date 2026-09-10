@@ -16,6 +16,8 @@ import type { z } from 'zod'
 
 import { skillToolName } from '../../piskiepilot/core/skill/define.js'
 import { toApiSchema } from '../../tools/params.js'
+import type { SkillScope } from '@shared/types/skill.js'
+import { resolveAvailableSkill, type SkillSelectionPort, type SkillWorkspaceOptions } from './resolve.js'
 
 /** 文件清单上限（超出截断并注明，深层内容仍可 read） */
 const MAX_LISTED_FILES = 50
@@ -45,6 +47,20 @@ export interface SkillTeachingDoc {
   found: boolean
   content: string
   classification?: 'standard' | 'disabled' | 'unknown'
+}
+
+/** Select the visible source before rendering its teaching and resource paths. */
+export async function renderAvailableSkillTeaching(
+  port: SkillTeachingPort & SkillSelectionPort,
+  skillName: string,
+  options: SkillWorkspaceOptions,
+): Promise<(SkillTeachingDoc & { scope: SkillScope }) | undefined> {
+  const item = await resolveAvailableSkill(port, skillName, options)
+  if (!item?.enabled) return undefined
+  const teaching = item.scope === 'project'
+    ? await renderSkillTeachingFromDir(item.path)
+    : await renderSkillTeachingDoc(port, skillName)
+  return { ...teaching, scope: item.scope }
 }
 
 /** 渲染指定技能的完整教学包（loader 视图：内置 + 全局已装载） */

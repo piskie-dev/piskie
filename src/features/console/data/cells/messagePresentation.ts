@@ -149,6 +149,7 @@ const BY_SUBTYPE = {
   system_event: { as: 'notice' },
   subagent_notification: { as: 'notice' },
   context_summary: { as: 'notice' },
+  agent_instructions: { as: 'notice' },
 } as const satisfies Record<MessageSubtype, DefaultPresentation>;
 
 // ==================== 信封覆盖 ====================

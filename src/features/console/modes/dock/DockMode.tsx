@@ -203,6 +203,7 @@ export const DockMode = memo<DockModeProps>(
                       fidelity="focused"
                       devMode={devMode}
                       onPreviewImage={onPreviewImage}
+                      onOpenWorker={setFocusWorkerId}
                       imageNodes={mainImageNodes}
                     />
                   </div>
@@ -219,6 +220,7 @@ export const DockMode = memo<DockModeProps>(
                           fidelity="visible"
                           devMode={devMode}
                           onPreviewImage={onPreviewImage}
+                          onOpenWorker={setFocusWorkerId}
                           imageNodes={workerImageNodes}
                         />
                       </div>
@@ -254,6 +256,7 @@ export const DockMode = memo<DockModeProps>(
                     stopping={agent.phase === 'stopping'}
                     devMode={devMode}
                     onPreviewImage={onPreviewImage}
+                    onOpenWorker={setFocusWorkerId}
                     onFullscreen={(target) => setFullscreen(target)}
                     emptyHint={
                       (agent.workers.length ?? 0) === 0

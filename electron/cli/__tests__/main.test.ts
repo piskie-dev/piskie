@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getPilotRoot } from '@electron/piskiepilot/paths.js';
 import { writeMarketCache } from '../../market/cache.js';
@@ -15,15 +15,28 @@ import {
 
 import { initializeCliEnvironment, resolvePilotRoot } from '../environment.js';
 import { parseCliArguments, runCli } from '../main.js';
+import { resolveWorkspace } from '../commands/skill.js';
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
       rm(directory, { recursive: true, force: true }),
     ),
   );
+});
+
+describe('project workspace discovery', () => {
+  it.each(['.agents', '.piskie'])('recognizes %s in cwd and gives an explicit workspace precedence', async (marker) => {
+    const workspace = await temporaryDirectory('sample-cli-project-');
+    await mkdir(path.join(workspace, marker));
+    vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+    expect(await resolveWorkspace(parseCliArguments(['skill', 'list', '--scope', 'project']))).toBe(workspace);
+    const selected = path.join(workspace, 'selected-project');
+    expect(await resolveWorkspace(parseCliArguments(['skill', 'list', '--workspace', selected]))).toBe(selected);
+  });
 });
 
 async function temporaryDirectory(prefix: string): Promise<string> {
@@ -253,6 +266,7 @@ describe('piskie skill 命令组', () => {
 
   it('returns CLI_ARGUMENT_INVALID with exit 2 for unknown commands and bad arguments', async () => {
     const root = await temporaryDirectory('piskie-cli-skill-');
+    vi.spyOn(process, 'cwd').mockReturnValue(root);
 
     await expect(execute(['skill', 'frobnicate', '--json'], root)).resolves.toMatchObject({
       code: 2,

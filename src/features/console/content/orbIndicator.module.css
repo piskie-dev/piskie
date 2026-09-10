@@ -1,4 +1,4 @@
-/* OrbIndicator：orbit 环流用于 Working；expanding 收放用于 Thinking。 */
+/* OrbIndicator：expanding 收放用于 Thinking、Working 和活跃子流程。 */
 
 .orb {
   position: relative;
@@ -58,8 +58,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb,
-  .orb i::before {
+  .orb[data-orb-variant],
+  .orb[data-orb-variant] i::before {
     animation: none;
   }
 

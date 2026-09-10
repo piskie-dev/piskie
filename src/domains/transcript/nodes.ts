@@ -223,6 +223,8 @@ export interface PlanNode extends TranscriptNodeBase {
 export interface WorkerNode extends TranscriptNodeBase {
   readonly kind: 'worker';
   readonly workerId: string;
+  /** 创建调用尚在执行；目标返回后由 Worker 的实时状态控制展示。 */
+  readonly creating: boolean;
   readonly workerType: string;
   readonly subject: string;
   readonly mode: string;

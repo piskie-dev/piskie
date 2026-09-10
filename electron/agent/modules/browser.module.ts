@@ -19,7 +19,9 @@ import { occupancyRegistry } from '../../core/occupancy/index.js';
 import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { browserLaunchPlanner } from '../../core/pilot/launch/index.js';
 import { createUuid } from '@shared/utils/identifiers.js';
-import { renderSkillTeachingDoc } from '../../skills/discovery/teaching.js';
+import { renderAvailableSkillTeaching } from '../../skills/discovery/teaching.js';
+import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
+import { pathsService } from '../../services/paths.service.js';
 import type { SkillCatalogPort } from '../../core/pilot/pilot-manager.js';
 import type {
   BrowserScreenshotTarget,
@@ -53,6 +55,9 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   readonly core = browserCore;
   private host!: AgentHost;
   private config!: BrowserModuleConfig;
+  private readonly skillInventory: SkillInventorySnapshot = {
+    renderedAt: new Date().toISOString(), entries: {},
+  };
 
   /** 浏览器 ID */
   private browserId?: string;
@@ -219,6 +224,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
 
   contributeTools(builder: ToolContextBuilder): void {
     builder.addResourceIds({ browserId: this.getBrowserId() }).setBrowser(this);
+    builder.setSkillInventory(this.skillInventory);
   }
 
   // ─── 公共方法 ──────────────────────────────────────────
@@ -275,9 +281,13 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
     const parts: string[] = [];
     for (const skill of skills) {
       try {
-        const teaching = await renderSkillTeachingDoc(catalog, skill, { forPrompt: true });
-        if (teaching.found) {
+        const teaching = await renderAvailableSkillTeaching(catalog, skill, {
+          workspace: this.config.workspace,
+          defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
+        });
+        if (teaching?.found) {
           parts.push(teaching.content);
+          this.skillInventory.entries[skill] = { tier: 'full', scope: teaching.scope };
         } else {
           appLog.warn({
             event: 'agent.skill_docs.load.degraded',

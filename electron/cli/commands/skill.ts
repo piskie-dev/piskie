@@ -5,7 +5,7 @@ import { createSkillsPort, type SkillsPort } from '../../skills/ports.js';
 import { createMcpPort } from '../../mcp/ports.js';
 import { createPluginsPort } from '../../plugins/ports.js';
 import { createMarketPort } from '../../market/ports.js';
-import { projectStatePathsForRead } from '../../skills/store/layout.js';
+import { projectSkillsRoot, projectStatePathsForRead } from '../../skills/store/layout.js';
 import { CliArgumentError, required } from '../../inference/config-cli/main.js';
 import type { CliParsedArguments } from '../main.js';
 
@@ -146,17 +146,18 @@ export function parseScopeOption<T extends string>(
   return scope as T;
 }
 
-/** 项目 workspace 解析：显式 --workspace 优先，否则 cwd 含项目状态目录时用 cwd。 */
+/** 显式 --workspace 优先，否则从 cwd 的 Skill 或项目状态目录识别。 */
 export async function resolveWorkspace(parsed: CliParsedArguments): Promise<string | undefined> {
   const explicit = parsed.option('workspace');
   if (explicit) return path.resolve(explicit);
   const cwd = process.cwd();
-  for (const candidate of await projectStatePathsForRead(cwd)) {
+  const candidates = [path.dirname(projectSkillsRoot(cwd)), ...await projectStatePathsForRead(cwd)];
+  for (const candidate of candidates) {
     try {
       const stats = await fs.stat(candidate);
       if (stats.isDirectory()) return cwd;
     } catch {
-      // Continue through the read-compatible project roots.
+      // Continue through the project directory markers.
     }
   }
   return undefined;
@@ -166,7 +167,7 @@ export async function requireWorkspace(parsed: CliParsedArguments): Promise<stri
   const workspace = await resolveWorkspace(parsed);
   if (!workspace) {
     throw new CliArgumentError(
-      '--scope project requires --workspace, or run inside a project directory containing .piskie/',
+      '--scope project requires --workspace, or run inside a project directory containing .agents/ or .piskie/',
     );
   }
   return workspace;

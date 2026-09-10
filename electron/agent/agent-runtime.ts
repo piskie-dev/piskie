@@ -75,6 +75,8 @@ import { ContextSettlementConversation, Settler } from './conversation/settler.j
 import { AgentMailbox, EventBatchApplyError } from './agent-mailbox.js';
 import { agentIncidentStore } from '../observability/incidents/agent-incident-store.js';
 import { AgentConversationContext } from './context/index.js';
+import { loadAgentInstructions } from './context/agent-instructions.js';
+import { app } from 'electron';
 import type { CatalogSnapshot, FinalToolFace } from '../tools/catalog.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
 import { createRole } from './roles/index.js';
@@ -665,6 +667,10 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       // 每个 Runtime 使用独立的系统临时目录，避免运行时文件污染用户工作区。
       await pathsService.ensureTempDir(this.id);
 
+      this.context.setAgentInstructions(await loadAgentInstructions(
+        app.getPath('userData'), this.getEffectiveWorkspace(),
+      ));
+
       // 1. Role 启动逻辑（isResume 时 Role 内部跳过初始任务注入）
       await this.role.onStart(this, this.options);
 
@@ -991,17 +997,14 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     const typed = builder.build();
     const info = typed.agentInfo;
     const runConfig = info.runConfig ?? defaultRunConfig(this._spec.name);
-    const workspaceDir =
-      runConfig.workspace ??
-      (this.options.workspace as string | undefined) ??
-      pathsService.getDefaultWorkspaceDir();
+    const workspaceDir = this.getEffectiveWorkspace();
 
     return {
       agentType: info.role === 'worker' ? 'worker' : 'main',
       agentSpec: info.agentSpec,
       agentId: info.agentId,
       mainAgentId: info.mainAgentId,
-      runConfig: Object.freeze({ ...runConfig }),
+      runConfig: Object.freeze({ ...runConfig, workspace: workspaceDir }),
       subagentConfig: info.subagentConfig,
       resourceIds: typed.resourceIds,
       assignmentSnapshot: typed.assignmentSnapshot,
@@ -1036,6 +1039,12 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   private mergedCustomTools(): string[] {
     const excluded = new Set(this._spec.tools?.exclude ?? []);
     return [...new Set(this._spec.tools?.customTools ?? [])].filter((name) => !excluded.has(name));
+  }
+
+  private getEffectiveWorkspace(): string {
+    return this.options.runConfig?.workspace
+      ?? (this.options.workspace as string | undefined)
+      ?? pathsService.getDefaultWorkspaceDir();
   }
 
   private buildPromptContext(): PromptContext {

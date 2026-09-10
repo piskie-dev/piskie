@@ -10,7 +10,7 @@ import type { SkillScope, SkillType } from '@shared/types/skill.js'
  * | 层     | 位置                                        | 形态          | 记账 |
  * | 内置   | 随 app 分发                                  | 知识型        | 无   |
  * | 全局   | {pilotRoot}/skills/{type}/{name}            | 知识型+可执行 | registry.json |
- * | 项目级 | {workspace}/.piskie/skills/{name} 及插件成员 | 仅知识型      | 无（发现即用） |
+ * | 项目级 | {workspace}/.agents/skills/{name} 及插件成员 | 仅知识型      | 无（发现即用） |
  *
  * 路径消费方必须 lazy 取值（getPilotRoot 注入前求值会冻结 fallback 根）。
  */
@@ -29,7 +29,7 @@ export function globalSkillDir(type: SkillType, name: string): string {
 }
 
 export function projectSkillsRoot(workspace: string): string {
-  return path.join(workspace, PROJECT_STATE_DIR, 'skills')
+  return path.join(workspace, '.agents', 'skills')
 }
 
 export function projectPluginsRoot(workspace: string): string {
@@ -52,7 +52,7 @@ export async function projectStatePathForRead(
 }
 
 export function projectSkillsRootsForRead(workspace: string): Promise<string[]> {
-  return projectStatePathsForRead(workspace, 'skills')
+  return Promise.resolve([projectSkillsRoot(workspace)])
 }
 
 export function projectPluginsRootsForRead(workspace: string): Promise<string[]> {
@@ -93,28 +93,26 @@ export interface ProjectSkillEntry {
 }
 
 /**
- * 项目级浅扫描：{workspace}/.piskie/skills/<name>/SKILL.md 与
+ * 项目级浅扫描：{workspace}/.agents/skills/<name>/SKILL.md 与
  * {workspace}/.piskie/plugins/<plugin>/skills/<name>/SKILL.md。
  * 只认目录 + SKILL.md 存在（codex DirectChildren 模式），不读内容。
  */
 export async function scanProjectSkills(workspace: string): Promise<ProjectSkillEntry[]> {
   const byName = new Map<string, ProjectSkillEntry>()
 
-  for (const stateRoot of await projectStatePathsForRead(workspace)) {
-    for (const dir of await listSkillDirs(path.join(stateRoot, 'skills'))) {
+  for (const dir of await listSkillDirs(projectSkillsRoot(workspace))) {
+    const name = path.basename(dir)
+    byName.set(name, { name, dir, scope: 'project' })
+  }
+  for (const pluginDir of await listChildDirs(projectPluginsRoot(workspace))) {
+    for (const dir of await listSkillDirs(path.join(pluginDir, 'skills'))) {
       const name = path.basename(dir)
-      byName.set(name, { name, dir, scope: 'project' })
-    }
-    for (const pluginDir of await listChildDirs(path.join(stateRoot, 'plugins'))) {
-      for (const dir of await listSkillDirs(path.join(pluginDir, 'skills'))) {
-        const name = path.basename(dir)
-        byName.set(name, {
-          name,
-          dir,
-          scope: 'project',
-          plugin: path.basename(pluginDir),
-        })
-      }
+      byName.set(name, {
+        name,
+        dir,
+        scope: 'project',
+        plugin: path.basename(pluginDir),
+      })
     }
   }
 
@@ -124,7 +122,8 @@ export async function scanProjectSkills(workspace: string): Promise<ProjectSkill
 async function listChildDirs(parent: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(parent, { withFileTypes: true })
-    return entries.filter((e) => e.isDirectory()).map((e) => path.join(parent, e.name))
+    return entries.filter((e) => e.isDirectory())
+      .map((e) => path.join(parent, e.name)).sort()
   } catch {
     return []
   }

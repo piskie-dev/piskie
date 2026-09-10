@@ -1743,8 +1743,8 @@ export default {
       call: '调用 {{callId}}',
     },
     fileRead: {
-      line: '第 {{start}} 行',
-      lineRange: '第 {{start}}–{{end}} 行',
+      line: '{{start}} 行',
+      lineRange: '{{start}}–{{end}} 行',
     },
     activity: {
       actionWithSummary: '{{action}} · {{summary}}',

@@ -139,7 +139,8 @@ export type MessageSubtype =
   | 'assignment'            // Worker 创建期唯一 Assignment + 紧凑 Task Board
   | 'system_event'          // 系统事件（initial_start、定时唤醒）
   | 'subagent_notification' // 子流程通知
-  | 'context_summary';      // 上下文压缩摘要
+  | 'context_summary'       // 上下文压缩摘要
+  | 'agent_instructions';   // Runtime 从 AGENTS.md 加载的用户指令
 
 export interface Message {
   role: 'user' | 'assistant';

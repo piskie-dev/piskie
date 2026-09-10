@@ -16,6 +16,7 @@ import {
 } from './install/pipeline.js'
 import { globalSkillsRoot, scanProjectSkills } from './store/layout.js'
 import { readRegistry } from './store/registry.js'
+import { resolveSkillResourceRoot } from './discovery/resolve.js'
 
 /**
  * SkillsPort：技能管理面唯一应用端口。
@@ -154,8 +155,7 @@ export function createSkillsPort(options: SkillsPortOptions = {}): SkillsPort {
       if (!item) throw new SkillPipelineError('SKILL_NOT_FOUND', `技能不存在：${name}`)
 
       const detail: SkillDetail = { ...item, files: [] }
-      const resourceRoot = runtime?.getResourceRoot?.(name)
-        ?? await resolveInstalledResourceRoot(item)
+      const resourceRoot = await resolveSkillResourceRoot(item, runtime?.getResourceRoot)
       try {
         const raw = await fs.readFile(path.join(resourceRoot, 'SKILL.md'), 'utf8')
         const parsed = parseSkillManifest(raw)
@@ -166,7 +166,7 @@ export function createSkillsPort(options: SkillsPortOptions = {}): SkillsPort {
       detail.files = await listFiles(resourceRoot)
       detail.sidecar = await readSidecar(item.path)
       detail.source = detail.sidecar?.source
-      const signatures = runtime?.getFunctionSignatures?.(name)
+      const signatures = item.scope === 'project' ? undefined : runtime?.getFunctionSignatures?.(name)
       if (signatures) detail.functions = signatures
       return detail
     },
@@ -276,26 +276,4 @@ async function listFiles(dir: string, depth = 3, prefix = ''): Promise<string[]>
     }
   }
   return out.slice(0, 200)
-}
-
-const EXECUTABLE_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
-const EXECUTABLE_BUILD_HASH = /^[a-f0-9]{64}$/u
-
-/** Resolve the current executable content for CLI callers that have no live Runtime. */
-async function resolveInstalledResourceRoot(item: SkillListItem): Promise<string> {
-  if (
-    item.scope !== 'user'
-    || item.executionType !== 'executable'
-    || !EXECUTABLE_SKILL_NAME.test(item.name)
-  ) {
-    return item.path
-  }
-
-  try {
-    const hash = (await fs.readFile(path.join(item.path, 'current'), 'utf8')).trim()
-    if (!EXECUTABLE_BUILD_HASH.test(hash)) return item.path
-    return path.join(globalSkillsRoot(), '.build', item.name, hash, 'module')
-  } catch {
-    return item.path
-  }
 }

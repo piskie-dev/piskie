@@ -131,6 +131,7 @@ export type CompactionActivityCallback = (active: boolean) => void;
 
 export class AgentConversationContext {
   private context: EnhancedAIContext;
+  private agentInstructions?: Message;
   private compactionEngine: CompactionEngine;
   private inference: AgentInferencePort;
   private target: ModelTarget;
@@ -170,6 +171,15 @@ export class AgentConversationContext {
     this.compactionEngine = new CompactionEngine(options.inference);
 
     this.context = this.createEmptyContext();
+  }
+
+  /** File instructions belong to this Runtime, independently of durable conversation facts. */
+  setAgentInstructions(content: string): void {
+    if ((this.agentInstructions?.content ?? '') === content) return;
+    this.agentInstructions = content
+      ? { role: 'user', content, subtype: 'agent_instructions' }
+      : undefined;
+    this.lastMeasurement = undefined;
   }
 
   /**
@@ -768,7 +778,7 @@ export class AgentConversationContext {
         return false;
       }
 
-      const history = this.projectModelMessages(processedMessages);
+      const history = this.projectConversationMessages(processedMessages);
 
       const result = await this.compactionEngine.compact(
         history,
@@ -846,8 +856,14 @@ export class AgentConversationContext {
     return true;
   }
 
-  /** 摘要与后续事实保持独立消息，provider 协议适配不在这里发生。 */
-  private projectModelMessages(
+  /** Requests, token counts and inspection share the same instruction prefix. */
+  private projectModelMessages(): Message[] {
+    const history = this.projectConversationMessages();
+    return this.agentInstructions ? [this.agentInstructions, ...history] : history;
+  }
+
+  /** 摘要与后续事实保持独立消息；压缩只接收这些对话事实。 */
+  private projectConversationMessages(
     source: EnhancedMessage[] = this.context.fullMessages
   ): Message[] {
     const messages = this.projectMessages(source);

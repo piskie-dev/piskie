@@ -1,9 +1,8 @@
 /**
- * OrbIndicator —— Think / Working 活动中的自有指示图形（Lumen「Orbs」法则）。
+ * OrbIndicator —— Think / Working / 子流程活动中的自有指示图形。
  *
- * orbit 用环流表示持续工作；expanding 在中心与圆环之间舒展，表示思考展开。
- * 它只在活动中存在，完成态由前置开合箭头接棒。颜色吃 currentColor，
- * 由挂载处的图标槽给色。
+ * expanding 在中心与圆环之间舒展；orbit 提供环流变体。
+ * 仅在活动中显示，静态图标与 currentColor 由挂载处决定。
  */
 
 import { memo } from 'react';

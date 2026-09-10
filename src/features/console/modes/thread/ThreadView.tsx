@@ -63,6 +63,7 @@ export interface ThreadViewProps {
   readonly onMenuSelect?: (key: string) => void;
   /** 点文件操作条目 ⇒ 右栏审阅面板（模式层持有右栏状态，故回调由它给） */
   readonly onOpenFileChange?: (cellId: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
 }
 
 export const ThreadView = memo<ThreadViewProps>(
@@ -76,6 +77,7 @@ export const ThreadView = memo<ThreadViewProps>(
     menuItems,
     onMenuSelect,
     onOpenFileChange,
+    onOpenWorker,
   }) => {
     const { t } = useTranslation();
     const active = isActive(fidelity);
@@ -171,12 +173,15 @@ export const ThreadView = memo<ThreadViewProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          conversationStatus={request?.status}
+          workers={agent?.workers}
+          onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
           onOpenFileChange={onOpenFileChange}
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [onOpenFileChange, onPreviewImage, runCellAction],
+      [agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, runCellAction],
     );
 
 

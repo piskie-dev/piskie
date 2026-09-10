@@ -65,6 +65,7 @@ export interface AgentNodeData {
   readonly workerId?: string;
   readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
 }
 
 export interface ScreenNodeData {
@@ -99,6 +100,7 @@ const AgentCanvasNode = memo(({ data, selected }: NodeProps) => {
         devMode={node.devMode}
         imageNodes={imageNodes}
         onPreviewImage={node.onPreviewImage}
+        onOpenWorker={node.onOpenWorker}
       />
     </NodeShell>
   );

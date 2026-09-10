@@ -61,7 +61,13 @@ function createManager(overrides: Record<string, unknown> = {}) {
     }),
     classifySkill: vi.fn().mockResolvedValue('unknown'),
     getSkillResourceRoot: vi.fn(() => undefined),
-    listManagedSkills: vi.fn().mockResolvedValue([]),
+    listManagedSkills: vi.fn().mockResolvedValue([{
+      name: executable.name, scope: 'user', enabled: true, executionType: 'executable',
+      path: '/tmp/skills/local', description: 'Sample workflow',
+    }, {
+      name: fixed.name, scope: 'builtin', enabled: true, executionType: 'knowledge',
+      path: '/app/skills/browser', description: 'Browser guide',
+    }]),
     ...overrides,
   } as any;
 }

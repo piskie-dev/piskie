@@ -73,9 +73,12 @@ import type {
   ToolNode,
 } from '@/domains/transcript/nodes';
 import styles from './thread.module.css';
+import activeTextStyles from './activeText.module.css';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { isBrowserToolName } from '../data/cells/toolPresentation';
 import { workerPresentation } from '../chrome/workerPresentation';
+import type { StatusKey } from '../data/status';
+import type { WorkerRef } from '../data/vm';
 
 const ICON = 14;
 
@@ -523,7 +526,7 @@ const ThinkDisclosure = memo<{ readonly cell: ThinkNode }>(({ cell }) => {
             <ChevronRight size={13} className={styles.thinkCaret} />
           )}
         </span>
-        <span className={styles.thinkLabel}>
+        <span className={`${styles.thinkLabel} ${cell.live ? activeTextStyles.text : ''}`}>
           {cell.live ? t('transcript.thinking') : t('transcript.title.thinking')}
         </span>
         {!open && (
@@ -556,6 +559,9 @@ ThinkDisclosure.displayName = 'ThinkDisclosure';
 
 export interface ThreadCellProps {
   readonly cell: TranscriptNode;
+  readonly conversationStatus?: StatusKey;
+  readonly workers?: readonly WorkerRef[];
+  readonly onOpenWorker?: (workerId: string) => void;
   readonly onPreviewImage?: (src: string) => void;
   /** 点文件操作条目 ⇒ 右栏审阅面板显示它；不传则退回就地展开 */
   readonly onOpenFileChange?: (cellId: string) => void;
@@ -566,7 +572,15 @@ export interface ThreadCellProps {
   readonly onAction?: (cell: TranscriptNode, action: TranscriptAction) => void;
 }
 
-export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenFileChange, onAction }) => {
+export const ThreadCell = memo<ThreadCellProps>(({
+  cell,
+  conversationStatus,
+  workers,
+  onOpenWorker,
+  onPreviewImage,
+  onOpenFileChange,
+  onAction,
+}) => {
   const { t } = useTranslation();
   const title = t(cell.titleKey, cell.titleArgs ?? {});
   const present = (value: PresentationText): string => (
@@ -770,28 +784,33 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
     // 子流程创建：类型图标和短标签用于扫读，任务标题占据剩余宽度。
     case 'worker': {
       const presentation = cell.workerType ? workerPresentation(cell.workerType) : undefined;
-      if (presentation) {
-        const Icon = presentation.icon;
-        return (
-          <div className={styles.workerCreation}>
-            <span className={styles.workerCreationIcon} aria-hidden>
-              <Icon size={ICON} />
-            </span>
-            <span className={styles.workerCreationLabel}>{title}</span>
-            <span className={styles.workerCreationType} title={t(presentation.labelKey)}>
-              {t(presentation.shortLabelKey)}
-            </span>
-            <span className={styles.workerCreationSubject} title={cell.subject}>{cell.subject}</span>
-          </div>
-        );
-      }
+      const worker = workers?.find((candidate) => candidate.id === cell.workerId);
+      const status = cell.creating ? conversationStatus : worker?.status;
+      const live = status === 'thinking' || status === 'running';
+      const open = worker && onOpenWorker ? () => onOpenWorker(worker.id) : undefined;
+      const Icon = presentation?.icon ?? Network;
       return (
-        <div className={styles.cell}>
-          <ActionLine
-            icon={<Network size={ICON} />}
-            text={t('transcript.workerCreated', { subject: cell.subject })}
-          />
-        </div>
+        <button
+          className={styles.workerCreation}
+          type="button"
+          disabled={!open}
+          onClick={open}
+          data-clickable={!!open}
+          data-live={live}
+        >
+          <span className={styles.workerCreationIcon} aria-hidden>
+            {live ? <OrbIndicator size={ICON} variant="expanding" /> : <Icon size={ICON} />}
+          </span>
+          <span className={`${styles.workerCreationText} ${live ? activeTextStyles.text : ''}`}>
+            <span className={styles.workerCreationLabel}>{title}</span>
+            {presentation && (
+              <span className={styles.workerCreationType} title={t(presentation.labelKey)}>
+                {t(presentation.shortLabelKey)}
+              </span>
+            )}
+            <span className={styles.workerCreationSubject} title={cell.subject}>{cell.subject}</span>
+          </span>
+        </button>
       );
     }
 

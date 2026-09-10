@@ -318,6 +318,7 @@ export const ThreadMode = memo<ThreadModeProps>(
                 menuItems={threadMenu}
                 onMenuSelect={onThreadMenu}
                 onOpenFileChange={openFileChange}
+                onOpenWorker={selectTab}
               />
             ) : emptyState}
           </div>

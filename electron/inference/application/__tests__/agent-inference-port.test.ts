@@ -169,13 +169,19 @@ describe('DefaultAgentInferencePort', () => {
     });
 
     const invokeOptions = options();
-    const response = await port.invoke(agentRequest(), invokeOptions);
+    const request = agentRequest();
+    const response = await port.invoke({
+      ...request,
+      messages: [{ role: 'user', subtype: 'agent_instructions', content: 'Global rules. Project rules.' },
+        ...request.messages],
+    }, invokeOptions);
 
     expect(mapped).toMatchObject({
       model: { providerId: 'provider', modelId: 'model/one' },
       promptCacheKey: 'agent-cache-key',
       messages: [
         { role: 'system', content: [{ kind: 'text', text: 'system rules' }] },
+        { role: 'user', content: [{ kind: 'text', text: 'Global rules. Project rules.' }] },
         { role: 'user', content: [{ kind: 'text', text: 'look at this' }, { kind: 'input_image' }] },
         { role: 'assistant', content: [
           {

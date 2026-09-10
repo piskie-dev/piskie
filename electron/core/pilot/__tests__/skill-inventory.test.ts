@@ -100,7 +100,7 @@ describe('buildSkillInventory', () => {
 
   it('块尾附触发规则；project scope 记入 manifest', async () => {
     const catalog = createCatalog([
-      item({ name: 'team-guide', scope: 'project', path: '/ws/.piskie/skills/team-guide' }),
+      item({ name: 'team-guide', scope: 'project', path: '/ws/.agents/skills/team-guide' }),
     ]);
     const result = await buildSkillInventory(catalog);
 
