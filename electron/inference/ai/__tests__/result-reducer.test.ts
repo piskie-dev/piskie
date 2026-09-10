@@ -183,4 +183,35 @@ describe('collectAiResult attempt isolation', () => {
       localCode: 'AI_RESULT_INCOMPLETE',
     });
   });
+
+  it('rejects a completed attempt without text, reasoning, or tool calls', async () => {
+    const base = baseFactory();
+    const events = [
+      { ...base(1), kind: 'response.started', model, configRevision: 7 },
+      { ...base(1), kind: 'usage.updated', usage: { totalInputTokens: 4, totalOutputTokens: 0 } },
+      { ...base(1), kind: 'response.completed', stopReason: 'other' },
+    ] satisfies AiEvent[];
+
+    await expect(collectAiResult(eventStream(events), model, 'trace-result')).rejects.toMatchObject({
+      source: 'local',
+      stage: 'collect',
+      localCode: 'AI_RESULT_EMPTY',
+    });
+  });
+
+  it('accepts a reasoning-only completed attempt', async () => {
+    const base = baseFactory();
+    const events = [
+      { ...base(1), kind: 'response.started', model, configRevision: 7 },
+      { ...base(1), kind: 'reasoning.delta', text: 'A private reasoning trace.' },
+      { ...base(1), kind: 'response.completed', stopReason: 'end_turn' },
+    ] satisfies AiEvent[];
+
+    const result = await collectAiResult(eventStream(events), model, 'trace-result');
+
+    expect(result.content).toEqual([{
+      kind: 'reasoning',
+      item: { protocol: 'openai-chat', text: 'A private reasoning trace.' },
+    }]);
+  });
 });

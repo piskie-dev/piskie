@@ -8,6 +8,7 @@ import type {
   CreateBrowserEnvironmentRequest,
 } from '../../../shared/types/index.js';
 import type { ScreenStreamRequest } from '../../../shared/types/stream.js';
+import type { AgentTarget } from '../../../shared/types/agent-control.js';
 import {
   streamTransfer,
   type ControllerContext,
@@ -59,6 +60,10 @@ const boundsSchema = z.object({
   height: z.number().finite().nonnegative(),
 }).strict();
 const pathSchema = z.string().trim().min(1).max(16_384);
+const browserTargetSchema = z.object({
+  agentId: identifier,
+  workerId: identifier.optional(),
+}).strict();
 const streamRequestSchema = z.object({
   requestId: identifier,
   kind: z.literal('browser').optional(),
@@ -121,32 +126,38 @@ export function createPilotController(
         browserId: request.browserId,
       });
     }),
-    operation(PILOT_OPERATIONS.navigateEmbeddedBrowser, args([z.string().max(8_192)]), (context, [url]) => (
-      application.navigateEmbeddedBrowser(context.windowId, url)
+    operation(PILOT_OPERATIONS.openEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => {
+      application.embeddedBrowser(context.windowId).open(target);
+    }),
+    operation(PILOT_OPERATIONS.closeEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).close(target)
     )),
-    operation(PILOT_OPERATIONS.openLocalHtmlInEmbeddedBrowser, args([pathSchema]), (context, [targetPath]) => (
-      application.openLocalHtmlInEmbeddedBrowser(context.windowId, targetPath)
+    operation(PILOT_OPERATIONS.navigateEmbeddedBrowser, args([browserTargetSchema, z.string().max(8_192)]), (context, [target, url]) => (
+      application.navigateEmbeddedBrowser(context.windowId, target, url)
     )),
-    operation(PILOT_OPERATIONS.backEmbeddedBrowser, args([]), (context) => (
-      application.embeddedBrowser(context.windowId).back()
+    operation(PILOT_OPERATIONS.openLocalHtmlInEmbeddedBrowser, args([browserTargetSchema, pathSchema]), (context, [target, targetPath]) => (
+      application.openLocalHtmlInEmbeddedBrowser(context.windowId, target, targetPath)
     )),
-    operation(PILOT_OPERATIONS.forwardEmbeddedBrowser, args([]), (context) => (
-      application.embeddedBrowser(context.windowId).forward()
+    operation(PILOT_OPERATIONS.backEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).get(target)?.back()
     )),
-    operation(PILOT_OPERATIONS.reloadEmbeddedBrowser, args([]), (context) => (
-      application.embeddedBrowser(context.windowId).reload()
+    operation(PILOT_OPERATIONS.forwardEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).get(target)?.forward()
     )),
-    operation(PILOT_OPERATIONS.stopEmbeddedBrowser, args([]), (context) => (
-      application.embeddedBrowser(context.windowId).stop()
+    operation(PILOT_OPERATIONS.reloadEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).get(target)?.reload()
     )),
-    operation(PILOT_OPERATIONS.setEmbeddedBrowserBounds, args([boundsSchema]), (context, [bounds]) => (
-      application.embeddedBrowser(context.windowId).setBounds(bounds)
+    operation(PILOT_OPERATIONS.stopEmbeddedBrowser, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).get(target)?.stop()
     )),
-    operation(PILOT_OPERATIONS.setEmbeddedBrowserVisible, args([z.boolean()]), (context, [visible]) => (
-      application.embeddedBrowser(context.windowId).setVisible(visible)
+    operation(PILOT_OPERATIONS.setEmbeddedBrowserBounds, args([browserTargetSchema, boundsSchema]), (context, [target, bounds]) => (
+      application.embeddedBrowser(context.windowId).setBounds(target, bounds)
     )),
-    operation(PILOT_OPERATIONS.embeddedBrowserState, args([]), (context) => (
-      application.embeddedBrowser(context.windowId).state()
+    operation(PILOT_OPERATIONS.setEmbeddedBrowserVisible, args([browserTargetSchema, z.boolean()]), (context, [target, visible]) => (
+      application.embeddedBrowser(context.windowId).setVisible(target, visible)
+    )),
+    operation(PILOT_OPERATIONS.embeddedBrowserState, args([browserTargetSchema]), (context, [target]) => (
+      application.embeddedBrowser(context.windowId).state(target)
     )),
   ];
 
@@ -165,11 +176,16 @@ export function createPilotController(
     {
       id: PILOT_TOPICS.embeddedBrowser,
       capability: 'pilot',
-      input: z.undefined(),
-      open(context, _input, emit) {
+      input: browserTargetSchema,
+      open(context, input, emit) {
+        const target = input as AgentTarget;
         const browser = application.embeddedBrowser(context.windowId);
-        const dispose = browser.changes.subscribe(emit, { signal: context.signal });
-        return { snapshot: browser.state(), dispose };
+        const dispose = browser.changes.subscribe((change) => {
+          if (change.target.agentId === target.agentId && change.target.workerId === target.workerId) {
+            emit(change.state);
+          }
+        }, { signal: context.signal });
+        return { snapshot: browser.state(target), dispose };
       },
     },
   ];

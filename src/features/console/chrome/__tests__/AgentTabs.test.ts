@@ -17,7 +17,7 @@ const items: readonly AgentTabItem[] = [
   ...Array.from({ length: 8 }, (_, index) => ({
     workerId: `worker-${index + 1}`,
     label: `Worker ${index + 1}`,
-    mode: 'local' as const,
+    type: 'local-worker' as const,
     status: 'running' as const,
   })),
 ];
@@ -115,6 +115,17 @@ describe('AgentTabs overflow navigation', () => {
       }));
     });
     expect(lastScrolledLabel).toContain('Worker 8');
+  });
+
+  it('shows an Explore label and opens the existing Worker conversation', async () => {
+    const onSelect = vi.fn();
+    await act(async () => root.render(createElement(AgentTabs, {
+      items: [{ workerId: 'worker-explore', type: 'explore', label: '调查保存入口', status: 'running' }], onSelect,
+    })));
+    const tab = container.querySelector<HTMLButtonElement>('[role="tab"]')!;
+    expect(tab.title).toBe('代码与文档调查 · 调查保存入口');
+    await act(async () => tab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onSelect).toHaveBeenCalledWith('worker-explore');
   });
 
   it('does not show paging buttons when the tabs fit', async () => {

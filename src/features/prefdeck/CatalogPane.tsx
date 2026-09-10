@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import {
   BadgeInfo,
   Bot,
+  Globe,
   Chrome,
   Image as ImageIcon,
   Palette,
@@ -33,9 +34,14 @@ export interface CatalogProviderItem {
 
 export type DeckSect =
   | 'ai' | 'image' | 'ai-tuning' | 'image-tuning'
+  | 'web-search' | 'web-search-settings'
   | 'proxy' | 'account' | 'look' | 'kernel' | 'logs' | 'about';
 
 export interface CatalogPaneProps {
+  readonly searchProviders: readonly { id: string; title: string; active: boolean }[];
+  readonly pickedSearch: string | null;
+  readonly onSearchProvider: (id: string) => void;
+  readonly onAddSearchProvider?: () => void;
   readonly sect: DeckSect;
   readonly providers: Record<GatewayKind, readonly CatalogProviderItem[]>;
   readonly picked: Record<GatewayKind, string | null>;
@@ -51,6 +57,7 @@ const GATEWAY_META: Record<GatewayKind, { labelKey: string; tuning: DeckSect; ic
 
 export const CatalogPane: React.FC<CatalogPaneProps> = ({
   sect,
+  searchProviders, pickedSearch, onSearchProvider, onAddSearchProvider,
   providers,
   picked,
   onSect,
@@ -129,6 +136,24 @@ export const CatalogPane: React.FC<CatalogPaneProps> = ({
         <div className={styles.branch}>{t('settings.catalog.inferenceGroup')}</div>
         {gatewayBranch('ai')}
         {gatewayBranch('image')}
+        <div className={styles.branch}>{t('settings.catalog.toolsGroup')}</div>
+        <button type="button" className={styles.leaf} data-on={sect === 'web-search' || sect === 'web-search-settings'} onClick={() => onSect('web-search')}>
+          <Globe size={15} />{t('settings.webSearch.title')}<span className={styles.leafCount}>{searchProviders.length}</span>
+        </button>
+        <div className={styles.twigList} data-sub="web-search" data-open={sect === 'web-search' || sect === 'web-search-settings'}>
+          {searchProviders.map((item) => <button key={item.id} type="button" className={styles.twig}
+            data-on={sect === 'web-search' && pickedSearch === item.id} onClick={() => onSearchProvider(item.id)}>
+            {item.active && <span className={styles.twigDot} />}<span className={styles.twigLabel}>{item.title}</span>
+          </button>)}
+          <button type="button" className={styles.twig} data-on={sect === 'web-search-settings'} onClick={() => onSect('web-search-settings')}>
+            <Settings size={12} /><span className={styles.twigLabel}>{t('settings.catalog.globalDefaults')}</span>
+          </button>
+          {onAddSearchProvider && (
+            <button type="button" className={styles.twig} onClick={onAddSearchProvider}>
+              <Plus size={12} /><span className={styles.twigLabel}>{t('settings.catalog.addProvider')}</span>
+            </button>
+          )}
+        </div>
         <div className={styles.branch}>{t('settings.catalog.networkGroup')}</div>
         {plainLeaf('proxy', <ShieldHalf size={15} />, t('settings.catalog.proxy'))}
         <div className={styles.branch}>{t('settings.catalog.applicationGroup')}</div>

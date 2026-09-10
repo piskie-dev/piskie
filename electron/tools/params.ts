@@ -23,7 +23,6 @@ export function toApiSchema(schema: z.ZodType): JSONSchemaObject {
   const json = restorePreprocessAnnotations(input, output);
   const apiSchema = { ...json };
   delete apiSchema.$schema;
-  delete apiSchema.additionalProperties;
   return apiSchema;
 }
 

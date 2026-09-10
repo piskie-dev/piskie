@@ -1,13 +1,99 @@
 {
   "provider": "zhipu",
-  "version": "2026.07.10.4+image.64791e754a58",
-  "verifiedAt": "2026-08-24",
+  "version": "2026.09.05+image.5cb131619ea4",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://docs.bigmodel.cn/cn/guide/capabilities/thinking",
     "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
   ],
   "models": [
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM-5.3-Flash",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-26",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.075,
+        "outputPerMillion": 0.25
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM-5.3",
+      "provider": "zhipu",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "deepseek-thinking",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-14",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
     {
       "id": "glm-5.2",
       "name": "GLM-5.2",
@@ -46,8 +132,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-13"
     },
@@ -89,8 +175,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-01"
     },
@@ -132,8 +218,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-03-27"
     },
@@ -180,8 +266,8 @@
           "https://models.dev",
           "https://docs.bigmodel.cn/cn/guide/capabilities/thinking"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 204800,
       "pricing": {
@@ -228,8 +314,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-01-19"
     },
@@ -271,8 +357,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-01-19"
     },
@@ -319,8 +405,8 @@
           "https://models.dev",
           "https://docs.bigmodel.cn/cn/guide/capabilities/thinking"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 204800,
       "pricing": {
@@ -367,8 +453,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-12-08"
     },
@@ -410,8 +496,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-09-30"
     },
@@ -453,8 +539,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-08-11"
     },
@@ -497,8 +583,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -540,8 +626,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -583,8 +669,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -613,8 +699,8 @@
         "sourceUrls": [
           "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "zhipu-docs:5cb131619ea478eb55b87c79ccbd18b861b153e10312bba29de715ae7eed99f6"
       }
     },
     {
@@ -642,8 +728,8 @@
         "sourceUrls": [
           "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "zhipu-docs:5cb131619ea478eb55b87c79ccbd18b861b153e10312bba29de715ae7eed99f6"
       }
     },
     {
@@ -671,8 +757,8 @@
         "sourceUrls": [
           "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "zhipu-docs:5cb131619ea478eb55b87c79ccbd18b861b153e10312bba29de715ae7eed99f6"
       }
     },
     {
@@ -700,19 +786,19 @@
         "sourceUrls": [
           "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md"
         ],
-        "verifiedAt": "2026-08-24",
-        "catalogVersion": "zhipu-docs:64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "zhipu-docs:5cb131619ea478eb55b87c79ccbd18b861b153e10312bba29de715ae7eed99f6"
       }
     }
   ],
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   },
   "imageInventorySource": {
     "id": "zhipu-docs",
     "url": "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90.md",
-    "sha256": "64791e754a5881d50d9fc9857d58aa92fb03ff3ae2552858a93363ed3b549d68"
+    "sha256": "5cb131619ea478eb55b87c79ccbd18b861b153e10312bba29de715ae7eed99f6"
   }
 }

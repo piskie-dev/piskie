@@ -1,12 +1,70 @@
 {
   "provider": "anthropic",
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://platform.claude.com/docs/en/about-claude/models/overview"
   ],
   "models": [
+    {
+      "id": "claude-fable-5-1",
+      "name": "Claude Fable 5.1",
+      "provider": "anthropic",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          },
+          {
+            "kind": "effort",
+            "effort": "max"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "medium"
+        },
+        "mandatory": true,
+        "transportPreset": "anthropic-adaptive-effort",
+        "replayPolicy": "visible"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-09-01",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "outputPerMillion": 50
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
     {
       "id": "claude-opus-5",
       "name": "Claude Opus 5",
@@ -61,8 +119,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -103,8 +161,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-29"
     },
@@ -161,8 +219,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-07"
     },
@@ -219,8 +277,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-05-28"
     },
@@ -277,8 +335,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-04-14"
     },
@@ -334,8 +392,8 @@
           "https://models.dev",
           "https://platform.claude.com/docs/en/about-claude/models/overview"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1000000,
       "releaseDate": "2026-02-17"
@@ -392,8 +450,8 @@
           "https://models.dev",
           "https://platform.claude.com/docs/en/about-claude/models/overview"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1000000,
       "releaseDate": "2026-02-04"
@@ -443,8 +501,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-11-24"
     },
@@ -493,8 +551,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-11-24"
     },
@@ -536,8 +594,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-10-15"
     },
@@ -586,8 +644,8 @@
           "https://models.dev",
           "https://platform.claude.com/docs/en/about-claude/models/overview"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 200000,
       "releaseDate": "2025-10-15"
@@ -630,8 +688,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2025-09-29"
     },
@@ -680,8 +738,8 @@
           "https://models.dev",
           "https://platform.claude.com/docs/en/about-claude/models/overview"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "maxContextWindow": 1000000,
       "releaseDate": "2025-09-29"
@@ -690,6 +748,6 @@
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

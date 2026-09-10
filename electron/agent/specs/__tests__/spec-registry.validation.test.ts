@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveWorkerMode, SpecRegistry } from '../spec-registry.js';
+import { SpecRegistry } from '../spec-registry.js';
 import type { AgentSpec } from '../spec.js';
 
 function spec(overrides: Partial<AgentSpec> = {}): AgentSpec {
@@ -15,7 +15,6 @@ function spec(overrides: Partial<AgentSpec> = {}): AgentSpec {
       sdkGroups: tools?.sdkGroups ?? [],
       customTools: tools?.customTools ?? [],
       exclude: tools?.exclude,
-      customToolGroups: tools?.customToolGroups,
     },
   };
 }
@@ -24,18 +23,6 @@ function register(candidate: AgentSpec): void {
   new SpecRegistry().register(candidate);
 }
 
-describe('AgentSpec mode derivation', () => {
-  it('derives local and browser only from final modules', () => {
-    expect(deriveWorkerMode(spec({ name: 'local', role: 'worker' }))).toBe('local');
-    expect(deriveWorkerMode(spec({ name: 'browser', role: 'worker', modules: ['browser'] }))).toBe('browser');
-  });
-
-  it('rejects directors', () => {
-    expect(() => deriveWorkerMode(spec({ name: 'director' }))).toThrow(/not a Worker/);
-  });
-
-});
-
 describe('AgentSpec registration invariants', () => {
   it.each(['', '', '.', '..', '../worker', 'group/worker', 'group\\worker']) (
     'rejects path-unsafe AgentSpec name %j',
@@ -43,15 +30,6 @@ describe('AgentSpec registration invariants', () => {
       expect(() => register(spec({ name }))).toThrow(/path-safe identifier/);
     },
   );
-
-  it('resolves Worker Specs from an explicit override or the base Worker mode', () => {
-    const registry = new SpecRegistry();
-
-    expect(registry.resolveWorkerSpec({ mode: 'local' })).toBe('local-worker');
-    expect(registry.resolveWorkerSpec({ mode: 'browser' })).toBe('browser-worker');
-    expect(registry.resolveWorkerSpec({ mode: 'browser', agentSpec: 'custom-worker' }))
-      .toBe('custom-worker');
-  });
 
   it.each([
     ['browser module without SDK', spec({ name: 'browser-no-sdk', role: 'worker', modules: ['browser'] })],
@@ -90,6 +68,12 @@ describe('AgentSpec registration invariants', () => {
     }))).toThrow(/pair/);
     expect(() => register(spec({ name: 'module-only', modules: ['subagent'] }))).toThrow(/pair/);
     expect(() => register(spec({
+      name: 'stop-only', tools: { sdkGroups: [], customTools: ['subagent_stop'] },
+    }))).toThrow(/pair/);
+    expect(() => register(spec({
+      name: 'paired-stop', modules: ['subagent'], tools: { sdkGroups: [], customTools: ['subagent', 'subagent_stop'] },
+    }))).not.toThrow();
+    expect(() => register(spec({
       name: 'worker-subagent',
       role: 'worker',
       modules: ['subagent'],
@@ -114,10 +98,10 @@ describe('AgentSpec registration invariants', () => {
       name: 'generic-worker',
       role: 'worker',
     }))).not.toThrow();
-    expect(registry.getNamedWorkersForParent('special-director')).toEqual([
-      { name: 'protected-worker', mode: 'local', description: '执行受保护的专业任务' },
+    expect(registry.getWorkersForParent('special-director')).toEqual([
+      { name: 'protected-worker', assignment: 'task-board', browser: false, skills: false, description: '执行受保护的专业任务' },
     ]);
-    expect(registry.getNamedWorkersForParent('director')).toEqual([]);
+    expect(registry.getWorkersForParent('director')).toEqual([]);
   });
 
   it('rejects invalid protected-Worker declarations', () => {

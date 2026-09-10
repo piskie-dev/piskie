@@ -35,3 +35,21 @@ export function linkAbort(
   signal.addEventListener('abort', invoke, { once: true });
   return () => signal.removeEventListener('abort', invoke);
 }
+
+/** Cancel the caller's wait; ownership of the underlying operation stays with its owner. */
+export async function raceAbort<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return operation;
+  if (signal.aborted) {
+    void operation.catch(() => {});
+    signal.throwIfAborted();
+  }
+  let unlink = (): void => {};
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    unlink = linkAbort(signal, (reason) => reject(reason));
+  });
+  try {
+    return await Promise.race([operation, cancelled]);
+  } finally {
+    unlink();
+  }
+}

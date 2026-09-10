@@ -15,13 +15,14 @@
  */
 
 import React, { memo, useCallback, useMemo, useState } from 'react';
-import { Bot, Globe, TerminalSquare } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { ImageNodePublicState } from '../../../../../shared/types';
 import { ContentLinkUrlScope } from '@/components/content-links';
 import { messageText, resolvePresentationText, type PresentationText } from '@/i18n/presentationText';
 import { ErrorBar } from '../../chrome/ErrorBar';
+import { workerPresentation } from '../../chrome/workerPresentation';
 import { StatusBadge } from '../../chrome/StatusBadge';
 import { statusOf } from '../../chrome/statusOf';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
@@ -37,6 +38,7 @@ import { Dialog } from '../../chrome/Dialog';
 import { ConversationComposer } from '../../content/composer/ConversationComposer';
 import { PendingEventQueue } from '../../content/composer/PendingEventQueue';
 import { AgentMetricsStrip } from '../../content/AgentMetricsStrip';
+import { FileChangeSummary } from '../../content/FileChangeSummary';
 import { Gate } from '../../content/Gate';
 import { resolveGateRequest } from '../../content/gates/resolve';
 import { useActionScope } from '../../content/useActionScope';
@@ -56,11 +58,6 @@ import threadStyles from '../../content/thread.module.css';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { activityChips, type ActivityChips } from '../../data/activity';
 
-const MODE_ICON = {
-  browser: Globe,
-  local: TerminalSquare,
-} as const;
-
 export interface DockPanelProps {
   readonly agentId: string;
   /** 有值即渲染该 worker 的面板（父 agent 为 `agentId`） */
@@ -69,6 +66,7 @@ export interface DockPanelProps {
   /** dev-mode 只开放上下文明细查看器；占用环始终可见 */
   readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
   /** 头部右侧动作（暂停/停止/切模式由模式层给） */
   readonly headerActions?: React.ReactNode;
   /** 待审核的生图节点（模式层从 VM 的 imageNodeIds 取全量态后传入） */
@@ -82,6 +80,7 @@ export const DockPanel = memo<DockPanelProps>(
     fidelity = 'visible',
     devMode,
     onPreviewImage,
+    onOpenWorker,
     headerActions,
     imageNodes,
   }) => {
@@ -208,12 +207,15 @@ export const DockPanel = memo<DockPanelProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          conversationStatus={request?.status}
+          workers={agent?.workers}
+          onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
           onOpenFileChange={openFileChange}
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [onPreviewImage, openFileChange, runCellAction],
+      [agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, runCellAction],
     );
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
@@ -227,7 +229,8 @@ export const DockPanel = memo<DockPanelProps>(
 
     // 锁门口径：main 看 phase==='stopping'，worker 看 phase==='waiting'
     const gateDisabled = worker ? worker.phase === 'waiting' : request.phase === 'stopping';
-    const ModeIcon = worker ? (MODE_ICON[worker.mode] ?? TerminalSquare) : Bot;
+    const presentation = worker ? workerPresentation(worker.type) : undefined;
+    const TypeIcon = presentation?.icon ?? Bot;
 
     return (
       <ContentLinkUrlScope onOpenLocalFile={openLocalFile}>
@@ -236,7 +239,7 @@ export const DockPanel = memo<DockPanelProps>(
         /* `--thread-*` 变量的供给点：ThreadCell 的规则只引用这些变量（见 thread.module.css 头注） */
         className={threadStyles.skin}
         fidelity={fidelity}
-        icon={<ModeIcon size={10} />}
+        icon={<span title={presentation ? t(presentation.labelKey) : undefined}><TypeIcon size={10} /></span>}
         title={subject}
         statusTone={status ? statusOf(status).tone : undefined}
         statusPulse={status ? statusOf(status).pulse : undefined}
@@ -288,6 +291,7 @@ export const DockPanel = memo<DockPanelProps>(
         footer={
           <>
             <PendingEventQueue events={request.pendingEvents} />
+            {tasks.length === 0 && <FileChangeSummary changes={chips} />}
             {!gate && (
               <ConversationComposer
                 agentId={agentId}

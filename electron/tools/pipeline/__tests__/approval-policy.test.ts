@@ -30,10 +30,10 @@ describe('plan(create) approval policy', () => {
     ['plan', 'confirm'],
     ['browser-skill', 'auto'],
     ['browser-skill', 'confirm'],
-  ] as const)('%s + %s 始终要求用户审批', (mode, approvalMode) => {
+  ] as const)('%s + %s 始终进入计划确认', (mode, approvalMode) => {
     expect(decideApproval(call('create', mode, approvalMode))).toEqual({
       needs: true,
-      reason: '计划正文必须由用户确认。',
+      reason: '确认计划正文后执行；自动执行模式下倒计时结束后批准。',
       modeInvariant: true,
     });
   });

@@ -42,7 +42,7 @@ describe('AgentRuntime worker AI failure notification', () => {
         initialModel: 'provider::model',
         onNotification,
         subagentConfig: {
-          mode: 'local',
+          type: 'local-worker',
           skills: [],
           subject: 'test',
           taskIds: ['task-1'],

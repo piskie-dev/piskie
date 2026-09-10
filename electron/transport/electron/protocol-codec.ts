@@ -20,6 +20,7 @@ const CAPABILITIES = new Set([
   'configuration',
   'desktop',
   'inference',
+  'web-search',
   'messaging',
   'modes',
   'observability',

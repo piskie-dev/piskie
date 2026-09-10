@@ -26,7 +26,7 @@ describe('AgentActivityRow', () => {
     const chinese = render();
     expect(chinese).toContain('Working…');
     expect(chinese).toContain('5分38秒');
-    expect(chinese).toContain('data-orb-variant="orbit"');
+    expect(chinese).toContain('data-orb-variant="expanding"');
     expect(chinese).not.toContain('暂无日志');
 
     await i18n.changeLanguage('en-US');

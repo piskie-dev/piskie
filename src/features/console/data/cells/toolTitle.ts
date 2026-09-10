@@ -8,7 +8,8 @@ export interface ToolTitleDescriptor {
 
 const STATIC_TITLE_KEYS: Readonly<Record<string, string>> = Object.freeze({
   ask_user: 'transcript.tool.askUser',
-  subagent: 'transcript.tool.manageWorker',
+  subagent: 'transcript.tool.createWorker',
+  subagent_stop: 'transcript.tool.stopWorker',
   plan: 'transcript.tool.plan',
   send_event: 'transcript.tool.sendEvent',
   skill_call: 'transcript.tool.skillCall',
@@ -47,13 +48,6 @@ export function resolveToolTitle(
     }
   }
 
-  if (input.tool === 'subagent') {
-    return {
-      titleKey: action === 'stop'
-        ? 'transcript.tool.stopWorker'
-        : 'transcript.tool.createWorker',
-    };
-  }
   if (input.tool === 'plan') {
     if (action === 'create') return { titleKey: 'transcript.tool.submitPlan' };
     if (action === 'read') return { titleKey: 'transcript.tool.readPlan' };

@@ -36,6 +36,7 @@ describe('OpenAI Responses request mapper', () => {
       promptCacheKey: 'agent-cache-key',
       messages: [
         { role: 'system', content: [{ kind: 'text', text: 'Follow the application rules.' }] },
+        { role: 'user', content: [{ kind: 'text', text: '# AGENTS.md instructions\nGlobal rules. Project rules.' }] },
         { role: 'user', content: [{ kind: 'text', text: 'Hello' }] },
       ],
     };
@@ -48,6 +49,11 @@ describe('OpenAI Responses request mapper', () => {
         type: 'message',
         role: 'developer',
         content: [{ type: 'input_text', text: 'Follow the application rules.' }],
+      },
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: '# AGENTS.md instructions\nGlobal rules. Project rules.' }],
       },
       {
         type: 'message',

@@ -53,7 +53,6 @@ function makeModule() {
   } as unknown as AgentHost;
   const module = new BrowserModule();
   module.init(host, {
-    mode: 'browser',
     mainAgentId: 'parent-1',
     browserEnvironmentId: 'p1',
     binding: { browserId: 'environment-p1', userDataId: 'login-p1' },
@@ -115,7 +114,7 @@ describe('BrowserModule bound environment ownership', () => {
     expect(h.recordStopped).toHaveBeenCalledWith('p1', 'environment-p1');
   });
 
-  it('borrowed does not overwrite config and returns the browser without closing', async () => {
+  it('reuses a borrowed browser configuration and closes the occupied browser on destroy', async () => {
     h.borrowed = true;
     const module = makeModule();
     await module.onStart();
@@ -124,8 +123,35 @@ describe('BrowserModule bound environment ownership', () => {
     expect(h.launch).not.toHaveBeenCalled();
     expect(h.recordStarted).not.toHaveBeenCalled();
     await module.onDestroyBegin();
-    expect(h.closeBrowser).not.toHaveBeenCalled();
-    expect(h.recordStopped).not.toHaveBeenCalled();
+    expect(h.closeBrowser).toHaveBeenCalledWith({ browserId: 'environment-p1' });
+    expect(h.recordStopped).toHaveBeenCalledWith('p1', 'environment-p1');
+  });
+
+  it('does not launch after destroy interrupts launch planning', async () => {
+    let finishPlanning!: (value: Awaited<ReturnType<typeof h.planLaunch>>) => void;
+    h.planLaunch.mockImplementationOnce(() => new Promise((resolve) => { finishPlanning = resolve; }));
+    const module = makeModule();
+    const starting = module.onStart();
+    await module.onDestroyBegin();
+    finishPlanning({
+      generation: 'cancelled-generation',
+      browserId: 'environment-p1',
+      userDataId: 'login-p1',
+      identity: {},
+      fingerprint: {},
+      backgroundMode: true,
+    });
+    await starting;
+    expect(h.launch).not.toHaveBeenCalled();
+    expect(h.recordStarted).not.toHaveBeenCalled();
+  });
+
+  it('does not acquire a browser when startup follows destroy', async () => {
+    const module = makeModule();
+    await module.onDestroyBegin();
+    await module.onStart();
+    expect(h.claim).not.toHaveBeenCalled();
+    expect(h.launch).not.toHaveBeenCalled();
   });
 
   it('does not close the current holder browser when the bound environment claim is rejected', async () => {

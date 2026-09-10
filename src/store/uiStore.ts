@@ -42,8 +42,10 @@ interface UIStore {
   backgroundMaskOpacity: number;
   /** 壁纸明暗判定：theme=auto 且有壁纸时跟随此值；null=未判定，按深色兜底。 */
   backgroundIsLight: boolean | null;
-  /** 左栏会话树里被手动折叠的工作区分组 key（默认全展开，只记折叠的） */
-  collapsedWorkspaceGroups: string[];
+  /** 左栏默认收起；只记手动展开或明确导航揭示的工作区 key。 */
+  expandedWorkspaceGroups: string[];
+  /** 按真实分组 key 记忆顺序；空数组表示尚未初始化。 */
+  workspaceGroupOrder: string[];
   /** 隐形左坞开关（默认开启；与 navPrismEnabled 至少保留一个）。 */
   navEdgeDockEnabled: boolean;
   /** 自由棱镜开关（默认开启；与 navEdgeDockEnabled 至少保留一个）。 */
@@ -58,6 +60,8 @@ interface UIStore {
   setBackgroundMaskOpacity: (opacity: number) => void;
   setBackgroundIsLight: (isLight: boolean | null) => void;
   toggleWorkspaceGroup: (key: string) => void;
+  expandWorkspaceGroup: (key: string) => void;
+  setWorkspaceGroupOrder: (order: string[]) => void;
   setSettings: (settings: AppSettings) => void;
 
   // Actions - 业务操作
@@ -78,7 +82,8 @@ export const useUIStore = create<UIStore>()(
       backgroundImage: DEFAULT_SETTINGS.backgroundImage,
       backgroundMaskOpacity: DEFAULT_SETTINGS.backgroundMaskOpacity,
       backgroundIsLight: null,
-      collapsedWorkspaceGroups: [],
+      expandedWorkspaceGroups: [],
+      workspaceGroupOrder: [],
       navEdgeDockEnabled: DEFAULT_SETTINGS.navEdgeDockEnabled,
       navPrismEnabled: DEFAULT_SETTINGS.navPrismEnabled,
       navPrismSpot: DEFAULT_SETTINGS.navPrismSpot,
@@ -89,10 +94,15 @@ export const useUIStore = create<UIStore>()(
       setConsoleMode: (mode) => set({ consoleMode: mode }),
       setConsoleSelection: (selection) => set({ consoleSelection: selection }),
       toggleWorkspaceGroup: (key) => set((state) => ({
-        collapsedWorkspaceGroups: state.collapsedWorkspaceGroups.includes(key)
-          ? state.collapsedWorkspaceGroups.filter((item) => item !== key)
-          : [...state.collapsedWorkspaceGroups, key],
+        expandedWorkspaceGroups: state.expandedWorkspaceGroups.includes(key)
+          ? state.expandedWorkspaceGroups.filter((item) => item !== key)
+          : [...state.expandedWorkspaceGroups, key],
       })),
+      expandWorkspaceGroup: (key) => {
+        if (get().expandedWorkspaceGroups.includes(key)) return;
+        set((state) => ({ expandedWorkspaceGroups: [...state.expandedWorkspaceGroups, key] }));
+      },
+      setWorkspaceGroupOrder: (order) => set({ workspaceGroupOrder: order }),
       setBackgroundMaskOpacity: (opacity) => set({ backgroundMaskOpacity: opacity }),
       setBackgroundIsLight: (isLight) => set({ backgroundIsLight: isLight }),
 
@@ -129,16 +139,16 @@ export const useUIStore = create<UIStore>()(
     }),
     {
       name: UI_STORAGE_NAME,
-      version: 3,
+      version: 4,
       /**
-       * v2 退役无消费者的 canvasLayout。读取边界只投影当前字段，旧值和未知字段
-       * 都不会合并进运行时；consoleMode 不从旧 tree/dock 偏好推断。
+       * v4 工作区默认收起，退役 collapsedWorkspaceGroups；旧数据不能推断哪些组
+       * 曾被手动展开，因此按新的默认值初始化。读取只投影当前字段。
        * 导航与背景偏好由 app-settings 持久化，localStorage 中的旧值直接忽略。
        */
       migrate: (persisted, version) => readPersistedUIState(persisted, version) as never,
       merge: (persisted, current) => ({
         ...current,
-        ...readPersistedUIState(persisted, 3),
+        ...readPersistedUIState(persisted, 4),
       }),
       partialize: selectPersistedUIState,
     }
@@ -150,7 +160,8 @@ export type PersistedUIState = Pick<
   | 'theme'
   | 'sidebarCollapsed'
   | 'consoleMode'
-  | 'collapsedWorkspaceGroups'
+  | 'expandedWorkspaceGroups'
+  | 'workspaceGroupOrder'
 >;
 
 export function selectPersistedUIState(state: PersistedUIState): PersistedUIState {
@@ -158,7 +169,8 @@ export function selectPersistedUIState(state: PersistedUIState): PersistedUIStat
     theme: state.theme,
     sidebarCollapsed: state.sidebarCollapsed,
     consoleMode: state.consoleMode,
-    collapsedWorkspaceGroups: state.collapsedWorkspaceGroups,
+    expandedWorkspaceGroups: state.expandedWorkspaceGroups,
+    workspaceGroupOrder: state.workspaceGroupOrder,
   };
 }
 
@@ -179,11 +191,11 @@ export function readPersistedUIState(value: unknown, version: number): Partial<P
   } else if (version < 1) {
     next.consoleMode = 'thread';
   }
-  if (
-    Array.isArray(state.collapsedWorkspaceGroups)
-    && state.collapsedWorkspaceGroups.every((item) => typeof item === 'string')
-  ) {
-    next.collapsedWorkspaceGroups = [...state.collapsedWorkspaceGroups];
+  for (const key of ['expandedWorkspaceGroups', 'workspaceGroupOrder'] as const) {
+    const keys = state[key];
+    if (Array.isArray(keys) && keys.every((item) => typeof item === 'string')) {
+      next[key] = [...new Set(keys)];
+    }
   }
 
   return next;

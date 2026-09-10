@@ -65,6 +65,7 @@ export interface DockCanvasProps {
   readonly stopping: boolean;
   readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
   readonly onFullscreen?: (target: ScreenFullscreenTarget) => void;
   /** 全部 worker 都在固定列里时的提示文案 */
   readonly emptyHint: string;
@@ -87,7 +88,6 @@ function initialSizeOf(kind: CanvasNode['kind']): { width: number; height: numbe
 function toWorkerInput(worker: CanvasWorker): CanvasWorkerInput {
   return {
     id: worker.id,
-    mode: worker.mode,
     browserId: worker.browserId,
   };
 }
@@ -99,6 +99,7 @@ const Inner = memo<DockCanvasProps>(
     stopping,
     devMode,
     onPreviewImage,
+    onOpenWorker,
     onFullscreen,
     emptyHint,
   }) => {
@@ -149,6 +150,7 @@ const Inner = memo<DockCanvasProps>(
               workerId: node.kind === 'worker' ? node.ownerId : undefined,
               devMode,
               onPreviewImage,
+              onOpenWorker,
             },
           };
         }
@@ -173,7 +175,7 @@ const Inner = memo<DockCanvasProps>(
           },
         };
       },
-      [agentId, byId, devMode, onFullscreen, onPreviewImage, stopping],
+      [agentId, byId, devMode, onFullscreen, onOpenWorker, onPreviewImage, stopping],
     );
 
     const computedNodes = useMemo(

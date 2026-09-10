@@ -32,7 +32,8 @@ describe('subagent failure notice renderer', () => {
 
     expect(html).toContain('data-tone="danger"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('子流程失败');
+    expect(html).toContain('接收子流程消息');
+    expect(html).toContain('>失败<');
     expect(html).toContain('Your input exceeds the context window of this model.');
     expect(html).not.toContain('limits.contextWindow');
   });

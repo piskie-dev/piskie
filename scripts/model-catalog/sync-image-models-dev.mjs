@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { OFFICIAL_IMAGE_CATALOG_SOURCES } from './image-catalog-sources.mjs';
 import { MODELS_DEV_URL } from './models-dev-config.mjs';
+import { retainRetiredModels } from './retired-models.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const providerCatalogDirectory = path.join(root, 'shared/ai-model-catalog/providers');
@@ -90,7 +91,10 @@ for (const update of updates) {
       ]),
     ],
     imageInventorySource: update.source,
-    models: [...aiModels, ...update.imageModels],
+    models: [...aiModels, ...retainRetiredModels(
+      current.models.filter((model) => model.kind === 'image'),
+      update.imageModels,
+    )],
   };
   staged.push({ providerCatalogPath, document, update });
 }

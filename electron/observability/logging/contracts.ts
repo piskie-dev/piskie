@@ -24,6 +24,7 @@ export interface NormalizedLogError {
   readonly stack?: string;
   readonly code?: string;
   readonly cause?: NormalizedLogError;
+  readonly errors?: readonly NormalizedLogError[];
   readonly fields?: Readonly<Record<string, JsonLogValue>>;
 }
 

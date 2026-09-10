@@ -51,7 +51,7 @@ function buildRuntime(): AgentRuntime {
         taskIds: ['task-test'],
         prompt: '完成测试任务。',
         skills: [],
-        mode: 'local',
+        type: 'local-worker',
       },
     } as never,
   });

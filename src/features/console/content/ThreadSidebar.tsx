@@ -1,7 +1,7 @@
 /**
  * ThreadSidebar —— 左栏整体（收起态 + 顶栏 + 会话树），**两个模式共用**。
  *
- * 形态：搜索 + `+` 菜单 + 在跑/历史合并的工作区树。两个模式的左栏完全一致，
+ * 形态：搜索 + 新会话/启动任务 + 在跑/历史合并的工作区树。两个模式的左栏完全一致，
  * 因此只有这一份实现。
  *
  * 职责边界：
@@ -11,27 +11,28 @@
  * - 搜索是本地过滤（无后端查询接口，AgentRun 历史一次读取后在本地筛选）
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronsLeft, ChevronsRight, Play, Plus, Search, Sparkles } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Search, SquarePen } from 'lucide-react';
 
-import { MenuButton } from '../chrome/MenuButton';
+import { useUIStore } from '../../../store/uiStore';
 import { StatusBadge } from '../chrome/StatusBadge';
 import { Tooltip } from '../chrome/Tooltip';
 import { useConsoleActions } from '../data/actions';
+import { useHistoryRowsReady } from '../data/session';
 import type { HistoryRow, SessionRow } from '../data/sessionRow';
 import type { SessionMenuSource } from '../data/sessionMenu';
 import { buildThreadRows, type ThreadRow } from '../data/threadRows';
-import { groupByWorkspace } from '../data/workspaceGroups';
+import {
+  filterWorkspaceGroups,
+  groupByWorkspace,
+  moveWorkspaceGroup,
+  orderWorkspaceGroups,
+  reconcileWorkspaceOrder,
+  type WorkspaceDropEdge,
+} from '../data/workspaceGroups';
 import { WorkspaceTree, type ThreadMenuKey } from './WorkspaceTree';
 import styles from './threads.module.css';
-
-/** 本地过滤：无后端查询接口 */
-function matches(query: string, ...fields: (string | undefined)[]): boolean {
-  if (!query) return true;
-  const needle = query.trim().toLowerCase();
-  return fields.some((field) => field?.toLowerCase().includes(needle));
-}
 
 export interface ThreadSidebarProps {
   readonly sessions: readonly SessionRow[];
@@ -44,7 +45,7 @@ export interface ThreadSidebarProps {
   /** 谓词输入按 agentId 取（菜单可见性由 shared 谓词算） */
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
   readonly onNewSession?: () => void;
-  readonly onStartTask?: () => void;
+  readonly renderTaskLauncher?: (trigger: ReactNode) => ReactNode;
   /** 组头「在此工作区新建会话」:回空态并预选该组目录 */
   readonly onNewSessionIn?: (workspace?: string) => void;
 }
@@ -60,24 +61,33 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     onSelectHistory,
     menuSourceOf,
     onNewSession,
-    onStartTask,
+    renderTaskLauncher,
     onNewSessionIn,
   }) => {
     const { t } = useTranslation();
     const actions = useConsoleActions();
     const [query, setQuery] = useState('');
+    const selection = useUIStore((state) => state.consoleSelection);
+    useEffect(() => setQuery(''), [selection]);
+    const historyReady = useHistoryRowsReady();
+    const savedOrder = useUIStore((state) => state.workspaceGroupOrder);
+    const setOrder = useUIStore((state) => state.setWorkspaceGroupOrder);
+    const searching = query.trim().length > 0;
 
-    /**
-     * 在跑的与历史的合并成**一张表**再按工作区分组。
-     * 过滤发生在合并**之后**，保证同一 AgentRun 的实时态和磁盘态使用同一条件。
-     */
-    const groups = useMemo(() => {
-      const rows = buildThreadRows({ sessions, history });
-      return groupByWorkspace(
-        rows.filter((row) => matches(query, row.label, row.workspace)),
-        t('sessionWorkbenchUi.shell.defaultWorkspace'),
-      );
-    }, [history, query, sessions, t]);
+    const allGroups = useMemo(() => groupByWorkspace(
+      buildThreadRows({ sessions, history }),
+      t('sessionWorkbenchUi.shell.defaultWorkspace'),
+    ), [history, sessions, t]);
+    const order = useMemo(() => reconcileWorkspaceOrder(savedOrder, allGroups), [savedOrder, allGroups]);
+    useEffect(() => {
+      if (historyReady && order !== savedOrder) setOrder([...order]);
+    }, [historyReady, order, savedOrder, setOrder]);
+    const orderedGroups = useMemo(() => orderWorkspaceGroups(allGroups, order), [allGroups, order]);
+    const groups = useMemo(() => filterWorkspaceGroups(orderedGroups, query), [orderedGroups, query]);
+    const moveGroup = useCallback((source: string, target: string, edge: WorkspaceDropEdge) => {
+      if (!allGroups.some((group) => group.key === source)) return;
+      setOrder([...moveWorkspaceGroup(order, source, target, edge)]);
+    }, [allGroups, order, setOrder]);
 
     /**
      * 行点击：在跑的选中会话，历史的恢复记录（后端懒恢复）。
@@ -110,9 +120,24 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
       [actions, onSelectHistory],
     );
 
+    const taskTrigger = (
+      <button
+        type="button"
+        className={collapsed ? styles.iconButton : styles.actionButton}
+        aria-label={t('sessionWorkbenchUi.sidebar.startTask')}
+        aria-haspopup="dialog"
+      >
+        <Play size={14} />
+        {!collapsed && t('sessionWorkbenchUi.sidebar.startTask')}
+      </button>
+    );
+    const taskLauncher = renderTaskLauncher?.(collapsed
+      ? <Tooltip title={t('sessionWorkbenchUi.sidebar.startTask')}>{taskTrigger}</Tooltip>
+      : taskTrigger);
+
     if (collapsed) {
       return (
-        /* 收起态：展开按钮 + 状态点竖列 + 新建菜单 */
+        /* 收起态：展开按钮 + 两个独立入口 + 状态点竖列 */
         <div className={styles.collapsed}>
           <Tooltip title={t('sessionWorkbenchUi.sidebar.expand')}>
             <button
@@ -125,11 +150,22 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
             </button>
           </Tooltip>
 
+          <Tooltip title={t('sessionWorkbenchUi.sidebar.blankSession')}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={onNewSession}
+              aria-label={t('sessionWorkbenchUi.sidebar.blankSession')}
+            >
+              <SquarePen size={14} />
+            </button>
+          </Tooltip>
+          {taskLauncher}
           <span className={styles.rule} />
 
           <div className={styles.collapsedList}>
             {/* 收起态只列在跑的：52px 里放不下历史 */}
-            {groups.flatMap((group) =>
+            {orderedGroups.flatMap((group) =>
               group.rows
                 .filter((row) => !!row.live)
                 .map((row) => (
@@ -147,21 +183,6 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
                 )),
             )}
           </div>
-
-          <span>
-            <MenuButton
-              items={[
-                { key: 'blank', label: t('sessionWorkbenchUi.sidebar.blankSession'), icon: <Sparkles size={12} /> },
-                { key: 'template', label: t('sessionWorkbenchUi.sidebar.startTask'), icon: <Play size={12} /> },
-              ]}
-              onSelect={(key) => (key === 'blank' ? onNewSession?.() : onStartTask?.())}
-              ariaLabel={t('sessionWorkbenchUi.sidebar.create')}
-              triggerClassName={styles.iconButton}
-              placement="inline-end"
-            >
-              <Plus size={13} />
-            </MenuButton>
-          </span>
         </div>
       );
     }
@@ -180,21 +201,6 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
             />
           </span>
 
-          {/* `+` 两项：空白会话 / 启动任务模板 */}
-          <span>
-            <MenuButton
-              items={[
-                { key: 'blank', label: t('sessionWorkbenchUi.sidebar.blankSession'), icon: <Sparkles size={12} /> },
-                { key: 'template', label: t('sessionWorkbenchUi.sidebar.startTask'), icon: <Play size={12} /> },
-              ]}
-              onSelect={(key) => (key === 'blank' ? onNewSession?.() : onStartTask?.())}
-              ariaLabel={t('sessionWorkbenchUi.sidebar.create')}
-              triggerClassName={styles.newButton}
-            >
-              <Plus size={13} />
-            </MenuButton>
-          </span>
-
           <Tooltip title={t('sessionWorkbenchUi.sidebar.collapse')}>
             <button
               type="button"
@@ -207,9 +213,19 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
           </Tooltip>
         </div>
 
+        <div className={styles.actions}>
+          <button type="button" className={styles.actionButton} onClick={onNewSession}>
+            <SquarePen size={14} />
+            {t('sessionWorkbenchUi.sidebar.blankSession')}
+          </button>
+          {taskLauncher}
+        </div>
+
         <div className={styles.scroll}>
           <WorkspaceTree
             groups={groups}
+            searching={searching}
+            onMoveGroup={historyReady && !searching ? moveGroup : undefined}
             selectedAgentId={selectedAgentId}
             onSelect={onSelectRow}
             menuSourceOf={menuSourceOf}

@@ -22,13 +22,6 @@ afterEach(() => {
 });
 
 describe('BrowserModule screenshot owner paths', () => {
-  it('requires the Worker creation contract to provide an explicit mode', () => {
-    const module = new BrowserModule();
-    expect(() => module.init({} as AgentHost, {})).toThrow(
-      'BrowserModule requires an explicit browser or local mode',
-    );
-  });
-
   it.each([
     ['Main', 'main-1', path.join('agent-runs', 'main-1', 'screenshots')],
     ['Worker', 'worker-1', path.join('agent-runs', 'main-1', 'workers', 'worker-1', 'screenshots')],
@@ -39,7 +32,7 @@ describe('BrowserModule screenshot owner paths', () => {
       id: agentId,
       mainAgentId: 'main-1',
       getConversationStore: () => store,
-    } as unknown as AgentHost, { mode: 'local' });
+    } as unknown as AgentHost, {});
     const params: Record<string, unknown> = { format: 'webp', fullPage: true };
 
     const target = await module.prepareScreenshot(params);

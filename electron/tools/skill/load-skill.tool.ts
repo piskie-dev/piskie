@@ -10,10 +10,10 @@ import { z } from '../params.js';
 import type { SkillCatalogPort } from '../../core/pilot/index.js';
 import {
   renderCandidateSkillTeaching,
-  renderSkillTeachingDoc,
-  renderSkillTeachingFromDir,
+  renderAvailableSkillTeaching,
 } from '../../skills/discovery/teaching.js';
-import { scanProjectSkills } from '../../skills/store/layout.js';
+import { listAvailableSkills } from '../../skills/discovery/resolve.js';
+import { pathsService } from '../../services/paths.service.js';
 import {
   browserSkillCandidateOverlay,
   canAccessBrowserSkillCandidate,
@@ -64,28 +64,13 @@ export class LoadSkillTool extends BaseTool<LoadSkillParams> {
       return this.error('Skill catalog is not available');
     }
 
-    const rendered = await renderSkillTeachingDoc(skills, skill);
-    if (rendered.found) {
-      return this.success(rendered.content, { skill });
-    }
-    if (rendered.classification === 'disabled') {
-      return this.error(await this.unknownSkillMessage(skills, skill, context.runConfig.workspace));
-    }
-
-    // 项目级知识型技能不进 loader：从 workspace 目录直接渲染
     const workspace = context.runConfig.workspace;
-    if (workspace) {
-      try {
-        const found = (await scanProjectSkills(workspace)).find((entry) => entry.name === skill);
-        if (found) {
-          const fromDir = await renderSkillTeachingFromDir(found.dir);
-          if (fromDir.found) {
-            return this.success(fromDir.content, { skill, scope: 'project' });
-          }
-        }
-      } catch {
-        // 项目层扫描失败不阻断自愈路径
-      }
+    const rendered = await renderAvailableSkillTeaching(skills, skill, {
+      workspace,
+      defaultWorkspaceDir: workspace ? pathsService.getDefaultWorkspaceDir() : undefined,
+    });
+    if (rendered?.found) {
+      return this.success(rendered.content, { skill, scope: rendered.scope });
     }
 
     return this.error(await this.unknownSkillMessage(skills, skill, workspace));
@@ -99,9 +84,9 @@ export class LoadSkillTool extends BaseTool<LoadSkillParams> {
   ): Promise<string> {
     let candidates: string[] = [];
     try {
-      const items = await skills.listManagedSkills({
-        scope: 'all',
-        workspaces: workspace ? [workspace] : undefined,
+      const items = await listAvailableSkills(skills, {
+        workspace,
+        defaultWorkspaceDir: workspace ? pathsService.getDefaultWorkspaceDir() : undefined,
       });
       candidates = closestNames(items.filter((i) => i.enabled).map((i) => i.name), skill, 3);
     } catch {

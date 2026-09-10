@@ -1,0 +1,44 @@
+.row {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  padding-block: 4px;
+}
+
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.added {
+  color: var(--status-running);
+}
+
+.removed {
+  color: var(--status-error);
+}

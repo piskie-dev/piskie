@@ -1,19 +1,13 @@
 import { appLog } from '@electron/observability/logging/app-log.js';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { BrowserWindow, WebContentsView, session } from 'electron';
 import { createChangeChannel, type ChangeSource } from '../core/change-channel.js';
-import type { EmbeddedBrowserState } from '../../shared/types/embedded-browser.js';
-import type { EmbeddedBrowserPresentation } from './desktop-presentation-port.js';
+import { EMPTY_EMBEDDED_BROWSER_STATE, type EmbeddedBrowserState } from '../../shared/types/embedded-browser.js';
+import type { EmbeddedBrowserPage } from './desktop-presentation-port.js';
 const PARTITION = 'persist:piskie-embedded-browser';
-const EMPTY_STATE: EmbeddedBrowserState = Object.freeze({
-  url: '',
-  title: '',
-  loading: false,
-  canGoBack: false,
-  canGoForward: false,
-});
 
-export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
+export class EmbeddedBrowserSession implements EmbeddedBrowserPage {
   private readonly changeChannel = createChangeChannel<EmbeddedBrowserState>({
     onSubscriberError: (error) =>
       appLog.error({
@@ -30,14 +24,17 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
 
   readonly changes: ChangeSource<EmbeddedBrowserState> = this.changeChannel.source;
 
-  constructor(private readonly window: BrowserWindow) {
-    window.webContents.on('did-start-navigation', this.hideForHostNavigation);
+  constructor(private readonly window: BrowserWindow) {}
+
+  open(): void {
+    this.ensureView();
   }
 
   state(): EmbeddedBrowserState {
     const contents = this.view?.webContents;
-    if (!contents || contents.isDestroyed()) return EMPTY_STATE;
+    if (!contents || contents.isDestroyed()) return EMPTY_EMBEDDED_BROWSER_STATE;
     return {
+      open: true,
       url: contents.getURL(),
       title: contents.getTitle(),
       loading: contents.isLoading(),
@@ -49,12 +46,18 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
   async navigate(address: string): Promise<boolean> {
     const target = normalizeEmbeddedAddress(address);
     if (!target) return false;
-    await this.ensureView().webContents.loadURL(target);
+    if (this.disposed) return true;
+    const contents = this.ensureView().webContents;
+    if (contents.getURL() !== target) await this.load(() => contents.loadURL(target));
     return true;
   }
 
   async openLocalHtml(filePath: string): Promise<void> {
-    await this.ensureView().webContents.loadFile(filePath);
+    if (this.disposed) return;
+    const contents = this.ensureView().webContents;
+    if (contents.getURL() !== pathToFileURL(filePath).href) {
+      await this.load(() => contents.loadFile(filePath));
+    }
   }
 
   back(): void {
@@ -87,8 +90,8 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
 
   setVisible(visible: boolean): void {
     if (this.disposed || this.window.isDestroyed()) return;
-    if (!visible && !this.view) return;
-    const view = this.ensureView();
+    const view = this.view;
+    if (!view || view.webContents.isDestroyed()) return;
     if (visible === this.visible) return;
     if (visible) {
       this.window.contentView.addChildView(view);
@@ -103,12 +106,13 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
     if (this.disposed) return;
     this.disposed = true;
     try {
-      this.window.webContents.removeListener('did-start-navigation', this.hideForHostNavigation);
       if (this.view && this.visible) this.window.contentView.removeChildView(this.view);
     } catch {
       // The owner window may already be destroyed.
     }
-    if (this.view && !this.view.webContents.isDestroyed()) this.view.webContents.close();
+    if (this.view && !this.view.webContents.isDestroyed()) {
+      this.view.webContents.close({ waitForBeforeUnload: false });
+    }
     this.view = undefined;
     this.visible = false;
   }
@@ -121,9 +125,15 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
     });
   }
 
-  private readonly hideForHostNavigation = (): void => {
-    this.setVisible(false);
-  };
+  private async load(navigate: () => Promise<void>): Promise<void> {
+    try {
+      await navigate();
+    } catch (error) {
+      // Closing a page or starting another navigation cancels an in-flight load.
+      if (this.disposed || (error as { code?: string }).code === 'ERR_ABORTED') return;
+      throw error;
+    }
+  }
 
   private ensureView(): WebContentsView {
     if (this.disposed) throw new Error('Embedded browser session is closed');
@@ -167,12 +177,12 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPresentation {
 function normalizeEmbeddedAddress(input: string): string | undefined {
   const value = input.trim();
   if (!value) return undefined;
-  if (/^(https?):/i.test(value)) return isAllowedEmbeddedUrl(value) ? value : undefined;
+  if (/^(https?):/i.test(value)) return isAllowedEmbeddedUrl(value) ? new URL(value).href : undefined;
   if (/^about:blank$/i.test(value)) return 'about:blank';
   if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return undefined;
   const scheme = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(value) ? 'http' : 'https';
   const target = `${scheme}://${value}`;
-  return isAllowedEmbeddedUrl(target) ? target : undefined;
+  return isAllowedEmbeddedUrl(target) ? new URL(target).href : undefined;
 }
 
 function isAllowedEmbeddedUrl(input: string): boolean {

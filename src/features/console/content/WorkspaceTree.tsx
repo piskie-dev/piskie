@@ -18,12 +18,11 @@
  * 分组与排序全在 `data/workspaceGroups` + `data/threadRows`（纯函数 + 单测），本组件只渲染。
  *
  * 长列表两道闸：
- * - 折叠态持久化（uiStore），默认展开、只记被折叠的组；
- * - 每组默认只列前 {@link GROUP_PREVIEW_LIMIT} 条，尾行「还有 N 条」点开全量
- *   （会话级临时态；选中项藏在隐藏区时自动全显，不让当前会话凭空消失）。
+ * - 默认收起，手动展开态持久化；搜索临时展开匹配组；
+ * - 每组默认列前 {@link GROUP_PREVIEW_LIMIT} 条及选中项，可展开全部并收起。
  */
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, FolderOpen, History, Pause, Plus, Square, Trash2 } from 'lucide-react';
 
@@ -39,7 +38,7 @@ import {
   type SessionMenuSource,
 } from '../data/sessionMenu';
 import type { ThreadRow } from '../data/threadRows';
-import type { WorkspaceGroup } from '../data/workspaceGroups';
+import type { WorkspaceDropEdge, WorkspaceGroup } from '../data/workspaceGroups';
 import { resolvePresentationText } from '../data/presentationText';
 import styles from './threads.module.css';
 
@@ -60,6 +59,8 @@ export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete';
 
 export interface WorkspaceTreeProps {
   readonly groups: readonly WorkspaceGroup[];
+  readonly searching?: boolean;
+  readonly onMoveGroup?: (source: string, target: string, edge: WorkspaceDropEdge) => void;
   readonly selectedAgentId?: string | null;
   readonly onSelect: (row: ThreadRow) => void;
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
@@ -76,6 +77,14 @@ const Row = memo<{
   readonly onMenuAction: (key: ThreadMenuKey, row: ThreadRow) => void;
 }>(({ row, selected, onSelect, menuSourceOf, onMenuAction }) => {
   const { t } = useTranslation();
+  const ref = useRef<HTMLDivElement>(null);
+  const reveal = useUIStore((store) => {
+    const selection = store.consoleSelection;
+    return selection?.kind !== 'empty' && selection?.agentId === row.agentId ? selection : null;
+  });
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected, reveal]);
   const live = row.live;
   const activity = live
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
@@ -96,6 +105,7 @@ const Row = memo<{
 
   return (
     <div
+      ref={ref}
       className={styles.row}
       data-live={live ? 'true' : undefined}
       data-selected={selected ? 'true' : undefined}
@@ -131,31 +141,51 @@ const Row = memo<{
 
 Row.displayName = 'WorkspaceThreadRow';
 
-interface GroupProps extends Omit<WorkspaceTreeProps, 'groups'> {
+interface GroupProps extends Omit<WorkspaceTreeProps, 'groups' | 'onMoveGroup'> {
   readonly group: WorkspaceGroup;
+  readonly dropEdge?: WorkspaceDropEdge;
+  readonly dragging: boolean;
+  readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
+  readonly onDragOver: (event: DragEvent<HTMLElement>) => void;
+  readonly onDrop: (event: DragEvent<HTMLElement>) => void;
+  readonly onDragEnd: () => void;
 }
 
 /** 每组默认露出的条数；在跑的排最前，天然不会被藏 */
 const GROUP_PREVIEW_LIMIT = 5;
 
-const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf, onMenuAction, onNewSessionIn }) => {
+const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf, onMenuAction,
+  onNewSessionIn, searching, dropEdge, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   const { t } = useTranslation();
-  const collapsed = useUIStore((store) => store.collapsedWorkspaceGroups);
+  const expandedGroups = useUIStore((store) => store.expandedWorkspaceGroups);
   const toggleWorkspaceGroup = useUIStore((store) => store.toggleWorkspaceGroup);
-  const open = !collapsed.includes(group.key);
-  const toggle = useCallback(() => toggleWorkspaceGroup(group.key), [group.key, toggleWorkspaceGroup]);
+  const open = searching || expandedGroups.includes(group.key);
 
   const [showAll, setShowAll] = useState(false);
-  const hidden = group.rows.slice(GROUP_PREVIEW_LIMIT);
-  // 选中的会话藏在截断区时强制全显——列表里凭空找不到当前会话是最糟的形态
-  const expanded =
-    showAll || hidden.length === 0 || hidden.some((row) => row.agentId === selectedAgentId);
-  const visibleRows = expanded ? group.rows : group.rows.slice(0, GROUP_PREVIEW_LIMIT);
+  const previewRows = group.rows.filter((row, index) => index < GROUP_PREVIEW_LIMIT || row.agentId === selectedAgentId);
+  const hiddenCount = group.rows.length - previewRows.length;
+  const visibleRows = showAll || searching ? group.rows : previewRows;
 
   return (
-    <section className={styles.group} data-open={open ? 'true' : undefined}>
+    <section
+      className={styles.group}
+      data-open={open ? 'true' : undefined}
+      data-drop-edge={dropEdge}
+      data-dragging={dragging || undefined}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <div className={styles.groupHead}>
-        <button type="button" className={styles.groupToggle} onClick={toggle} aria-expanded={open}>
+        <button
+          type="button"
+          className={styles.groupToggle}
+          onClick={() => { if (!searching) toggleWorkspaceGroup(group.key); }}
+          aria-expanded={open}
+          aria-disabled={searching || undefined}
+          draggable={!!onDragStart}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+        >
           <span className={styles.caret}>
             <ChevronRight size={10} />
           </span>
@@ -166,8 +196,6 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
           ) : (
             <span className={styles.groupLabel}>{group.label}</span>
           )}
-          {/* 计数含全部 thread，不只在跑的 */}
-          <span className={styles.groupCount}>{group.rows.length}</span>
         </button>
         {onNewSessionIn && (
           <Tooltip title={t('sessionWorkbenchUi.sidebar.newInWorkspace')}>
@@ -195,9 +223,11 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
           />
         ))}
 
-      {open && !expanded && (
-        <button type="button" className={styles.moreRow} onClick={() => setShowAll(true)}>
-          {t('sessionWorkbenchUi.sidebar.moreRows', { count: hidden.length })}
+      {open && !searching && hiddenCount > 0 && (
+        <button type="button" className={styles.moreRow} onClick={() => setShowAll((value) => !value)}>
+          {showAll
+            ? t('sessionWorkbenchUi.sidebar.fewerRows')
+            : t('sessionWorkbenchUi.sidebar.moreRows', { count: hiddenCount })}
         </button>
       )}
     </section>
@@ -206,18 +236,52 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
 
 Group.displayName = 'WorkspaceGroup';
 
-export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, ...rest }) => {
+export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, onMoveGroup, ...rest }) => {
   const { t } = useTranslation();
+  const [source, setSource] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ key: string; edge: WorkspaceDropEdge } | null>(null);
+  const clearDrag = () => { setSource(null); setDrop(null); };
+  const dropEdge = (event: DragEvent<HTMLElement>): WorkspaceDropEdge => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  };
   if (groups.length === 0) {
-    return <div className={styles.empty}>{t('sessionWorkbenchUi.sidebar.empty')}</div>;
+    return <div className={styles.empty}>{t(rest.searching ? 'sessionWorkbenchUi.sidebar.noMatches' : 'sessionWorkbenchUi.sidebar.empty')}</div>;
   }
 
   return (
-    <>
+    <div onDragLeave={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(null);
+    }}>
       {groups.map((group) => (
-        <Group key={group.key} group={group} {...rest} />
+        <Group
+          key={group.key}
+          group={group}
+          {...rest}
+          dragging={source === group.key}
+          dropEdge={drop?.key === group.key ? drop.edge : undefined}
+          onDragStart={onMoveGroup ? (event) => {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', group.key);
+            setSource(group.key);
+          } : undefined}
+          onDragOver={(event) => {
+            if (!onMoveGroup || source === null) return;
+            if (source === group.key) { setDrop(null); return; }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setDrop({ key: group.key, edge: dropEdge(event) });
+          }}
+          onDrop={(event) => {
+            if (!onMoveGroup || source === null) return;
+            event.preventDefault();
+            onMoveGroup(source, group.key, dropEdge(event));
+            clearDrag();
+          }}
+          onDragEnd={clearDrag}
+        />
       ))}
-    </>
+    </div>
   );
 });
 

@@ -327,6 +327,59 @@ describe('executeAiRun cancellation ownership', () => {
   });
 });
 
+describe('executeAiRun provider retry policy', () => {
+  it('retries a structured stream read error without an HTTP status', async () => {
+    let attempts = 0;
+    const selected = target(async function* (_request, context): AsyncIterable<AiAttemptEvent> {
+      attempts++;
+      if (context.attempt === 1) {
+        throw new GatewayCallError({
+          source: 'provider',
+          gateway: 'ai',
+          providerId: request.model.providerId,
+          modelId: request.model.modelId,
+          driverId: 'openai',
+          stage: 'request',
+          attempt: context.attempt,
+          traceId: context.traceId,
+          message: 'stream_read_error',
+          upstream: {
+            code: 'stream_read_error',
+            type: 'upstream_error',
+            message: 'stream_read_error',
+          },
+        });
+      }
+      yield { kind: 'response.completed', stopReason: 'end_turn' };
+    });
+
+    const events = await collect(executeAiRun({
+      request,
+      context: {
+        runId: 'run-provider-stream-read',
+        traceId: 'trace-provider-stream-read',
+        signal: new AbortController().signal,
+      },
+      target: selected,
+      policy: { ...policy, maxAttempts: 2 },
+      dependencies: { sleep: async () => undefined },
+    }));
+
+    expect(attempts).toBe(2);
+    expect(events.map((event) => event.kind)).toEqual([
+      'response.started',
+      'response.retrying',
+      'response.completed',
+    ]);
+    expect(events[1]).toMatchObject({
+      kind: 'response.retrying',
+      attempt: 1,
+      error: { upstream: { code: 'stream_read_error' } },
+    });
+    expect(events.at(-1)).toMatchObject({ kind: 'response.completed', attempt: 2 });
+  });
+});
+
 describe('executeAiRun compiled model defaults', () => {
   it('adds the catalog output limit without replacing explicit generation fields', async () => {
     let received: AiRequest | undefined;

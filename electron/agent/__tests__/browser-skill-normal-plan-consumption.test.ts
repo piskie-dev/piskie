@@ -1,3 +1,4 @@
+import { specRegistry } from '../specs/index.js';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -22,8 +23,8 @@ vi.mock('../../agent-runs/compaction-archive.js', () => ({
 }));
 
 import { AgentRuntime } from '../agent-runtime.js';
+import { occupancyRegistry } from '../../core/occupancy/index.js';
 import { BrowserModule } from '../modules/browser.module.js';
-import { browserWorkerSpec } from '../specs/builtin/browser-worker.js';
 import { attachSkillProvenance, defineSkill } from '../../piskiepilot/core/skill/define.js';
 import type { SkillCatalogPort } from '../../core/pilot/pilot-manager.js';
 import type { AgentHost } from '../agent-host.js';
@@ -87,7 +88,10 @@ function skillPort(catalog: ToolCatalog): SkillCatalogPort {
     )),
     getSkillResourceRoot: () => '/tmp/piskie-browser-skill-consumption/installed',
     getLoadedSkillModule: (name: string) => name === SKILL ? loaded : undefined,
-    listManagedSkills: vi.fn(async () => []),
+    listManagedSkills: vi.fn(async () => [{
+      name: SKILL, scope: 'user' as const, enabled: true, executionType: 'executable' as const,
+      path: '/tmp/example-installed-skill', description: 'Example Site searches',
+    }]),
   } as SkillCatalogPort;
 }
 
@@ -107,6 +111,8 @@ function browserRuntime() {
   };
 }
 
+const browserWorkerSpec = specRegistry.get('browser-worker')!;
+
 describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
   it.each(['normal', 'plan'] as const)(
     '%s Director 的标准 skills Assignment 进入普通 browser-worker，并能执行 skill_call',
@@ -121,7 +127,7 @@ describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
       catalog.replaceSkill(SKILL, loaded.provenance, entries);
 
       const assignment = {
-        mode: 'browser' as const,
+        type: 'browser-worker' as const,
         subject: '在 Example Site 搜索',
         taskIds: ['task-1'],
         prompt: '使用已安装网站 Skill 搜索 red shoes，并返回 optionIds。',
@@ -133,7 +139,8 @@ describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
         id: `${mode}-browser-worker`,
         mainAgentId: `${mode}-director`,
         getSkillCatalog: () => skills,
-        getBrowserControl: () => null,
+        getBrowserControl: () => ({ hasBrowser: () => true }),
+        spec: browserWorkerSpec,
         getSkillDocs: () => docs,
         setSkillDocs: (value: string) => {
           docs = value;
@@ -143,11 +150,13 @@ describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
       } as unknown as AgentHost;
       const browserModule = new BrowserModule();
       browserModule.init(host, {
-        mode: 'local',
+        binding: { browserId: `${mode}-browser-worker`, userDataId: `${mode}-browser-worker` },
         skills: assignment.skills,
       });
 
       await browserModule.onStart();
+      occupancyRegistry.releaseAllOwnedBy(host.id);
+      await browserModule.onDestroy();
 
       expect(setSkillDocs).toHaveBeenCalledOnce();
       expect(docs).toContain('# Example Site');

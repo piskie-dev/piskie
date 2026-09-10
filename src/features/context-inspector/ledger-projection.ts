@@ -169,6 +169,7 @@ function messageTitle(message: Message, labels: ContextLedgerLabels): string {
     return labels.toolResult;
   }
   if (message.subtype === 'context_summary') return labels.contextSummary;
+  if (message.subtype === 'agent_instructions') return 'AGENTS.md';
   return labels.user;
 }
 

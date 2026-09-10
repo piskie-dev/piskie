@@ -23,6 +23,7 @@ import {
   buildToolNode,
   isDegradedOutcome,
   resolveToolOutcome,
+  type ToolOutcome,
 } from '@/features/console/data/cells/toolCell';
 import {
   presentUserMessage,
@@ -163,7 +164,7 @@ function buildUserNode(
 
   const summary = rawSummary(text, 120) ?? attachmentSummary(images?.length ?? 0, files?.length ?? 0);
 
-  const hasDetail = !!text || !!assignment?.taskBoard;
+  const hasDetail = !!text || !!assignment?.taskBoard || !!images?.length;
   const interaction = resolveInteraction({ kind: 'user', sections: [], hasDetail });
 
   return {
@@ -193,9 +194,13 @@ function buildNoticeNode(
   sourceIndex: number,
   presentation: NoticeMessagePresentation,
 ): NoticeNode {
+  const images = extractCellMedia(entry.content);
   const summary =
-    rawSummary(presentation.summary, 120)
+    (typeof presentation.summary === 'string'
+      ? rawSummary(presentation.summary, 120)
+      : presentation.summary)
     ?? rawSummary(presentation.text, 120)
+    ?? attachmentSummary(images?.length ?? 0, 0)
     ?? (presentation.source
       ? messageText('transcript.summary.fromSource', {
           source: rawPresentationText(presentation.source),
@@ -205,10 +210,14 @@ function buildNoticeNode(
     kind: 'notice',
     sections: [],
     noticeContent: presentation.text,
-    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.details,
+    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.detailFile || !!images?.length,
   });
   const meta = [
-    ...(presentation.source ? [rawPresentationText(presentation.source)] : []),
+    ...(presentation.source
+      ? [messageText('transcript.summary.fromSource', {
+          source: rawPresentationText(presentation.source),
+        })]
+      : []),
     ...(presentation.metadata ?? []),
   ];
 
@@ -222,6 +231,7 @@ function buildNoticeNode(
     meta: meta.length > 0 ? meta : undefined,
     source: presentation.source,
     text: presentation.text,
+    images,
     ...(presentation.badge && { badge: presentation.badge }),
     ...(presentation.eventType && { eventType: presentation.eventType }),
     ...(presentation.errorType && { errorType: presentation.errorType }),
@@ -233,7 +243,11 @@ function buildNoticeNode(
       ? () => ({
           sections: noticeSections(presentation.text, {
             guidance: presentation.guidance,
-            details: presentation.details,
+            detailFile: presentation.detailFile
+              ? messageText('transcript.detail.eventFile', {
+                  path: rawPresentationText(presentation.detailFile),
+                })
+              : undefined,
           }),
         })
       : undefined,
@@ -326,6 +340,7 @@ function buildWorkerNode(
   ts: number,
   sourceIndex: number,
   params: Record<string, unknown>,
+  outcome: ToolOutcome,
 ): WorkerNode {
   const subject = typeof params.subject === 'string' ? params.subject : '';
   const taskIds = Array.isArray(params.taskIds)
@@ -340,7 +355,9 @@ function buildWorkerNode(
     sourceIndex,
     ...title,
     summary: rawSummary(subject, 140),
-    workerId: typeof params.id === 'string' ? params.id : '',
+    workerId: outcome.unpacked?.text?.match(/^subagentId:[ \t]*(\S+)[ \t]*$/m)?.[1] ?? '',
+    creating: outcome.state.phase === 'running',
+    workerType: typeof params.type === 'string' ? params.type : '',
     subject,
     mode: typeof params.mode === 'string' ? params.mode : '',
     taskIds,
@@ -399,7 +416,7 @@ export function projectEntryNodes(
   if (entry.t !== 'msg') return [];
 
   if (entry.role === 'user') {
-    const presented = presentUserMessage(entry.subtype, readableMessageText(entry.content));
+    const presented = presentUserMessage(entry.subtype, readableMessageText(entry.content), entry.id);
     return [
       presented.as === 'user'
         ? buildUserNode(entry, sourceIndex, presented.origin, presented.text)
@@ -541,6 +558,7 @@ function buildToolUseNode(
       matched ? matched.entry.ts : entry.ts,
       sourceIndex,
       params ?? {},
+      outcome,
     );
   }
 

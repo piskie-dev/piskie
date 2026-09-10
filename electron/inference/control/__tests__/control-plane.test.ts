@@ -49,6 +49,33 @@ async function fixture(driver: InferenceDriver = createFakeDriver()) {
 }
 
 describe('InferenceControlPlane runtime hooks', () => {
+  it('keeps system suggestions unchanged when a model is locally overridden or a custom model is added', async () => {
+    const { control, repository } = await fixture();
+    const root = repository.paths.rootDirectory;
+    const system = testModel({
+      id: 'custom/chat', displayName: 'System Chat',
+      source: { kind: 'bundled', version: 'base-1' },
+    });
+    await fs.writeFile(path.join(root, 'catalog/models.json'), JSON.stringify({
+      version: 'base-1', models: [system],
+    }));
+    const before = await control.models('ai');
+    await fs.writeFile(path.join(root, 'config/model-catalog.json'), JSON.stringify({
+      version: 'local:1', revision: 1,
+      models: [
+        { id: system.id, displayName: 'Saved Chat', limits: { contextWindow: 24_000 } },
+        testModel({ id: 'custom/extra', displayName: 'Extra Chat' }),
+      ],
+    }));
+    const after = await control.models('ai');
+    expect(after.catalogModels).toEqual(before.catalogModels);
+    expect(after.catalogModels).toEqual([system]);
+    expect(after.models.find((model) => model.id === system.id)).toMatchObject({
+      displayName: 'Saved Chat', limits: { contextWindow: 24_000 }, source: { kind: 'local' },
+    });
+    expect(after.models.some((model) => model.id === 'custom/extra')).toBe(true);
+  });
+
   it('runs candidate smoke through the compiled gateway target instead of a Driver probe request', async () => {
     const attempts: Array<{ upstreamModel: string; request: unknown }> = [];
     const driver: InferenceDriver = {
@@ -62,6 +89,7 @@ describe('InferenceControlPlane runtime hooks', () => {
         ai: {
           openAttempt: async function* (request) {
             attempts.push({ upstreamModel: input.binding.upstreamId, request });
+            yield { kind: 'text.delta', text: 'ok' };
             yield { kind: 'response.completed', stopReason: 'end_turn' };
           },
         },
@@ -83,7 +111,7 @@ describe('InferenceControlPlane runtime hooks', () => {
       request: {
         model: { providerId: 'primary', modelId: 'chat' },
         messages: [{ role: 'user', content: [{ kind: 'text', text: 'hi' }] }],
-        generation: { maxOutputTokens: 16 },
+        generation: { maxOutputTokens: 128 },
       },
     }]);
   });

@@ -1,3 +1,4 @@
+import type { SearchPort } from '../../../shared/types/web-search.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 import * as path from 'node:path';
 import type { CatalogEntry, CatalogSnapshot } from '../../tools/catalog.js';
@@ -55,6 +56,7 @@ export type ToolActivationContext = Readonly<{
   subagents?: SubagentPort;
   events?: EventPort;
   imageOps?: ImageOpsPort;
+  search?: SearchPort;
   browser?: BrowserHostRuntime;
   post(event: AgentInputRequest): boolean;
 }>;
@@ -129,6 +131,7 @@ export class ToolCallContextFactory {
       plan: entry.modelName === 'plan' ? activation.plan : undefined,
       subagents: entry.tool.def.scope === 'main' ? activation.subagents : undefined,
       events: entry.modelName === 'send_event' ? activation.events : undefined,
+      search: entry.modelName === 'web_search' ? activation.search : undefined,
       imageOps: entry.modelName === 'generate_image' ? activation.imageOps : undefined,
       browser: domain === 'browser' ? activation.browser : undefined,
     });

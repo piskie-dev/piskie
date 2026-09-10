@@ -147,3 +147,8 @@ export interface CatalogSnapshot {
 export interface ModelCatalogSource {
   load(signal?: AbortSignal): Promise<CatalogSnapshot>;
 }
+
+export interface CatalogViews {
+  system: CatalogSnapshot;
+  effective: CatalogSnapshot;
+}

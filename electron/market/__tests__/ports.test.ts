@@ -222,8 +222,8 @@ describe('MarketPort', () => {
       { scope: 'project', workspace: workspaceA, ok: true },
       { scope: 'project', workspace: workspaceB, ok: true },
     ])
-    await expect(access(path.join(workspaceA, '.piskie', 'skills', 'writer', 'SKILL.md'))).resolves.toBeUndefined()
-    await expect(access(path.join(workspaceB, '.piskie', 'skills', 'writer', 'SKILL.md'))).resolves.toBeUndefined()
+    await expect(access(path.join(workspaceA, '.agents', 'skills', 'writer', 'SKILL.md'))).resolves.toBeUndefined()
+    await expect(access(path.join(workspaceB, '.agents', 'skills', 'writer', 'SKILL.md'))).resolves.toBeUndefined()
 
     const preview = await market.preview(workspaceA)
     const rows = preview.items.filter((item) => item.kind === 'skill' && item.name === 'writer')

@@ -1,3 +1,4 @@
+import { specRegistry } from '../specs/index.js';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -18,12 +19,8 @@ vi.mock('../../agent-runs/compaction-archive.js', () => ({
 }));
 
 import { AgentRuntime } from '../agent-runtime.js';
-import { browserSkillBuilderSpec } from '../specs/builtin/browser-skill-builder.js';
 import { browserSkillDirectorSpec } from '../specs/builtin/browser-skill-director.js';
-import { browserSkillVerifierSpec } from '../specs/builtin/browser-skill-verifier.js';
 import { directorSpec } from '../specs/builtin/director.js';
-import { localWorkerSpec } from '../specs/builtin/local-worker.js';
-import { siteScoutSpec } from '../specs/builtin/site-scout.js';
 import type { AgentSpec } from '../specs/spec.js';
 import {
   BROWSER_BUILDER_EXCLUDES,
@@ -123,6 +120,11 @@ function definition(spec: AgentSpec, name: string) {
   return found!;
 }
 
+const browserSkillBuilderSpec = specRegistry.get('browser-skill-builder')!;
+const browserSkillVerifierSpec = specRegistry.get('browser-skill-verifier')!;
+const localWorkerSpec = specRegistry.get('local-worker')!;
+const siteScoutSpec = specRegistry.get('site-scout')!;
+
 describe('Browser Skill 最终模型工具面', () => {
   it('Director 只在完整通用 Director 工具面上增加 status/publish', () => {
     const normal = names(directorSpec);
@@ -138,8 +140,9 @@ describe('Browser Skill 最终模型工具面', () => {
   it('普通 Director 不看到 Browser Skill 专属 Worker type', () => {
     const subagent = definition(directorSpec, 'subagent').input_schema;
     expect((subagent.properties?.type as { enum?: string[] }).enum).toEqual([
-      'browser',
-      'local',
+      'browser-worker',
+      'explore',
+      'local-worker',
     ]);
     expect(JSON.stringify(subagent.properties?.type)).not.toMatch(
       /site-scout|browser-skill-builder|browser-skill-verifier/,
@@ -223,10 +226,10 @@ describe('Browser Skill 最终模型工具面', () => {
     expect(Object.keys(publish.properties ?? {}).sort()).toEqual(['force']);
     expect(subagent.properties).not.toHaveProperty('browserSkillAssignment');
     expect((subagent.properties?.type as { enum?: string[] }).enum).toEqual([
-      'browser',
-      'local',
       'browser-skill-builder',
       'browser-skill-verifier',
+      'browser-worker',
+      'local-worker',
       'site-scout',
     ]);
     const subagentTypeDescription = (subagent.properties?.type as { description?: string }).description;

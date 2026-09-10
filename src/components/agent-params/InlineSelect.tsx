@@ -3,7 +3,7 @@
  *
  * 用 Chromium 的可定制 `<select>`（`appearance: base-select`）：触发钮 + `::picker`
  * 弹层全部由 CSS 定制，浏览器托管焦点、键盘导航、无障碍与 top-layer 呈现，
- * 无需自绘 popover。选项标签为纯文本，旧浏览器降级为系统下拉仍可读。
+ * 无需自绘 popover。选项保留文本标签，可附带状态图标。
  */
 
 import React from 'react';
@@ -23,6 +23,8 @@ declare global {
 export interface InlineOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
+  className?: string;
 }
 
 interface InlineSelectProps {
@@ -55,7 +57,8 @@ export const InlineSelect: React.FC<InlineSelectProps> = ({
       <selectedcontent />
     </button>
     {options.map((option) => (
-      <option key={option.value} value={option.value}>
+      <option key={option.value} value={option.value} className={option.className}>
+        {option.icon}
         {option.label}
       </option>
     ))}

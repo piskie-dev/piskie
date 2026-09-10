@@ -1,5 +1,10 @@
 import { watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
+import packageJson from '../../../package.json' with { type: 'json' };
+import { AI_MODEL_CATALOG } from '../../../shared/ai-model-catalog/index.js';
+import trustedKeys from '../../../shared/ai-model-catalog/trusted-keys.json' with { type: 'json' };
+import { RemoteCatalogSource, type RemoteCatalogOptions } from '../catalog/remote-source.js';
+import { inferenceCatalogVersion } from '../catalog/projection.js';
 import { DefaultAiGateway } from '../ai/public-gateway.js';
 import { bootstrapInferenceConfig, type BootstrapInferenceConfigResult } from '../control/bootstrap-config.js';
 import { compileInferenceConfig } from '../control/compiler.js';
@@ -48,6 +53,9 @@ export interface InferenceRuntimeHostOptions {
   onConfigChanged?: (event: ConfigDomainRevisionChangedEvent) => void;
   onClose?: () => void | Promise<void>;
   configIntegrations?: ConfigDomainIntegrations;
+  remoteCatalog?: Partial<Pick<RemoteCatalogOptions, 'baseUrl' | 'clientVersion' | 'fetch' | 'keys' | 'onError'>> & {
+    autoRefresh?: boolean;
+  };
 }
 
 export interface InferenceRuntimeStartupResult {
@@ -78,6 +86,7 @@ export class InferenceRuntimeHost {
   readonly configHost: ConfigHost;
   readonly aiGateway: DefaultAiGateway;
   readonly imageGateway: DefaultImageGateway;
+  readonly remoteCatalog: RemoteCatalogSource;
 
   private configWatcher: FSWatcher | undefined;
   private catalogWatcher: FSWatcher | undefined;
@@ -111,12 +120,25 @@ export class InferenceRuntimeHost {
       imageHttp: options.imageHttp,
       now: this.now,
     });
+    this.remoteCatalog = new RemoteCatalogSource({
+      rootDirectory: options.rootDirectory,
+      baseUrl: options.remoteCatalog?.baseUrl ?? 'https://www.piskie.dev',
+      clientVersion: options.remoteCatalog?.clientVersion ?? packageJson.version,
+      keys: options.remoteCatalog?.keys ?? trustedKeys,
+      fetch: options.remoteCatalog?.fetch,
+      driverIds: new Set(this.drivers.list().map((driver) => driver.manifest.id)),
+      bundledVersion: inferenceCatalogVersion(AI_MODEL_CATALOG),
+      bundledGeneratedAt: AI_MODEL_CATALOG.generatedAt,
+      now: this.now,
+      onError: options.remoteCatalog?.onError,
+    });
     this.control = new InferenceControlPlane({
       repository: this.repository,
       drivers: this.drivers,
       journal: this.journal,
       publisher: options.publisher ?? 'electron',
       now: this.now,
+      remoteCatalog: this.remoteCatalog,
     });
     this.configHost = createConfigHost(
       {
@@ -193,6 +215,7 @@ export class InferenceRuntimeHost {
       issues.push(startupIssue('watchers', cause));
       this.notifyReloadError(cause);
     }
+    if (this.options.remoteCatalog?.autoRefresh) this.remoteCatalog.start();
     return {
       ...(bootstrap && { bootstrap }),
       ...(currentRevision !== undefined && { currentRevision }),
@@ -217,6 +240,7 @@ export class InferenceRuntimeHost {
   }
 
   async close(): Promise<void> {
+    await this.remoteCatalog.close();
     this.configWatcher?.close();
     this.configWatcher = undefined;
     this.catalogWatcher?.close();

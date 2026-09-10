@@ -3,7 +3,7 @@
  *
  * 三形态:AI 模型 / 生图模型 / ComfyUI 工作流。
  * - 新建供应商态:代理/名称(唯一化建议)/API 密钥(按预设鉴权形态)/API 地址
- * - 模型 ID 联想:兼容目录过滤(驱动兼容+家族+非本地;自定义预设只列已绑定目录),
+ * - 模型 ID 联想:兼容目录过滤(驱动兼容+家族;自定义预设只列已绑定目录),
  *   选中回填全套能力与上限;手动改动即脱钩目录并清空回填;显示名跟随未手改的 ID
  * - AI:能力三态×3 + 思考协议(仅自定义预设可改)+ 默认思考程度 + 上下文窗口(必填)+ 最大输出
  * - 生图:能力三态×4 + 尺寸 tags + 格式多选 + 最大张数
@@ -16,7 +16,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UploadCloud, X } from 'lucide-react';
+import { RefreshCw, UploadCloud, X } from 'lucide-react';
 
 import { NO_REASONING, profileForReasoningTransport } from '../../../../shared/ai-model-catalog';
 import { MIN_CONTEXT_WINDOW } from '../../../../shared/constants/token';
@@ -63,9 +63,9 @@ import {
   BLANK_COMFY,
   buildComfyBindings,
   comfyDraftOf,
+  compatibleModelDefinitions,
   composeCatalogModel,
   equalCatalogShape,
-  freshFirst,
   sealBinding,
   suggestOutputNodes,
   triOf,
@@ -75,7 +75,6 @@ import {
 import {
   coinDisplayName,
   defaultTransportOf,
-  familyOf,
   forgeAuth,
   peekKey,
   transportEditable,
@@ -129,6 +128,7 @@ export interface ModelForgeProps {
   readonly provider?: InferenceProviderInstance;
   readonly editingModelId?: string;
   readonly definitions: readonly InferenceModelDefinition[];
+  readonly catalogDefinitions: readonly InferenceModelDefinition[];
   readonly providerNames: readonly string[];
   readonly onClose: () => void;
   readonly onSaved: (providerId: string) => void;
@@ -142,6 +142,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   provider,
   editingModelId,
   definitions,
+  catalogDefinitions,
   providerNames,
   onClose,
   onSaved,
@@ -152,6 +153,8 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   const addProvider = useInferenceStore((s) => s.addProvider);
   const upsertProviderModel = useInferenceStore((s) => s.upsertProviderModel);
   const upsertCatalogModel = useInferenceStore((s) => s.upsertCatalogModel);
+  const refresh = useInferenceStore((s) => s.refresh);
+  const refreshCatalog = useInferenceStore((s) => s.refreshCatalog);
   const proxyPool = useProxyStore((s) => s.config);
   const fetchProxyPool = useProxyStore((s) => s.fetchConfig);
 
@@ -163,18 +166,9 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
     gateway === 'ai' ? profileForReasoningTransport(defaultTransportOf(spec)) : NO_REASONING
   ), [gateway, spec]);
 
-  /** 兼容目录:驱动兼容 → 自定义预设只列已绑定;内置预设按家族过滤且排除本地目录 */
-  const compatibleDefs = useMemo(() => {
-    const byDriver = definitions.filter((item) => item.compatibleDrivers.includes(spec.driver));
-    if (spec.wing === 'diy') {
-      if (!providerId || !provider) return [];
-      const bound = new Set(Object.values(provider.models).map((binding) => binding.catalogId));
-      return byDriver.filter((item) => bound.has(item.id));
-    }
-    return byDriver
-      .filter((item) => item.family === familyOf(spec) && item.source.kind !== 'local')
-      .sort(freshFirst);
-  }, [definitions, provider, providerId, spec]);
+  const compatibleDefs = useMemo(() => compatibleModelDefinitions(
+    catalogDefinitions, spec, provider,
+  ), [catalogDefinitions, provider, spec]);
 
   // ── 挂载即成型的草稿(宿主按会话 key 重挂载) ──
   const seedDefinition = editingDefinition
@@ -217,9 +211,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   const [maxImages, setMaxImages] = useState(
     seedDefinition?.limits.maxImages != null ? String(seedDefinition.limits.maxImages) : '',
   );
-  const [pickedCatalogId, setPickedCatalogId] = useState<string | undefined>(
-    editingBinding?.catalogId ?? seedDefinition?.id,
-  );
+  const [pickedDefinition, setPickedDefinition] = useState(seedDefinition);
   const [pickedWireId, setPickedWireId] = useState<string | undefined>(
     editingBinding?.upstreamId ?? (seedDefinition ? wireIdOf(seedDefinition) : undefined),
   );
@@ -236,6 +228,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   const [dragOver, setDragOver] = useState(false);
   const [fault, setFault] = useState<PresentationText | null>(null);
   const [saving, setSaving] = useState(false);
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const faultText = fault
     ? resolvePresentationText(fault, (key, values) => t(key, values))
     : null;
@@ -243,6 +236,8 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   useEffect(() => {
     if (!proxyPool) void fetchProxyPool();
   }, [proxyPool, fetchProxyPool]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
 
   // 既有 Comfy 绑定:挂载后加载资产的 inspect/candidates
   const seedAssetId = seedComfy.assetId;
@@ -321,9 +316,9 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
 
   /** 选中目录建议:回填全套能力与上限 */
   const adoptDefinition = (wireId: string, catalogId: string): void => {
-    const definition = definitions.find((item) => item.id === catalogId);
+    const definition = compatibleDefs.find((item) => item.id === catalogId);
     if (!definition) return;
-    setPickedCatalogId(definition.id);
+    setPickedDefinition(definition);
     setPickedWireId(wireId);
     setModelId(wireId);
     setNameEdited(false);
@@ -351,7 +346,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
   const detachDefinition = (value: string): void => {
     setModelId(value);
     if (value !== pickedWireId) {
-      if (pickedCatalogId) {
+      if (pickedDefinition) {
         setContextWindow('');
         setMaxOutput('');
         setTris({
@@ -369,17 +364,31 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         setThinkProfile(specProfile);
         setThinkPick(specProfile.defaultSelection);
       }
-      setPickedCatalogId(undefined);
+      setPickedDefinition(undefined);
     }
     if (!nameEdited) setDisplayName(value);
   };
 
   const suggestions = compatibleDefs.map((definition) => {
-    const bound = provider && Object.values(provider.models)
-      .find((binding) => binding.catalogId === definition.id);
-    const value = bound?.upstreamId ?? wireIdOf(definition);
+    const value = wireIdOf(definition);
     return { value, label: `${definition.displayName} · ${value}`, payload: definition.id };
   });
+
+  const updateCatalog = async (): Promise<void> => {
+    if (catalogRefreshing) return;
+    setCatalogRefreshing(true);
+    setFault(null);
+    try {
+      const result = await refreshCatalog();
+      onFlash(messageText(result.updated
+        ? 'settings.modelForge.catalogUpdated'
+        : 'settings.modelForge.catalogCurrent'));
+    } catch {
+      setFault(messageText('settings.modelForge.catalogRefreshFailed'));
+    } finally {
+      setCatalogRefreshing(false);
+    }
+  };
 
   const proxyChoices = [
     { value: DIRECT_LINE, label: t('settings.provider.direct') },
@@ -440,16 +449,13 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         };
       }
 
-      // 目录归属:选中定义 → 沿用;既有自定义目录 → 复用;否则铸新自定义目录 id
-      const picked = definitions.find((item) => item.id === pickedCatalogId);
+      const picked = pickedDefinition;
       const usePicked = picked !== undefined && pickedWireId === trimmedModelId;
-      const reuseCustom = editingBinding?.catalogId.startsWith('custom/') === true;
-      const catalogId = usePicked
-        ? picked.id
-        : reuseCustom
-          ? editingBinding.catalogId
-          : customCatalogId(targetProviderId, trimmedModelId);
-      const inherited = usePicked ? picked : reuseCustom ? editingDefinition : undefined;
+      const reuseLocal = editingBinding && editingDefinition?.source.kind === 'local';
+      const catalogId = reuseLocal
+        ? editingBinding.catalogId
+        : customCatalogId(targetProviderId, trimmedModelId);
+      const inherited = usePicked ? picked : reuseLocal ? editingDefinition : undefined;
 
       const catalogModel = composeCatalogModel({
         id: catalogId,
@@ -477,7 +483,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
           messageText('settings.modelForge.composeContextRequired'),
         ),
       });
-      if (!picked || !equalCatalogShape(picked, catalogModel)) {
+      if (!editingDefinition || !equalCatalogShape(editingDefinition, catalogModel)) {
         if (!await upsertCatalogModel(catalogModel)) return;
       }
 
@@ -614,7 +620,29 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         )}
 
         <section className={styles.forgeSect}>
-          <div className={styles.sectCap}>{t('settings.modelForge.modelSection')}</div>
+          <div className={styles.sectCap}>
+            {t('settings.modelForge.modelSection')}
+            {!editingModelId && !isComfy && (
+              <button
+                type="button"
+                className={`${styles.orbBtn} ${styles.catalogRefreshBtn}`}
+                aria-label={t(catalogRefreshing
+                  ? 'settings.modelForge.refreshingCatalog'
+                  : 'settings.modelForge.refreshCatalog')}
+                title={t(catalogRefreshing
+                  ? 'settings.modelForge.refreshingCatalog'
+                  : 'settings.modelForge.refreshCatalog')}
+                disabled={catalogRefreshing}
+                onClick={() => void updateCatalog()}
+              >
+                <RefreshCw
+                  size={12}
+                  className={catalogRefreshing ? styles.catalogRefreshSpin : undefined}
+                  aria-hidden
+                />
+              </button>
+            )}
+          </div>
           <div className={styles.duoGrid}>
             <div>
               <label className={styles.fieldTag}>{t('settings.modelForge.modelIdHint')}</label>

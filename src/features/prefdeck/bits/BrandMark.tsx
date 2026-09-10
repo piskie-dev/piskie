@@ -14,6 +14,7 @@ import ComfyUIIcon from '@lobehub/icons/es/ComfyUI/components/Mono';
 import DeepSeekIcon from '@lobehub/icons/es/DeepSeek/components/Color';
 import FireworksIcon from '@lobehub/icons/es/Fireworks/components/Color';
 import GeminiIcon from '@lobehub/icons/es/Gemini/components/Color';
+import GrokIcon from '@lobehub/icons/es/Grok/components/Mono';
 import GroqIcon from '@lobehub/icons/es/Groq/components/Mono';
 import MetaIcon from '@lobehub/icons/es/Meta/components/Color';
 import MinimaxIcon from '@lobehub/icons/es/Minimax/components/Color';
@@ -37,6 +38,7 @@ const BRAND_SVGS: Record<string, BrandSvg> = {
   deepseek: DeepSeekIcon as unknown as BrandSvg,
   fireworks: FireworksIcon as unknown as BrandSvg,
   gemini: GeminiIcon as unknown as BrandSvg,
+  grok: GrokIcon as unknown as BrandSvg,
   groq: GroqIcon as unknown as BrandSvg,
   llamacpp: MetaIcon as unknown as BrandSvg,
   minimax: MinimaxIcon as unknown as BrandSvg,

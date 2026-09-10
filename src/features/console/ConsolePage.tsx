@@ -14,22 +14,20 @@
  * 不是控制台渲染树的一部分。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import logo128 from '/logo-128.png';
-import type { ApprovalMode } from '../../../shared/types';
 import type { TaskDefinitionSnapshot } from '../../../shared/electron-contracts/task-definitions';
 import { TaskDefinitionModal } from '../../components/task-definition/TaskDefinitionModal';
 import ImageLightbox from './content/ImageLightbox';
-import { useComposerDraft } from './data/composer-drafts';
+import { useComposerDraftVersion, WELCOME_DRAFT_KEY } from './data/composer-drafts';
 import { acquireOverlay } from './chrome/overlayPresence';
 import {
   useRendererRuntime,
   useTaskDefinitionRepository,
 } from '../../renderer-runtime/hooks';
-import { formatModelReference, useInferenceStore } from '../../store/inferenceStore';
 import {
   messageText,
   presentationFromError,
@@ -37,14 +35,11 @@ import {
   resolvePresentationText,
   type PresentationText,
 } from '../../i18n/presentationText';
-import { composeAttachmentText, useAttachmentDraft } from './attachments';
 import { ErrorBar } from './chrome/ErrorBar';
 import { ModeSwitch } from './chrome/ModeSwitch';
 import { EmptyState } from './content/EmptyState';
-import { WelcomeComposer } from './content/composer/WelcomeComposer';
-import { McpRuntimeCard } from './content/McpRuntimeCard';
+import { WelcomeInput } from './content/composer/WelcomeInput';
 import { useDevelopmentFeatures } from './data/useDevelopmentFeatures';
-import { useMcpPrewarm } from './data/useMcpPrewarm';
 import { TaskDefinitionLauncher } from './shell/TaskDefinitionLauncher';
 import { useConsoleKeyboard } from './shell/useConsoleKeyboard';
 import { useConsoleShell } from './shell/useConsoleShell';
@@ -54,135 +49,10 @@ import { ThreadMode } from './modes/thread/ThreadMode';
 import { DockMode } from './modes/dock/DockMode';
 import styles from './shell/shell.module.css';
 
-/**
- * 空态的输入器：还没有会话，投递即"新建并启动"。
- *
- * 位置贴底，这是不变量。
- * 模型 / 计划模式 / 审批模式 / 工作区 / 浏览器环境都在这里选 ——
- * 启动后它们固化进 runConfig，活跃态的 dock 触发条里不再可改。
- */
-const WelcomeInput: React.FC<{
-  readonly sending: boolean;
-  readonly onStart: (text: string, options: QuickChatOptions) => Promise<StartOutcome>;
-  readonly onPreviewImage?: (src: string) => void;
-  /** 左栏组头「在此工作区新建会话」的预选目录:每次点击都是新对象,重复点同一组也会重新套用 */
-  readonly workspaceSeed?: { readonly path?: string } | null;
-}> = ({ sending, onStart, onPreviewImage, workspaceSeed }) => {
-  const { t } = useTranslation();
-  // 草稿驻留:切模块/切会话回来文字仍在(composer-drafts)
-  const [draft, setDraft] = useComposerDraft('welcome');
-  const [modeId, setMode] = useState<'normal' | 'plan' | 'browser-skill'>('normal');
-  const [approvalMode, setApprovalMode] = useState<ApprovalMode>('confirm');
-  const [model, setModel] = useState<string | undefined>();
-  const [workspace, setWorkspace] = useState<string | undefined>();
-  const [environmentIds, setEnvironmentIds] = useState<string[]>([]);
-  const attachments = useAttachmentDraft('welcome');
-  const submitting = useRef(false);
-
-  // 套用左栏的预选目录(对象身份即触发信号)
-  /* eslint-disable react-hooks/set-state-in-effect -- 外部预选目录的一次性套用 */
-  useEffect(() => {
-    if (workspaceSeed) setWorkspace(workspaceSeed.path);
-  }, [workspaceSeed]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const inferenceSelections = useInferenceStore((store) => store.selections);
-  const mcpPrewarmEnabled = modeId !== 'browser-skill';
-  const prewarmRequest = useMemo(
-    () => (mcpPrewarmEnabled ? { workspace, specName: 'system-chat' } : null),
-    [mcpPrewarmEnabled, workspace],
-  );
-  const prewarm = useMcpPrewarm(prewarmRequest);
-
-  /** 未显式选择时跟随统一 Inference 控制面的当前模型。 */
-  const resolvedModel = useMemo(() => {
-    if (model !== undefined) return model;
-    return inferenceSelections?.ai ? formatModelReference(inferenceSelections.ai) : undefined;
-  }, [inferenceSelections, model]);
-
-  const workspaceLabel = useMemo(() => {
-    if (!workspace) return t('sessionWorkbenchUi.shell.defaultWorkspace');
-    const segments = workspace.replace(/\\/g, '/').split('/').filter(Boolean);
-    return segments.at(-1) || workspace;
-  }, [t, workspace]);
-
-  const selectWorkspace = useCallback(async () => {
-    const paths = await window.piskie.desktop.files.select({ type: 'folder' });
-    if (paths[0]) setWorkspace(paths[0]);
-  }, []);
-
-  const submit = useCallback(async () => {
-    if (submitting.current || (!draft.trim() && !attachments.hasAttachments)) return;
-    submitting.current = true;
-    try {
-      const text = composeAttachmentText(draft, attachments.files, attachments.images.length > 0);
-      const images = await attachments.imagePayloads();
-      const mcpPrewarmToken = prewarm.claim();
-      const outcome = await onStart(text, {
-        workspace,
-        model: resolvedModel,
-        modeId,
-        approvalMode,
-        environmentIds,
-        images,
-        mcpPrewarmToken,
-      });
-      prewarm.settle(mcpPrewarmToken, outcome.kind === 'started');
-      if (outcome.kind === 'started') {
-        setDraft('');
-        setEnvironmentIds([]);
-        attachments.clear();
-      }
-    } finally {
-      submitting.current = false;
-    }
-  }, [approvalMode, attachments, draft, environmentIds, onStart, modeId, prewarm, resolvedModel, setDraft, workspace]);
-
-  return (
-    <WelcomeComposer
-      value={draft}
-      onChange={setDraft}
-      onSubmit={submit}
-      onPaste={attachments.handlePaste}
-      placeholder={modeId === 'browser-skill'
-        ? t('sessionWorkbenchUi.shell.describeWebsiteSkill')
-        : t('sessionWorkbenchUi.shell.describeTask')}
-      sending={sending}
-      images={attachments.images}
-      files={attachments.files}
-      onRemoveAttachment={attachments.remove}
-      onPreviewImage={onPreviewImage}
-      model={resolvedModel}
-      onModelChange={setModel}
-      modeId={modeId}
-      onModeChange={(nextMode) => {
-        if (nextMode === 'normal' || nextMode === 'plan' || nextMode === 'browser-skill') {
-          setMode(nextMode);
-        }
-      }}
-      approvalMode={approvalMode}
-      onApprovalModeChange={setApprovalMode}
-      workspaceLabel={workspaceLabel}
-      workspacePath={workspace}
-      onSelectWorkspace={() => void selectWorkspace()}
-      onUseDefaultWorkspace={() => setWorkspace(undefined)}
-      environmentIds={environmentIds}
-      onEnvironmentIdsChange={setEnvironmentIds}
-      statusSlot={(
-        <McpRuntimeCard
-          view={prewarm.view}
-          error={prewarm.error}
-          workspace={workspace}
-          variant="composer"
-        />
-      )}
-    />
-  );
-};
-
 const ConsoleShellView: React.FC = () => {
   const { t } = useTranslation();
   const shell = useConsoleShell();
+  const welcomeVersion = useComposerDraftVersion(WELCOME_DRAFT_KEY);
   const hasActiveSession = shell.selectedAgentId !== null;
   const renderedMode = hasActiveSession ? shell.mode : 'thread';
   const devMode = useDevelopmentFeatures();
@@ -285,24 +155,11 @@ const ConsoleShellView: React.FC = () => {
     [agentStart, settle],
   );
 
-  /**
-   * 左栏组头「在此工作区新建会话」:回空态 + 空态输入器预选该组目录。
-   * 种子是每次点击新建的对象——对象身份充当触发信号,重复点同一组也会重新套用。
-   */
-  const [workspaceSeed, setWorkspaceSeed] = useState<{ path?: string } | null>(null);
-  const newSessionIn = useCallback(
-    (path?: string) => {
-      setWorkspaceSeed({ path });
-      shell.newSession();
-    },
-    [shell],
-  );
-
   // 顶栏徽标跳转：选中目标 agent 即 reveal（不再有"找不到画布节点"的空转）
   useHeaderAction({
     // 会话 + worker 一起定位（worker 级 reveal，见 useHeaderAction 文件头）
     onReveal: shell.reveal,
-    // 顶栏的「新建会话」语义与左栏一致：回空态
+    // 顶栏与左栏共用新建入口：重置草稿并打开输入页
     onNewChat: shell.newSession,
   });
 
@@ -350,30 +207,29 @@ const ConsoleShellView: React.FC = () => {
       onPickTemplate={pickTemplate}
       composer={
         <WelcomeInput
+          key={welcomeVersion}
           sending={starting}
           onStart={quickChat}
           onPreviewImage={shell.setPreviewImage}
-          workspaceSeed={workspaceSeed}
         />
       }
     />
   );
 
-  const topRailActions = useMemo(
-    () => (
-      <>
-        <TaskDefinitionLauncher
-          definitions={taskDefinitions}
-          onStart={(definition) => void launch(definition)}
-          onCreate={() => setTaskEditor({ kind: 'create' })}
-          onEdit={(definition) => setTaskEditor({ kind: 'edit', definition })}
-          onDelete={(definitionId) => void deleteTaskDefinition(definitionId)}
-        />
-        {hasActiveSession && <ModeSwitch mode={shell.mode} onChange={shell.setMode} />}
-      </>
-    ),
-    [deleteTaskDefinition, hasActiveSession, launch, shell.mode, shell.setMode, taskDefinitions],
-  );
+  const renderTaskLauncher = useCallback((trigger: React.ReactNode) => (
+    <TaskDefinitionLauncher
+      definitions={taskDefinitions}
+      onStart={(definition) => void launch(definition)}
+      onCreate={() => setTaskEditor({ kind: 'create' })}
+      onEdit={(definition) => setTaskEditor({ kind: 'edit', definition })}
+      onDelete={(definitionId) => void deleteTaskDefinition(definitionId)}
+      trigger={trigger}
+    />
+  ), [deleteTaskDefinition, launch, taskDefinitions]);
+
+  const topRailActions = hasActiveSession
+    ? <ModeSwitch mode={shell.mode} onChange={shell.setMode} />
+    : undefined;
 
   const shared = {
     sessions: shell.sessions,
@@ -384,9 +240,9 @@ const ConsoleShellView: React.FC = () => {
     menuSourceOf: shell.menuSourceOf,
     emptyState,
     onPreviewImage: shell.setPreviewImage,
-    onStartTask: () => setTaskEditor({ kind: 'create' }),
+    renderTaskLauncher,
     onNewSession: shell.newSession,
-    onNewSessionIn: newSessionIn,
+    onNewSessionIn: shell.newSessionIn,
     devMode,
     // 收起态两模式共用同一份状态：展开 240 / 收起 52，切模式时左栏宽度不变
     sessionsCollapsed: shell.sessionsCollapsed,

@@ -6,11 +6,12 @@ describe('browser page readiness', () => {
   it('notifies the host after newPage succeeds', async () => {
     const newPage = vi.fn(async () => 'Page opened');
     const notifyPageOpen = vi.fn();
+    const signal = new AbortController().signal;
 
     const output = await browserCore.functions.newPage.run(
       { url: 'https://example.com' },
       {
-        signal: new AbortController().signal,
+        signal,
         browserId: 'browser-1',
         browser: {
           core: { newPage },
@@ -23,6 +24,7 @@ describe('browser page readiness', () => {
     expect(newPage).toHaveBeenCalledWith({
       url: 'https://example.com',
       browserId: 'browser-1',
+      signal,
     });
     expect(notifyPageOpen).toHaveBeenCalledOnce();
     expect(output).toEqual({ ok: true, text: 'Page opened' });

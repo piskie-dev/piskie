@@ -75,21 +75,24 @@ export type NetworkResourceFilter =
   | 'fedcm'
   | 'other';
 
-export async function takeSnapshot(params: {
-  verbose?: boolean;
+interface BrowserCallContext {
   browserId: string;
+  signal?: AbortSignal;
+}
+
+export async function takeSnapshot(params: BrowserCallContext & {
+  verbose?: boolean;
 }): Promise<string> {
-  return BrowserManager.runExclusive(params.browserId, async ({ automation }) => {
+  return runBrowserCore(params, async (automation) => {
     return formatStandaloneSnapshot(await automation.takeSnapshot(params.verbose ?? false));
   });
 }
 
-export async function clickByUid(params: {
+export async function clickByUid(params: BrowserCallContext & {
   uid: string;
   clickCount?: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.clickByUid(params.uid, params.clickCount === 2 ? 2 : 1);
     return finalize(automation, 'Successfully ' +
       (params.clickCount === 2 ? 'double clicked on the element' : 'clicked on the element'), {
@@ -98,12 +101,11 @@ export async function clickByUid(params: {
   });
 }
 
-export async function fillByUid(params: {
+export async function fillByUid(params: BrowserCallContext & {
   uid: string;
   value: string;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.fillByUid(params.uid, params.value);
     return finalize(automation, 'Successfully filled out the element', { snapshot: true });
   });
@@ -113,14 +115,14 @@ export type NavigateToParams = BrowserNavigateRequest;
 
 export async function navigateTo(params: NavigateToParams): Promise<string> {
   const { browserId, signal, ...request } = params;
-  return runBrowserCore(browserId, signal, async (automation) => {
+  return runBrowserCore({ browserId, signal }, async (automation) => {
     const result = await BrowserOperations.navigateInSession(automation, request);
     return finalize(automation, navigationMessage(result, request.url), { pages: true });
   });
 }
 
-export async function goBack(params: { browserId: string }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+export async function goBack(params: BrowserCallContext): Promise<string> {
+  return runBrowserCore(params, async (automation) => {
     const page = automation.getSelectedPage();
     await automation.waitForAction(() => page.goBack({ waitUntil: 'networkidle2' }));
     const snapshot = await automation.takeSnapshot(false);
@@ -128,8 +130,8 @@ export async function goBack(params: { browserId: string }): Promise<string> {
   });
 }
 
-export async function refresh(params: { browserId: string }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+export async function refresh(params: BrowserCallContext): Promise<string> {
+  return runBrowserCore(params, async (automation) => {
     const page = automation.getSelectedPage();
     await automation.waitForAction(() => page.reload({ waitUntil: 'networkidle2' }));
     const snapshot = await automation.takeSnapshot(false);
@@ -137,22 +139,20 @@ export async function refresh(params: { browserId: string }): Promise<string> {
   });
 }
 
-export async function newPage(params: {
+export async function newPage(params: BrowserCallContext & {
   url: string;
   timeout?: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.newPage(params.url, params.timeout);
     return finalize(automation, '', { pages: true });
   });
 }
 
-export async function closePage(params: {
+export async function closePage(params: BrowserCallContext & {
   pageIndex: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     let message = '';
     try {
       await automation.closePageByIndex(params.pageIndex);
@@ -166,31 +166,29 @@ export async function closePage(params: {
   });
 }
 
-export async function listPages(params: { browserId: string }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, (automation) =>
+export async function listPages(params: BrowserCallContext): Promise<string> {
+  return runBrowserCore(params, (automation) =>
     finalize(automation, '', { pages: true })
   );
 }
 
-export async function selectPage(params: {
+export async function selectPage(params: BrowserCallContext & {
   pageIdx: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.selectPageByIndex(params.pageIdx);
     return finalize(automation, '', { pages: true });
   });
 }
 
-export async function pressKey(params: {
+export async function pressKey(params: BrowserCallContext & {
   key: string;
   count?: number;
-  browserId: string;
 }): Promise<string> {
   const count = params.count ?? 1;
   let output = '';
   for (let index = 0; index < count; index += 1) {
-    output = await runBrowserCore(params.browserId, undefined, async (automation) => {
+    output = await runBrowserCore(params, async (automation) => {
       await automation.pressKey(params.key);
       return finalize(automation, `Successfully pressed key: ${params.key}`, { snapshot: true });
     });
@@ -198,56 +196,51 @@ export async function pressKey(params: {
   return output;
 }
 
-export async function hoverByUid(params: {
+export async function hoverByUid(params: BrowserCallContext & {
   uid: string;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.hoverByUid(params.uid);
     return finalize(automation, 'Successfully hovered over the element', { snapshot: true });
   });
 }
 
-export async function drag(params: {
+export async function drag(params: BrowserCallContext & {
   fromUid: string;
   toUid: string;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.dragByUids(params.fromUid, params.toUid);
     return finalize(automation, 'Successfully dragged an element', { snapshot: true });
   });
 }
 
-export async function uploadFile(params: {
+export async function uploadFile(params: BrowserCallContext & {
   uid: string;
   filePath: string;
   allowedRoots: readonly string[];
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await validatePathWithinRoots(params.filePath, params.allowedRoots);
     await automation.uploadFileByUid(params.uid, params.filePath);
     return finalize(automation, `File uploaded from ${params.filePath}.`, { snapshot: true });
   });
 }
 
-export async function fillFormByUids(params: {
+export async function fillFormByUids(params: BrowserCallContext & {
   elements: Array<{ uid: string; value: string }>;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.fillFormByUids(params.elements);
     return finalize(automation, 'Successfully filled out the form', { snapshot: true });
   });
 }
 
-export async function handleDialog(params: {
+export async function handleDialog(params: BrowserCallContext & {
   action: 'accept' | 'dismiss';
   promptText?: string;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.handleDialog(params.action, params.promptText);
     const message = params.action === 'accept'
       ? 'Successfully accepted the dialog'
@@ -256,12 +249,11 @@ export async function handleDialog(params: {
   });
 }
 
-export async function waitFor(params: {
+export async function waitFor(params: BrowserCallContext & {
   text: string[];
   timeout?: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     await automation.waitForTextOnPage(params.text, params.timeout);
     return finalize(
       automation,
@@ -271,14 +263,13 @@ export async function waitFor(params: {
   });
 }
 
-export async function listConsoleMessages(params: {
+export async function listConsoleMessages(params: BrowserCallContext & {
   pageSize?: number;
   pageIdx?: number;
   types?: ConsoleMessageFilter[];
   includePreservedMessages?: boolean;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     let messages = automation.getConsoleData(params.includePreservedMessages ?? false);
     if (params.types?.length) {
       const types = new Set(params.types);
@@ -298,11 +289,10 @@ export async function listConsoleMessages(params: {
   });
 }
 
-export async function getConsoleMessage(params: {
+export async function getConsoleMessage(params: BrowserCallContext & {
   msgid: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     const message = automation.getConsoleMessageById(params.msgid);
     const formatter = await ConsoleFormatter.from(message, {
       id: params.msgid,
@@ -312,14 +302,13 @@ export async function getConsoleMessage(params: {
   });
 }
 
-export async function listNetworkRequests(params: {
+export async function listNetworkRequests(params: BrowserCallContext & {
   pageSize?: number;
   pageIdx?: number;
   resourceTypes?: NetworkResourceFilter[];
   includePreservedRequests?: boolean;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     let requests = automation.getNetworkRequests(params.includePreservedRequests ?? false);
     if (params.resourceTypes?.length) {
       const resourceTypes = new Set(params.resourceTypes);
@@ -336,11 +325,10 @@ export async function listNetworkRequests(params: {
   });
 }
 
-export async function getNetworkRequest(params: {
+export async function getNetworkRequest(params: BrowserCallContext & {
   reqid?: number;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     automation.throwIfDialogOpen();
     if (!params.reqid) return 'Nothing is currently selected in the DevTools Network panel.';
     const request = automation.getNetworkRequestById(params.reqid);
@@ -353,15 +341,14 @@ export async function getNetworkRequest(params: {
   });
 }
 
-export async function takeScreenshot(params: {
+export async function takeScreenshot(params: BrowserCallContext & {
   format?: 'png' | 'jpeg' | 'webp';
   quality?: number;
   uid?: string;
   fullPage?: boolean;
-  browserId: string;
 }): Promise<string> {
   const format = params.format ?? 'png';
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     if (params.uid && params.fullPage) {
       throw new Error('Providing both "uid" and "fullPage" is not allowed.');
     }
@@ -398,11 +385,10 @@ export async function takeScreenshot(params: {
   });
 }
 
-export async function evaluateScript(params: {
+export async function evaluateScript(params: BrowserCallContext & {
   function: string;
-  browserId: string;
 }): Promise<string> {
-  return runBrowserCore(params.browserId, undefined, async (automation) => {
+  return runBrowserCore(params, async (automation) => {
     const page = automation.getSelectedPage();
     const functionHandle = await page.evaluateHandle(`(${params.function})`);
     try {
@@ -426,52 +412,47 @@ export async function closeBrowser(params: { browserId: string }): Promise<strin
   return `Browser ${params.browserId} closed successfully`;
 }
 
-export async function getAllCookies(params: {
-  browserId: string;
+export async function getAllCookies(params: BrowserCallContext & {
   urls?: string[];
 }): Promise<string> {
   return JSON.stringify(await BrowserOperations.getAllCookies(params), null, 2);
 }
 
-export async function setCookies(params: {
-  browserId: string;
+export async function setCookies(params: BrowserCallContext & {
   cookies: Record<string, unknown>[];
 }): Promise<string> {
   if (!Array.isArray(params.cookies)) throw new Error('setCookies: params.cookies 必须是数组');
   return JSON.stringify(await BrowserOperations.setCookies(params), null, 2);
 }
 
-export async function deleteCookies(params: {
-  browserId: string;
+export async function deleteCookies(params: BrowserCallContext & {
   cookies: Record<string, unknown>[];
 }): Promise<string> {
   if (!Array.isArray(params.cookies)) throw new Error('deleteCookies: params.cookies 必须是数组');
   return JSON.stringify(await BrowserOperations.deleteCookies(params), null, 2);
 }
 
-export async function clearCookies(params: { browserId: string }): Promise<string> {
-  return JSON.stringify(await BrowserOperations.clearCookies(params.browserId), null, 2);
+export async function clearCookies(params: BrowserCallContext): Promise<string> {
+  return JSON.stringify(await BrowserOperations.clearCookies(params.browserId, params.signal), null, 2);
 }
 
-export async function getWindowBounds(params: { browserId: string }): Promise<string> {
-  const bounds = await BrowserOperations.getWindowBounds(params.browserId);
+export async function getWindowBounds(params: BrowserCallContext): Promise<string> {
+  const bounds = await BrowserOperations.getWindowBounds(params.browserId, params.signal);
   return JSON.stringify({ success: true, bounds }, null, 2);
 }
 
-export async function setWindowBounds(params: {
-  browserId: string;
+export async function setWindowBounds(params: BrowserCallContext & {
   bounds: BrowserWindowBoundsInput;
 }): Promise<string> {
   if (!params.bounds || typeof params.bounds !== 'object') {
     throw new Error('setWindowBounds: params.bounds 必须是对象');
   }
-  const bounds = await BrowserOperations.setWindowBounds(params.browserId, params.bounds);
+  const bounds = await BrowserOperations.setWindowBounds(params.browserId, params.bounds, params.signal);
   return JSON.stringify({ success: true, bounds }, null, 2);
 }
 
 async function runBrowserCore<T>(
-  browserId: string,
-  signal: AbortSignal | undefined,
+  { browserId, signal }: BrowserCallContext,
   action: (automation: BrowserAutomationSession) => Promise<T>
 ): Promise<T> {
   return BrowserManager.runExclusive(browserId, ({ automation }) => action(automation), signal);

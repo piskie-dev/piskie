@@ -2,25 +2,20 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, ChevronLeft, ChevronRight, Globe, TerminalSquare } from 'lucide-react';
+import { Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import type { SubagentMode } from '../../../../shared/types';
+import { workerPresentation } from './workerPresentation';
 import type { StatusKey } from '../data/vm';
 import { StatusBadge } from './StatusBadge';
 import styles from './agentTabs.module.css';
 
 const COMPACT_THRESHOLD = 7;
 
-const MODE_ICON: Record<SubagentMode, typeof Globe> = {
-  browser: Globe,
-  local: TerminalSquare,
-};
-
 /** `workerId === undefined` 即主会话标签。 */
 export interface AgentTabItem {
   readonly workerId?: string;
   readonly label: string;
-  readonly mode?: SubagentMode;
+  readonly type?: string;
   readonly status: StatusKey;
   /** false 时仅作为当前会话标识，不提供选择动作。 */
   readonly selectable?: boolean;
@@ -109,7 +104,8 @@ export const AgentTabs = memo<AgentTabsProps>(({ items, selectedWorkerId, onSele
 
       <div ref={trackRef} className={styles.track} role="tablist">
         {items.map((item) => {
-          const Icon = item.mode ? (MODE_ICON[item.mode] ?? TerminalSquare) : Bot;
+          const presentation = item.type ? workerPresentation(item.type) : undefined;
+          const Icon = presentation?.icon ?? Bot;
           const selected = item.workerId === selectedWorkerId;
           const selectable = item.selectable !== false;
 
@@ -123,7 +119,7 @@ export const AgentTabs = memo<AgentTabsProps>(({ items, selectedWorkerId, onSele
               data-selected={selected ? 'true' : undefined}
               disabled={!selectable}
               onClick={selectable ? () => onSelect(item.workerId) : undefined}
-              title={item.label}
+              title={presentation ? `${t(presentation.labelKey)} · ${item.label}` : item.label}
             >
               <Icon size={11} />
               <span className={styles.label}>{item.label}</span>

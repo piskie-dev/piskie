@@ -226,6 +226,7 @@ export abstract class AgentEngine {
       resolve: (d: ToolApprovalDecision) => void;
     }
   >();
+  private planAutoApproval?: { callId: string; timer: ReturnType<typeof setTimeout> };
   protected skillDocs = '';
   protected incidentTarget!: AgentTarget;
 
@@ -603,6 +604,7 @@ export abstract class AgentEngine {
   async interrupt(): Promise<void> {
     const activePump = this.pumpPromise;
     this._interrupted = true;
+    this.cancelPlanAutoApproval();
 
     // stopping 只用于在途冲程；纯 waiting 会话没有 finally 可以将其拨回 waiting。
     if (activePump) {
@@ -761,6 +763,7 @@ export abstract class AgentEngine {
    * 审批门接入冲程取消域后，这是 AbortSignal 的手动等价物。
    */
   protected cancelPendingApprovals(feedback: string): void {
+    this.cancelPlanAutoApproval();
     if (this.pendingApprovals.size > 0) {
       for (const [callId, { resolve }] of this.pendingApprovals) {
         resolve({ callId, decision: 'deny', feedback });
@@ -919,6 +922,41 @@ export abstract class AgentEngine {
 
   // === 审批机制 ===
 
+  private cancelPlanAutoApproval(): void {
+    const current = this.planAutoApproval;
+    if (!current) return;
+    clearTimeout(current.timer);
+    this.planAutoApproval = undefined;
+    const item = this.pendingApprovals.get(current.callId);
+    if (item) {
+      item.pending = { ...item.pending };
+      delete item.pending.autoApproveAt;
+    }
+  }
+
+  /** 只为当前可审批的计划计时，排队中的下一份计划获得完整的 60 秒。 */
+  private refreshPendingApprovals(): void {
+    const first = this.pendingApprovals.values().next().value;
+    const plan = this.approvalMode === 'auto' && !this._interrupted && !this.destroyPromise
+      && first?.pending.toolName === 'plan' && first.pending.params.action === 'create'
+      ? first : undefined;
+
+    if (!plan || this.planAutoApproval?.callId !== plan.pending.id) {
+      this.cancelPlanAutoApproval();
+      if (plan) {
+        const callId = plan.pending.id;
+        plan.pending = { ...plan.pending, autoApproveAt: Date.now() + 60_000 };
+        this.planAutoApproval = {
+          callId,
+          timer: setTimeout(() => {
+            this.respondToApproval({ callId, decision: 'allow' });
+          }, 60_000),
+        };
+      }
+    }
+    this.emitStateChange();
+  }
+
   async handleApprovalRequest(
     pending: PendingToolCall,
     signal?: AbortSignal
@@ -939,7 +977,7 @@ export abstract class AgentEngine {
         if (!this.pendingApprovals.has(pending.id)) return;
         const wasVisible = this.pendingApprovals.keys().next().value === pending.id;
         this.pendingApprovals.delete(pending.id);
-        if (wasVisible) this.emitStateChange();
+        if (wasVisible) this.refreshPendingApprovals();
         resolve({ callId: pending.id, decision: 'deny', feedback: '操作已取消' });
       });
 
@@ -952,7 +990,7 @@ export abstract class AgentEngine {
         },
       });
 
-      if (wasEmpty) this.emitStateChange();
+      if (wasEmpty) this.refreshPendingApprovals();
     });
   }
 
@@ -979,13 +1017,13 @@ export abstract class AgentEngine {
         message: 'Agent approval mode updated',
         context: { scope: 'agent.approval_mode', agentId: this.id, approvalMode: 'auto' },
       });
-      // Auto 统一放行工具审批；计划正文等工作流确认继续等待。
+      // Auto 放行工具审批；计划进入倒计时，其余工作流确认继续等待。
       for (const [callId, pendingItem] of this.pendingApprovals) {
         if (callId !== decision.callId && pendingItem.pending.modeInvariant === true) continue;
         pendingItem.resolve({ callId, decision: 'allow' });
         this.pendingApprovals.delete(callId);
       }
-      this.emitStateChange();
+      this.refreshPendingApprovals();
       return true;
     }
 
@@ -1002,13 +1040,13 @@ export abstract class AgentEngine {
         images: decision.images,
       });
 
-      this.emitStateChange();
+      this.refreshPendingApprovals();
       return true;
     }
 
     item.resolve(decision);
     this.pendingApprovals.delete(decision.callId);
-    this.emitStateChange();
+    this.refreshPendingApprovals();
     return true;
   }
 
@@ -1029,7 +1067,7 @@ export abstract class AgentEngine {
       }
     }
 
-    this.emitStateChange();
+    this.refreshPendingApprovals();
   }
 
   // === AI 调用 ===
@@ -1295,12 +1333,6 @@ export abstract class AgentEngine {
 
       const response = await this.callAI(systemPrompt, toolList, messages, signal);
       const toolUses = response.content.filter((c: ContentBlock) => c.type === 'tool_use');
-
-      if (response.content.length === 0) {
-        throw new Error(
-          'AI returned empty response (no content blocks); upstream stream likely truncated'
-        );
-      }
 
       for (const t of toolUses) {
         if (typeof t.input === 'string' && t.input.length > 0) {

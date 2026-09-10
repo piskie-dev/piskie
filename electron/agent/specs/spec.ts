@@ -12,12 +12,8 @@ export interface ToolSetConfig {
   sdkGroups: string[];
   /** Native model-facing tool names, such as read, subagent, and send_event. */
   customTools: string[];
-  /**
-   * 工具名黑名单（精确匹配，可选）
-   * 用于精准禁掉 prompt 已禁止但 AI 偶尔仍误调的工具（如 tool_search）
-   * 或 director 永远不该用的危险工具（如 shell）
-   * 只挡少量特定项，不改变其他默认行为。
-   */
+  options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** 从原生工具和 SDK 分组中排除的具体工具名。 */
   exclude?: string[];
 }
 
@@ -49,10 +45,12 @@ export interface SubagentLifecycle {
 export interface AgentSpec {
   /** 唯一标识 */
   name: string;
-  /** Director 创建专属 Worker 时展示给模型的简短职责；通用 browser/local 不使用。 */
+  /** Director 创建 Worker 时展示给模型的简短职责。 */
   subagentTypeDescription?: string;
   /** 角色：决定 Agent 的行为策略（director/worker） */
   role: RoleType;
+  /** Worker input contract, compiled from its declaration. */
+  assignment?: 'question' | 'task-board';
   /** 工具集配置 */
   tools: ToolSetConfig;
   /** 模块列表（按名称引用，从 modules/index.ts 工厂创建） */

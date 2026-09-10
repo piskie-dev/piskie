@@ -103,10 +103,11 @@ async function withCredentialFileLock<T>(
   return withLock(credentialFileLocks, path.resolve(configRoot), action)
 }
 
-export async function saveIssuerRecord(configRoot: string, record: OAuthIssuerRecord): Promise<void> {
+export async function saveIssuerRecord(configRoot: string, record: OAuthIssuerRecord, signal?: AbortSignal): Promise<void> {
   await withIssuerLock(record.issuer, async () => {
     await withCredentialFileLock(configRoot, async () => {
       const state = await readFileState(configRoot)
+      signal?.throwIfAborted()
       const existing = state.issuers[record.issuer]
       const claimedResources = new Set(record.resources)
       // One resource must resolve to exactly one issuer. If the protected-resource metadata moved

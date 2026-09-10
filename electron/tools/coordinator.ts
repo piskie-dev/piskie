@@ -1,6 +1,6 @@
 import { PendingSettlement } from '../agent/tool-call/pending-settlement.js';
 import type { ToolCallContextFactory } from '../agent/tool-call/context-builder.js';
-import type { CatalogEntry, CatalogSnapshot } from './catalog.js';
+import type { ResolvedCatalogEntry as CatalogEntry, CatalogSnapshot } from './catalog.js';
 import { parse } from './params.js';
 import { InvariantViolation } from './pipeline/invariant-violation.js';
 import {
@@ -226,7 +226,7 @@ export class ToolCoordinator {
     }
     if (raw.modelName !== 'skill_call') return { entry: direct, rawParams: raw.rawParams };
 
-    const parsed = parse(direct.tool.def.schema, raw.rawParams);
+    const parsed = parse(direct.contract.schema, raw.rawParams);
     if (!parsed.ok) return { text: REJECT.shapeViolation(parsed.errors) };
     const selector = parsed.value as SkillSelectorParams;
     const resolved = snapshot.resolveSkillFunction(selector.skill, selector.function);

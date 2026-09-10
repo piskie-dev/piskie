@@ -47,10 +47,11 @@ for (const file of files) {
 }
 
 const contentHash = createHash('sha256').update(JSON.stringify(providers)).digest('hex');
+const previous = JSON.parse(await fs.readFile(outputPath, 'utf8').catch(() => 'null'));
 const generated = {
   version,
   contentHash,
-  generatedAt: `${version.slice(0, 10).replaceAll('.', '-') || '1970-01-01'}T00:00:00.000Z`,
+  generatedAt: previous?.contentHash === contentHash ? previous.generatedAt : new Date().toISOString(),
   providers,
 };
 const next = `${JSON.stringify(generated, null, 2)}\n`;

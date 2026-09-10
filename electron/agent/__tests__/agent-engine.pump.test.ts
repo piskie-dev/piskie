@@ -8,7 +8,7 @@
  * applyEvents 失败携带批次 ids。
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentControlState, ConversationEntry } from '../../../shared/types/agent-control.js';
 import type {
   AgentInputEvent,
@@ -119,6 +119,7 @@ class PumpTestEngine extends AgentEngine {
   get mailboxSize(): number { return this.mailbox.size; }
   get abortSignal(): AbortSignal | undefined { return this.pumpController?.signal; }
   get pendingApprovalCount(): number { return this.pendingApprovals.size; }
+  get visibleApproval(): PendingToolCall | undefined { return this.pendingApprovals.values().next().value?.pending; }
   setStateProbe(cb: (state: AgentControlState) => void): void { this.stateChangeCallback = cb; }
   setActivityStartedAt(startedAt: number): void {
     this.activityTracker.aiStarted(startedAt);
@@ -783,7 +784,7 @@ describe('统一 Auto 与工作流确认', () => {
     expect(engine.pendingApprovalCount).toBe(0);
   });
 
-  it('计划正文等模式无关工作流确认仍需显式决定', async () => {
+  it('其他模式无关工作流确认仍需显式决定', async () => {
     const engine = new PumpTestEngine();
     engine.approvalMode = 'auto';
 
@@ -830,6 +831,107 @@ describe('统一 Auto 与工作流确认', () => {
 
     await expect(workflow).resolves.toMatchObject({ decision: 'allow' });
     expect(engine.approvalMode).toBe('confirm');
+  });
+});
+
+describe('plan approval countdown', () => {
+  let engine: PumpTestEngine;
+  const plan = (id = 'plan-a'): PendingToolCall => ({
+    id, agentId: 'agent-a', mainAgentId: 'agent-a', toolName: 'plan',
+    params: { action: 'create', taskSummary: 'Sample plan' },
+    timestamp: new Date(), description: 'Review the plan', category: 'system', modeInvariant: true,
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    engine = new PumpTestEngine();
+    engine.approvalMode = 'auto';
+  });
+  afterEach(async () => {
+    await engine.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('publishes a 60-second deadline and approves once even without a mounted page', async () => {
+    const settled = vi.fn();
+    const startedAt = Date.now();
+    const result = engine.handleApprovalRequest(plan()).then(settled);
+    expect(engine.visibleApproval?.autoApproveAt).toBe(startedAt + 60_000);
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(settled).not.toHaveBeenCalled();
+    engine.emitStateChange();
+    expect(engine.visibleApproval?.autoApproveAt).toBe(startedAt + 60_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await result;
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ callId: 'plan-a', decision: 'allow' });
+    expect(engine.pendingApprovalCount).toBe(0);
+  });
+
+  it('starts on switching to auto, cancels on confirm, and gives a fresh interval on re-entry', async () => {
+    engine.approvalMode = 'confirm';
+    const settled = vi.fn();
+    const result = engine.handleApprovalRequest(plan()).then(settled);
+    expect(engine.visibleApproval?.autoApproveAt).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(settled).not.toHaveBeenCalled();
+    engine.setApprovalMode('auto');
+    await vi.advanceTimersByTimeAsync(30_000);
+    engine.setApprovalMode('confirm');
+    expect(engine.visibleApproval?.autoApproveAt).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(settled).not.toHaveBeenCalled();
+    engine.setApprovalMode('auto');
+    expect(engine.visibleApproval?.autoApproveAt).toBe(Date.now() + 60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await result;
+    expect(settled).toHaveBeenCalledOnce();
+  });
+
+  it.each(['allow', 'deny'] as const)('cancels the timer after a manual %s', async (decision) => {
+    const settled = vi.fn();
+    const result = engine.handleApprovalRequest(plan()).then(settled);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(engine.respondToApproval({ callId: 'plan-a', decision })).toBe(true);
+    await result;
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ callId: 'plan-a', decision });
+  });
+
+  it.each(['abort', 'interrupt', 'destroy'] as const)('cancels the timer on %s', async (action) => {
+    const controller = new AbortController();
+    const result = engine.handleApprovalRequest(plan(), controller.signal);
+    if (action === 'abort') controller.abort();
+    else if (action === 'interrupt') await engine.instantInterrupt();
+    else await engine.destroy();
+    await expect(result).resolves.toMatchObject({ decision: 'deny' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(engine.pendingApprovalCount).toBe(0);
+  });
+
+  it('starts a full countdown for the next plan after the current one is settled', async () => {
+    const first = engine.handleApprovalRequest(plan());
+    const secondSettled = vi.fn();
+    const second = engine.handleApprovalRequest(plan('plan-b')).then(secondSettled);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(first).resolves.toMatchObject({ decision: 'allow' });
+    expect(secondSettled).not.toHaveBeenCalled();
+    expect(engine.visibleApproval).toMatchObject({ id: 'plan-b', autoApproveAt: Date.now() + 60_000 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await second;
+    expect(secondSettled).toHaveBeenCalledOnce();
+  });
+
+  it('starts plan review after switching to auto from a tool approval', async () => {
+    engine.approvalMode = 'confirm';
+    const tool = engine.handleApprovalRequest({ ...plan('tool-a'), toolName: 'shell', params: {}, modeInvariant: false });
+    const result = engine.handleApprovalRequest(plan());
+    engine.respondToApproval({ callId: 'tool-a', decision: 'allow', changeToAuto: true });
+    await expect(tool).resolves.toMatchObject({ decision: 'allow' });
+    expect(engine.visibleApproval?.autoApproveAt).toBe(Date.now() + 60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(result).resolves.toMatchObject({ decision: 'allow' });
   });
 });
 

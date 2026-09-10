@@ -431,7 +431,7 @@ describe('AgentService 磁盘恢复与精确删除', () => {
       {
         id: 'worker-a',
         config: {
-          mode: 'local',
+          type: 'local-worker',
           subject: '旧 Assignment',
           taskIds: ['task-1'],
           prompt: 'work',
@@ -542,7 +542,7 @@ describe('AgentService 世代观察与升级通道', () => {
     const runtime = h.instances[0]!;
     runtime.headerChildren = [{
       id: 'worker-open',
-      config: { mode: 'local', subject: 'unfinished', taskIds: ['task-1'], prompt: 'work' },
+      config: { type: 'local-worker', subject: 'unfinished', taskIds: ['task-1'], prompt: 'work' },
       createdAt: Date.now(),
     }];
     releases.length = 0;

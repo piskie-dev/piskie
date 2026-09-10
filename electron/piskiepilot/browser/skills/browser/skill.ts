@@ -25,10 +25,11 @@ const NETWORK_RESOURCE_TYPES = [
 
 const browserContext = <T extends Record<string, unknown>>(
   params: T,
-  ctx: { browserId: string },
-): T & { browserId: string } => ({
+  ctx: { browserId: string; signal: AbortSignal },
+): T & { browserId: string; signal: AbortSignal } => ({
   ...params,
   browserId: ctx.browserId,
+  signal: ctx.signal,
 });
 
 const skill = defineTrustedBrowserSkill({
@@ -46,11 +47,10 @@ const skill = defineTrustedBrowserSkill({
       description: "Clicks on the provided element identified by its UID from the page content snapshot. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After clicking, automatically detects if new tabs were opened or closed, and includes this information in the response. This helps you know immediately if a new page opened without manually calling listPages. IMPORTANT: The snapshot is taken immediately after the click. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
       params: z.object({ "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of an element on the page from the page content snapshot (format: snapshotId_nodeIndex, e.g., \"10_116\")"), "dblClick": bool().default(false).describe("Set to true for double clicks. Default is false.") }),
       async run({ uid: elementUid, dblClick }, ctx) {
-        return ok(await ctx.browser.core.clickByUid({
+        return ok(await ctx.browser.core.clickByUid(browserContext({
           uid: elementUid,
           clickCount: dblClick ? 2 : 1,
-          browserId: ctx.browserId,
-        }));
+        }, ctx)));
       },
     },
     fillByUid: {
@@ -71,10 +71,7 @@ const skill = defineTrustedBrowserSkill({
       description: "Navigates the currently selected page to a URL, or performs history navigation (back/forward/reload). Returns a snapshot after navigation completes. IMPORTANT: If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
       params: z.object({ "type": z.enum(["url", "back", "forward", "reload"]).optional().describe("Navigate the page by URL, back or forward in history, or reload. Defaults to \"url\" if url parameter is provided"), "url": z.string().regex(new RegExp("^https?://")).optional().describe("Target URL (required only when type=url or type is omitted)"), "ignoreCache": bool().default(false).describe("Whether to ignore cache on reload (only applicable for type=reload)"), "timeout": num(z.gte(0), z.lte(300000)).default(30000).describe("Maximum wait time in milliseconds. If set to 0, the default timeout will be used.") }),
       async run(params, ctx) {
-        const text = await ctx.browser.core.navigateTo({
-          ...browserContext(params, ctx),
-          signal: ctx.signal,
-        } as Parameters<typeof ctx.browser.core.navigateTo>[0]);
+        const text = await ctx.browser.core.navigateTo(browserContext(params, ctx));
         ctx.browser.notifyPageOpen();
         return ok(text);
       },
@@ -90,7 +87,7 @@ const skill = defineTrustedBrowserSkill({
       description: "Refresh the current page. Equivalent to navigateTo with type=\"reload\" — either works; do not call both.",
       params: z.object({}),
       async run(_params, ctx) {
-        return ok(await ctx.browser.core.refresh({ browserId: ctx.browserId }));
+        return ok(await ctx.browser.core.refresh(browserContext({}, ctx)));
       },
     },
     newPage: {

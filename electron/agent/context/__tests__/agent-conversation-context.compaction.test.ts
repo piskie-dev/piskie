@@ -55,6 +55,36 @@ function serialized(messages: Message[]): string {
 }
 
 describe('AgentConversationContext compaction H/P boundary', () => {
+  it('preserves complete file instructions outside summarized and restored conversation facts', async () => {
+    const invoke = vi.fn().mockResolvedValue(response('# Compact summary\nTask progress.'));
+    const manager = new AgentConversationContext({
+      inference: fakeAgentInference({ invoke, contextWindow: () => 200_000 }),
+      target: TARGET,
+    });
+    const persisted = vi.fn();
+    manager.setPersistHook(persisted);
+    manager.setAgentInstructions('Global and project file instructions.');
+    manager.addUserMessage('Processed task');
+    manager.commitSuccessfulRequest(manager.captureRequestBoundary(), {
+      ...requestInfo('processed'), usage: { inputTokens: 170_000 },
+    });
+    manager.addUserMessage('Pending task');
+    const prepared = await manager.getMessagesForAI({ systemPrompt: 'sys', tools: [], model: TARGET });
+    expect(invoke.mock.calls[0]?.[0].messages.map((message: Message) => message.content))
+      .toEqual(['Processed task', COMPACTION_INSTRUCTION]);
+    expect(prepared.messages.map((message) => message.subtype))
+      .toEqual(['agent_instructions', 'context_summary', 'user_input']);
+    expect(prepared.messages[0].content).toBe('Global and project file instructions.');
+
+    const restored = new AgentConversationContext({ inference: fakeAgentInference(), target: TARGET });
+    restored.restoreSummary(persisted.mock.calls.find(([entry]) => entry.t === 'summary')![0].summary);
+    restored.addUserMessage('Pending task');
+    restored.setAgentInstructions('Updated file instructions.');
+    expect(restored.buildContextSnapshot('sys', []).messages.map((message) => message.content)).toEqual([
+      'Updated file instructions.', '# Compact summary\nTask progress.', 'Pending task',
+    ]);
+  });
+
   it('publishes the shared activity lifecycle when the 85% admission threshold compacts', async () => {
     const invoke = vi.fn().mockResolvedValue(response('# Compact summary\n\n继续当前任务。'));
     const manager = new AgentConversationContext({

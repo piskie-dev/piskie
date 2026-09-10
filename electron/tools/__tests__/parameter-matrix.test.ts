@@ -40,6 +40,12 @@ const STRICT_NUMERIC_PARAMS = new Set([
   'browser_getNetworkRequest.reqid',
 ]);
 
+// Cross-field constraints need a valid combination beyond sampling each field independently.
+const BASELINE_OVERRIDES: Record<string, JsonSchema> = {
+  subagent: { type: 'local-worker', subject: '本地任务', prompt: '完成看板任务', taskIds: ['task-a'], skills: ['skill-a'] },
+  web_search: { publishedAfter: '2026-01-01', publishedBefore: '2026-02-01' },
+};
+
 function selectSchema(schema: JsonSchema): JsonSchema {
   const alternatives = (schema.oneOf ?? schema.anyOf) as JsonSchema[] | undefined;
   if (!alternatives?.[0]) return schema;
@@ -144,11 +150,15 @@ describe('model-facing parameter coercion matrix', () => {
     } as never);
     const snapshots = (['main', 'subagent'] as const).map((agentType) => catalog.snapshot({
       scope: agentType,
-      agentType,
+      agentType: agentType === 'main' ? 'main' : 'worker',
+      searchCapabilities: { domains: true, publishedAfter: true, publishedBefore: true },
       customTools: includeEveryName,
       exposedSkillFunctions: includeEveryName,
       excluded: new Set(),
       domains: new Set(['local', 'browser']),
+      subagentTypes: [
+        { name: 'local-worker', description: '本地执行', assignment: 'task-board', browser: false, skills: true },
+      ],
     }));
     const entries = new Map(snapshots.flatMap((snapshot) => (
       snapshot.definitions().map((definition) => [
@@ -170,7 +180,7 @@ describe('model-facing parameter coercion matrix', () => {
     expect(entries.has('flow')).toBe(false);
 
     const schemaContractFailures = [...entries].flatMap(([name, { definition, entry }]) => {
-      const sourceSchema = toApiSchema(entry.tool.def.schema);
+      const sourceSchema = toApiSchema(entry.contract.schema);
       const published = definition.input_schema;
       const failures: string[] = [];
       if (sourceSchema.type !== 'object') failures.push(`${name}: source schema root is not object`);
@@ -222,9 +232,9 @@ describe('model-facing parameter coercion matrix', () => {
         failures.push(`${definition.name}: definition is not resolvable in its own snapshot`);
         continue;
       }
-      const apiSchema = toApiSchema(entry.tool.def.schema);
-      const baseline = sample(apiSchema);
-      const baselineResult = parse(entry.tool.def.schema, baseline);
+      const apiSchema = toApiSchema(entry.contract.schema);
+      const baseline = { ...sample(apiSchema) as JsonSchema, ...BASELINE_OVERRIDES[definition.name] };
+      const baselineResult = parse(entry.contract.schema, baseline);
       if (!baselineResult.ok) {
         failures.push(`${definition.name}: generated valid baseline failed: ${baselineResult.errors.join('; ')}`);
         continue;
@@ -235,14 +245,14 @@ describe('model-facing parameter coercion matrix', () => {
         const path = item.path.join('.');
         const quoted = item.kind === 'boolean' ? 'false' : String(item.value);
         const parsed = parse(
-          entry.tool.def.schema,
+          entry.contract.schema,
           replaceAtPath(baseline, item.path, quoted),
         );
         const qualifiedPath = `${definition.name}.${path}`;
         if (STRICT_NUMERIC_PARAMS.has(qualifiedPath)) {
           if (parsed.ok) failures.push(`${qualifiedPath}: accepted a numeric string`);
           if (item.optional && !parse(
-            entry.tool.def.schema,
+            entry.contract.schema,
             replaceAtPath(baseline, item.path, ''),
           ).ok) {
             failures.push(`${qualifiedPath}: rejected an empty optional numeric parameter`);
@@ -261,12 +271,12 @@ describe('model-facing parameter coercion matrix', () => {
 
         if (item.kind === 'boolean') {
           for (const invalid of ['0', 'yes']) {
-            if (parse(entry.tool.def.schema, replaceAtPath(baseline, item.path, invalid)).ok) {
+            if (parse(entry.contract.schema, replaceAtPath(baseline, item.path, invalid)).ok) {
               failures.push(`${qualifiedPath}: accepted invalid boolean ${JSON.stringify(invalid)}`);
             }
           }
         } else {
-          const empty = parse(entry.tool.def.schema, replaceAtPath(baseline, item.path, ''));
+          const empty = parse(entry.contract.schema, replaceAtPath(baseline, item.path, ''));
           if (item.optional && !empty.ok) {
             failures.push(`${qualifiedPath}: rejected an empty optional numeric parameter`);
           } else if (!item.optional && empty.ok) {

@@ -1,3 +1,5 @@
+import type { PromptContext } from '../types.js';
+
 /**
  * L2 collaboration：协作协议（按角色二选一）
  * - 共有段：消息信封语义
@@ -30,20 +32,19 @@ function notificationEvaluation(): string {
 
 | type | 含义 | 你的处理 |
 |------|------|----------|
-| message | Worker 普通报告 | 结合当前任务判断是否需要行动；不要把它当终态 |
+| message | Worker 协作消息 | 非终态通知；需要补充执行信息、解决协调请求或调整要求时才回复。 |
 | completed | Assignment 已完成 | 核对结果与 Task Board，继续后续工作或汇总 |
 | user_stopped | 用户停止 | 等待新指示 |
 | failed | Assignment 未能完成 | 根据事件中的事实决定重派、接管或向用户报告 |
 | need_user_action | 只有用户能解除的阻断 | 立即用 ask_user 告知所需操作并询问是否完成；用户确认后，告知原 Worker 用户已完成操作 |
 
-completed 通知应自包含关键结果、产出路径和未完成项。摘要足以决策时无需读取落盘原文；信息不足时明确指出缺少的事实。
+completed 通知应自包含关键结果、产出路径和未完成项。摘要足以决策时无需读取落盘原文；信息不足时明确指出缺少的事实。Worker 尚未汇报时不要预测或代写它的结果。
 
 ### 处理 failed 通知
 
 failed 只表示当前 Assignment 未能完成。根据通知携带的事实决定下一步：
 
 - **临时错误**：只有错误明确属于临时问题且重试仍有价值时，才创建新 Worker 重试
-- **权限或账号问题**：向用户报告问题，等待指示
 - **部分完成**：根据已完成内容继续后续任务
 
 need_user_action 只用于登录、验证码、授权确认、用户选择等确实需要用户介入的阻断。不要自行假设用户已经完成；用户确认后让原 Worker 先验证页面或环境状态，再从原检查点继续。`;
@@ -73,7 +74,8 @@ export function directorProtocol(): string {
  * 子流程协作协议（worker）
  * 会话配置在 L5 <context>；Assignment 只在创建期初始消息中出现。
  */
-export function workerProtocol(): string {
+export function workerProtocol(ctx?: PromptContext): string {
+  if (ctx?.assignment === 'question') return questionProtocol(ctx);
   return `${messageModel()}
 
 ## 执行原则
@@ -82,11 +84,7 @@ export function workerProtocol(): string {
 执行，并用 task 工具维护自己负责的完整细任务清单；task 工具结果和后续事件中的新事实优先于旧
 快照。终态 send_event 前先收口任务状态和后续项，结果写入 send_event，不写入 TaskItem。
 
-执行前先核对对话历史中的工具结果：已成功的步骤不要重复；收到新要求时只处理新增或变化的部分。
-
-独立完成工作，不为每个步骤发送通知；只在终态或确需用户操作时主动向 director 报告。
-
-**任务范围**：\`<assignment>\` 与用户后续明确提出的要求共同定义当前范围；不要自行扩大范围。执行中发现必要的新步骤时更新 Task Board，范围外问题在 completed 的 message 里报告。
+执行前先核对对话历史中的工具结果：已成功的步骤不要重复。
 
 ## 错误重试原则
 
@@ -112,7 +110,7 @@ export function workerProtocol(): string {
 
 ## 外部事件处理
 
-- 收到 \`<agent_input>\` 消息（注入事件，source 属性标注来源）时，根据其 priority 属性和当前任务状态自主决定是否中断
+- 新增任务加入任务清单，保留尚未完成的任务，按依赖关系和明确的先后要求依次完成；修改或取消任务时，更新对应项和执行安排。补充事实用于推进对应任务。
 - 收到 director 转达的“用户已完成操作”消息时，先验证阻断条件确已解除，再从原检查点继续；不要重新创建 Worker 或从头重复探索
 - 正在执行关键操作（如表单提交）时，可以先完成当前步骤再处理
 - 用户修改任务范围时：按修改后的范围完成任务，在 completed 的 summary 中说明修改情况
@@ -132,4 +130,26 @@ export function workerProtocol(): string {
 **completed 契约**：跨上下文通知不携带完整执行历史，因此在这一条通知里带全结果。
 - **message**：完整结果内容，包括关键数据、产出文件绝对路径和未完成项
 - **summary**：概括核心结果和关键数据；只写“任务完成”不构成有效摘要`;
+}
+
+function questionProtocol(ctx: PromptContext): string {
+  const canRequestUser = ctx.sendEventTypes?.includes('need_user_action');
+  return [
+    messageModel(),
+    `## 问题处理
+
+以 \`<assignment>\` 中的问题、范围和预期结果为准。收到补充事实或范围调整后，继续核对受影响的结论。`,
+    `## 执行与结果
+
+- 执行前核对已有工具结果，已成功且未受新事实影响的步骤无需重复。
+- 临时错误在安全且仍有价值时自行重试；权限不足、材料不可用或重试后仍不能完成时，如实报告原因、原始错误和已完成部分。
+- 结论和完成状态必须有实际取得的证据支持；区分已经验证的结果与仍未验证的内容。
+- 持续处理当前任务及后续要求，完成后通过 send_event 报告完整结果；无法完成时报告原因和缺失条件。结果应自包含关键结论、证据、产出路径和未完成项。
+- 用户修改范围后按新范围执行，结果中说明影响结论的范围变化。`,
+    canRequestUser ? `## 用户介入
+
+遇到登录、验证码、授权确认、用户选择等只有用户能完成的阻断时，通过 send_event 报告当前状态、用户要做的动作和恢复检查点，然后等待。
+
+收到“用户已完成操作”消息后，先验证阻断条件确已解除，再从原检查点继续。` : '',
+  ].filter(Boolean).join('\n\n');
 }

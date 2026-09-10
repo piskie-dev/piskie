@@ -8,10 +8,12 @@ import { appLog } from '@electron/observability/logging/app-log.js';
  */
 
 import path from 'path';
+import { promises as fs } from 'node:fs';
 import { CORE_SKILLS } from '../../piskiepilot/core/skill/loader.js';
 import { renderSkillInventory, type InventorySkill } from '../../skills/discovery/inventory.js';
 import type { SearchableSkill, SkillSearchSource } from '../../skills/discovery/search.js';
-import { isProjectLayerActive } from '../../skills/store/layout.js';
+import { listAvailableSkills, resolveSkillResourceRoot } from '../../skills/discovery/resolve.js';
+import { parseSkillManifest } from '../../skills/manifest/parse.js';
 import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
 import type { SkillCatalogPort } from './pilot-manager.js';
 import { pathsService } from '../../services/paths.service.js';
@@ -48,14 +50,7 @@ export async function buildSkillInventory(
 ): Promise<SkillInventoryResult> {
   let items: Awaited<ReturnType<SkillCatalogPort['listManagedSkills']>>;
   try {
-    const projectActive =
-      options.workspace && options.defaultWorkspaceDir
-        ? await isProjectLayerActive(options.workspace, options.defaultWorkspaceDir)
-        : false;
-    items = await catalog.listManagedSkills({
-      scope: 'all',
-      workspaces: projectActive && options.workspace ? [options.workspace] : undefined,
-    });
+    items = await listAvailableSkills(catalog, options);
   } catch (error) {
     appLog.warn({
       event: 'browser.skill_inventory.load.degraded',
@@ -69,12 +64,13 @@ export async function buildSkillInventory(
   const skills: InventorySkill[] = [];
   for (const item of items) {
     if (!item.enabled || EXCLUDED.has(item.name)) continue;
-    const functions = Object.keys(catalog.getLoadedSkillModule(item.name)?.functions ?? {});
+    const functions = item.scope === 'project'
+      ? [] : Object.keys(catalog.getLoadedSkillModule(item.name)?.functions ?? {});
     skills.push({
       name: item.name,
       description: item.description || '',
       scope: item.scope,
-      path: path.join(catalog.getSkillResourceRoot(item.name) ?? item.path, 'SKILL.md'),
+      path: path.join(await resolveSkillResourceRoot(item, (name) => catalog.getSkillResourceRoot(name)), 'SKILL.md'),
       functions,
     });
   }
@@ -98,21 +94,22 @@ export async function buildSkillInventory(
 export function createSkillSearchSource(catalog: SkillCatalogPort): SkillSearchSource {
   return {
     async listSearchableSkills(workspace?: string): Promise<SearchableSkill[]> {
-      const projectActive = workspace
-        ? await isProjectLayerActive(workspace, pathsService.getDefaultWorkspaceDir())
-        : false;
-      const items = await catalog.listManagedSkills({
-        scope: 'all',
-        workspaces: projectActive && workspace ? [workspace] : undefined,
+      const items = await listAvailableSkills(catalog, {
+        workspace,
+        defaultWorkspaceDir: workspace ? pathsService.getDefaultWorkspaceDir() : undefined,
       });
       return Promise.all(
         items
           .filter((item) => item.enabled)
           .map(async (item) => {
-            const functions = Object.keys(catalog.getLoadedSkillModule(item.name)?.functions ?? {});
+            const functions = item.scope === 'project'
+              ? [] : Object.keys(catalog.getLoadedSkillModule(item.name)?.functions ?? {});
+            const resourceRoot = await resolveSkillResourceRoot(item, (name) => catalog.getSkillResourceRoot(name));
             let body: string | undefined;
             try {
-              body = (await catalog.getSkillDocs(item.name)) || undefined;
+              body = item.scope === 'project'
+                ? parseSkillManifest(await fs.readFile(path.join(resourceRoot, 'SKILL.md'), 'utf8')).body || undefined
+                : (await catalog.getSkillDocs(item.name)) || undefined;
             } catch {
               body = undefined;
             }
@@ -121,7 +118,7 @@ export function createSkillSearchSource(catalog: SkillCatalogPort): SkillSearchS
               description: item.description || '',
               type: item.type,
               scope: item.scope,
-              path: path.join(catalog.getSkillResourceRoot(item.name) ?? item.path, 'SKILL.md'),
+              path: path.join(resourceRoot, 'SKILL.md'),
               functions,
               body,
             };

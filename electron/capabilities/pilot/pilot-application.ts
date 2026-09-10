@@ -24,6 +24,7 @@ import type {
   BrowserEnvironmentGroup,
 } from '../../../shared/types/index.js';
 import type { ScreenStreamRequest } from '../../../shared/types/stream.js';
+import type { AgentTarget } from '../../../shared/types/agent-control.js';
 import type { ConfigPatchOperation } from '../../../shared/types/index.js';
 import { PublicOperationError } from '../public-errors.js';
 export class PilotApplication {
@@ -201,17 +202,19 @@ export class PilotApplication {
     return this.dependencies.presentation.embeddedBrowser(windowId);
   }
 
-  async navigateEmbeddedBrowser(windowId: number, address: string): Promise<void> {
-    if (!(await this.embeddedBrowser(windowId).navigate(address))) {
+  async navigateEmbeddedBrowser(windowId: number, target: AgentTarget, address: string): Promise<void> {
+    if (!(await this.embeddedBrowser(windowId).open(target).navigate(address))) {
       throw new PublicOperationError('invalid-input', 'The browser address is not allowed');
     }
   }
 
-  async openLocalHtmlInEmbeddedBrowser(windowId: number, targetPath: string): Promise<void> {
+  async openLocalHtmlInEmbeddedBrowser(windowId: number, target: AgentTarget, targetPath: string): Promise<void> {
     if (!path.isAbsolute(targetPath)) {
       throw new PublicOperationError('invalid-input', 'An absolute path is required');
     }
 
+    // Capture this lifetime before I/O; closing the page must cancel the pending open.
+    const page = this.embeddedBrowser(windowId).open(target);
     let resolved: string;
     let stats: fs.Stats;
     try {
@@ -227,6 +230,6 @@ export class PilotApplication {
       throw new PublicOperationError('unsupported', 'Only HTML files can be opened here');
     }
 
-    await this.embeddedBrowser(windowId).openLocalHtml(resolved);
+    await page.openLocalHtml(resolved);
   }
 }

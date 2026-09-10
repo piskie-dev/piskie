@@ -16,39 +16,18 @@ import { ArrowLeft, ArrowRight, Globe, RotateCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { EmbeddedBrowserState } from '../../../../../shared/types/embedded-browser';
+import type { AgentTarget } from '../../../../../shared/types/agent-control';
 import { getOverlayCount, subscribeOverlay } from '../../chrome/overlayPresence';
 import styles from './browserPanel.module.css';
 
-const EMPTY_STATE: EmbeddedBrowserState = {
-  url: '',
-  title: '',
-  loading: false,
-  canGoBack: false,
-  canGoForward: false,
-};
-
 const api = () => window.piskie.pilot.embeddedBrowser;
 
-export const BrowserPanel = memo(() => {
+export const BrowserPanel = memo(({ target, state }: { target: AgentTarget; state: EmbeddedBrowserState }) => {
   const { t } = useTranslation();
-  const [state, setState] = useState<EmbeddedBrowserState>(EMPTY_STATE);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(state.url);
   const [editing, setEditing] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const overlayCount = useSyncExternalStore(subscribeOverlay, getOverlayCount);
-
-  // 状态订阅 + 初始快照
-  useEffect(() => {
-    let alive = true;
-    void api().state().then((next) => {
-      if (alive) setState(next);
-    });
-    const off = api().observeState((next) => setState(next));
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
 
   // 地址栏跟随页面（编辑中不打断）
   useEffect(() => {
@@ -61,7 +40,7 @@ export const BrowserPanel = memo(() => {
     if (!host) return;
     const report = () => {
       const rect = host.getBoundingClientRect();
-      void api().setBounds({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+      void api().setBounds(target, { x: rect.x, y: rect.y, width: rect.width, height: rect.height });
     };
     report();
     const ro = new ResizeObserver(report);
@@ -71,21 +50,21 @@ export const BrowserPanel = memo(() => {
       ro.disconnect();
       window.removeEventListener('resize', report);
     };
-  }, []);
+  }, [target]);
 
   // 可见性：挂载显示、卸载隐藏；浮层在场时让位（z-order）
   useEffect(() => {
-    void api().setVisible(overlayCount === 0);
+    void api().setVisible(target, overlayCount === 0);
     return () => {
-      void api().setVisible(false);
+      void api().setVisible(target, false);
     };
-  }, [overlayCount]);
+  }, [overlayCount, target]);
 
   const submit = useCallback(() => {
     const value = draft.trim();
     setEditing(false);
-    if (value) void api().navigate(value);
-  }, [draft]);
+    if (value) void api().navigate(target, value);
+  }, [draft, target]);
 
   return (
     <div className={styles.root}>
@@ -94,7 +73,7 @@ export const BrowserPanel = memo(() => {
           type="button"
           className={styles.navButton}
           disabled={!state.canGoBack}
-          onClick={() => void api().back()}
+          onClick={() => void api().back(target)}
           aria-label={t('sessionWorkbenchUi.browser.back')}
         >
           <ArrowLeft size={13} />
@@ -103,7 +82,7 @@ export const BrowserPanel = memo(() => {
           type="button"
           className={styles.navButton}
           disabled={!state.canGoForward}
-          onClick={() => void api().forward()}
+          onClick={() => void api().forward(target)}
           aria-label={t('sessionWorkbenchUi.browser.forward')}
         >
           <ArrowRight size={13} />
@@ -111,7 +90,7 @@ export const BrowserPanel = memo(() => {
         <button
           type="button"
           className={styles.navButton}
-          onClick={() => void (state.loading ? api().stop() : api().reload())}
+          onClick={() => void (state.loading ? api().stop(target) : api().reload(target))}
           aria-label={state.loading
             ? t('sessionWorkbenchUi.browser.stop')
             : t('sessionWorkbenchUi.browser.refresh')}

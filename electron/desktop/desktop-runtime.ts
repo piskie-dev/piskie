@@ -130,6 +130,7 @@ export class DesktopRuntime implements DesktopAppearancePort {
       });
       this.application = application;
       this.options.windows.setConnectionReleaseHandler(application.releaseConnection);
+      this.options.windows.observeAgentLifetimes(capabilities.agent.observations);
       const router = new PortRouter(application.catalog, {
         phase: () => {
           const phase = this.options.backend.runtime.snapshot().phase;

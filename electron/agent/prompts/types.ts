@@ -18,6 +18,11 @@ export interface PromptContext {
   // === Derived tool surface ===
   /** 最终可见工具面是否包含 agent_run 工具。 */
   canManageAgentRuns: boolean;
+  toolNames?: readonly string[];
+  sendEventTypes?: readonly string[];
+  assignment?: 'question' | 'task-board';
+  /** 当前工具面允许创建的调查型（question）Worker 类型名；为空表示不教学调查委派。 */
+  investigatorTypes?: readonly string[];
 
   // === 用户自定义指令（<user_instructions> 槽位，L2 之后 L3 之前） ===
   /** 用户级指令（AgentRunConfig.systemPrompt / 自定义 Agent 类型的 systemPromptPrefix） */

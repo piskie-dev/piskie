@@ -27,6 +27,7 @@ import { MenuButton, type MenuItemDescriptor } from '../../chrome/MenuButton';
 import { ConversationComposer } from '../../content/composer/ConversationComposer';
 import { PendingEventQueue } from '../../content/composer/PendingEventQueue';
 import { AgentMetricsStrip } from '../../content/AgentMetricsStrip';
+import { FileChangeSummary } from '../../content/FileChangeSummary';
 import { Gate } from '../../content/Gate';
 import { resolveGateRequest } from '../../content/gates/resolve';
 import { useActionScope } from '../../content/useActionScope';
@@ -62,6 +63,7 @@ export interface ThreadViewProps {
   readonly onMenuSelect?: (key: string) => void;
   /** 点文件操作条目 ⇒ 右栏审阅面板（模式层持有右栏状态，故回调由它给） */
   readonly onOpenFileChange?: (cellId: string) => void;
+  readonly onOpenWorker?: (workerId: string) => void;
 }
 
 export const ThreadView = memo<ThreadViewProps>(
@@ -75,6 +77,7 @@ export const ThreadView = memo<ThreadViewProps>(
     menuItems,
     onMenuSelect,
     onOpenFileChange,
+    onOpenWorker,
   }) => {
     const { t } = useTranslation();
     const active = isActive(fidelity);
@@ -170,16 +173,19 @@ export const ThreadView = memo<ThreadViewProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          conversationStatus={request?.status}
+          workers={agent?.workers}
+          onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
           onOpenFileChange={onOpenFileChange}
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [onOpenFileChange, onPreviewImage, runCellAction],
+      [agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, runCellAction],
     );
 
 
-    /** 当前流水的活动总量（任务清单头部的 ± 与生图） */
+    /** 当前流水的活动量（文件改动摘要与任务清单的活动徽标） */
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
 
     /**
@@ -267,6 +273,7 @@ export const ThreadView = memo<ThreadViewProps>(
         )}
 
         <PendingEventQueue events={request.pendingEvents} />
+        {tasks.length === 0 && <FileChangeSummary changes={chips} />}
 
         {/* 门与输入互斥：有待决策时输入让位（与 dock 同语义，不同外观） */}
         {gate ? (

@@ -12,13 +12,14 @@
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FolderOpen, Globe, History, Pause, Square } from 'lucide-react';
+import { FolderOpen, Globe, History, PanelRightClose, PanelRightOpen, Pause, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { ContentLinkUrlScope } from '@/components/content-links';
 import { AgentTabs, type AgentTabItem } from '../../chrome/AgentTabs';
 import { Divider } from '../../chrome/Divider';
 import { TopRail } from '../../chrome/TopRail';
+import { Tooltip } from '../../chrome/Tooltip';
 import type { MenuItemDescriptor } from '../../chrome/MenuButton';
 import { ThreadSidebar } from '../../content/ThreadSidebar';
 import {
@@ -34,15 +35,9 @@ import { useGlobalBinding } from '../../data/useKeyboard';
 import { useAgentVM, useWorkerVM } from '../../data/vm';
 import { RightPanel } from './RightPanel';
 import { availablePanels, type PanelKey } from './panels';
+import { useEmbeddedBrowserState } from './useEmbeddedBrowserState';
+import { useThreadPanels } from './useThreadPanels';
 import styles from './threadview.module.css';
-
-/** 关闭集的空值；作用域为空串 ⇒ 与任何真实作用域都不相等，等价于"没关过" */
-const EMPTY_CLOSED = { scope: '', panels: [] as readonly PanelKey[] } as const;
-
-interface ScopedReviewTarget {
-  readonly scope: string;
-  readonly target: FileReviewTarget;
-}
 
 export interface ThreadModeProps {
   readonly sessions: readonly SessionRow[];
@@ -54,8 +49,7 @@ export interface ThreadModeProps {
   readonly devMode?: boolean;
   readonly onNewSession?: () => void;
   readonly onNewSessionIn?: (workspace?: string) => void;
-  /** 打开创建/配置任务弹层（与 dock 侧栏底部的「启动任务」同一入口） */
-  readonly onStartTask?: () => void;
+  readonly renderTaskLauncher?: (trigger: React.ReactNode) => React.ReactNode;
   /** 与 dock 共用同一份壳级状态，保证切模式时左栏宽度不变（52 / 240） */
   readonly sessionsCollapsed: boolean;
   readonly onToggleSessions: () => void;
@@ -80,7 +74,7 @@ export const ThreadMode = memo<ThreadModeProps>(
     devMode,
     onNewSession,
     onNewSessionIn,
-    onStartTask,
+    renderTaskLauncher,
     sessionsCollapsed,
     onToggleSessions,
     emptyState,
@@ -101,28 +95,6 @@ export const ThreadMode = memo<ThreadModeProps>(
       consumedReveal.current = revealWorker.requestId;
       setTabWorkerId(revealWorker.workerId);
     }, [revealWorker]);
-    /**
-     * 被用户关掉的 tab。右栏是 tab 形态，"收起"就是"关到没有 tab"，
-     * 不另设开合标志。
-     *
-     * **带作用域标签**：关闭是"这个视图里我不想看这一页"的意思，不该跨会话/跨 worker 生效。
-     * 记住"这份关闭集属于哪个视图"，作用域一变派生自动失效——裸数组 + 在切换入口手动重置
-     * 的写法迟早漏一个入口（在 A 会话关掉全部 tab，切到 B 会话右栏也是关着的）。
-     */
-    const [closed, setClosed] = useState<{
-      readonly scope: string;
-      readonly panels: readonly PanelKey[];
-    }>(EMPTY_CLOSED);
-    /** 用户明确打开的文件操作或正文路径；没有目标时审阅页不存在。 */
-    const [reviewTarget, setReviewTarget] = useState<ScopedReviewTarget | undefined>(undefined);
-    /**
-     * 右栏想看哪一页。放在这里而不是 `RightPanel` 内部：`openFileOp` 要把它推到
-     * 'review'，而那个入口在本组件。不可用时 `resolveSelectedPanel` 会回落，故初值随意。
-     */
-    const [wantedPanel, setWantedPanel] = useState<PanelKey>('review');
-    /** 内嵌浏览器面板：纯手动开启——入口按钮或点流水链接 */
-    const [browserOpen, setBrowserOpen] = useState(false);
-
     const agent = useAgentVM(selectedAgentId);
     const actions = useConsoleActions();
 
@@ -131,15 +103,13 @@ export const ThreadMode = memo<ThreadModeProps>(
     const worker = useWorkerVM(activeWorkerId ? selectedAgentId : undefined, activeWorkerId);
     const imageNodes = useImageNodes(selectedAgentId, activeWorkerId);
 
-    /** 关闭集的作用域：一个 agent tab（主会话或某个 worker）就是一个视图。
-        声明前置：openBrowser（更早定义）依赖它，后置会 TDZ */
     const panelScope = `${selectedAgentId ?? ''}|${activeWorkerId ?? ''}`;
-    const activeReviewTarget = reviewTarget?.scope === panelScope ? reviewTarget.target : undefined;
-
-    // 切换会话或 worker 后丢弃旧目标；按 scope 派生可避免清理 effect 前闪出空审阅面板。
-    useEffect(() => {
-      setReviewTarget((current) => (current && current.scope !== panelScope ? undefined : current));
-    }, [panelScope]);
+    const browserTarget = useMemo(() => selectedAgentId
+      ? { agentId: selectedAgentId, workerId: activeWorkerId }
+      : undefined, [activeWorkerId, selectedAgentId]);
+    const browserState = useEmbeddedBrowserState(browserTarget);
+    const panelView = useThreadPanels(panelScope);
+    const { open: openPanel, close: closePanelView } = panelView;
 
     const tabs = useMemo<readonly AgentTabItem[]>(() => {
       if (!agent) return [];
@@ -148,7 +118,7 @@ export const ThreadMode = memo<ThreadModeProps>(
         ...agent.workers.map((item) => ({
           workerId: item.id,
           label: item.subject,
-          mode: item.mode,
+          type: item.type,
           status: item.status,
         })),
       ];
@@ -156,37 +126,22 @@ export const ThreadMode = memo<ThreadModeProps>(
 
     const selectTab = useCallback((workerId?: string) => {
       setTabWorkerId(workerId);
-      setReviewTarget(undefined);
-      // 关闭集不用在这里重置：它带作用域标签，`panelScope` 一变就自动失效
     }, []);
 
-    /**
-     * 中栏头部的 `···` 菜单（Codex 截图里标题右侧那个）。
-     * 可见性走同一份 shared 谓词（`buildSessionMenu`），与左栏行菜单同源，
-     * 不另写一套 phase 判断。
-     */
-    const showBrowser = useCallback(() => {
-      // 浏览器 tab 可能刚被关掉（进了本 scope 的关闭集）⇒ 放回来，否则整栏
-      // 仍然隐藏、点链接没有直接反应（openFileChange 同款处理）
-      setClosed((current) =>
-        current.scope === panelScope
-          ? { scope: panelScope, panels: current.panels.filter((key) => key !== 'browser') }
-          : current,
-      );
-      setBrowserOpen(true);
-      setWantedPanel('browser');
-    }, [panelScope]);
-
     /** 打开内嵌浏览器：入口按钮（无 URL）或流水链接点击（带 URL） */
-    const openBrowser = useCallback((url?: string) => {
-      showBrowser();
-      if (url) void window.piskie.pilot.embeddedBrowser.navigate(url);
-    }, [showBrowser]);
+    const openBrowser = useCallback(async (url?: string) => {
+      if (!browserTarget) return;
+      openPanel('browser');
+      const api = window.piskie.pilot.embeddedBrowser;
+      if (url) await api.navigate(browserTarget, url);
+      else await api.open(browserTarget);
+    }, [browserTarget, openPanel]);
 
     const openLocalHtml = useCallback(async (targetPath: string) => {
-      showBrowser();
-      await window.piskie.pilot.embeddedBrowser.openLocalHtml(targetPath);
-    }, [showBrowser]);
+      if (!browserTarget) return;
+      openPanel('browser');
+      await window.piskie.pilot.embeddedBrowser.openLocalHtml(browserTarget, targetPath);
+    }, [browserTarget, openPanel]);
 
     const threadMenu = useMemo(() => {
       if (!selectedAgentId) return [];
@@ -231,49 +186,33 @@ export const ThreadMode = memo<ThreadModeProps>(
         availablePanels({
           isWorker: !!worker,
           hasScreen: !!worker?.browserId,
-          hasReviewTarget: activeReviewTarget !== undefined,
-          hasBrowser: browserOpen,
+          hasReviewTarget: panelView.reviewTarget !== undefined,
+          hasBrowser: browserState.open,
         }),
-      [activeReviewTarget, browserOpen, worker],
+      [panelView.reviewTarget, browserState.open, worker],
     );
-
-    const closedPanels = closed.scope === panelScope ? closed.panels : EMPTY_CLOSED.panels;
 
     /** 扣掉用户关掉的；空数组 ⇒ 整栏不出现 */
     const visiblePanels = useMemo(
-      () => allPanels.filter((key) => !closedPanels.includes(key)),
-      [allPanels, closedPanels],
+      () => allPanels.filter((key) => !panelView.closed.includes(key)),
+      [allPanels, panelView.closed],
     );
 
-    const showPanel = !!selectedAgentId && !!agent && visiblePanels.length > 0;
+    const showPanel = !!browserTarget && !!agent && !panelView.collapsed && visiblePanels.length > 0;
 
     const closePanel = useCallback(
       (key: PanelKey) => {
-        setClosed((current) => {
-          const base = current.scope === panelScope ? current.panels : [];
-          if (base.includes(key)) return current;
-          return { scope: panelScope, panels: [...base, key] };
-        });
-        // 关审阅页时必须同时清目标：目标本身会让审阅 tab 可用，不清就关不掉
-        if (key === 'review') setReviewTarget(undefined);
-        // 浏览器面板是全局手动态：关 tab 即全局关闭（视图隐藏、页面状态保留）
-        if (key === 'browser') setBrowserOpen(false);
+        closePanelView(key);
+        if (key === 'browser' && browserTarget) {
+          void window.piskie.pilot.embeddedBrowser.close(browserTarget);
+        }
       },
-      [panelScope],
+      [browserTarget, closePanelView],
     );
 
     const showReviewTarget = useCallback(
-      (target: FileReviewTarget) => {
-        // 审阅页可能刚被关掉 ⇒ 放回来，否则点条目没反应
-        setClosed((current) =>
-          current.scope === panelScope
-            ? { scope: panelScope, panels: current.panels.filter((key) => key !== 'review') }
-            : current,
-        );
-        setReviewTarget({ scope: panelScope, target });
-        setWantedPanel('review');
-      },
-      [panelScope],
+      (target: FileReviewTarget) => openPanel('review', target),
+      [openPanel],
     );
 
     const openFileChange = useCallback(
@@ -290,6 +229,30 @@ export const ThreadMode = memo<ThreadModeProps>(
 
     // Esc 链的第三级：回到主会话 tab。未选中 worker 时不注册
     useGlobalBinding('escape', t('sessionWorkbenchUi.panels.backToMain'), backToMain, !!activeWorkerId);
+
+    const railActions = (
+      <>
+        {topRailActions}
+        {selectedAgentId && agent && (
+          <Tooltip title={t(showPanel ? 'sessionWorkbenchUi.panels.collapse' : 'sessionWorkbenchUi.panels.expand')}>
+            <button
+              type="button"
+              className={styles.panelToggle}
+              aria-label={t(showPanel ? 'sessionWorkbenchUi.panels.collapse' : 'sessionWorkbenchUi.panels.expand')}
+              aria-expanded={showPanel}
+              onClick={() => {
+                if (showPanel) panelView.collapse();
+                else if (visiblePanels.length > 0) panelView.expand();
+                else if (allPanels[0]) openPanel(allPanels[0]);
+                else void openBrowser();
+              }}
+            >
+              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+            </button>
+          </Tooltip>
+        )}
+      </>
+    );
 
     return (
       <ContentLinkUrlScope
@@ -317,7 +280,7 @@ export const ThreadMode = memo<ThreadModeProps>(
             menuSourceOf={menuSourceOf}
             onNewSession={onNewSession}
             onNewSessionIn={onNewSessionIn}
-            onStartTask={onStartTask}
+            renderTaskLauncher={renderTaskLauncher}
           />
         </div>
 
@@ -336,7 +299,7 @@ export const ThreadMode = memo<ThreadModeProps>(
           </div>
           )}
 
-          <TopRail actions={showPanel ? undefined : topRailActions}>
+          <TopRail actions={showPanel ? undefined : railActions}>
             {selectedAgentId && agent && (
               <AgentTabs items={tabs} selectedWorkerId={activeWorkerId} onSelect={selectTab} />
             )}
@@ -355,6 +318,7 @@ export const ThreadMode = memo<ThreadModeProps>(
                 menuItems={threadMenu}
                 onMenuSelect={onThreadMenu}
                 onOpenFileChange={openFileChange}
+                onOpenWorker={selectTab}
               />
             ) : emptyState}
           </div>
@@ -381,14 +345,16 @@ export const ThreadMode = memo<ThreadModeProps>(
         <div ref={panelRef} className={styles.panel} data-collapsed={showPanel ? undefined : 'true'}>
           {showPanel && (
             <RightPanel
-              agentId={selectedAgentId}
+              agentId={browserTarget.agentId}
               worker={worker}
               panels={visiblePanels}
               onClosePanel={closePanel}
-              wanted={wantedPanel}
-              onPick={setWantedPanel}
-              reviewTarget={activeReviewTarget}
-              topRailActions={topRailActions}
+              wanted={panelView.wanted}
+              onPick={panelView.pick}
+              reviewTarget={panelView.reviewTarget}
+              browserState={browserState}
+              browserTarget={browserTarget}
+              topRailActions={railActions}
             />
           )}
         </div>

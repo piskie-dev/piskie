@@ -1,3 +1,8 @@
+import { ToolCoordinator } from '../../tools/coordinator.js';
+import { ToolCatalog, type CatalogSnapshot } from '../../tools/catalog.js';
+import { ToolCallContextFactory } from '../tool-call/context-builder.js';
+import { WebSearchTool } from '../../tools/web-search/web-search.tool.js';
+import { z } from '../../tools/params.js';
 /**
  * engine 结算写入点的中断统一分类。
  * - signal 已 abort 且 outcome 失败 → canonical interrupted（execution: unknown），不是普通工具失败；
@@ -64,8 +69,10 @@ class SettleEngine extends AgentEngine {
     } as never;
   }
 
-  runExecuteTools(toolUses: ContentBlock[], options: ExecuteToolsOptions): Promise<TurnOutcome> {
-    return this.executeTools(toolUses, {} as never, options, new Set());
+  setActualCoordinator(coordinator: ToolCoordinator): void { this.toolCoordinator = coordinator; }
+
+  runExecuteTools(toolUses: ContentBlock[], options: ExecuteToolsOptions, snapshot?: CatalogSnapshot): Promise<TurnOutcome> {
+    return this.executeTools(toolUses, snapshot ?? {} as never, options, new Set());
   }
 
   runCheckYieldGate(toolUses: ContentBlock[]): string | null {
@@ -203,5 +210,48 @@ describe('工具执行运行态统计', () => {
       steps: 1,
       toolDurationMs: 15,
     });
+  });
+});
+
+
+describe('web search and ordinary tools share Engine cancellation', () => {
+  it('settles both in-flight calls as interrupted through the existing coordinator', async () => {
+    const engine = new SettleEngine();
+    engine.approvalMode = 'auto';
+    const controller = new AbortController();
+    const ready = Promise.withResolvers<void>();
+    const signals: AbortSignal[] = [];
+    const waitForCancellation = (signal: AbortSignal): Promise<never> => new Promise((_resolve, reject) => {
+      signals.push(signal);
+      if (signals.length === 2) ready.resolve();
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+    const catalog = new ToolCatalog();
+    catalog.register(new WebSearchTool(), 'builtin');
+    catalog.register({ def: { name: 'read', scope: 'shared', effects: [], schema: z.object({}), description: 'Sample read' },
+      execute: (_params, context) => waitForCancellation(context.signal) }, 'builtin');
+    const contexts = new ToolCallContextFactory({ signal: () => controller.signal, activation: {
+      agentId: 'sample-main', mainAgentId: 'sample-main', agentType: 'main', agentSpec: 'director',
+      runConfig: { name: 'Sample', description: '', promptTemplate: '' }, resourceIds: {}, currentModel: () => 'sample::model',
+      modes: { modeId: () => 'normal', approvalMode: () => 'auto' }, post: () => true,
+      workspace: { dir: '/workspace', tempDir: '/tmp/sample-run' },
+      search: { capabilities: { domains: true, publishedAfter: true, publishedBefore: true },
+        search: (_request, context) => waitForCancellation(context.signal) },
+    } });
+    engine.setActualCoordinator(new ToolCoordinator({ contexts, observer: { start: vi.fn(), finish: vi.fn() } }));
+    const snapshot = catalog.snapshot({ scope: 'main', agentType: 'main', customTools: ['web_search', 'read'],
+      searchCapabilities: { domains: true, publishedAfter: true, publishedBefore: true },
+      exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
+    const running = engine.runExecuteTools([
+      { type: 'tool_use', id: 'sample-search', name: 'web_search', input: { query: 'sample',
+        domains: { mode: 'include', values: ['example.org'] }, publishedAfter: '2026-01-01', publishedBefore: '2026-02-01' } },
+      toolUse('sample-read', 'read'),
+    ], { mode: 'parallel', signal: controller.signal }, snapshot);
+    await ready.promise;
+    controller.abort(new Error('sample interruption'));
+    await running;
+    expect(signals).toEqual([controller.signal, controller.signal]);
+    expect(engine.settleCalls).toHaveLength(2);
+    for (const settlement of engine.settleCalls) expect(parseSettle(settlement.result)).toMatchObject({ status: 'interrupted', reason: 'user_interrupted' });
   });
 });

@@ -1,4 +1,6 @@
+import type { SearchService } from '../../search/service.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
+import { app, net } from 'electron';
 import { DefaultAgentInferencePort } from '../../inference/application/agent-inference-port.js';
 import { DefaultImageApplicationPort } from '../../inference/application/image-application-port.js';
 import { InferenceRuntimeHost } from '../../inference/composition/runtime-host.js';
@@ -17,6 +19,7 @@ export interface InferenceComponentState {
 export function createInferenceComponent(options: {
   userDataDirectory: string;
   agentService: AgentService;
+  search: SearchService;
   state: InferenceComponentState;
 }): RuntimeComponent<AgentServiceRuntimeBindings> {
   let host: InferenceRuntimeHost | undefined;
@@ -32,7 +35,7 @@ export function createInferenceComponent(options: {
   return {
     id: 'inference',
     requirement: 'required',
-    dependsOn: ['proxy-transports'],
+    dependsOn: ['proxy-transports', 'web-search'],
     async start(_context, scope) {
       scope.register({
         kind: 'custom',
@@ -42,7 +45,19 @@ export function createInferenceComponent(options: {
       });
       host = new InferenceRuntimeHost({
         rootDirectory: options.userDataDirectory,
-        configIntegrations: createElectronConfigDomainIntegrations(),
+        remoteCatalog: {
+          autoRefresh: true,
+          baseUrl: process.env.PISKIE_MODEL_CATALOG_BASE_URL ?? 'https://www.piskie.dev',
+          clientVersion: app.getVersion(),
+          fetch: (input, init) => net.fetch(input instanceof Request ? input : String(input), init),
+          onError: (error) => appLog.warn({
+            event: 'inference.catalog.update.failed',
+            message: 'Model catalog update failed; retaining the current catalog',
+            context: { scope: 'inference.catalog' },
+            error,
+          }),
+        },
+        configIntegrations: createElectronConfigDomainIntegrations({ publish: (config) => options.search.publish(config) }),
         openAi: { resolveFetch: resolveElectronInferenceFetch },
         anthropic: { resolveFetch: resolveElectronInferenceFetch },
         imageHttp: { resolveFetch: resolveElectronInferenceFetch },
@@ -62,6 +77,7 @@ export function createInferenceComponent(options: {
       const bindings: AgentServiceRuntimeBindings = {
         userDataDirectory: options.userDataDirectory,
         inferenceHost: host,
+        search: options.search,
         agentInference: new DefaultAgentInferencePort(
           host.aiGateway,
           host.control.runtime,

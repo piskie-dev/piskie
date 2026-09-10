@@ -1,0 +1,293 @@
+{
+  "provider": "xai",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
+  "sourceUrls": [
+    "https://models.dev",
+    "https://docs.x.ai/developers/models"
+  ],
+  "models": [
+    {
+      "id": "grok-4.6",
+      "name": "Grok 4.6",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          },
+          {
+            "kind": "effort",
+            "effort": "xhigh"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": true,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-12",
+      "contextWindow": 500000,
+      "maxContextWindow": 500000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "grok-4.5",
+      "name": "Grok 4.5",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": true,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-07-08",
+      "contextWindow": 500000,
+      "maxContextWindow": 500000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "grok-4.3",
+      "name": "Grok 4.3",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "effort",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "effort",
+            "effort": "low"
+          },
+          {
+            "kind": "effort",
+            "effort": "medium"
+          },
+          {
+            "kind": "effort",
+            "effort": "high"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "effort",
+          "effort": "high"
+        },
+        "mandatory": false,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-17",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 30000,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "grok-build-0.1",
+      "name": "Grok Build 0.1",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "fixed",
+        "options": [
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": true,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 256000,
+      "maxContextWindow": 256000,
+      "maxOutputTokens": 256000,
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 2
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "grok-4.20-0309-non-reasoning",
+      "name": "Grok 4.20 (Non-Reasoning)",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "none",
+        "options": [
+          {
+            "kind": "provider-default"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "provider-default"
+        },
+        "mandatory": false,
+        "transportPreset": "none",
+        "replayPolicy": "none"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-09",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 30000,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "grok-4.20-0309-reasoning",
+      "name": "Grok 4.20 (Reasoning)",
+      "provider": "xai",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "fixed",
+        "options": [
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": true,
+        "transportPreset": "openai-effort",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-03-09",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 30000,
+      "pricing": {
+        "inputPerMillion": 1.25,
+        "outputPerMillion": 2.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    }
+  ],
+  "inventorySource": {
+    "id": "models.dev",
+    "url": "https://models.dev/api.json",
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
+  }
+}

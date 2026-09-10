@@ -20,6 +20,8 @@ import debug from 'debug';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { linkAbort, raceAbort } from '@electron/utils/abort.js';
 
 const logger = debug('piskiepilot:browser-manager');
 
@@ -32,6 +34,7 @@ interface BrowserInstance {
   mutex: Mutex;                  // 🔑 每个浏览器独立的锁
   kernelProfileId?: string;      // FingerprintBrowser 内部会话 ID
   launchGeneration?: string;
+  pid?: number;
 }
 
 /**
@@ -48,6 +51,7 @@ interface PersistentConfig {
 
 interface BrowserConnectionOptions {
   wsEndpoint?: string;
+  pid?: number;
   userDataId?: string;
   userDataDir?: string;
   backgroundMode?: boolean;
@@ -81,9 +85,10 @@ export interface ConnectedBrowserSession {
 interface BrowserHandle {
   /** 创建凭据：成品或创建失败（含创建超时、创建中被 terminate） */
   readonly ready: Promise<BrowserInstance>;
+  readonly signal: AbortSignal;
   /**
    * 边界终止：发起同步取引用直接关（不排队不等 mutex，簿记事后补）；
-   * settle 来自 OS/库级事实（transport 关闭 ⇒ 在途 CDP 调用必然 reject）。
+   * Completion confirms browser cleanup; tool waits use their caller's abort signal.
    */
   terminate(reason: string): Promise<void>;
   /** 成品且未被终止时返回实例；创建中/失败/终止中返回 undefined */
@@ -102,6 +107,8 @@ const BROWSER_CREATE_TIMEOUT_MS = 60_000;
 /** graceful close 期限：protocolTimeout: 0 下 browser.close() 无自带
  * 上限，CDP 卡死时永不 settle——期限后升级为 PID 级进程终止 */
 const BROWSER_CLOSE_TIMEOUT_MS = 5_000;
+
+class BrowserCleanupError extends Error {}
 
 function browserAbortReason(signal: AbortSignal): unknown {
   if (signal.reason !== undefined) return signal.reason;
@@ -142,54 +149,48 @@ export class BrowserManager {
    * @param options 创建/连接选项
    * @returns 浏览器ID
    */
-  static async getOrCreate(browserId: string, options?: BrowserLaunchOptions): Promise<string> {
-    // 确保已初始化
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
-    const persistedConfig = await this.readPersistedBrowserConfig(browserId);
-    const effectiveUserDataId = options?.launchSpec.userDataId ?? persistedConfig?.userDataId;
-    const needsRestart = Boolean(
-      options?.launchSpec &&
-      persistedConfig?.userDataId &&
-      persistedConfig.userDataId !== effectiveUserDataId
-    );
-
-    // ========== 复用 / 终止旧世代 / 登记所有权 ==========
+  static async getOrCreate(
+    browserId: string,
+    options?: BrowserLaunchOptions,
+    signal?: AbortSignal
+  ): Promise<string> {
     for (;;) {
+      signal?.throwIfAborted();
       const existing = this.instances.get(browserId);
       if (!existing) break;
-
-      if (needsRestart) {
-        // 契约 4：terminate 后同 ID 新建必须等旧 settlement 完成（失败即上抛，不在残留边界上新建）
-        await existing.terminate('userDataId changed');
-        continue;   // settlement 完成后条目已删，重查后登记新 handle
+      if (existing.signal.aborted) {
+        if (!options) existing.signal.throwIfAborted();
+        await raceAbort(existing.terminate('await prior termination'), signal);
+        continue;
       }
 
-      // 契约 1：存在 ≠ 可用——创建中等成品，创建失败对并发调用方可见（reject 上抛）
-      const instance = await existing.ready;
-      if (options?.launchSpec && instance.launchGeneration !== options.launchSpec.generation) {
+      const waiting = signal ? AbortSignal.any([signal, existing.signal]) : existing.signal;
+      const instance = await raceAbort(existing.ready, waiting);
+      const persistedConfig = await raceAbort(this.readPersistedBrowserConfig(browserId), waiting);
+      waiting.throwIfAborted();
+      const effectiveUserDataId = options?.launchSpec.userDataId ?? persistedConfig?.userDataId;
+      if (options?.launchSpec && (
+        instance.launchGeneration !== options.launchSpec.generation ||
+        (persistedConfig?.userDataId && persistedConfig.userDataId !== effectiveUserDataId)
+      )) {
         await existing.terminate('browser launch generation changed');
         continue;
       }
-      if (existing.getReady()) {
-        if (!instance.browser.connected) {
-          await this.recoverDisconnected(browserId, existing, instance, effectiveUserDataId);
-          return browserId;
-        }
-        logger('Browser %s already exists, reusing', browserId);
-        return browserId;
+      if (!instance.browser.connected) {
+        await this.recoverDisconnected(browserId, existing, instance, effectiveUserDataId, signal);
       }
-      // 成品已被 terminate 接管：等旧 settlement 后重查（幂等门闩返回同一 settlement）
-      await existing.terminate('await prior termination');
+      return browserId;
     }
 
-    // 登记所有权（同步 set，先于任何创建 await——"创建中"的边界从此可见）
-    const handle = this.registerHandle(browserId, () =>
-      this.createInstance(browserId, options, effectiveUserDataId, effectiveUserDataId ?? browserId)
-    );
-    await handle.ready;
+    // Reserve ownership before filesystem reads so close can reach every startup phase.
+    const handle = this.registerHandle(browserId, async (creationSignal) => {
+      if (!this.initialized) await raceAbort(this.initialize(), creationSignal);
+      const persisted = await raceAbort(this.readPersistedBrowserConfig(browserId), creationSignal);
+      creationSignal.throwIfAborted();
+      const userDataId = options?.launchSpec.userDataId ?? persisted?.userDataId;
+      return this.createInstance(browserId, options, userDataId, userDataId ?? browserId, creationSignal);
+    });
+    await raceAbort(handle.ready, signal ? AbortSignal.any([signal, handle.signal]) : handle.signal);
     return browserId;
   }
 
@@ -204,7 +205,7 @@ export class BrowserManager {
    */
   private static registerHandle(
     browserId: string,
-    create: () => Promise<BrowserInstance>,
+    create: (signal: AbortSignal) => Promise<BrowserInstance>,
     fallbackOnFailure?: BrowserHandle
   ): BrowserHandle {
     const state: {
@@ -213,8 +214,8 @@ export class BrowserManager {
       terminateSettlement?: Promise<void>;
     } = {};
 
-    // 事实 1：底层创建 settlement（失败在消费方/termination 处消费，此处仅防 unhandled）
-    const rawCreation: Promise<BrowserInstance> = create();
+    const controller = new AbortController();
+    const rawCreation = Promise.resolve().then(() => create(controller.signal));
     rawCreation.catch(() => {
       /* consumed by consumerReady / termination */
     });
@@ -233,13 +234,14 @@ export class BrowserManager {
 
     const handle: BrowserHandle = {
       ready: consumerReady,
+      signal: controller.signal,
       getReady: () => (state.terminateSettlement ? undefined : state.consumedInstance),
       getConsumed: () => state.consumedInstance ?? fallbackOnFailure?.getConsumed(),
       terminate: (reason: string): Promise<void> => {
         // 契约 3：幂等——创建前/中/后调用返回同一 settlement（rejected 亦可反复消费）
         if (!state.terminateSettlement) {
           logger('Terminating browser %s (%s)', browserId, reason);
-          state.terminateSettlement = (async () => {
+          state.terminateSettlement = Promise.resolve().then(async () => {
             // 事实 3：等底层创建退出（有界）后关闭成品——含超时判负后的迟到成品；
             // rawCreation 宽限期内不 settle → 诚实 reject（无凭据，条目保留）
             const instance = await this.awaitRawCreationBounded(rawCreation, browserId);
@@ -252,7 +254,8 @@ export class BrowserManager {
             if (this.instances.get(browserId) === handle) {
               this.instances.delete(browserId);
             }
-          })();
+          });
+          controller.abort(new Error(`Browser ${browserId} terminated during creation or operation`));
         }
         return state.terminateSettlement;
       },
@@ -263,13 +266,17 @@ export class BrowserManager {
     // 底层也失败 → 两事实皆 settle，条目退场（身份检查防误删新世代）
     consumerReady.catch(() => {
       void (async () => {
+        let cleanupFailed = false;
         const late = await rawCreation.then(
           (i) => i,
-          () => undefined
+          (error) => {
+            cleanupFailed = error instanceof BrowserCleanupError;
+            return undefined;
+          }
         );
         if (state.terminateSettlement) return;   // terminate 已接管，删除责任归它
-        if (late) {
-          handle.terminate('late creation after consumer failure').catch(() => {
+        if (late || cleanupFailed) {
+          handle.terminate('cleanup after consumer failure').catch(() => {
             // rejection 已在 termination settlement 上可见——此 catch 仅防 unhandledRejection
           });
           return;
@@ -293,9 +300,12 @@ export class BrowserManager {
     browserId: string,
     staleHandle: BrowserHandle,
     staleInstance: BrowserInstance,
-    effectiveUserDataId: string | undefined
+    effectiveUserDataId: string | undefined,
+    signal?: AbortSignal
   ): Promise<BrowserInstance> {
-    const persisted = await this.readPersistedBrowserConfig(browserId);
+    const waiting = signal ? AbortSignal.any([signal, staleHandle.signal]) : staleHandle.signal;
+    const persisted = await raceAbort(this.readPersistedBrowserConfig(browserId), waiting);
+    waiting.throwIfAborted();
     if (!persisted?.wsEndpoint) {
       throw new Error(
         `Browser "${browserId}" disconnected and has no persisted endpoint for recovery.`
@@ -307,12 +317,13 @@ export class BrowserManager {
       if (!current) {
         throw new Error(`Browser "${browserId}" lost its lifecycle handle during recovery.`);
       }
-      return current.ready;
+      return raceAbort(current.ready, signal ? AbortSignal.any([signal, current.signal]) : current.signal);
     }
 
     logger('Recovering disconnected browser %s from %s', browserId, persisted.wsEndpoint);
     const recoveryOptions: BrowserConnectionOptions = {
       wsEndpoint: persisted.wsEndpoint,
+      pid: persisted.pid,
       userDataId: persisted.userDataId,
       userDataDir: persisted.userDataDir,
       backgroundMode: persisted.backgroundMode,
@@ -320,18 +331,22 @@ export class BrowserManager {
     };
     const recoveryHandle = this.registerHandle(
       browserId,
-      () =>
+      (creationSignal) =>
         this.createInstance(
-        browserId,
-        recoveryOptions,
-        persisted.userDataId ?? effectiveUserDataId,
-          persisted.userDataId ?? effectiveUserDataId ?? browserId
-      ),
+          browserId,
+          recoveryOptions,
+          persisted.userDataId ?? effectiveUserDataId,
+          persisted.userDataId ?? effectiveUserDataId ?? browserId,
+          creationSignal,
+          // The previous handle keeps ownership of the process during transport recovery.
+          false
+        ),
       staleHandle
     );
 
     try {
-      return await recoveryHandle.ready;
+      return await raceAbort(recoveryHandle.ready,
+        signal ? AbortSignal.any([signal, recoveryHandle.signal]) : recoveryHandle.signal);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(`Browser "${browserId}" recovery failed: ${detail}`, { cause: error });
@@ -384,9 +399,10 @@ export class BrowserManager {
           clearTimeout(timer);
           resolve(instance);
         },
-        () => {
+        (error) => {
           clearTimeout(timer);
-          resolve(undefined);
+          if (error instanceof BrowserCleanupError) reject(error);
+          else resolve(undefined);
         }
       );
     });
@@ -400,16 +416,20 @@ export class BrowserManager {
     browserId: string,
     options: BrowserConnectionOptions | undefined,
     effectiveUserDataId: string | undefined,
-    kernelProfileId: string
+    kernelProfileId: string,
+    signal: AbortSignal,
+    closeExistingOnAbort = true
   ): Promise<BrowserInstance> {
-    const guard = await this.globalMutex.acquire();
+    const guard = await this.globalMutex.acquire(signal);
     let browser: Browser | undefined;
     let wsEndpoint: string | undefined;
     let kernelStarted = false;
     let activeKernelProfileId: string | undefined;
     let automation: BrowserAutomationSession | undefined;
+    let connectionOptions = options;
 
     try {
+      signal.throwIfAborted();
       logger('Creating/connecting browser: %s', browserId);
 
       const launchSpec = options?.launchSpec;
@@ -426,9 +446,9 @@ export class BrowserManager {
         }
       }
 
-      let connectionOptions = options;
       if (!launchSpec && !connectionOptions?.wsEndpoint) {
-        const persistedConfig = await this.readPersistedBrowserConfig(browserId);
+        const persistedConfig = await raceAbort(this.readPersistedBrowserConfig(browserId), signal);
+        signal.throwIfAborted();
         if (persistedConfig?.wsEndpoint) {
           connectionOptions = {
             userDataId: persistedConfig.userDataId,
@@ -437,23 +457,21 @@ export class BrowserManager {
             launchGeneration: persistedConfig.launchGeneration,
             ...connectionOptions,
             wsEndpoint: persistedConfig.wsEndpoint,
+            pid: persistedConfig.pid,
           };
         }
       }
 
       if (connectionOptions?.wsEndpoint) {
         try {
-          browser = await puppeteer.connect({
-            browserWSEndpoint: connectionOptions.wsEndpoint,
-            defaultViewport: null,
-            protocolTimeout: 0,
-          });
+          browser = await this.connectBrowser(connectionOptions.wsEndpoint, signal);
           wsEndpoint = connectionOptions.wsEndpoint || browser.wsEndpoint();
           if (fingerprintBrowser.has(kernelProfileId)) {
             activeKernelProfileId = kernelProfileId;
           }
           logger('Connected to existing browser: %s', wsEndpoint);
         } catch (error) {
+          signal.throwIfAborted();
           logger('Failed to connect to existing browser: %O', error);
           if (!launchSpec) {
             const detail = error instanceof Error ? error.message : String(error);
@@ -491,7 +509,8 @@ export class BrowserManager {
         };
         const webrtcMode =
           runtimeConfig.fingerprint?.webrtc ?? (runtimeConfig.proxy?.server ? 'proxy' : 'real');
-        await ensureWebrtcPreferences(userDataDir, webrtcMode);
+        await raceAbort(ensureWebrtcPreferences(userDataDir, webrtcMode), signal);
+        signal.throwIfAborted();
 
         const extraArgs = ['--disable-blink-features=AutomationControlled'];
         // 窗口尺寸必须属于本次不可变启动快照；未指定时最大化。
@@ -526,15 +545,13 @@ export class BrowserManager {
         if (fingerprintBrowser.has(kernelProfileId)) {
           await fingerprintBrowser.stop(kernelProfileId);
         }
-        const handle = await fingerprintBrowser.launch(kernelProfileId, fpConfig);
+        signal.throwIfAborted();
         kernelStarted = true;
+        const handle = await fingerprintBrowser.launch(kernelProfileId, fpConfig, signal);
+        signal.throwIfAborted();
         activeKernelProfileId = kernelProfileId;
 
-        browser = await puppeteer.connect({
-          browserWSEndpoint: handle.browserWSEndpoint,
-          defaultViewport: null,
-          protocolTimeout: 0,
-        });
+        browser = await this.connectBrowser(handle.browserWSEndpoint, signal);
         wsEndpoint = handle.browserWSEndpoint;
         logger(
           'Kernel browser launched for %s (profile=%s, seed=%d, platform=%s)',
@@ -548,9 +565,14 @@ export class BrowserManager {
       if (!wsEndpoint) wsEndpoint = browser.wsEndpoint();
       const browserPid = activeKernelProfileId
         ? fingerprintBrowser.getPid(activeKernelProfileId)
-        : (browser.process()?.pid ?? (await this.readPersistedBrowserConfig(browserId))?.pid);
+        : (browser.process()?.pid ?? connectionOptions?.pid);
 
-      automation = await BrowserAutomationSession.create(browser);
+      const creatingAutomation = BrowserAutomationSession.create(browser);
+      void creatingAutomation.then((session) => {
+        if (signal.aborted) session.dispose();
+      }, () => {});
+      automation = await raceAbort(creatingAutomation, signal);
+      signal.throwIfAborted();
       browser.on('disconnected', () => {
         automation?.dispose();
         logger('Browser %s disconnected', browserId);
@@ -562,12 +584,14 @@ export class BrowserManager {
         mutex: new Mutex(),
         kernelProfileId: activeKernelProfileId,
         launchGeneration: launchSpec?.generation ?? connectionOptions?.launchGeneration,
+        pid: browserPid,
       };
 
-      await WindowController.initialize(browserId, {
+      await raceAbort(WindowController.initialize(browserId, {
         startHidden: shouldBackgroundMode,
         callerWindow: options?.callerWindow,
-      });
+      }), signal);
+      signal.throwIfAborted();
 
       if (!browser.connected) {
         throw new Error(`Browser ${browserId} disconnected during initialization`);
@@ -580,6 +604,7 @@ export class BrowserManager {
         backgroundMode: shouldBackgroundMode,
         launchGeneration: launchSpec?.generation ?? connectionOptions?.launchGeneration,
       });
+      signal.throwIfAborted();
 
       if (!browser.connected) {
         throw new Error(`Browser ${browserId} disconnected during initialization`);
@@ -591,22 +616,40 @@ export class BrowserManager {
       automation?.dispose();
       if (browser) {
         try {
-          await browser.disconnect();
+          void browser.disconnect().catch(() => {});
         } catch {
           // ignore
         }
       }
-      if (kernelStarted) {
-        try {
+      try {
+        if (kernelStarted || (signal.aborted && closeExistingOnAbort && fingerprintBrowser.has(kernelProfileId))) {
           await fingerprintBrowser.stop(kernelProfileId);
-        } catch (cleanupError) {
-          logger('Failed to clean kernel launch for %s: %O', browserId, cleanupError);
+        } else if (signal.aborted && closeExistingOnAbort && connectionOptions?.pid) {
+          await this.killProcessTreeByPid(connectionOptions.pid);
+        } else if (signal.aborted && closeExistingOnAbort && browser) {
+          await this.closeWithDeadline(browserId, { browser });
         }
+        if (signal.aborted && closeExistingOnAbort) await this.deletePersisted(browserId);
+      } catch (cleanupError) {
+        throw new BrowserCleanupError(`Browser ${browserId} startup cleanup failed`, { cause: cleanupError });
       }
       throw error;
     } finally {
       guard.dispose();
     }
+  }
+
+  private static async connectBrowser(endpoint: string, signal: AbortSignal): Promise<Browser> {
+    signal.throwIfAborted();
+    const connecting = puppeteer.connect({
+      browserWSEndpoint: endpoint,
+      defaultViewport: null,
+      protocolTimeout: 0,
+    });
+    void connecting.then((browser) => {
+      if (signal.aborted) void browser.disconnect().catch(() => {});
+    }, () => {});
+    return raceAbort(connecting, signal);
   }
 
   /** Selected-page accessor for non-exclusive consumers such as screencast polling. */
@@ -626,7 +669,7 @@ export class BrowserManager {
   ): Promise<T> {
     for (;;) {
       signal?.throwIfAborted();
-      const instance = await this.getConnectedInstance(browserId);
+      const instance = await this.getConnectedInstance(browserId, signal);
       const guard = await instance.mutex.acquire(signal);
       try {
         const current = this.instances.get(browserId)?.getReady();
@@ -652,9 +695,9 @@ export class BrowserManager {
     }
     signal.throwIfAborted();
 
-    let onAbort: (() => void) | undefined;
+    let unlink = (): void => {};
     const cancelled = new Promise<never>((_resolve, reject) => {
-      onAbort = () => {
+      unlink = linkAbort(signal, () => {
         // CdpBrowser.disconnect() disposes the local transport synchronously. Chrome keeps running,
         // while pending protocol calls reject and the next operation can reconnect by endpoint.
         try {
@@ -665,8 +708,7 @@ export class BrowserManager {
           logger('Failed to disconnect cancelled browser transport: %O', error);
         }
         reject(browserAbortReason(signal));
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
+      });
     });
 
     try {
@@ -675,25 +717,27 @@ export class BrowserManager {
       );
       return await Promise.race([running, cancelled]);
     } finally {
-      signal.removeEventListener('abort', onAbort!);
+      unlink();
     }
   }
 
-  private static async getConnectedInstance(browserId: string): Promise<BrowserInstance> {
+  private static async getConnectedInstance(browserId: string, signal?: AbortSignal): Promise<BrowserInstance> {
     try {
       for (;;) {
-        await this.getOrCreate(browserId);
+        await this.getOrCreate(browserId, undefined, signal);
+        signal?.throwIfAborted();
         const instance = this.instances.get(browserId)?.getReady();
         if (instance?.browser.connected) {
           return instance;
         }
       }
     } catch (error) {
+      signal?.throwIfAborted();
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(`Browser "${browserId}" is not ready and could not be recovered: ${detail}`, {
         cause: error,
       });
-  }
+    }
   }
 
   /** Includes creating and terminating handles so shutdown verification cannot hide them. */
@@ -736,17 +780,17 @@ export class BrowserManager {
     // Puppeteer 通过 connect 接入，实际进程和常驻 CDP 通道由 FingerprintBrowser 持有。
     const isKernelSession =
       instance.kernelProfileId != null && fingerprintBrowser.has(instance.kernelProfileId);
-      if (isKernelSession) {
-        try {
-          await instance.browser.disconnect();
-        } catch {
-          // ignore
-        }
-        await fingerprintBrowser.stop(instance.kernelProfileId!);
-        logger('Kernel browser stopped for %s', browserId);
-      } else {
-        await this.closeWithDeadline(browserId, instance);
+    if (isKernelSession) {
+      try {
+        void instance.browser.disconnect().catch(() => {});
+      } catch {
+        // Process termination below does not depend on transport cleanup.
       }
+      await fingerprintBrowser.stop(instance.kernelProfileId!);
+      logger('Kernel browser stopped for %s', browserId);
+    } else {
+      await this.closeWithDeadline(browserId, instance);
+    }
 
     // 删除持久化配置
     await this.deletePersisted(browserId);
@@ -756,21 +800,22 @@ export class BrowserManager {
   /**
    * 有界 close：graceful browser.close() 限期 race →
    * 超时/失败升级为 PID 级进程终止（Chrome 子进程随主进程死亡收敛）。
-   * PID kill 成功/进程已不存在 = 终止凭据（允许后续删条目）；无 PID 或 kill 失败 →
+   * 确认进程退出后才完成关闭；无 PID 或 kill 失败 →
    * throw（termination settlement reject → 条目保留 → 失败隔离）。
    */
   private static async closeWithDeadline(
     browserId: string,
-    instance: BrowserInstance
+    instance: Pick<BrowserInstance, 'browser' | 'pid'>
   ): Promise<void> {
     // close 后 browser.process() 可能失效，先取 PID（connect 场景 fallback persisted）
     const pid =
       instance.browser.process()?.pid ??
+      instance.pid ??
       (await this.readPersistedBrowserConfig(browserId))?.pid ??
       null;
 
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const closePromise = instance.browser.close();
+    const closePromise = Promise.resolve().then(() => instance.browser.close());
     closePromise.catch(() => {
       /* 超时放弃等待后迟到 rejection 不得成为 unhandled */
     });
@@ -787,7 +832,8 @@ export class BrowserManager {
           );
         }),
       ]);
-      return;   // graceful close 成功
+      if (pid != null) await this.waitForProcessExit(pid);
+      return;
     } catch (closeError) {
       logger(
         'Browser %s graceful close failed/timed out, escalating to PID kill: %o',
@@ -805,8 +851,8 @@ export class BrowserManager {
   }
 
   /**
-   * PID 级进程终止：POSIX SIGKILL 主进程（Chrome 树随主进程收敛）、Windows
-   * taskkill /T /F（自身有固定期限，挂起也有界）。成功或进程已不存在 = 凭据；
+   * PID 级进程终止：POSIX 优先终止进程组，Windows 使用 taskkill /T /F。
+   * 终止命令和进程退出确认均有固定期限；
    * 其余失败 throw。
    */
   private static async killProcessTreeByPid(pid: number): Promise<void> {
@@ -842,13 +888,33 @@ export class BrowserManager {
           finish(() => rejectKill(error));
         }
       });
+      await this.waitForProcessExit(pid);
       return;
     }
     try {
-      process.kill(pid, 'SIGKILL');
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {
+        process.kill(pid, 'SIGKILL');
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ESRCH') return;   // 已死 = 凭据
       throw error;
+    }
+    await this.waitForProcessExit(pid);
+  }
+
+  private static async waitForProcessExit(pid: number): Promise<void> {
+    const deadline = Date.now() + 4_000;
+    for (;;) {
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return;
+        throw error;
+      }
+      if (Date.now() >= deadline) throw new Error(`Browser process ${pid} did not exit after termination`);
+      await sleep(25);
     }
   }
 

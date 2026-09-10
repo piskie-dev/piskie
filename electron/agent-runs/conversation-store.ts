@@ -789,12 +789,11 @@ const runConfigSchema = z.object({
 const childSnapshotSchema = z.object({
   id: z.string(),
   config: z.object({
-    mode: z.enum(['browser', 'local']),
+    type: z.string().min(1),
     subject: z.string(),
-    taskIds: z.array(z.string()),
+    taskIds: z.array(z.string()).optional(),
     prompt: z.string(),
     skills: z.array(z.string()).optional(),
-    agentSpec: z.string().optional(),
     browserEnvironmentId: z.string().optional(),
     advancedSettings: advancedSettingsSchema.optional(),
   }),

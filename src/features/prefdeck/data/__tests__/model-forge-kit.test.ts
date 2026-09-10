@@ -6,6 +6,7 @@ import {
   BLANK_COMFY,
   buildComfyBindings,
   comfyDraftOf,
+  compatibleModelDefinitions,
   composeCatalogModel,
   equalCatalogShape,
   sealBinding,
@@ -13,6 +14,7 @@ import {
   unsealBinding,
   wireIdOf,
 } from '../model-forge-kit';
+import { vendorsFor } from '../vendor-atlas';
 
 const NO_THINK: ReasoningProfile = { mode: 'none' } as ReasoningProfile;
 const CONTEXT_REQUIRED = 'AI 模型必须填写上下文窗口';
@@ -131,6 +133,32 @@ describe('wireIdOf', () => {
   it('剥 family 前缀;无前缀原样', () => {
     expect(wireIdOf({ id: 'openai/gpt-x', family: 'openai' } as InferenceModelDefinition)).toBe('gpt-x');
     expect(wireIdOf({ id: 'solo-model' } as InferenceModelDefinition)).toBe('solo-model');
+  });
+});
+
+describe('compatibleModelDefinitions', () => {
+  const spec = vendorsFor('ai').find((vendor) => vendor.key === 'openai')!;
+  const model = (id: string, source: 'bundled' | 'remote'): InferenceModelDefinition => ({
+    id: `openai/${id}`, displayName: id, kind: 'ai', family: 'openai', lifecycle: 'active',
+    compatibleDrivers: ['openai'], inputModalities: ['text'], outputModalities: ['text'],
+    capabilities: {}, limits: { contextWindow: 16_000 },
+    releaseDate: '2026-01-01', source: { kind: source, version: 'example' },
+  });
+
+  it('selects system models by family and driver with stable ordering on equal release dates', () => {
+    const result = compatibleModelDefinitions([
+      model('example-c', 'bundled'), model('example-b', 'remote'), model('example-a', 'remote'),
+      { ...model('different-family', 'bundled'), family: 'example-vendor' },
+      { ...model('different-driver', 'bundled'), compatibleDrivers: ['example-driver'] },
+    ], spec);
+    expect(result.map((item) => item.id)).toEqual([
+      'openai/example-a', 'openai/example-b', 'openai/example-c',
+    ]);
+  });
+
+  it('excludes retired system models from new model suggestions', () => {
+    const retired = { ...model('example-old', 'remote'), lifecycle: 'retired' as const };
+    expect(compatibleModelDefinitions([retired], spec)).toEqual([]);
   });
 });
 

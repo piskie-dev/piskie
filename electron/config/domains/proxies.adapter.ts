@@ -65,12 +65,14 @@ export function createProxiesDomain(
         inference: revisionOf(await readDomain('inference')),
         'browser-profiles': revisionOf(await readDomain('browser-profiles')),
         mcp: revisionOf(await readDomain('mcp')),
+        'web-search': revisionOf(await readDomain('web-search')),
       }),
       validateSemantic: async (candidate) => validateProxyReferences(
         candidate,
         await readDomain('inference'),
         await readDomain('browser-profiles'),
         await readDomain('mcp'),
+        await readDomain('web-search'),
       ),
       analyzeImpact: (current, candidate) => {
         const removed = Object.keys(current.proxies).filter((id) => !candidate.proxies[id]);
@@ -99,11 +101,13 @@ function validateProxyReferences(
   inference: unknown,
   browserEnvironments: unknown,
   mcp: unknown,
+  webSearch: unknown,
 ) {
   const referenced = new Set([
     ...referencedInferenceProxyIds(inference),
     ...referencedBrowserProxyIds(browserEnvironments),
     ...referencedMcpProxyIds(mcp),
+    ...referencedSearchProxyIds(webSearch),
   ]);
   const missing = [...referenced].filter((id) => !candidate.proxies[id]);
   return {
@@ -161,4 +165,13 @@ function escapePointer(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function referencedSearchProxyIds(value: unknown): Set<string> {
+  const result = new Set<string>();
+  if (!isRecord(value) || !isRecord(value.providers)) return result;
+  for (const provider of Object.values(value.providers)) {
+    if (isRecord(provider) && typeof provider.proxyId === 'string') result.add(provider.proxyId);
+  }
+  return result;
 }

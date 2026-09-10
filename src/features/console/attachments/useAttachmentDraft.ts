@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ClipboardAttachmentDescriptor } from '../../../../shared/electron-contracts/desktop';
 import {
   getComposerAttachments,
+  getComposerDraftVersion,
   useComposerAttachments,
   useComposerDraftStore,
   type ComposerAttachmentImageResource,
@@ -236,9 +237,11 @@ export function useAttachmentDraft(key?: string): AttachmentDraft {
     if (!needsSystemDescriptors) return;
 
     const discovery = beginDiscovery(draftKey);
+    const version = getComposerDraftVersion(draftKey);
     void window.piskie.desktop.system.clipboardAttachments()
       .then((descriptors) => {
         if (!finishDiscovery(draftKey, discovery)) return;
+        if (getComposerDraftVersion(draftKey) !== version) return;
         importSystemDescriptors(descriptors, directImageFingerprints);
       })
       .catch((error: unknown) => {

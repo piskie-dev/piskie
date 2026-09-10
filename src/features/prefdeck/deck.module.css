@@ -1720,6 +1720,33 @@ html[data-theme='light'] .dropCard {
   color: var(--pd-ink);
 }
 
+.catalogRefreshBtn {
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  margin-block: -6px;
+}
+
+.catalogRefreshBtn:disabled {
+  color: var(--pd-faint);
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.catalogRefreshSpin {
+  animation: pd-catalog-spin 800ms linear infinite;
+}
+
+@keyframes pd-catalog-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalogRefreshSpin {
+    animation: none;
+  }
+}
+
 /* 两列排布(弹窗与页内共用) */
 .duoGrid {
   display: grid;
@@ -2001,4 +2028,34 @@ html[data-theme='light'] .dropCard {
   max-block-size: 80vh;
   border-radius: 10px;
   display: block;
+}
+
+
+.searchEvidence {
+  margin-block-start: 14px;
+  padding: 14px;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 12px;
+  max-block-size: 420px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.searchEvidence pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+.searchEvidence article + article {
+  margin-block-start: 18px;
+  padding-block-start: 14px;
+  border-block-start: 1px solid var(--pd-hairline);
+}
+
+.searchEvidence a {
+  color: var(--pd-ink);
+  font-weight: 600;
 }

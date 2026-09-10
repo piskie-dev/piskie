@@ -92,7 +92,7 @@ describe('DirectorRole 中断快照', () => {
     const child = {
       id: 'worker-1',
       config: {
-        mode: 'browser' as const,
+        type: 'browser-worker' as const,
         subject: '继续构建 Skill',
         taskIds: ['build-skill'],
       },

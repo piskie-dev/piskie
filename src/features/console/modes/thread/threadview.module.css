@@ -11,9 +11,7 @@
  * 用户特批把 dock 也改成 240（"dock 模式本身的太小了"）—— 两个模式取同一个值，
  * 切换时主屏不横向跳位。
  *
- * 右栏折叠用 `content-visibility: hidden`：**DOM 与滚动位置全留着**，
- * 切回来是瞬时的（不是卸载重建）。但它只省 CPU 不省内存，
- * 所以缓存必须配 LRU 上限，见 `RightPanel`。
+ * 右栏收起后释放布局空间；浏览器页面由主进程保留。
  */
 
 .threadview {
@@ -34,8 +32,7 @@
   background: var(--console-canvas-bg);
 }
 
-/* 右栏隐藏（无内容或 tab 被全部关闭）：第三列收成 0，中栏吃满。
-   用户再次打开具体内容时，对应 tab 会随内容自然恢复。 */
+/* 收起或没有可见标签时，第三列收成 0，中栏吃满。 */
 .threadview[data-panel-hidden='true'] {
   grid-template-columns: minmax(186px, var(--col-threads, 240px)) minmax(0, 1fr) 0;
 }
@@ -126,6 +123,31 @@
 .panel[data-collapsed='true'] {
   content-visibility: hidden;
   border: 0;
+}
+
+.panelToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+}
+
+.panelToggle:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.panelToggle:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: 2px;
 }
 
 /* 分栏条：落在 threads|center 与 center|panel 两条栅格线上 */

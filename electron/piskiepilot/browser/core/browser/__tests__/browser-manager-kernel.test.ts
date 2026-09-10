@@ -12,6 +12,7 @@ import { fingerprintBrowser } from '../../../fingerprint/runtime.js';
 import { BrowserAutomationSession } from '../../session/browser-automation-session.js';
 import { WindowController } from '../window-controller.js';
 import type { BrowserLaunchSpec } from '../browser-launch-spec.js';
+import { getNetworkRequest } from '../../../skills/browser/index.js';
 
 type TestBrowserManager = {
   initialized: boolean;
@@ -22,6 +23,24 @@ type TestBrowserManager = {
 };
 
 const manager = BrowserManager as unknown as TestBrowserManager;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+function mockKernel(browser = fakeBrowser()) {
+  vi.spyOn(fingerprintBrowser, 'launch').mockResolvedValue({
+    seed: 1, config: { platform: 'linux' }, browserWSEndpoint: 'ws://example.test/browser',
+  } as never);
+  vi.spyOn(fingerprintBrowser, 'has').mockReturnValue(true);
+  vi.spyOn(fingerprintBrowser, 'getPid').mockReturnValue(undefined);
+  const stop = vi.spyOn(fingerprintBrowser, 'stop').mockResolvedValue(true);
+  const connect = vi.spyOn(puppeteer, 'connect').mockResolvedValue(browser as never);
+  browser.disconnect.mockImplementation(async () => { browser.emitDisconnected(); });
+  return { browser, stop, connect };
+}
 
 function launchSpec(browserId: string, userDataId: string): BrowserLaunchSpec {
   return {
@@ -82,6 +101,115 @@ beforeEach(() => {
 afterEach(() => {
   manager.instances.clear();
   vi.restoreAllMocks();
+});
+
+describe('BrowserManager stop cancellation', () => {
+  it('retains startup ownership when initialization and process cleanup both fail', async () => {
+    const { stop } = mockKernel();
+    stop.mockResolvedValueOnce(true).mockRejectedValue(new Error('Process termination failed'));
+    vi.mocked(BrowserAutomationSession.create).mockRejectedValue(new Error('Session initialization failed'));
+    await expect(BrowserManager.getOrCreate('browser-a', {
+      launchSpec: launchSpec('browser-a', 'profile-a'),
+    })).rejects.toThrow('startup cleanup failed');
+    await expect(BrowserManager.close('browser-a')).rejects.toThrow('startup cleanup failed');
+    expect(BrowserManager.ownedIds()).toEqual(['browser-a']);
+    expect(manager.deletePersisted).not.toHaveBeenCalled();
+  });
+
+  it('releases a stuck response body and queued calls while still waiting for process shutdown', async () => {
+    const { stop } = mockKernel();
+    const bodyStarted = deferred<void>();
+    const processStopped = deferred<boolean>();
+    vi.mocked(BrowserAutomationSession.create).mockResolvedValue({
+      dispose: vi.fn(),
+      throwIfDialogOpen: vi.fn(),
+      getNetworkRequestId: () => 1,
+      getNetworkRequestById: () => ({
+        hasPostData: () => false,
+        response: () => ({ buffer: () => { bodyStarted.resolve(); return new Promise(() => {}); } }),
+      }),
+    } as never);
+    await BrowserManager.getOrCreate('browser-a', { launchSpec: launchSpec('browser-a', 'profile-a') });
+    stop.mockClear();
+    stop.mockReturnValueOnce(processStopped.promise);
+    const controller = new AbortController();
+    const reason = new Error('Task stopped');
+    const reading = getNetworkRequest({ browserId: 'browser-a', reqid: 1, signal: controller.signal });
+    await bodyStarted.promise;
+    const operation = vi.fn();
+    const queued = BrowserManager.runExclusive('browser-a', operation, controller.signal);
+    let closed = false;
+    const closing = BrowserManager.close('browser-a').then(() => { closed = true; });
+    const repeatedClose = BrowserManager.close('browser-a');
+    controller.abort(reason);
+    await expect(reading).rejects.toBe(reason);
+    await expect(queued).rejects.toBe(reason);
+    expect(operation).not.toHaveBeenCalled();
+    expect(closed).toBe(false);
+    processStopped.resolve(true);
+    await Promise.all([closing, repeatedClose]);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(BrowserManager.ownedIds()).toEqual([]);
+  });
+
+  it('registers startup before filesystem reads and prevents a late launch after stop', async () => {
+    const config = deferred<unknown>();
+    vi.mocked(manager.readPersistedBrowserConfig).mockReturnValue(config.promise);
+    const launch = vi.spyOn(fingerprintBrowser, 'launch');
+    const starting = BrowserManager.getOrCreate('browser-a', { launchSpec: launchSpec('browser-a', 'profile-a') });
+    expect(BrowserManager.ownedIds()).toEqual(['browser-a']);
+    const outcome = expect(starting).rejects.toThrow('terminated');
+    await BrowserManager.close('browser-a');
+    await outcome;
+    config.resolve(null);
+    await Promise.resolve();
+    expect(launch).not.toHaveBeenCalled();
+    expect(BrowserManager.ownedIds()).toEqual([]);
+  });
+
+  it('cancels a connection waiter and closes startup without waiting for Puppeteer connect', async () => {
+    const { stop, connect, browser } = mockKernel();
+    const connection = deferred<never>();
+    connect.mockReturnValue(connection.promise);
+    const starting = BrowserManager.getOrCreate('browser-a', { launchSpec: launchSpec('browser-a', 'profile-a') });
+    const startedOutcome = expect(starting).rejects.toThrow('terminated');
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce());
+    stop.mockClear();
+    const controller = new AbortController();
+    const reason = new Error('Task stopped');
+    const operation = vi.fn();
+    const waiting = BrowserManager.runExclusive('browser-a', operation, controller.signal);
+    controller.abort(reason);
+    await expect(waiting).rejects.toBe(reason);
+    await BrowserManager.close('browser-a');
+    await startedOutcome;
+    expect(stop).toHaveBeenCalledWith('profile-a');
+    expect(operation).not.toHaveBeenCalled();
+    connection.resolve(browser as never);
+    await Promise.resolve();
+    expect(browser.disconnect).toHaveBeenCalled();
+    expect(BrowserManager.ownedIds()).toEqual([]);
+  });
+
+  it('closes the original process when stop interrupts transport recovery', async () => {
+    const { browser, stop, connect } = mockKernel();
+    await BrowserManager.getOrCreate('browser-a', { launchSpec: launchSpec('browser-a', 'profile-a') });
+    vi.mocked(manager.readPersistedBrowserConfig).mockResolvedValue({
+      userDataId: 'profile-a', wsEndpoint: 'ws://example.test/browser',
+    });
+    browser.emitDisconnected();
+    connect.mockReturnValue(new Promise(() => {}));
+    const operation = vi.fn();
+    const waiting = BrowserManager.runExclusive('browser-a', operation);
+    const outcome = expect(waiting).rejects.toThrow('terminated');
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    stop.mockClear();
+    await BrowserManager.close('browser-a');
+    await outcome;
+    expect(stop).toHaveBeenCalledOnce();
+    expect(operation).not.toHaveBeenCalled();
+    expect(BrowserManager.ownedIds()).toEqual([]);
+  });
 });
 
 describe('BrowserManager managed-kernel launch', () => {
@@ -219,7 +347,8 @@ describe('BrowserManager managed-kernel launch', () => {
       'temporary-browser',
       expect.objectContaining({
         userDataDir: path.join(getUserDataRoot(), 'temporary-browser', 'chrome-data'),
-      })
+      }),
+      expect.any(AbortSignal),
     );
   });
 

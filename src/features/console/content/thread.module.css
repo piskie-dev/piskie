@@ -210,6 +210,9 @@
 .thinkLabel {
   flex: none;
   font-weight: 500;
+}
+
+.thinkDisclosure:not([data-live='true']) .thinkLabel {
   color: var(--thread-text-soft);
 }
 
@@ -238,7 +241,9 @@
   line-height: inherit;
 }
 
-.thinkSummary :global(.x-markdown) > * {
+/* li 也需行内化，否则外层 ul/ol 行内化后仍会被拆出额外行盒并裁掉文字。 */
+.thinkSummary :global(.x-markdown) > *,
+.thinkSummary :global(.x-markdown) li {
   display: inline;
   margin: 0;
   padding: 0;
@@ -278,28 +283,6 @@
 .thinkMarkdown > :first-child { margin-block-start: 0; }
 .thinkMarkdown > :last-child { margin-block-end: 0; }
 
-/* 思考中使用 Orb 环流（组件自带）+ 标签流光；完成后全部静止。
-   旧的整行扫光（8% 透明度）存在感稀薄，已删。 */
-.thinkDisclosure[data-live='true'] .thinkLabel {
-  background: linear-gradient(
-    90deg,
-    var(--thread-muted) 0%,
-    var(--thread-text) 50%,
-    var(--thread-muted) 100%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: think-shimmer 2.2s linear infinite;
-}
-
-@keyframes think-shimmer {
-  from { background-position: 180% 0; }
-  to { background-position: -80% 0; }
-}
-
-
 /* 单步动作行：图标 + 一行灰字，无容器 */
 .actionLine {
   display: flex;
@@ -319,7 +302,7 @@
   cursor: pointer;
 }
 
-.actionLine[data-clickable='true']:hover {
+.actionLine:where([data-clickable='true']:hover) {
   color: var(--thread-text);
 }
 
@@ -335,6 +318,15 @@
   white-space: nowrap;
 }
 
+.actionMeta {
+  flex: 0 0 auto;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--thread-rule);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .actionBadge {
   flex: 0 0 auto;
   padding: 1px 6px;
@@ -343,6 +335,82 @@
   font-size: 11px;
   line-height: 1.4;
   opacity: 0.8;
+}
+
+/* 子流程类型始终可见；较长的任务标题省略，悬停可读全文。 */
+.workerCreation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: start;
+  color: var(--thread-muted);
+  transition: color 160ms ease;
+}
+
+.workerCreation[data-clickable='true'] {
+  cursor: pointer;
+}
+
+.workerCreation[data-clickable='true']:hover {
+  color: var(--thread-text);
+}
+
+.workerCreation:focus-visible {
+  outline: 2px solid var(--thread-accent);
+  outline-offset: 2px;
+}
+
+.workerCreationIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* 标签和标题共用一个流光坐标系，短标签不再独立闪动。 */
+.workerCreationText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.workerCreationLabel {
+  flex: 0 0 auto;
+  font-weight: 400;
+}
+
+.workerCreationType {
+  flex: 0 0 auto;
+  padding-inline: 6px;
+  border: 1px solid var(--thread-rule);
+  border-radius: 4px;
+  background: var(--thread-pill-bg);
+  color: var(--thread-text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.workerCreation[data-live='false'] .workerCreationSubject {
+  color: var(--thread-text-soft);
+}
+
+.workerCreationSubject {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
 }
 
 /*
@@ -418,6 +486,171 @@
   user-select: text;
 }
 
+/* ── 消息收发：方向图标 + 动作 + 状态 + 摘要，展开正文沿文字轨缩进 ── */
+
+.flowEvent {
+  --flow-event-tone: var(--thread-accent);
+
+  container-type: inline-size;
+  min-inline-size: 0;
+}
+
+.flowEvent[data-tone='warning'] { --flow-event-tone: var(--status-waiting); }
+.flowEvent[data-tone='danger'] { --flow-event-tone: var(--thread-removed); }
+.flowEvent[data-tone='muted'] { --flow-event-tone: var(--thread-muted); }
+.flowEvent[data-event-type='completed'] { --flow-event-tone: var(--status-running); }
+
+.flowEventHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--thread-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: start;
+}
+
+button.flowEventHeader {
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+button.flowEventHeader:hover {
+  color: var(--thread-text);
+}
+
+button.flowEventHeader:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--flow-event-tone) 52%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.flowEventIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.flowEvent[data-flow-direction='system'][data-tone='warning'] .flowEventIcon,
+.flowEvent[data-flow-direction='system'][data-tone='danger'] .flowEventIcon {
+  color: var(--flow-event-tone);
+}
+
+.flowEventTitle {
+  flex: 0 0 auto;
+  max-inline-size: 65%;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: inherit;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flowEventStatus {
+  flex: 0 0 auto;
+  padding-inline: 5px;
+  border: 1px solid var(--thread-rule);
+  border-radius: 4px;
+  background: var(--thread-pill-bg);
+  color: var(--flow-event-tone);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.flowEventSeparator {
+  flex: 0 0 auto;
+  inline-size: 3px;
+  block-size: 3px;
+  border-radius: 50%;
+  background: var(--thread-muted-soft);
+}
+
+.flowEventSummary {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--thread-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flowEvent[data-tone='danger'] .flowEventSummary {
+  color: var(--thread-removed);
+}
+
+.flowEventChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 14px;
+  margin-inline-start: auto;
+  color: var(--thread-muted-soft);
+  transition: rotate 180ms ease, color 160ms ease;
+}
+
+.flowEventHeader:hover .flowEventChevron {
+  color: var(--thread-text-soft);
+}
+
+.flowEventHeader[aria-expanded='true'] .flowEventChevron {
+  rotate: 90deg;
+}
+
+.flowEventBody {
+  margin-block-start: 6px;
+  padding-inline-start: 22px;
+  color: var(--thread-text-soft);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.flowEventMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin-block-start: 9px;
+  color: var(--thread-muted-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@container (max-width: 260px) {
+  .flowEventHeader {
+    gap: 6px;
+  }
+
+  .flowEventTitle {
+    flex: 1 1 auto;
+    max-inline-size: none;
+  }
+
+  .flowEventSeparator,
+  .flowEventSummary {
+    display: none;
+  }
+
+  .flowEventBody {
+    padding-inline-start: 20px;
+  }
+}
+
 /* ── 聚合产物卡片（唯一带边框的形态）── */
 
 .card {
@@ -462,6 +695,11 @@
   border-radius: 8px;
   background: var(--thread-pill-bg);
   color: var(--thread-muted);
+  transition: color 160ms ease;
+}
+
+.cardHeadButton:hover .cardIcon {
+  color: var(--thread-text);
 }
 
 .cardHeadMain {
@@ -609,19 +847,11 @@
 @media (prefers-reduced-motion: reduce) {
   .actionLine,
   .cardHeadButton,
+  .flowEventHeader,
+  .flowEventChevron,
   .chevron,
   .collapsibleBody {
     transition: none;
-  }
-
-  .thinkDisclosure[data-live='true'] .thinkLabel {
-    animation: none;
-  }
-
-  /* shimmer 关掉后文字得有颜色 */
-  .thinkDisclosure[data-live='true'] .thinkLabel {
-    background: none;
-    color: var(--thread-text-soft);
   }
 }
 
@@ -633,6 +863,10 @@
   gap: 8px;
   margin-block-start: 6px;
   padding-inline-start: 22px; /* 与动作行文字对齐（图标 14 + gap 8） */
+}
+
+.flowEventBody .imageRow {
+  padding-inline-start: 0;
 }
 
 .imageThumb {

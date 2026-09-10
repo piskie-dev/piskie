@@ -8,7 +8,8 @@ import type { AgentRole, RoleDefaults, RuntimeOptions, LoopConfig, ToolUseInput 
 import type { AgentHost } from '../agent-host.js';
 import type { ToolContextBuilder } from '../tool-context.js';
 import type { PromptContext } from '../prompts/types.js';
-import { renderSkillTeachingDoc } from '../../skills/discovery/teaching.js';
+import { renderAvailableSkillTeaching } from '../../skills/discovery/teaching.js';
+import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
 import { pathsService } from '../../services/paths.service.js';
 import type {
   AgentRunConfig,
@@ -23,6 +24,10 @@ interface BrowserControllerLike {
 }
 
 export class WorkerRole implements AgentRole {
+  private readonly skillInventory: SkillInventorySnapshot = {
+    renderedAt: new Date().toISOString(), entries: {},
+  };
+
   getDefaults(options: RuntimeOptions): RoleDefaults {
     return {
       approvalMode: options.initialApprovalMode || 'auto',
@@ -42,9 +47,13 @@ export class WorkerRole implements AgentRole {
       if (assignedSkills.length) {
         for (const skill of assignedSkills) {
           try {
-            const teaching = await renderSkillTeachingDoc(skills, skill, { forPrompt: true });
-            if (teaching.found) {
+            const teaching = await renderAvailableSkillTeaching(skills, skill, {
+              workspace: options.runConfig?.workspace ?? (options.workspace as string | undefined),
+              defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
+            });
+            if (teaching?.found) {
               host.setSkillDocs(host.getSkillDocs() + '\n\n' + teaching.content);
+              this.skillInventory.entries[skill] = { tier: 'full', scope: teaching.scope };
             } else {
               appLog.warn({
                 event: 'agent.skill_docs.load.degraded',
@@ -78,10 +87,7 @@ export class WorkerRole implements AgentRole {
     if (!options.isResume) {
       const snapshot = options.assignmentTaskBoardSnapshot as
         AssignmentTaskBoardSnapshot | undefined;
-      if (!snapshot) {
-        throw new Error('Worker 缺少创建期 Task Board 快照');
-      }
-      // [提示词锚点] SubagentTool“编写 prompt”说明依赖此处只注入 Assignment，不继承 Parent 对话。
+      // [提示词锚点] SubagentTool 的 prompt 参数说明依赖此处只注入 Assignment，不继承 Parent 对话。
       host.addUserMessage({
         text: renderAssignmentInitialMessage(subConfig, snapshot),
         subtype: 'assignment',
@@ -114,7 +120,8 @@ export class WorkerRole implements AgentRole {
     ctx.role = 'worker';
     ctx.skills = subConfig.skills as string[];
 
-    ctx.workspaceDir = (options.workspace as string) || pathsService.getDefaultWorkspaceDir();
+    ctx.workspaceDir = options.runConfig?.workspace ?? (options.workspace as string | undefined)
+      ?? pathsService.getDefaultWorkspaceDir();
     ctx.tempDir = pathsService.getTempDir(host.id);
   }
 
@@ -134,15 +141,7 @@ export class WorkerRole implements AgentRole {
       subagentConfig: subConfig,
     });
     // worker 的可见集 = 出生时被授予并注入教学文档的技能（tool_search 互斥基准）
-    builder.setSkillInventory({
-      renderedAt: new Date().toISOString(),
-      entries: Object.fromEntries(
-        (subConfig.skills ?? []).map((skill) => [
-          skill,
-          { tier: 'full' as const, scope: 'user' as const },
-        ])
-      ),
-    });
+    builder.setSkillInventory(this.skillInventory);
     builder
       .setAssignmentSnapshot(
         options.assignmentTaskBoardSnapshot as AssignmentTaskBoardSnapshot | undefined
@@ -173,13 +172,12 @@ export class WorkerRole implements AgentRole {
     const config: Record<string, Record<string, unknown>> = {};
 
     config['browser'] = {
-      mode: subConfig.mode,
       skills: subConfig.skills,
       advancedSettings: subConfig.advancedSettings ?? (options as any).advancedSettings,
       browserEnvironmentId: subConfig.browserEnvironmentId,
       binding: options.browserBinding,
       mainAgentId: options.mainAgentId,
-      workspace: options.workspace,
+      workspace: options.runConfig?.workspace ?? options.workspace,
     };
 
     // 通用 Worker 统一注入显式图片执行目标

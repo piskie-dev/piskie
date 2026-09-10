@@ -7,6 +7,7 @@ const syncedProviders = [
   'openai',
   'anthropic',
   'gemini',
+  'xai',
   'deepseek',
   'zhipu',
   'minimax',

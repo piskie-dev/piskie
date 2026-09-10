@@ -92,6 +92,9 @@ async function fixture(
   let botConfigs: MessagingConnectionConfig[] = [];
 
   const integrations: ConfigDomainIntegrations = {
+    webSearch: {
+      publish: (_config, context) => { publications.push({ domain: context.domain, source: context.source }); },
+    },
     appSettings: {
       resolveInitialLanguage: () => initialLanguage,
       publish: (_settings, context) => publications.push({ domain: context.domain, source: context.source }),
@@ -574,7 +577,7 @@ describe('all managed Config Domains', () => {
     });
   });
 
-  it('uses one Plan/apply/history/rollback transaction shape for all nine Domains', async () => {
+  it('uses one Plan/apply/history/rollback transaction shape for all registered Domains', async () => {
     const { root, host, control, publications } = await fixture();
     expect(host.domains().map((domain) => domain.id)).toEqual([
       'app-settings',
@@ -586,6 +589,7 @@ describe('all managed Config Domains', () => {
       'model-catalog',
       'proxies',
       'task-definitions',
+      'web-search',
     ]);
 
     await applyPlan(host, 'app-settings', [{ op: 'replace', path: '/theme', value: 'dark' }], 0);
@@ -732,6 +736,9 @@ describe('all managed Config Domains', () => {
     await expect(host.rollback('im-bots', 0)).resolves.toMatchObject({ revision: 2 });
     await expect(host.rollback('task-definitions', 0)).resolves.toMatchObject({ revision: 2 });
 
+    await applyPlan(host, 'web-search', [{ op: 'replace', path: '/defaultProvider', value: 'exa' }], 0);
+    await expect(host.rollback('web-search', 0)).resolves.toMatchObject({ revision: 2 });
+
     for (const domain of host.domains()) {
       const history = await host.history(domain.id);
       expect(history, domain.id).toContain(0);
@@ -749,7 +756,20 @@ describe('all managed Config Domains', () => {
       'im-bots',
       'mcp',
       'proxies',
+      'web-search',
     ]));
+  });
+
+  it('keeps proxies referenced by search providers until the reference is removed', async () => {
+    const { host } = await fixture();
+    await applyPlan(host, 'proxies', [{ op: 'add', path: '/proxies/sample-proxy', value: {
+      name: 'Sample proxy', protocol: 'http', host: '127.0.0.1', port: 8080, enabled: true,
+    } }], 0);
+    await applyPlan(host, 'web-search', [{ op: 'add', path: '/providers/exa/proxyId', value: 'sample-proxy' }], 0);
+    const removal = await host.createPatchPlan<ConfigPlan>('proxies', [{ op: 'remove', path: '/proxies/sample-proxy' }]);
+    expect(removal.validation.issues).toContainEqual(expect.objectContaining({ code: 'PROXY_STILL_REFERENCED' }));
+    await applyPlan(host, 'web-search', [{ op: 'remove', path: '/providers/exa/proxyId' }], 1);
+    await applyPlan(host, 'proxies', [{ op: 'remove', path: '/proxies/sample-proxy' }], 1);
   });
 
   it('projects one shared set of usable inference targets for runtime, UI, and selection reads', async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAllComposerDrafts,
   composerDraftKey,
@@ -49,5 +49,12 @@ describe('composer-drafts(输入草稿驻留)', () => {
 
     clearAttachments(key);
     expect(useComposerDraftStore.getState().drafts[key]).toBeUndefined();
+  });
+
+  it('starts a fresh renderer with confirmation even after a previous renderer selected auto', async () => {
+    useComposerDraftStore.getState().selectApprovalMode('auto');
+    vi.resetModules();
+    const fresh = await import('../composer-drafts');
+    expect(fresh.useComposerDraftStore.getState().defaults.approvalMode).toBe('confirm');
   });
 });

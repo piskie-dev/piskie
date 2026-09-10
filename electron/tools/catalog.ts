@@ -3,6 +3,7 @@ import type {
   SkillProvenance,
 } from '../piskiepilot/core/skill/define.js';
 import type { McpOrigin, McpTransportKind } from '../../shared/types/mcp.js';
+import type { SearchCapabilities } from '../../shared/types/web-search.js';
 import { toToolInputSchema } from './params.js';
 import type {
   DeferredToolsPort,
@@ -11,6 +12,7 @@ import type {
   ToolAgentType,
   ToolDefinition,
   ToolScope,
+  ToolContract,
 } from './types.js';
 
 export type SkillCatalogIdentity = Readonly<{
@@ -54,13 +56,15 @@ export type CatalogEntry = Readonly<{
   definitionOverride?: ToolDefinition;
 }>;
 
+export type ResolvedCatalogEntry = CatalogEntry & Readonly<{ contract: ToolContract<any> }>;
+
 export type CatalogSkillEntryInput = Readonly<{
   tool: ITool<any, any>;
   identity: SkillCatalogIdentity;
 }>;
 
 export type SkillFunctionResolution =
-  | { kind: 'resolved'; entry: CatalogEntry }
+  | { kind: 'resolved'; entry: ResolvedCatalogEntry }
   | { kind: 'directOnly'; modelName: string }
   | { kind: 'unknownFunction'; available: readonly string[] }
   | { kind: 'notEligible'; reason: 'scope' | 'excluded' | 'resource' | 'notExposed' }
@@ -69,7 +73,9 @@ export type SkillFunctionResolution =
 export type FinalToolFace = Readonly<{
   scope: ToolScope;
   agentType: ToolAgentType;
+  searchCapabilities?: SearchCapabilities;
   customTools: readonly string[];
+  toolOptions?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   exposedSkillFunctions: readonly string[];
   excluded: ReadonlySet<string>;
   domains: ReadonlySet<SkillDomain>;
@@ -93,9 +99,9 @@ export type DeferredToolListing = Readonly<{
 }>;
 
 export interface CatalogSnapshot {
-  resolve(modelName: string): CatalogEntry | undefined;
+  resolve(modelName: string): ResolvedCatalogEntry | undefined;
   /** deferred 条目的解析（无论是否已装载；装载检查由调用方做） */
-  resolveDeferred(modelName: string): CatalogEntry | undefined;
+  resolveDeferred(modelName: string): ResolvedCatalogEntry | undefined;
   /** direct 定义 + 已装载的 deferred 定义（追加式投影） */
   definitions(loadedDeferred?: ReadonlySet<string>): ToolDefinition[];
   deferredTools(): readonly DeferredToolListing[];
@@ -156,30 +162,29 @@ function directlyExposed(entry: CatalogEntry, face: FinalToolFace): boolean {
   );
 }
 
-function asDefinition(entry: CatalogEntry, face: FinalToolFace): ToolDefinition {
+function asDefinition(entry: ResolvedCatalogEntry): ToolDefinition {
   if (entry.definitionOverride) return entry.definitionOverride;
-  const { def } = entry.tool;
-  const inputSchema = toToolInputSchema(def.schema);
   return {
     name: entry.modelName,
-    description: typeof def.description === 'function'
-      ? def.description(face.agentType)
-      : def.description,
-    input_schema: def.modelInputSchema?.(inputSchema, {
-      agentType: face.agentType,
-      subagentTypes: face.subagentTypes ?? [],
-      subagentResources: face.subagentResources ?? {
-        browserEnvironmentIds: [],
-      },
-    }) ?? inputSchema,
+    description: entry.contract.description,
+    input_schema: toToolInputSchema(entry.contract.schema),
   };
+}
+
+function resolveToolOptions(tool: ITool<any, any>, options: unknown): Record<string, unknown> {
+  if (tool.def.optionsSchema) return tool.def.optionsSchema.parse(options ?? {});
+  if (options !== undefined && Object.keys(options as object).length > 0) {
+    throw new Error(`Tool '${tool.def.name}' does not accept assembly options`);
+  }
+  return {};
 }
 
 class FrozenCatalogSnapshot implements CatalogSnapshot {
   private readonly entries: readonly CatalogEntry[];
-  private readonly direct: ReadonlyMap<string, CatalogEntry>;
-  private readonly deferred: ReadonlyMap<string, CatalogEntry>;
+  private readonly direct: ReadonlyMap<string, ResolvedCatalogEntry>;
+  private readonly deferred: ReadonlyMap<string, ResolvedCatalogEntry>;
   private readonly definitionsValue: readonly ToolDefinition[];
+  private readonly resolved = new Map<string, ResolvedCatalogEntry>();
 
   constructor(
     entries: readonly CatalogEntry[],
@@ -202,22 +207,41 @@ class FrozenCatalogSnapshot implements CatalogSnapshot {
       seen.add(entry.modelName);
     }
     const exposed = this.entries.filter((entry) => directlyExposed(entry, face));
-    this.direct = new Map(exposed.map((entry) => [entry.modelName, entry]));
+    this.direct = new Map(exposed.map((entry) => [entry.modelName, this.resolveEntry(entry)]));
     this.deferred = new Map(
       this.entries
         .filter((entry) => entry.exposure === 'deferred' && !eligible(entry, face))
-        .map((entry) => [entry.modelName, entry]),
+        .map((entry) => [entry.modelName, this.resolveEntry(entry)]),
     );
     this.definitionsValue = Object.freeze(
-      exposed.map((entry) => Object.freeze(asDefinition(entry, face))),
+      [...this.direct.values()].map((entry) => Object.freeze(asDefinition(entry))),
     );
   }
 
-  resolve(modelName: string): CatalogEntry | undefined {
+  private resolveEntry(entry: CatalogEntry): ResolvedCatalogEntry {
+    const existing = this.resolved.get(entry.modelName);
+    if (existing) return existing;
+    const { def } = entry.tool;
+    const options = resolveToolOptions(entry.tool, this.face.toolOptions?.[entry.modelName]);
+    const contract = def.resolveContract?.(options, {
+      agentType: this.face.agentType,
+      searchCapabilities: this.face.searchCapabilities,
+      subagentTypes: this.face.subagentTypes ?? [],
+      subagentResources: this.face.subagentResources ?? { browserEnvironmentIds: [] },
+    }) ?? {
+      schema: def.schema,
+      description: typeof def.description === 'function' ? def.description(this.face.agentType) : def.description,
+    };
+    const resolved = Object.freeze({ ...entry, contract: Object.freeze(contract) });
+    this.resolved.set(entry.modelName, resolved);
+    return resolved;
+  }
+
+  resolve(modelName: string): ResolvedCatalogEntry | undefined {
     return this.direct.get(modelName);
   }
 
-  resolveDeferred(modelName: string): CatalogEntry | undefined {
+  resolveDeferred(modelName: string): ResolvedCatalogEntry | undefined {
     return this.deferred.get(modelName);
   }
 
@@ -225,7 +249,7 @@ class FrozenCatalogSnapshot implements CatalogSnapshot {
     const base = [...this.definitionsValue];
     if (!loadedDeferred || loadedDeferred.size === 0) return base;
     for (const [name, entry] of this.deferred) {
-      if (loadedDeferred.has(name)) base.push(asDefinition(entry, this.face));
+      if (loadedDeferred.has(name)) base.push(asDefinition(entry));
     }
     return base;
   }
@@ -234,7 +258,7 @@ class FrozenCatalogSnapshot implements CatalogSnapshot {
     return [...this.deferred.values()].map((entry) => ({
       modelName: entry.modelName,
       server: entry.identity?.kind === 'mcp' ? entry.identity.server : '',
-      description: asDefinition(entry, this.face).description,
+      description: asDefinition(entry).description,
     }));
   }
 
@@ -266,7 +290,7 @@ class FrozenCatalogSnapshot implements CatalogSnapshot {
         ? { kind: 'directOnly', modelName: entry.modelName }
         : { kind: 'notEligible', reason: 'notExposed' };
     }
-    return { kind: 'resolved', entry };
+    return { kind: 'resolved', entry: this.resolveEntry(entry) };
   }
 }
 
@@ -283,6 +307,24 @@ export class ToolCatalog {
       throw new Error(`Catalog modelName conflict: ${modelName}`);
     }
     this.entries.set(modelName, Object.freeze({ modelName, tool, trust, identity }));
+  }
+
+  /** Validate a declaration using the selected tool's registered configuration contract. */
+  configure(name: string, options?: Readonly<Record<string, unknown>>, scope?: ToolScope): Record<string, unknown> {
+    const entry = this.entries.get(name);
+    if (!entry) throw new Error(`Unknown tool '${name}'`);
+    if (scope && entry.tool.def.scope !== 'shared' && entry.tool.def.scope !== scope) {
+      throw new Error(`Tool '${name}' is not available to ${scope}`);
+    }
+    return resolveToolOptions(entry.tool, options);
+  }
+
+  configurationDefinitions(): readonly { name: string; description: string; optionsSchema?: ToolDefinition['input_schema'] }[] {
+    return [...this.entries.values()].map(({ tool, modelName }) => ({
+      name: modelName,
+      description: typeof tool.def.description === 'function' ? tool.def.description('worker') : tool.def.description,
+      ...(tool.def.optionsSchema ? { optionsSchema: toToolInputSchema(tool.def.optionsSchema) } : {}),
+    }));
   }
 
   validateSkillReplacement(

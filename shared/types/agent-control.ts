@@ -9,7 +9,6 @@ import type {
   PendingToolCall,
   AIQuestion,
   AgentRunConfig,
-  SubagentMode,
   SubagentConfig,
   ContentBlock,
   ToolResultContentBlock,
@@ -178,7 +177,7 @@ export interface ChildControlState extends AgentActivityState {
   id: string;
   phase: AgentPhase;
   interrupted?: boolean;
-  mode: SubagentMode;
+  type: string;
   /** Parent UI 使用的 Assignment 简短标题 */
   subject: string;
   /** 创建期 Assignment 引用的细任务 ID；仅用于从 Main 权威看板派生 Worker UI。 */

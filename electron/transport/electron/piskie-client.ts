@@ -1,4 +1,5 @@
 import {
+  WEB_SEARCH_OPERATIONS,
   ACCOUNT_OPERATIONS,
   AGENT_RUN_OPERATIONS,
   AGENT_OPERATIONS,
@@ -50,6 +51,15 @@ export function createElectronPiskieClient(options: {
   );
 
   const api: PiskieDesktopApi = {
+    webSearch: {
+      listProviders: () => request(WEB_SEARCH_OPERATIONS.listProviders),
+      connectOAuth: (id) => waitForUser(WEB_SEARCH_OPERATIONS.connectOAuth, id),
+      cancelOAuth: (id) => request(WEB_SEARCH_OPERATIONS.cancelOAuth, id),
+      disconnectOAuth: (id) => request(WEB_SEARCH_OPERATIONS.disconnectOAuth, id),
+      checkConnection: (id, testOptions) => updateRequest(WEB_SEARCH_OPERATIONS.checkConnection, id, testOptions),
+      testSearch: (id, query, testOptions) => updateRequest(WEB_SEARCH_OPERATIONS.testSearch, id, query, testOptions),
+      cancelOperation: (id) => request(WEB_SEARCH_OPERATIONS.cancelOperation, id),
+    },
     account: {
       status: () => accountRequest(ACCOUNT_OPERATIONS.status),
       beginSignIn: () => accountRequest(ACCOUNT_OPERATIONS.beginSignIn),
@@ -191,6 +201,7 @@ export function createElectronPiskieClient(options: {
       listDrivers: () => request(INFERENCE_OPERATIONS.listDrivers),
       driverSchema: (driverId) => request(INFERENCE_OPERATIONS.driverSchema, driverId),
       queryModels: (input) => request(INFERENCE_OPERATIONS.queryModels, input),
+      refreshCatalog: () => request(INFERENCE_OPERATIONS.refreshCatalog),
       importWorkflow: (source) => request(INFERENCE_OPERATIONS.importWorkflow, source),
       inspectWorkflow: (assetId) => request(INFERENCE_OPERATIONS.inspectWorkflow, assetId),
       detectBindings: (assetId) => request(INFERENCE_OPERATIONS.detectBindings, assetId),
@@ -271,16 +282,22 @@ export function createElectronPiskieClient(options: {
         },
       },
       embeddedBrowser: {
-        navigate: (url) => request(PILOT_OPERATIONS.navigateEmbeddedBrowser, url),
-        openLocalHtml: (path) => request(PILOT_OPERATIONS.openLocalHtmlInEmbeddedBrowser, path),
-        back: () => request(PILOT_OPERATIONS.backEmbeddedBrowser),
-        forward: () => request(PILOT_OPERATIONS.forwardEmbeddedBrowser),
-        reload: () => request(PILOT_OPERATIONS.reloadEmbeddedBrowser),
-        stop: () => request(PILOT_OPERATIONS.stopEmbeddedBrowser),
-        setBounds: (bounds) => request(PILOT_OPERATIONS.setEmbeddedBrowserBounds, bounds),
-        setVisible: (visible) => request(PILOT_OPERATIONS.setEmbeddedBrowserVisible, visible),
-        state: () => request(PILOT_OPERATIONS.embeddedBrowserState),
-        observeState: (listener) => observe(PILOT_TOPICS.embeddedBrowser, listener),
+        open: (target) => request(PILOT_OPERATIONS.openEmbeddedBrowser, target),
+        close: (target) => request(PILOT_OPERATIONS.closeEmbeddedBrowser, target),
+        navigate: (target, url) => request(PILOT_OPERATIONS.navigateEmbeddedBrowser, target, url),
+        openLocalHtml: (target, path) => request(PILOT_OPERATIONS.openLocalHtmlInEmbeddedBrowser, target, path),
+        back: (target) => request(PILOT_OPERATIONS.backEmbeddedBrowser, target),
+        forward: (target) => request(PILOT_OPERATIONS.forwardEmbeddedBrowser, target),
+        reload: (target) => request(PILOT_OPERATIONS.reloadEmbeddedBrowser, target),
+        stop: (target) => request(PILOT_OPERATIONS.stopEmbeddedBrowser, target),
+        setBounds: (target, bounds) => request(PILOT_OPERATIONS.setEmbeddedBrowserBounds, target, bounds),
+        setVisible: (target, visible) => request(PILOT_OPERATIONS.setEmbeddedBrowserVisible, target, visible),
+        state: (target) => request(PILOT_OPERATIONS.embeddedBrowserState, target),
+        observeState: (target, listener) => transport.subscribe(PILOT_TOPICS.embeddedBrowser, {
+          payload: target,
+          onSnapshot: listener,
+          onChange: listener,
+        }),
       },
     },
     messaging: {

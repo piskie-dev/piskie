@@ -1,3 +1,4 @@
+import { specRegistry } from '../specs/index.js';
 /**
  * 工具面与提示词的一致性（AgentSpec -> AgentRuntime -> mergedCustomTools -> assembled prompt）。
  *
@@ -29,9 +30,10 @@ import { AgentRuntime } from '../agent-runtime.js';
 import type { AgentSpec } from '../specs/spec.js';
 import { directorSpec } from '../specs/builtin/director.js';
 import { systemChatSpec } from '../specs/builtin/system-chat.js';
-import { localWorkerSpec } from '../specs/builtin/local-worker.js';
+import { browserSkillDirectorSpec } from '../specs/builtin/browser-skill-director.js';
 import { ToolCatalog, type FinalToolFace } from '../../tools/catalog.js';
 import { AgentRunTool } from '../../tools/agent/agent-run.tool.js';
+import { SubagentTool } from '../../tools/agent/subagent.tool.js';
 import { fakeAgentInference } from '../../testing/fake-agent-inference.js';
 
 const noAgentRunDirectorSpec: AgentSpec = {
@@ -66,6 +68,7 @@ function buildRuntime(spec: AgentSpec, subagentConfig?: Record<string, unknown>)
   );
   const catalog = new ToolCatalog();
   catalog.register(new AgentRunTool(), 'builtin');
+  catalog.register(new SubagentTool(), 'builtin');
   const internal = runtime as unknown as {
     toolCatalog: ToolCatalog;
     toolFace: FinalToolFace;
@@ -73,11 +76,12 @@ function buildRuntime(spec: AgentSpec, subagentConfig?: Record<string, unknown>)
   internal.toolCatalog = catalog;
   internal.toolFace = {
     scope: spec.role === 'worker' ? 'subagent' : 'main',
-    agentType: spec.role === 'worker' ? 'subagent' : 'main',
+    agentType: spec.role === 'worker' ? 'worker' : 'main',
     customTools: merged,
     exposedSkillFunctions: [],
     excluded: new Set(spec.tools.exclude ?? []),
     domains: new Set(['local']),
+    subagentTypes: specRegistry.getWorkersForParent(spec.name),
   };
   return runtime;
 }
@@ -109,7 +113,16 @@ function assertConsistent(spec: AgentSpec): void {
     .toBe(declaredAgentRun);
 }
 
+const localWorkerSpec = specRegistry.get('local-worker')!;
+
 describe('工具面 ↔ 提示词一致性（真实 builtin spec 全链路）', () => {
+  it.each([directorSpec, systemChatSpec, browserSkillDirectorSpec])('only teaches Explore when $name can create it', (spec) => {
+    const runtime = buildRuntime(spec);
+    const schema = runtime.getAvailableTools().find((tool) => tool.name === 'subagent')!.input_schema;
+    const available = (schema.properties.type as { enum: string[] }).enum;
+    expect(runtime.buildSystemPrompt().includes('subagent(type: "explore")')).toBe(available.includes('explore'));
+  });
+
   it('start always enters the existing mailbox loop after prepare', async () => {
     const runtime = buildRuntime(directorSpec);
     const prepare = vi.spyOn(runtime, 'prepare').mockResolvedValue();
@@ -159,7 +172,7 @@ describe('工具面 ↔ 提示词一致性（真实 builtin spec 全链路）', 
   });
 
   it('Worker 的 Spec 不含 agent_run，因此 canManageAgentRuns 为 false', () => {
-    const runtime = buildRuntime(localWorkerSpec, { mode: 'local' }) as unknown as {
+    const runtime = buildRuntime(localWorkerSpec, { type: 'local-worker' }) as unknown as {
       buildPromptContext(): { canManageAgentRuns: boolean };
     };
     expect(runtime.buildPromptContext().canManageAgentRuns).toBe(false);

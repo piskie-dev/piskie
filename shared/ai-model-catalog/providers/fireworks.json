@@ -1,12 +1,141 @@
 {
   "provider": "fireworks",
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://docs.fireworks.ai/guides/reasoning"
   ],
   "models": [
+    {
+      "id": "accounts/fireworks/models/glm-5p3-flash",
+      "name": "GLM 5.3 Flash",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-26",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.5
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
+      "name": "DeepSeek V4 Flash Vision Exp",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-21",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 0.66
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "accounts/fireworks/models/glm-5p3",
+      "name": "GLM 5.3",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-14",
+      "contextWindow": 1000000,
+      "maxContextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 1.4,
+        "outputPerMillion": 4.4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
     {
       "id": "accounts/fireworks/models/deepseek-v4-pro-0813",
       "name": "DeepSeek V4 Pro 0813",
@@ -46,8 +175,51 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "accounts/fireworks/models/qwen3p8-2p4t-a95b",
+      "name": "Qwen3.8 2.4T A95B",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "releaseDate": "2026-08-12",
+      "contextWindow": 262144,
+      "maxContextWindow": 262144,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -89,8 +261,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -132,8 +304,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -175,8 +347,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -211,15 +383,15 @@
       "maxContextWindow": 1000000,
       "maxOutputTokens": 384000,
       "pricing": {
-        "inputPerMillion": 0.14,
-        "outputPerMillion": 0.28
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 0.66
       },
       "provenance": {
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -261,8 +433,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -304,8 +476,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -347,8 +519,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -390,8 +562,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -432,8 +604,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-16"
     },
@@ -475,8 +647,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-12"
     },
@@ -518,8 +690,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-12"
     },
@@ -561,53 +733,10 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-06-12"
-    },
-    {
-      "id": "accounts/fireworks/routers/kimi-k2p7-code-fast",
-      "name": "Kimi K2.7 Code Fast",
-      "provider": "fireworks",
-      "capabilityProfile": {
-        "toolUse": "supported",
-        "vision": "supported",
-        "streaming": "unknown"
-      },
-      "reasoning": {
-        "mode": "toggle",
-        "options": [
-          {
-            "kind": "disabled"
-          },
-          {
-            "kind": "enabled"
-          }
-        ],
-        "defaultSelection": {
-          "kind": "enabled"
-        },
-        "mandatory": false,
-        "transportPreset": "fireworks-reasoning",
-        "replayPolicy": "opaque-required"
-      },
-      "lifecycle": "active",
-      "releaseDate": "2026-06-12",
-      "contextWindow": 262000,
-      "maxContextWindow": 262000,
-      "maxOutputTokens": 262000,
-      "pricing": {
-        "inputPerMillion": 1.9,
-        "outputPerMillion": 8
-      },
-      "provenance": {
-        "sourceUrls": [
-          "https://models.dev"
-        ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
-      }
     },
     {
       "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
@@ -648,6 +777,135 @@
         "sourceUrls": [
           "https://models.dev"
         ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      }
+    },
+    {
+      "id": "accounts/fireworks/models/kimi-k2p6",
+      "name": "Kimi K2.6",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 262000,
+      "maxContextWindow": 262000,
+      "maxOutputTokens": 262000,
+      "pricing": {
+        "inputPerMillion": 0.95,
+        "outputPerMillion": 4
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      },
+      "releaseDate": "2026-04-17"
+    },
+    {
+      "id": "accounts/fireworks/models/gpt-oss-120b",
+      "name": "GPT OSS 120B",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "unsupported",
+        "streaming": "supported"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "active",
+      "contextWindow": 131072,
+      "maxContextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
+      },
+      "releaseDate": "2025-08-05"
+    },
+    {
+      "id": "accounts/fireworks/routers/kimi-k2p7-code-fast",
+      "name": "Kimi K2.7 Code Fast",
+      "provider": "fireworks",
+      "capabilityProfile": {
+        "toolUse": "supported",
+        "vision": "supported",
+        "streaming": "unknown"
+      },
+      "reasoning": {
+        "mode": "toggle",
+        "options": [
+          {
+            "kind": "disabled"
+          },
+          {
+            "kind": "enabled"
+          }
+        ],
+        "defaultSelection": {
+          "kind": "enabled"
+        },
+        "mandatory": false,
+        "transportPreset": "fireworks-reasoning",
+        "replayPolicy": "opaque-required"
+      },
+      "lifecycle": "retired",
+      "releaseDate": "2026-06-12",
+      "contextWindow": 262000,
+      "maxContextWindow": 262000,
+      "maxOutputTokens": 262000,
+      "pricing": {
+        "inputPerMillion": 1.9,
+        "outputPerMillion": 8
+      },
+      "provenance": {
+        "sourceUrls": [
+          "https://models.dev"
+        ],
         "verifiedAt": "2026-07-10",
         "catalogVersion": "2026.07.10.4"
       }
@@ -678,7 +936,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 1000000,
       "maxContextWindow": 1000000,
       "maxOutputTokens": 384000,
@@ -721,7 +979,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 1000000,
       "maxContextWindow": 1000000,
       "maxOutputTokens": 384000,
@@ -737,49 +995,6 @@
         "catalogVersion": "2026.07.10.4"
       },
       "releaseDate": "2026-04-24"
-    },
-    {
-      "id": "accounts/fireworks/models/kimi-k2p6",
-      "name": "Kimi K2.6",
-      "provider": "fireworks",
-      "capabilityProfile": {
-        "toolUse": "supported",
-        "vision": "supported",
-        "streaming": "supported"
-      },
-      "reasoning": {
-        "mode": "toggle",
-        "options": [
-          {
-            "kind": "disabled"
-          },
-          {
-            "kind": "enabled"
-          }
-        ],
-        "defaultSelection": {
-          "kind": "enabled"
-        },
-        "mandatory": false,
-        "transportPreset": "fireworks-reasoning",
-        "replayPolicy": "opaque-required"
-      },
-      "lifecycle": "active",
-      "contextWindow": 262000,
-      "maxContextWindow": 262000,
-      "maxOutputTokens": 262000,
-      "pricing": {
-        "inputPerMillion": 0.95,
-        "outputPerMillion": 4
-      },
-      "provenance": {
-        "sourceUrls": [
-          "https://models.dev"
-        ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
-      },
-      "releaseDate": "2026-04-17"
     },
     {
       "id": "accounts/fireworks/routers/kimi-k2p6-fast",
@@ -807,7 +1022,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "releaseDate": "2026-04-17",
       "contextWindow": 262000,
       "maxContextWindow": 262000,
@@ -850,7 +1065,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "releaseDate": "2026-04-17",
       "contextWindow": 262000,
       "maxContextWindow": 262000,
@@ -893,7 +1108,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 196608,
       "maxContextWindow": 196608,
       "maxOutputTokens": 196608,
@@ -909,49 +1124,6 @@
         "catalogVersion": "2026.07.10.4"
       },
       "releaseDate": "2026-04-12"
-    },
-    {
-      "id": "accounts/fireworks/models/gpt-oss-120b",
-      "name": "GPT OSS 120B",
-      "provider": "fireworks",
-      "capabilityProfile": {
-        "toolUse": "supported",
-        "vision": "unsupported",
-        "streaming": "supported"
-      },
-      "reasoning": {
-        "mode": "toggle",
-        "options": [
-          {
-            "kind": "disabled"
-          },
-          {
-            "kind": "enabled"
-          }
-        ],
-        "defaultSelection": {
-          "kind": "enabled"
-        },
-        "mandatory": false,
-        "transportPreset": "fireworks-reasoning",
-        "replayPolicy": "opaque-required"
-      },
-      "lifecycle": "active",
-      "contextWindow": 131072,
-      "maxContextWindow": 131072,
-      "maxOutputTokens": 32768,
-      "pricing": {
-        "inputPerMillion": 0.15,
-        "outputPerMillion": 0.6
-      },
-      "provenance": {
-        "sourceUrls": [
-          "https://models.dev"
-        ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
-      },
-      "releaseDate": "2025-08-05"
     },
     {
       "id": "accounts/fireworks/models/gpt-oss-20b",
@@ -979,7 +1151,7 @@
         "transportPreset": "fireworks-reasoning",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 131072,
       "maxContextWindow": 131072,
       "maxOutputTokens": 32768,
@@ -1000,6 +1172,6 @@
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

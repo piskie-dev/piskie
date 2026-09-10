@@ -127,59 +127,59 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
               />
             )}
           </div>
+        </div>
 
-          {/* 覆盖层挂在视口上（不随内容滚动） */}
-          {!browserReady && (
-            <div className={styles.overlay}>
-              <Loader2 size={22} className="animate-spin" />
-              <span>{t('sessionWorkbenchUi.screen.waitingBrowser')}</span>
-            </div>
-          )}
-
-          {browserReady && !stream.ready && !stream.error && (
-            <div className={styles.overlay} data-tone="loading">
-              <Loader2 size={22} className="animate-spin" />
-            </div>
-          )}
-
-          {browserReady && stream.error && !stream.ready && (
-            <div className={styles.overlay} data-tone="error">
-              <Unplug size={22} />
-              <span>{stream.error}</span>
-            </div>
-          )}
-
-          {/* 画面内悬浮控件：常态可发现，指针移入时增强 */}
-          <div className={styles.floatBar}>
-            {browserReady && (
-              <span className={styles.floatChip}>
-                <span
-                  className={styles.statusDot}
-                  data-state={stream.ready ? 'ready' : stream.error ? 'error' : undefined}
-                  aria-hidden="true"
-                />
-                {formatFps(stream.currentFps)} FPS
-              </span>
-            )}
-            {onFullscreen ? (
-              <Tooltip title={t('sessionWorkbenchUi.screen.fullscreen')}>
-                <button
-                  type="button"
-                  className={styles.floatButton}
-                  onClick={onFullscreen}
-                  aria-label={t('sessionWorkbenchUi.screen.fullscreen')}
-                >
-                  <Maximize2 size={14} />
-                </button>
-              </Tooltip>
-            ) : (
-              <Tooltip title={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
-                <button type="button" className={styles.floatButton} onClick={onShowWindow} aria-label={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
-                  <Eye size={14} />
-                </button>
-              </Tooltip>
-            )}
+        {/* 覆盖层与滚动视口并列，固定在面板可见区域。 */}
+        {!browserReady && (
+          <div className={styles.overlay}>
+            <Loader2 size={22} className="animate-spin" />
+            <span>{t('sessionWorkbenchUi.screen.waitingBrowser')}</span>
           </div>
+        )}
+
+        {browserReady && !stream.ready && !stream.error && (
+          <div className={styles.overlay} data-tone="loading">
+            <Loader2 size={22} className="animate-spin" />
+          </div>
+        )}
+
+        {browserReady && stream.error && !stream.ready && (
+          <div className={styles.overlay} data-tone="error">
+            <Unplug size={22} />
+            <span>{stream.error}</span>
+          </div>
+        )}
+
+        {/* 画面内悬浮控件：常态可发现，指针移入时增强 */}
+        <div className={styles.floatBar}>
+          {browserReady && (
+            <span className={styles.floatChip}>
+              <span
+                className={styles.statusDot}
+                data-state={stream.ready ? 'ready' : stream.error ? 'error' : undefined}
+                aria-hidden="true"
+              />
+              {formatFps(stream.currentFps)} FPS
+            </span>
+          )}
+          {onFullscreen ? (
+            <Tooltip title={t('sessionWorkbenchUi.screen.fullscreen')}>
+              <button
+                type="button"
+                className={styles.floatButton}
+                onClick={onFullscreen}
+                aria-label={t('sessionWorkbenchUi.screen.fullscreen')}
+              >
+                <Maximize2 size={14} />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip title={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
+              <button type="button" className={styles.floatButton} onClick={onShowWindow} aria-label={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
+                <Eye size={14} />
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
     );

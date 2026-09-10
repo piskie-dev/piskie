@@ -1,3 +1,4 @@
+import type { SearchPort } from '../../../shared/types/web-search.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 /**
  * SubagentModule — 子流程管理
@@ -16,7 +17,6 @@ import type { AgentRuntimeObserver, AgentRuntimeObserverFactory } from '../obser
 import type { ImageApplicationPort } from '../../inference/application/image-application-port.js';
 import type { ModelTarget } from '../../inference/execution/contracts.js';
 import type {
-  AssignmentTaskBoardSnapshot,
   TaskItem,
   SubagentConfig,
   SubagentNotification,
@@ -28,10 +28,13 @@ import type {
   ChildSnapshot,
 } from '../../../shared/types/index.js';
 import { STALLED_CONFIG } from '../../../shared/constants/index.js';
+import { createSubagentSchema } from '../../tools/agent/subagent-contract.js';
+import { taskBoardService } from '../../agent-runs/task-board-service.js';
+import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { neutralizeClosing } from '../prompts/context.js';
 import { RuntimeTraceWriter } from '../tracing/runtime-trace-writer.js';
 import { createUuid } from '@shared/utils/identifiers.js';
-import { deriveWorkerMode, specRegistry } from '../specs/index.js';
+import { specRegistry } from '../specs/index.js';
 import { resolveBrowserBinding, type ResolvedBrowserBinding } from './browser-binding.js';
 import {
   normalizeSubagentNotification,
@@ -50,6 +53,7 @@ interface SubagentModuleConfig {
     browser: AgentPilotPorts['browser'] | null;
   };
   imageApplication?: ImageApplicationPort;
+  search?: SearchPort;
   imageTarget?: ModelTarget;
 }
 
@@ -109,6 +113,7 @@ export class SubagentModule implements AgentModule {
   private inference?: AgentInferencePort;
   private pilotPorts?: AgentPilotPorts;
   private imageApplication?: ImageApplicationPort;
+  private search?: SearchPort;
   private imageTarget?: ModelTarget;
 
   /** 活跃的子流程 Map */
@@ -143,6 +148,7 @@ export class SubagentModule implements AgentModule {
           ? { skills: ports.skills, browser: ports.browser }
           : undefined,
       imageApplication: settings?.imageApplication,
+      search: settings?.search,
       imageTarget: settings?.imageTarget,
     });
 
@@ -177,9 +183,7 @@ export class SubagentModule implements AgentModule {
   contributeTools(builder: ToolContextBuilder): void {
     builder
       .setSubagents({
-        resolveType: (type: string) => this.resolveWorkerType(type),
-        create: (config: SubagentConfig, snapshot: AssignmentTaskBoardSnapshot) =>
-          this.createSubagent(config, snapshot),
+        create: (config: SubagentConfig) => this.createSubagent(config),
         destroy: (id: string) => this.destroySubagent(id),
         traceFilePath: (id: string) => this.getSubagentTraceFilePath(id),
       })
@@ -188,32 +192,6 @@ export class SubagentModule implements AgentModule {
         send: (id: string, event: Record<string, unknown>) => this.sendEventToSubagent(id, event),
         notifyParent: () => false,
       });
-  }
-
-  private availableWorkerTypes() {
-    return specRegistry.getNamedWorkersForParent(this.host.spec.name);
-  }
-
-  private resolveWorkerType(
-    type: string
-  ): { mode: SubagentConfig['mode']; agentSpec?: string } | { error: string } {
-    const namedWorkers = this.availableWorkerTypes();
-    const available = ['browser', 'local', ...namedWorkers.map((worker) => worker.name)];
-    if (!namedWorkers.some((worker) => worker.name === type)) {
-      return {
-        error: `未知的子流程类型: ${type}。当前可用 type: ${available.join(' / ')}`,
-      };
-    }
-    const spec = specRegistry.get(type);
-    if (!spec) {
-      return { error: `子流程类型 ${type} 已从注册表移除，请重新读取当前工具定义` };
-    }
-    try {
-      specRegistry.assertParentMayCreate(this.host.spec.name, spec);
-      return { mode: deriveWorkerMode(spec), agentSpec: type };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
   }
 
   processEvent(event: AgentInputEvent): boolean {
@@ -525,8 +503,7 @@ export class SubagentModule implements AgentModule {
   // ─── 内部方法 ──────────────────────────────────────────
 
   private async createSubagent(
-    config: SubagentConfig,
-    taskBoardSnapshot: AssignmentTaskBoardSnapshot
+    config: SubagentConfig
   ): Promise<string> {
     let id = '';
     let subagent:
@@ -543,7 +520,7 @@ export class SubagentModule implements AgentModule {
     }
 
     try {
-      const specName = specRegistry.resolveWorkerSpec(config);
+      const specName = config.type;
       const spec = specRegistry.get(specName);
       if (!spec) {
         throw new Error(`AgentSpec '${specName}' not found in registry`);
@@ -554,6 +531,19 @@ export class SubagentModule implements AgentModule {
         );
       }
       specRegistry.assertParentMayCreate(this.host.spec.name, spec);
+
+      const bindings = this.runConfig?.bindings;
+      const environmentIds = bindings?.type === 'standard' ? bindings.boundEnvironmentIds ?? [] : [];
+      const input = { ...config };
+      delete input.advancedSettings;
+      createSubagentSchema(specRegistry.getWorkersForParent(this.host.spec.name), environmentIds)
+        .parse(input);
+      if (config.browserEnvironmentId && !browserEnvironmentRuntime.getEnvironment(config.browserEnvironmentId)) {
+        throw new Error(`绑定的浏览器环境不存在或已被删除: ${config.browserEnvironmentId}`);
+      }
+      const taskBoardSnapshot = spec.assignment === 'task-board'
+        ? await taskBoardService.createCompactSnapshot(this.host.mainAgentId, config.taskIds!)
+        : undefined;
 
       if (!this.allocateAgentId) throw new Error('Agent ID allocator is unavailable');
       id = this.allocateAgentId();
@@ -620,6 +610,7 @@ export class SubagentModule implements AgentModule {
           workspace: this.runConfig?.workspace,
           advancedSettings: childAdvancedSettings,
           imageApplication: this.imageApplication,
+          search: this.search,
           imageTarget: this.imageTarget,
           assignmentTaskBoardSnapshot: taskBoardSnapshot,
           onTaskBoardChange: (board: { taskSummary: string; items: TaskItem[] }) =>
@@ -642,7 +633,7 @@ export class SubagentModule implements AgentModule {
           config: {
             subject: config.subject,
             taskIds: config.taskIds,
-            mode: config.mode,
+            type: config.type,
             skills: config.skills,
           },
         },
@@ -821,8 +812,9 @@ export class SubagentModule implements AgentModule {
   }
 
   private async releaseSubagentTasks(subagentId: string, publish: boolean): Promise<void> {
+    const child = this.subagents.get(subagentId) as (AgentEngine & Pick<AgentHost, 'spec'>) | undefined;
+    if (child?.spec.assignment !== 'task-board') return;
     try {
-      const { taskBoardService } = await import('../../agent-runs/task-board-service.js');
       const board = await taskBoardService.releaseOwnerTasks(this.host.id, subagentId);
       if (publish && board) this.publishTaskBoard(board);
     } catch (error) {

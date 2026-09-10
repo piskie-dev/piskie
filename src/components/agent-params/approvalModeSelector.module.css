@@ -1,0 +1,17 @@
+.auto.auto,
+.auto.auto:hover,
+.auto.auto:focus,
+.auto.auto:checked,
+.auto.auto::picker-icon {
+  color: var(--approval-auto);
+}
+
+.auto selectedcontent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.auto svg {
+  flex: none;
+}

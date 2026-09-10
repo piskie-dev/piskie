@@ -1,7 +1,7 @@
 {
   "provider": "deepseek",
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
+  "version": "2026.09.05",
+  "verifiedAt": "2026-09-05",
   "sourceUrls": [
     "https://models.dev",
     "https://api-docs.deepseek.com/guides/thinking_mode"
@@ -46,8 +46,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       }
     },
     {
@@ -88,8 +88,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-08-12"
     },
@@ -131,8 +131,8 @@
         "sourceUrls": [
           "https://models.dev"
         ],
-        "verifiedAt": "2026-07-10",
-        "catalogVersion": "2026.07.10.4"
+        "verifiedAt": "2026-09-05",
+        "catalogVersion": "2026.09.05"
       },
       "releaseDate": "2026-07-31"
     },
@@ -159,7 +159,7 @@
         "transportPreset": "none",
         "replayPolicy": "none"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 1000000,
       "maxOutputTokens": 384000,
       "tags": [
@@ -209,7 +209,7 @@
         "transportPreset": "deepseek-thinking",
         "replayPolicy": "opaque-required"
       },
-      "lifecycle": "active",
+      "lifecycle": "retired",
       "contextWindow": 1000000,
       "maxOutputTokens": 384000,
       "tags": [
@@ -234,6 +234,6 @@
   "inventorySource": {
     "id": "models.dev",
     "url": "https://models.dev/api.json",
-    "sha256": "cac66563dfa1dab3d5143a5541424ed61877cb4ed578abbfdbde45f5b4da08ec"
+    "sha256": "0ec013ae43faf1b47c2e51a54d2151d331bcb738fcc350e460fec5594a25c734"
   }
 }

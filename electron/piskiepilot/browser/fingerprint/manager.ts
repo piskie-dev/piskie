@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { resolveConfig, type FpConfig, type FpUserConfig } from './config.js';
 import { resolveExecutable } from './binary.js';
 import { CdpControl } from './cdp-control.js';
+import { linkAbort, raceAbort } from '@electron/utils/abort.js';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const STARTUP_DIAGNOSTIC_LIMIT = 16 * 1024;
@@ -25,10 +26,12 @@ interface Session {
 
 async function getDevToolsEndpoint(
   userDataDir: string,
+  signal: AbortSignal,
   tries = 120,
 ): Promise<string> {
   const activePortFile = join(userDataDir, 'DevToolsActivePort');
   for (let i = 0; i < tries; i++) {
+    signal.throwIfAborted();
     try {
       const [portLine, pathLine] = readFileSync(activePortFile, 'utf8').trim().split(/\r?\n/);
       const port = Number(portLine);
@@ -38,7 +41,7 @@ async function getDevToolsEndpoint(
     } catch {
       // Chromium has not published its endpoint yet.
     }
-    await sleep(100);
+    await raceAbort(sleep(100), signal);
   }
   throw new Error('DevToolsActivePort never became ready');
 }
@@ -86,12 +89,14 @@ export class FingerprintBrowser {
   /** Registered immediately after spawn so shutdown can also reach a browser still starting. */
   private processes = new Map<string, ChildProcess>();
 
-  async launch(profileId: string, userConfig: FpUserConfig = {}): Promise<FpHandle> {
+  async launch(profileId: string, userConfig: FpUserConfig = {}, signal?: AbortSignal): Promise<FpHandle> {
+    signal?.throwIfAborted();
     if (this.processes.has(profileId) || this.sessions.has(profileId)) {
       throw new Error(`profile already running: ${profileId}`);
     }
 
-    const exe = await resolveExecutable(userConfig.executablePath);
+    const exe = await raceAbort(resolveExecutable(userConfig.executablePath), signal);
+    signal?.throwIfAborted();
     // seed 的派生与合法性对齐都在 resolveConfig -> pickSeed 内完成。
     const cfg = resolveConfig(profileId, userConfig);
 
@@ -133,17 +138,27 @@ export class FingerprintBrowser {
     };
     proc.once('error', onSpawnError);
     proc.once('exit', onEarlyExit);
+    const polling = new AbortController();
+    const startupSignal = signal ? AbortSignal.any([signal, polling.signal]) : polling.signal;
+    const unlink = linkAbort(signal, (reason) => {
+      try {
+        control?.close();
+      } catch {
+        // The process is terminated in the startup cleanup below.
+      }
+      rejectStartup(reason instanceof Error ? reason : new Error('Browser startup was cancelled', { cause: reason }));
+    });
 
     try {
       const ws = await Promise.race([
-        getDevToolsEndpoint(userDataDir),
+        getDevToolsEndpoint(userDataDir, startupSignal),
         startupFailure,
       ]);
-      proc.off('error', onSpawnError);
-      proc.off('exit', onEarlyExit);
+      signal?.throwIfAborted();
 
       control = new CdpControl(ws, cfg);
-      await control.connect();
+      await Promise.race([control.connect(), startupFailure]);
+      signal?.throwIfAborted();
 
       const session: Session = { control };
       this.sessions.set(profileId, session);
@@ -176,7 +191,12 @@ export class FingerprintBrowser {
       } catch {
         // ignore
       }
-      this.killTree(proc);
+      let killError: unknown;
+      try {
+        this.killTree(proc);
+      } catch (error) {
+        killError = error;
+      }
       const exited = await this.waitForExit(proc);
       if (exited) {
         if (this.processes.get(profileId) === proc) this.processes.delete(profileId);
@@ -186,11 +206,18 @@ export class FingerprintBrowser {
         });
       }
       this.sessions.delete(profileId);
+      if (!exited) {
+        throw new AggregateError(
+          [error, killError ?? new Error(`Browser process ${proc.pid} did not exit`)],
+          `Browser ${profileId} startup cleanup failed`,
+        );
+      }
 
       await waitForDiagnosticDrain(proc);
       const diagnostic = `${error instanceof Error ? error.message : String(error)}\n${startupDiagnostic}`;
       if (
         !isSandboxFallback &&
+        !signal?.aborted &&
         exited &&
         process.platform === 'linux' &&
         isKnownSandboxFailure(diagnostic)
@@ -201,8 +228,8 @@ export class FingerprintBrowser {
         );
         this.sandboxFallbackProfiles.add(profileId);
         try {
-          await sleep(300); // 让首次进程的 profile 锁释放
-          const result = await this.launch(profileId, userConfig);
+          await raceAbort(sleep(300), signal);
+          const result = await this.launch(profileId, userConfig, signal);
           this.noSandboxRequired = true;
           return result;
         } finally {
@@ -210,6 +237,11 @@ export class FingerprintBrowser {
         }
       }
       throw error;
+    } finally {
+      unlink();
+      polling.abort();
+      proc.off('error', onSpawnError);
+      proc.off('exit', onEarlyExit);
     }
   }
 
@@ -228,6 +260,7 @@ export class FingerprintBrowser {
     if (proc) {
       this.killTree(proc);
       exited = await this.waitForExit(proc);
+      if (!exited) throw new Error(`Browser process ${proc.pid} did not exit after forced termination`);
     }
     if (!session || this.sessions.get(profileId) === session) this.sessions.delete(profileId);
     if ((!proc || exited) && this.processes.get(profileId) === proc) {
@@ -250,15 +283,18 @@ export class FingerprintBrowser {
       return Promise.resolve(true);
     }
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), 4000);
-      proc.once('exit', () => {
+      const finish = (exited: boolean) => {
         clearTimeout(timer);
-        resolve(true);
-      });
+        proc.off('exit', onExit);
+        resolve(exited);
+      };
+      const onExit = () => finish(true);
+      const timer = setTimeout(() => finish(false), 4000);
+      proc.once('exit', onExit);
     });
   }
 
-  /** Best-effort process-tree shutdown; callers retain the original lifecycle semantics. */
+  /** Terminate the process group, falling back to its directly owned process handle. */
   private killTree(proc: ChildProcess): void {
     const pid = proc.pid;
     if (!pid || proc.exitCode !== null || proc.signalCode !== null) return;
@@ -281,11 +317,7 @@ export class FingerprintBrowser {
         // Fall back to the process handle.
       }
     }
-    try {
-      proc.kill('SIGKILL');
-    } catch {
-      // ignore
-    }
+    proc.kill('SIGKILL');
   }
 }
 

@@ -8,22 +8,23 @@
 
 import type { Identity } from '../assemble.js';
 
-export const workerIdentity: Identity = {
-  includeSkillDocs: true,
-  render: () => `## 身份：任务执行者
+export const WORKER_INSTRUCTIONS = `## 身份：任务执行者
 
 负责独立完成创建期对话中 \`<assignment>\` 定义的多任务工作包。执行方法论以当前工具定义、角色专属职责和下方存在的技能文档为准；协作协议见后续章节。
 
 ### 执行纪律
 
-- 持续执行直到任务完成或需要用户介入；不要在每个操作后都通知 director，这会导致执行缓慢
-- 相互无依赖的工具调用在同一响应里并行发出；有依赖才分轮次
-- 不可逆或对外发布的动作（发帖、下单、删除、覆盖）先核对 Assignment 确有要求再执行`,
+- 根据 Assignment 的目标和约束，自主完成执行、排障和验证，持续推进直到任务完成或遇到无法自行解除的阻断。
+- 相互无依赖的工具调用在同一响应里并行发出；有依赖才分轮次`;
+
+export const workerIdentity: Identity = {
+  includeSkillDocs: true,
+  render: () => WORKER_INSTRUCTIONS,
 };
 
-const BROWSER_EXECUTION = `## 浏览器执行
+export const BROWSER_EXECUTION = `## 浏览器执行
 
-browser 和 Browser Skill 调用依赖同一浏览器的页面状态，必须逐次执行；收到当前调用结果后再发起下一次。`;
+browser_* 工具操作的是 Piskie 为你启动的真实浏览器窗口，用户能看到你的操作。这些调用依赖同一浏览器的页面状态，必须逐次执行；收到当前调用结果后再发起下一次。`;
 
 export const browserWorkerIdentity: Identity = {
   includeSkillDocs: workerIdentity.includeSkillDocs,

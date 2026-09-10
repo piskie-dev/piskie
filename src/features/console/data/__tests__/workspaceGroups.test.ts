@@ -9,7 +9,10 @@ import { describe, expect, it } from 'vitest';
 
 import { resolveTaskDescription, type SessionRow } from '../sessionRow';
 import { buildThreadRows, type ThreadRow } from '../threadRows';
-import { groupByWorkspace, workspaceLabel } from '../workspaceGroups';
+import {
+  filterWorkspaceGroups, groupByWorkspace, moveWorkspaceGroup,
+  orderWorkspaceGroups, reconcileWorkspaceOrder, workspaceLabel,
+} from '../workspaceGroups';
 import { rawText } from '../presentationText';
 
 const DEFAULT_WORKSPACE = '默认工作区';
@@ -86,6 +89,58 @@ describe('groupByWorkspace', () => {
     const named = groups.find((group) => group.label === 'p');
     expect(fallback?.path).toBeUndefined();
     expect(named?.path).toBe('/w/p');
+  });
+});
+
+describe('workspace order and search', () => {
+  const groups = () => groupByWorkspace([
+    row({ agentId: 'a', title: 'Sample first', workspace: '/sample/alpha', createdAt: '2026-01-03T00:00:00Z' }),
+    row({ agentId: 'b', title: 'Sample second', workspace: '/sample/beta', createdAt: '2026-01-02T00:00:00Z' }),
+    row({ agentId: 'd', title: 'Sample default', createdAt: '2026-01-01T00:00:00Z' }),
+  ], DEFAULT_WORKSPACE);
+
+  it('starts with default first and then preserves manual order as activity changes', () => {
+    const initial = reconcileWorkspaceOrder([], groups());
+    expect(initial).toEqual(['', '/sample/alpha', '/sample/beta']);
+    const moved = moveWorkspaceGroup(initial, '', '/sample/beta', 'after');
+    expect(moved).toEqual(['/sample/alpha', '/sample/beta', '']);
+    const refreshed = [...groups()].reverse();
+    expect(reconcileWorkspaceOrder(moved, refreshed)).toBe(moved);
+    expect(orderWorkspaceGroups(refreshed, moved).map((group) => group.key)).toEqual(moved);
+  });
+
+  it('inserts before or after the target, including the default group', () => {
+    const initial = ['', '/sample/alpha', '/sample/beta'];
+    expect(moveWorkspaceGroup(initial, '/sample/beta', '', 'before')).toEqual(['/sample/beta', '', '/sample/alpha']);
+    expect(moveWorkspaceGroup(initial, '/sample/beta', '', 'after')).toEqual(['', '/sample/beta', '/sample/alpha']);
+    expect(moveWorkspaceGroup(initial, '', '', 'after')).toBe(initial);
+  });
+
+  it('appends new workspaces and preserves the places of temporarily missing groups', () => {
+    const saved = ['/sample/beta', '', '/sample/alpha'];
+    const partial = groups().filter((group) => group.key !== '/sample/beta');
+    const added = groupByWorkspace([row({ agentId: 'c', workspace: '/sample/gamma' })], DEFAULT_WORKSPACE);
+    const next = reconcileWorkspaceOrder(saved, [...added, ...partial]);
+    expect(next).toEqual([...saved, '/sample/gamma']);
+    expect(orderWorkspaceGroups([...groups(), ...added], next).map((group) => group.key)).toEqual(next);
+  });
+
+  it('keeps workspaces with identical directory names distinct', () => {
+    const sameNames = groupByWorkspace([
+      row({ agentId: 'a', workspace: '/sample/one/demo' }),
+      row({ agentId: 'b', workspace: '/sample/two/demo' }),
+    ], DEFAULT_WORKSPACE);
+    const order = ['/sample/two/demo', '/sample/one/demo'];
+    expect(orderWorkspaceGroups(sameNames, order).map((group) => group.key)).toEqual(order);
+  });
+
+  it('filters sorted groups without changing order and matches default group labels', () => {
+    const ordered = orderWorkspaceGroups(groups(), ['/sample/beta', '', '/sample/alpha']);
+    expect(filterWorkspaceGroups(ordered, ' sample ').map((group) => group.key)).toEqual(['/sample/beta', '', '/sample/alpha']);
+    expect(filterWorkspaceGroups(ordered, 'SECOND')[0]?.rows.map((item) => item.agentId)).toEqual(['b']);
+    expect(filterWorkspaceGroups(ordered, DEFAULT_WORKSPACE).map((group) => group.key)).toEqual(['']);
+    expect(filterWorkspaceGroups(ordered, 'alpha')[0]?.rows).toHaveLength(1);
+    expect(filterWorkspaceGroups(ordered, '   ')).toBe(ordered);
   });
 });
 

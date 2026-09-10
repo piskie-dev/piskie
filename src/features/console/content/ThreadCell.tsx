@@ -18,6 +18,9 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
   BookOpen,
   Camera,
   ChevronRight,
@@ -38,8 +41,9 @@ import {
   Loader2,
   Network,
   Puzzle,
+  Pause,
+  RotateCcw,
   Search,
-  Send,
   ShieldQuestion,
   Smartphone,
   Terminal,
@@ -69,8 +73,12 @@ import type {
   ToolNode,
 } from '@/domains/transcript/nodes';
 import styles from './thread.module.css';
+import activeTextStyles from './activeText.module.css';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { isBrowserToolName } from '../data/cells/toolPresentation';
+import { workerPresentation } from '../chrome/workerPresentation';
+import type { StatusKey } from '../data/status';
+import type { WorkerRef } from '../data/vm';
 
 const ICON = 14;
 
@@ -79,6 +87,14 @@ const BADGE_KEYS: Record<TranscriptBadge, string> = {
   'awaiting-approval': 'transcript.badge.awaitingApproval',
   failed: 'transcript.badge.failed',
   cancelled: 'transcript.badge.cancelled',
+};
+
+const FLOW_EVENT_STATUS_KEYS: Readonly<Record<string, string>> = {
+  completed: 'transcript.flowEvent.completed',
+  failed: 'transcript.badge.failed',
+  user_stopped: 'transcript.badge.cancelled',
+  need_user_action: 'transcript.flowEvent.needsAction',
+  stalled: 'transcript.flowEvent.stalled',
 };
 
 /**
@@ -105,8 +121,8 @@ function toolGlyph(tool: string): React.ReactNode {
     case 'task': return <ListChecks size={ICON} />;
     case 'plan': return <ClipboardList size={ICON} />;
     case 'ask_user': return <CircleHelp size={ICON} />;
-    case 'subagent': return <Workflow size={ICON} />;
-    case 'send_event': return <Send size={ICON} />;
+    case 'subagent':
+    case 'subagent_stop': return <Workflow size={ICON} />;
     case 'skill_call': return <Puzzle size={ICON} />;
     case 'load_skill': return <BookOpen size={ICON} />;
     case 'tool_search': return <Search size={ICON} />;
@@ -144,6 +160,7 @@ function toolIcon(cell: ToolNode): React.ReactNode {
 const ActionLine = memo<{
   readonly icon: React.ReactNode;
   readonly text: string;
+  readonly metadata?: string;
   readonly state?: 'failed' | 'cancelled';
   readonly tone?: TranscriptTone;
   readonly badge?: TranscriptBadge;
@@ -155,7 +172,7 @@ const ActionLine = memo<{
    * 是非法 HTML；有 aside 时整行外面才包一层 flex 行，没有时不多包这一层。
    */
   readonly aside?: React.ReactNode;
-}>(({ icon, text, state, tone, badge, detail, defaultOpen = false, onActivate, aside }) => {
+}>(({ icon, text, metadata, state, tone, badge, detail, defaultOpen = false, onActivate, aside }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const toggle = useCallback(() => setOpen((value) => !value), []);
@@ -172,7 +189,8 @@ const ActionLine = memo<{
       onClick={onActivate ?? (detail ? toggle : undefined)}
     >
       <span className={styles.actionIcon}>{icon}</span>
-      <span className={styles.actionText}>{text}</span>
+      <span className={styles.actionText} title={text}>{text}</span>
+      {metadata && <span className={styles.actionMeta}>{metadata}</span>}
       {badge && <span className={styles.actionBadge}>{t(BADGE_KEYS[badge])}</span>}
       {clickable && (
         <span className={styles.chevron}>
@@ -201,10 +219,97 @@ const ActionLine = memo<{
 
 ActionLine.displayName = 'ActionLine';
 
+const FlowEventDisclosure = memo<{
+  readonly direction: 'incoming' | 'outgoing' | 'system';
+  readonly icon: React.ReactNode;
+  readonly title: string;
+  readonly summary?: string;
+  readonly tone: TranscriptTone;
+  readonly badge?: TranscriptBadge;
+  readonly eventType?: string;
+  readonly meta?: readonly string[];
+  readonly detail?: React.ReactNode;
+  readonly defaultOpen?: boolean;
+  readonly aside?: React.ReactNode;
+}>(({ direction, icon, title, summary, tone, badge, eventType, meta, detail, defaultOpen = false, aside }) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = useCallback(() => setOpen((value) => !value), []);
+  const hasMeta = !!meta && meta.length > 0;
+  const expandable = !!detail || hasMeta;
+  const statusKey = badge
+    ? direction === 'outgoing' && badge === 'running'
+      ? 'transcript.flowEvent.sending'
+      : BADGE_KEYS[badge]
+    : eventType ? FLOW_EVENT_STATUS_KEYS[eventType] : undefined;
+
+  const headerContent = (
+    <>
+      <span className={styles.flowEventIcon} aria-hidden>{icon}</span>
+      <span className={styles.flowEventTitle} title={title}>{title}</span>
+      {statusKey && <span className={styles.flowEventStatus}>{t(statusKey)}</span>}
+      {!open && summary && (
+        <>
+          <span className={styles.flowEventSeparator} aria-hidden />
+          <span className={styles.flowEventSummary} title={summary}>{summary}</span>
+        </>
+      )}
+      {expandable && (
+        <span className={styles.flowEventChevron} aria-hidden>
+          <ChevronRight size={12} />
+        </span>
+      )}
+    </>
+  );
+
+  const header = expandable ? (
+    <button
+      type="button"
+      className={styles.flowEventHeader}
+      aria-expanded={open}
+      onClick={toggle}
+    >
+      {headerContent}
+    </button>
+  ) : (
+    <div className={styles.flowEventHeader}>{headerContent}</div>
+  );
+
+  return (
+    <div
+      className={styles.flowEvent}
+      data-flow-event=""
+      data-flow-direction={direction}
+      data-tone={tone}
+      data-event-type={eventType}
+    >
+      {aside ? <div className={styles.toolRow}>{header}{aside}</div> : header}
+      {expandable && open && (
+        <div className={styles.flowEventBody}>
+          {detail}
+          {hasMeta && (
+            <div className={styles.flowEventMeta}>
+              {meta.map((item) => <span key={item}>{item}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+FlowEventDisclosure.displayName = 'FlowEventDisclosure';
+
 function noticeIcon(cell: NoticeNode): React.ReactNode {
+  switch (cell.source) {
+    case 'worker_interrupted': return <Pause size={ICON} />;
+    case 'closure_check': return <ListChecks size={ICON} />;
+    case 'session_restored': return <RotateCcw size={ICON} />;
+    case 'task_notification': return <Terminal size={ICON} />;
+  }
   if (cell.tone === 'danger') return <XCircle size={ICON} />;
   if (cell.badge === 'cancelled') return <CircleSlash2 size={ICON} />;
-  return <FileText size={ICON} />;
+  return <Bell size={ICON} />;
 }
 
 // ==================== 详情 format renderer registry ====================
@@ -279,7 +384,8 @@ const Detail = memo<{
 }>(({ cell, onPreviewImage }) => {
   const { t } = useTranslation();
   const detail = useMemo(() => cell.detail?.(), [cell]);
-  if (!detail || detail.sections.length === 0) return null;
+  const images = cell.kind === 'notice' || cell.kind === 'user' ? cell.images : undefined;
+  if (!detail?.sections.length && !images?.length) return null;
 
   const presentValue = (format: DetailFormat, value: unknown): unknown => (
     (format === 'text' || format === 'markdown') && isPresentationText(value)
@@ -289,7 +395,7 @@ const Detail = memo<{
 
   return (
     <>
-      {detail.sections.map((section, index) => (
+      {detail?.sections.map((section, index) => (
         <div key={index} className={styles.cardBody} style={{ padding: 0 }}>
           {DETAIL_RENDERERS[section.format](
             presentValue(section.format, section.value),
@@ -297,6 +403,19 @@ const Detail = memo<{
           )}
         </div>
       ))}
+      {!!images?.length && (
+        <div className={styles.imageRow}>
+          {images.map((image, index) => (
+            <ImageThumbnail
+              key={`${image.kind === 'file' ? image.path : image.url}:${index}`}
+              resource={image}
+              className={styles.imageThumb}
+              alt={t('sessionWorkbenchUi.transcript.attachmentImage')}
+              onPreview={onPreviewImage}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 });
@@ -407,7 +526,7 @@ const ThinkDisclosure = memo<{ readonly cell: ThinkNode }>(({ cell }) => {
             <ChevronRight size={13} className={styles.thinkCaret} />
           )}
         </span>
-        <span className={styles.thinkLabel}>
+        <span className={`${styles.thinkLabel} ${cell.live ? activeTextStyles.text : ''}`}>
           {cell.live ? t('transcript.thinking') : t('transcript.title.thinking')}
         </span>
         {!open && (
@@ -440,6 +559,9 @@ ThinkDisclosure.displayName = 'ThinkDisclosure';
 
 export interface ThreadCellProps {
   readonly cell: TranscriptNode;
+  readonly conversationStatus?: StatusKey;
+  readonly workers?: readonly WorkerRef[];
+  readonly onOpenWorker?: (workerId: string) => void;
   readonly onPreviewImage?: (src: string) => void;
   /** 点文件操作条目 ⇒ 右栏审阅面板显示它；不传则退回就地展开 */
   readonly onOpenFileChange?: (cellId: string) => void;
@@ -450,7 +572,15 @@ export interface ThreadCellProps {
   readonly onAction?: (cell: TranscriptNode, action: TranscriptAction) => void;
 }
 
-export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenFileChange, onAction }) => {
+export const ThreadCell = memo<ThreadCellProps>(({
+  cell,
+  conversationStatus,
+  workers,
+  onOpenWorker,
+  onPreviewImage,
+  onOpenFileChange,
+  onAction,
+}) => {
   const { t } = useTranslation();
   const title = t(cell.titleKey, cell.titleArgs ?? {});
   const present = (value: PresentationText): string => (
@@ -459,14 +589,24 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
   const summary = cell.summary ? present(cell.summary) : undefined;
   const meta = cell.meta?.map(present);
   switch (cell.kind) {
-    /**
-     * 任务分派 / 父级下发**不是"你说的话"**，不能走右对齐气泡：
-     * worker 的第一条分派消息是一整个工作包正文，铺成满屏气泡观感极差。
-     * 所以走"标题 + 摘要 + 可展开详情"的聚合产物卡片：
-     * 卡头一行 + 三行截断预览，点开才铺全文。
-     */
     case 'user':
-      if (cell.origin !== 'user') {
+      if (cell.origin === 'parent') {
+        return (
+          <FlowEventDisclosure
+            direction="incoming"
+            icon={<ArrowDownLeft size={ICON} />}
+            title={title}
+            summary={summary}
+            tone={cell.tone}
+            eventType="message"
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            defaultOpen={cell.defaultExpanded}
+          />
+        );
+      }
+
+      // 任务分派是完整工作包，不作为用户气泡或过程事件展示。
+      if (cell.origin === 'assignment') {
         return (
           <CollapsibleCard
             icon={<ClipboardList size={16} />}
@@ -529,12 +669,49 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
        * 于是 `TranscriptAction` 在这个模式里只是数据、点不到（快捷键也一样，见 `useActionScope`）。
        */
       const action = onAction ? cell.actions.find((item) => item.enabled) : undefined;
+      const backgroundAction = action && (
+        <button
+          type="button"
+          className={styles.actionAside}
+          onClick={() => onAction?.(cell, action)}
+          title={t('transcript.action.promoteToBackgroundWithShortcut', {
+            shortcut: SHORTCUT_HINT,
+          })}
+        >
+          {t('transcript.action.promoteToBackground')}
+        </button>
+      );
+      if (cell.tool === 'send_event') {
+        return (
+          <FlowEventDisclosure
+            direction="outgoing"
+            icon={<ArrowUpRight size={ICON} />}
+            title={title}
+            summary={summary}
+            tone={cell.tone}
+            badge={cell.badge}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            defaultOpen={cell.defaultExpanded}
+            aside={backgroundAction}
+          />
+        );
+      }
+      const read = cell.fileOp?.kind === 'read'
+        && cell.fileOp.startLine !== undefined
+        && cell.fileOp.endLine !== undefined
+        ? cell.fileOp
+        : undefined;
+      const actionSummary = read?.path ?? summary;
 
       return (
         <div className={styles.cell}>
           <ActionLine
             icon={toolIcon(cell)}
-            text={summary ? `${title} · ${summary}` : title}
+            text={actionSummary ? `${title} · ${actionSummary}` : title}
+            metadata={read ? t(
+              read.startLine === read.endLine ? 'transcript.fileRead.line' : 'transcript.fileRead.lineRange',
+              { start: read.startLine, end: read.endLine },
+            ) : undefined}
             state={
               cell.state.phase === 'failed'
                 ? 'failed'
@@ -544,20 +721,7 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
             }
             onActivate={toReview}
             detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
-            aside={
-              action && (
-                <button
-                  type="button"
-                  className={styles.actionAside}
-                  onClick={() => onAction?.(cell, action)}
-                  title={t('transcript.action.promoteToBackgroundWithShortcut', {
-                    shortcut: SHORTCUT_HINT,
-                  })}
-                >
-                  {t('transcript.action.promoteToBackground')}
-                </button>
-              )
-            }
+            aside={backgroundAction}
           />
 
           {cell.generatedImages && (
@@ -617,16 +781,38 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
         </CollapsibleCard>
       );
 
-    // 子流程创建：一行灰字
-    case 'worker':
+    // 子流程创建：类型图标和短标签用于扫读，任务标题占据剩余宽度。
+    case 'worker': {
+      const presentation = cell.workerType ? workerPresentation(cell.workerType) : undefined;
+      const worker = workers?.find((candidate) => candidate.id === cell.workerId);
+      const status = cell.creating ? conversationStatus : worker?.status;
+      const live = status === 'thinking' || status === 'running';
+      const open = worker && onOpenWorker ? () => onOpenWorker(worker.id) : undefined;
+      const Icon = presentation?.icon ?? Network;
       return (
-        <div className={styles.cell}>
-          <ActionLine
-            icon={<Network size={ICON} />}
-            text={t('transcript.workerCreated', { subject: cell.subject })}
-          />
-        </div>
+        <button
+          className={styles.workerCreation}
+          type="button"
+          disabled={!open}
+          onClick={open}
+          data-clickable={!!open}
+          data-live={live}
+        >
+          <span className={styles.workerCreationIcon} aria-hidden>
+            {live ? <OrbIndicator size={ICON} variant="expanding" /> : <Icon size={ICON} />}
+          </span>
+          <span className={`${styles.workerCreationText} ${live ? activeTextStyles.text : ''}`}>
+            <span className={styles.workerCreationLabel}>{title}</span>
+            {presentation && (
+              <span className={styles.workerCreationType} title={t(presentation.labelKey)}>
+                {t(presentation.shortLabelKey)}
+              </span>
+            )}
+            <span className={styles.workerCreationSubject} title={cell.subject}>{cell.subject}</span>
+          </span>
+        </button>
       );
+    }
 
     // 上下文压缩：一行灰字 + 可展开摘要
     case 'summary':
@@ -641,17 +827,34 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
       );
 
     case 'notice':
-      return (
-        <div className={styles.cell}>
-          <ActionLine
-            icon={noticeIcon(cell)}
-            text={summary ? `${title} · ${summary}` : title}
+      if (cell.eventType) {
+        return (
+          <FlowEventDisclosure
+            direction="incoming"
+            icon={<ArrowDownLeft size={ICON} />}
+            title={t('transcript.notice.workerMessage')}
+            summary={summary}
             tone={cell.tone}
             badge={cell.badge}
+            eventType={cell.eventType}
+            meta={meta}
             detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
             defaultOpen={cell.defaultExpanded}
           />
-        </div>
+        );
+      }
+
+      return (
+        <FlowEventDisclosure
+          direction="system"
+          icon={noticeIcon(cell)}
+          title={title}
+          summary={summary}
+          tone={cell.tone}
+          badge={cell.badge}
+          detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+          defaultOpen={cell.defaultExpanded}
+        />
       );
   }
 });

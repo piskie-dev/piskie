@@ -1,11 +1,11 @@
 import type { BrowserWindow } from 'electron';
 import type { WindowConnection } from '../transport/electron/window-connection.js';
-import { EmbeddedBrowserSession } from './embedded-browser-session.js';
+import { EmbeddedBrowserRegistry } from './embedded-browser-registry.js';
 
 export class WindowSession {
   readonly id: number;
   readonly webContentsId: number;
-  readonly embeddedBrowser: EmbeddedBrowserSession;
+  readonly embeddedBrowser: EmbeddedBrowserRegistry;
 
   private readonly connections = new Set<WindowConnection>();
   private readonly usedNonces = new Set<string>();
@@ -17,7 +17,7 @@ export class WindowSession {
   constructor(readonly window: BrowserWindow) {
     this.id = window.id;
     this.webContentsId = window.webContents.id;
-    this.embeddedBrowser = new EmbeddedBrowserSession(window);
+    this.embeddedBrowser = new EmbeddedBrowserRegistry(window);
     window.webContents.on('did-start-navigation', this.handleNavigation);
     window.webContents.on('render-process-gone', this.handleRendererGone);
   }
@@ -67,7 +67,7 @@ export class WindowSession {
     navigationEpoch: number;
     connections: number;
     disposed: boolean;
-    embeddedBrowser: ReturnType<EmbeddedBrowserSession['snapshot']>;
+    embeddedBrowser: ReturnType<EmbeddedBrowserRegistry['snapshot']>;
   } {
     return Object.freeze({
       id: this.id,

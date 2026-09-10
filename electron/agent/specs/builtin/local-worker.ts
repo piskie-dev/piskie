@@ -1,15 +1,13 @@
-import type { AgentSpec } from '../spec.js';
+import type { WorkerDefinition } from '../worker-definition.js';
 import { WORKSPACE_TOOL_NAMES } from '../native-tool-sets.js';
-import { assemble, workerIdentity } from '../../prompts/index.js';
+import { WORKER_INSTRUCTIONS } from '../../prompts/identities/worker.js';
 
-/** 本地工作者：对应 sub local 模式 */
-export const localWorkerSpec: AgentSpec = {
+export const localWorkerDefinition: WorkerDefinition = {
   name: 'local-worker',
-  role: 'worker',
-  tools: {
-    sdkGroups: [],
-    customTools: [...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image'],
-  },
-  buildSystemPrompt: (ctx) => assemble(workerIdentity, ctx),
-  modules: ['image'],
+  description: '在本地读写文件、执行命令，完成多任务工作包',
+  instructions: WORKER_INSTRUCTIONS,
+  assignment: 'task-board',
+  tools: ['web_search', ...WORKSPACE_TOOL_NAMES, 'task', 'send_event', 'generate_image', 'load_skill', 'skill_call']
+    .map((name) => ({ name })),
+  resources: { image: true },
 };

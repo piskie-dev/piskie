@@ -3,6 +3,7 @@ import { INFERENCE_OPERATIONS } from '../../../shared/electron-contracts/inferen
 import type { InferenceRuntimeHost } from '../../inference/composition/runtime-host.js';
 import { readArtifactPreview } from '../../inference/application/artifact-preview.js';
 import type { OperationDefinition } from '../catalog.js';
+import { PublicOperationError } from '../public-errors.js';
 import { args, identifier, plainRecord } from '../validation.js';
 
 const querySchema = z.object({
@@ -26,6 +27,17 @@ export function createInferenceController(host: InferenceRuntimeHost): readonly 
     operation(INFERENCE_OPERATIONS.queryModels, args([querySchema]), ([input]) => (
       host.control.models(input.gateway, input.operation)
     )),
+    operation(INFERENCE_OPERATIONS.refreshCatalog, args([]), async () => {
+      const status = await host.remoteCatalog.refresh();
+      if (status.state === 'error') {
+        throw new PublicOperationError(
+          'unavailable',
+          'The official model catalog could not be refreshed',
+          { retryable: status.error === 'network' },
+        );
+      }
+      return { updated: status.state === 'updated' };
+    }),
     operation(INFERENCE_OPERATIONS.importWorkflow, args([z.string().min(1).max(32 * 1024 * 1024)]), async ([source]) => {
       const asset = await host.control.importComfyWorkflow(source);
       return { id: asset.id, sha256: asset.sha256 };

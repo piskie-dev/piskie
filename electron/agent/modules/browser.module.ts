@@ -2,7 +2,7 @@ import { appLog } from '@electron/observability/logging/app-log.js';
 /**
  * BrowserModule — 浏览器控制
  *
- * 负责浏览器模式检测、userData 配置、截图管理、
+ * 负责浏览器资源绑定、截图管理、
  * 占用声明与浏览器生命周期。
  *
  * 封装浏览器子流程所需的浏览器生命周期逻辑。
@@ -19,7 +19,9 @@ import { occupancyRegistry } from '../../core/occupancy/index.js';
 import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { browserLaunchPlanner } from '../../core/pilot/launch/index.js';
 import { createUuid } from '@shared/utils/identifiers.js';
-import { renderSkillTeachingDoc } from '../../skills/discovery/teaching.js';
+import { renderAvailableSkillTeaching } from '../../skills/discovery/teaching.js';
+import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
+import { pathsService } from '../../services/paths.service.js';
 import type { SkillCatalogPort } from '../../core/pilot/pilot-manager.js';
 import type {
   BrowserScreenshotTarget,
@@ -33,8 +35,6 @@ import {
 import * as browserCore from '../../piskiepilot/browser/skills/browser/index.js';
 
 interface BrowserModuleConfig {
-  /** 浏览器模式 */
-  mode: 'browser' | 'local';
   /** Skills */
   skills?: string[];
   /** 高级设置 */
@@ -55,144 +55,116 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   readonly core = browserCore;
   private host!: AgentHost;
   private config!: BrowserModuleConfig;
+  private readonly skillInventory: SkillInventorySnapshot = {
+    renderedAt: new Date().toISOString(), entries: {},
+  };
 
   /** 浏览器 ID */
   private browserId?: string;
   // ─── 浏览器子流程运行时私有状态 ─────────────────────────
-  /** 缓存模式判断结果 */
-  private isBrowserMode = false;
   /** navigateTo 成功后才为 true，防止 ScreenPreview 提前订阅 */
   private browserLaunched = false;
-  /** false 表示接管手动已打开的浏览器，普通 teardown 只松手不关窗。 */
+  /** Whether startup needs to launch a browser or reuse the current instance. */
   private ownsBrowser = false;
   /** 绑定环境只有成功声明占用后才取得关闭权，避免冲突回滚误关当前占用者。 */
   private environmentOccupancyClaimed = false;
+  private instanceOccupancyClaimed = false;
+  private stopped = false;
 
   init(host: AgentHost, config: Record<string, unknown>): void {
     this.host = host;
-    if (config.mode !== 'browser' && config.mode !== 'local') {
-      throw new Error('BrowserModule requires an explicit browser or local mode');
-    }
     this.config = config as unknown as BrowserModuleConfig;
   }
 
   // ─── 生命周期 ──────────────────────────────────────────
 
   async onStart(): Promise<void> {
+    if (this.stopped) return;
     const agentId = this.host.id;
     const skills = this.host.getSkillCatalog();
     const browser = this.host.getBrowserControl();
 
-    // 1. 模式由 Worker 创建合同唯一决定
-    this.isBrowserMode = this.config.mode === 'browser';
+    if (!browser || !skills) {
+      throw new Error('BrowserModule requires browser and skill catalog ports');
+    }
+    const binding = this.config.binding;
+    if (!binding) {
+      throw new Error(`Browser Worker ${agentId} 缺少创建期 Browser Binding`);
+    }
+    this.browserId = binding.browserId;
 
-    // 2. 浏览器相关初始化
-    if (this.isBrowserMode) {
-      if (!browser || !skills) {
-        throw new Error('BrowserModule requires browser and skill catalog ports');
-      }
-      const binding = this.config.binding;
-      if (!binding) {
-        throw new Error(`Browser Worker ${agentId} 缺少创建期 Browser Binding`);
-      }
-      this.browserId = binding.browserId;
+    // 声明占用
+    const userDataId = binding.userDataId;
+    const ownerId = this.config.mainAgentId ?? agentId;
+    // 冲突 = 可诚实报告的失败：拒绝启动，不带病共用环境。
+    // ⚓ L2 systemContract：同一环境的第二个子流程在这里被拒。
+    // 失败 AgentRun 的占用被保留时（隔离），同 key 的新 claim 在这里被拒而非撞残留 Chrome。
+    const environmentClaim = occupancyRegistry.claim({
+      kind: 'browserEnvironment',
+      resourceId: userDataId,
+      occupantId: agentId,
+      ownerId,
+      occupantName: this.host.spec.name,
+    });
+    if (!environmentClaim.ok) {
+      throw new Error(
+        `浏览器环境 ${userDataId} 当前被 ${environmentClaim.heldBy.occupantName} 占用（可能是未完成关闭的任务），请先处理冲突或稍后重试`
+      );
+    }
+    this.environmentOccupancyClaimed = true;
+    const instanceClaim = occupancyRegistry.claim({
+      kind: 'browserInstance',
+      resourceId: this.browserId,
+      occupantId: agentId,
+      ownerId,
+      occupantName: this.host.spec.name,
+    });
+    if (!instanceClaim.ok) {
+      throw new Error(
+        `浏览器实例 ${this.browserId} 当前被 ${instanceClaim.heldBy.occupantName} 占用，请先处理冲突或稍后重试`
+      );
+    }
+    this.instanceOccupancyClaimed = true;
 
-      // 2a. 声明占用
-      const userDataId = binding.userDataId;
-      const ownerId = this.config.mainAgentId ?? agentId;
-      // 冲突 = 可诚实报告的失败：拒绝启动，不带病共用环境。
-      // ⚓ L2 systemContract：同一环境的第二个子流程在这里被拒。
-      // 失败 AgentRun 的占用被保留时（隔离），同 key 的新 claim 在这里被拒而非撞残留 Chrome。
-      const environmentClaim = occupancyRegistry.claim({
-        kind: 'browserEnvironment',
-        resourceId: userDataId,
-        occupantId: agentId,
-        ownerId,
-        occupantName: this.host.spec.name,
-      });
-      if (!environmentClaim.ok) {
-        throw new Error(
-          `浏览器环境 ${userDataId} 当前被 ${environmentClaim.heldBy.occupantName} 占用（可能是未完成关闭的任务），请先处理冲突或稍后重试`
-        );
-      }
-      this.environmentOccupancyClaimed = true;
-      const instanceClaim = occupancyRegistry.claim({
-        kind: 'browserInstance',
-        resourceId: this.browserId,
-        occupantId: agentId,
-        ownerId,
-        occupantName: this.host.spec.name,
-      });
-      if (!instanceClaim.ok) {
-        throw new Error(
-          `浏览器实例 ${this.browserId} 当前被 ${instanceClaim.heldBy.occupantName} 占用，请先处理冲突或稍后重试`
-        );
-      }
+    // 占用齐全后再做唯一一次 owned/borrowed 判定；失败回滚阶段尚未取得关闭权。
+    this.ownsBrowser = !browser.hasBrowser(this.browserId);
 
-      // 占用齐全后再做唯一一次 owned/borrowed 判定；失败回滚阶段尚未取得关闭权。
-      this.ownsBrowser = !browser.hasBrowser(this.browserId);
-
-      if (this.ownsBrowser) {
-        const spec = this.config.browserEnvironmentId
-          ? await browserEnvironmentRuntime.planLaunch(
-              this.config.browserEnvironmentId,
-              this.browserId,
-              userDataId,
-              true
-            )
-          : await browserLaunchPlanner.planTask({
-              browserId: this.browserId,
-              userDataId,
-              identity: {
-                ...(this.config.advancedSettings?.language
-                  ? { language: this.config.advancedSettings.language }
-                  : {}),
-                ...(this.config.advancedSettings?.userAgent
-                  ? { userAgent: this.config.advancedSettings.userAgent }
-                  : {}),
-              },
-              fingerprint: this.config.advancedSettings?.fingerprint,
-              backgroundMode: this.config.advancedSettings?.backgroundMode ?? true,
-            });
-        // owned 才显式启动；borrowed 保持现有 generation。
-        await browser.launch(spec);
-        if (this.config.browserEnvironmentId) {
-          browserEnvironmentRuntime.recordAgentBrowserStarted(
+    if (this.ownsBrowser) {
+      const spec = this.config.browserEnvironmentId
+        ? await browserEnvironmentRuntime.planLaunch(
             this.config.browserEnvironmentId,
             this.browserId,
-            userDataId
-          );
-        }
-      }
-
-      // 2d. 加载浏览器技能文档并追加到核心文档
-      await this.loadSkillDocs(skills);
-    }
-
-    // 3. 本地模式 Skill 文档加载（外装技能走教学包渲染器：SKILL.md + skill_call 函数签名）
-    if (!this.isBrowserMode && this.config.skills?.length) {
-      try {
-        if (!skills) throw new Error('BrowserModule requires a skill catalog port');
-        const teachingDocs = await this.renderAssignedSkillDocs(skills, this.config.skills);
-        if (teachingDocs) {
-          this.host.setSkillDocs(this.host.getSkillDocs() + '\n\n' + teachingDocs);
-        }
-      } catch (error) {
-        appLog.warn({
-          event: 'agent.skill_docs.load.degraded',
-          message: 'Assigned skill documentation loading degraded',
-          context: {
-            scope: 'agent.skill_docs',
-            agentId,
-            skillCount: this.config.skills.length,
-          },
-          error,
-        });
-        this.host.setSkillDocs(
-          this.host.getSkillDocs() + '\n\n[WARNING] 部分技能文档加载失败，工具调用可能受影响'
+            userDataId,
+            true
+          )
+        : await browserLaunchPlanner.planTask({
+            browserId: this.browserId,
+            userDataId,
+            identity: {
+              ...(this.config.advancedSettings?.language
+                ? { language: this.config.advancedSettings.language }
+                : {}),
+              ...(this.config.advancedSettings?.userAgent
+                ? { userAgent: this.config.advancedSettings.userAgent }
+                : {}),
+            },
+            fingerprint: this.config.advancedSettings?.fingerprint,
+            backgroundMode: this.config.advancedSettings?.backgroundMode ?? true,
+          });
+      if (this.stopped) return;
+      await browser.launch(spec);
+      if (this.stopped) return;
+      if (this.config.browserEnvironmentId) {
+        browserEnvironmentRuntime.recordAgentBrowserStarted(
+          this.config.browserEnvironmentId,
+          this.browserId,
+          userDataId
         );
       }
     }
+
+    // 加载浏览器技能文档并追加到核心文档
+    await this.loadSkillDocs(skills);
   }
 
   /**
@@ -202,13 +174,11 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
    * （errors 非空 → 租约保留）。不碰租约（释放唯一归 releaseResources）。
    */
   async onDestroyBegin(): Promise<void> {
+    this.stopped = true;
     const agentId = this.host.id;
     const browser = this.host.getBrowserControl();
     if (!browser) return;
-    if (!this.ownsBrowser) {
-      return;
-    }
-    if (this.config.browserEnvironmentId && !this.environmentOccupancyClaimed) {
+    if (!this.environmentOccupancyClaimed || !this.instanceOccupancyClaimed) {
       return;
     }
 
@@ -247,18 +217,20 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
     this.browserId = undefined;
     this.browserLaunched = false;
     this.environmentOccupancyClaimed = false;
+    this.instanceOccupancyClaimed = false;
   }
 
   // ─── 工具上下文贡献 ──────────────────────────────────────
 
   contributeTools(builder: ToolContextBuilder): void {
     builder.addResourceIds({ browserId: this.getBrowserId() }).setBrowser(this);
+    builder.setSkillInventory(this.skillInventory);
   }
 
   // ─── 公共方法 ──────────────────────────────────────────
 
   getBrowserReady(): boolean {
-    return this.isBrowserMode && !!this.browserId && this.browserLaunched;
+    return !!this.browserId && this.browserLaunched;
   }
 
   markBrowserLaunched(): void {
@@ -276,17 +248,9 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   }
 
   getBrowserId(): string {
-    if (this.browserId) return this.browserId;
-    const agentId = this.host.id;
-    if (!this.isBrowserMode) {
-      return `local-${agentId}`;
-    }
-    return agentId;
+    return this.browserId ?? this.config.binding?.browserId ?? this.host.id;
   }
 
-  getIsBrowserMode(): boolean {
-    return this.isBrowserMode;
-  }
 
   // ─── 私有辅助方法 ──────────────────────────────────────
 
@@ -317,9 +281,13 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
     const parts: string[] = [];
     for (const skill of skills) {
       try {
-        const teaching = await renderSkillTeachingDoc(catalog, skill, { forPrompt: true });
-        if (teaching.found) {
+        const teaching = await renderAvailableSkillTeaching(catalog, skill, {
+          workspace: this.config.workspace,
+          defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
+        });
+        if (teaching?.found) {
           parts.push(teaching.content);
+          this.skillInventory.entries[skill] = { tier: 'full', scope: teaching.scope };
         } else {
           appLog.warn({
             event: 'agent.skill_docs.load.degraded',

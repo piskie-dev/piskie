@@ -129,11 +129,58 @@
 }
 
 .markdown {
-  padding: 14px 16px 32px;
+  padding: 14px 16px 32px 0;
   font-size: 12px;
   line-height: 1.7;
   color: var(--cyber-text);
   overflow-wrap: anywhere;
+}
+
+.textPreview {
+  min-inline-size: 0;
+}
+
+.readBlock {
+  display: grid;
+  grid-template-columns: max(44px, var(--review-line-width)) minmax(0, 1fr);
+  align-items: start;
+}
+
+.sourceLineNo {
+  padding-inline: 8px 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: end;
+  white-space: nowrap;
+  color: var(--review-gutter);
+  user-select: none;
+}
+
+.readContent {
+  min-inline-size: 0;
+}
+
+.markdown .readBlock + .readBlock {
+  margin-block-start: 1em;
+}
+
+.markdown .readContent > :first-child {
+  margin-block-start: 0;
+}
+
+.markdown .readContent > :last-child {
+  margin-block-end: 0;
+}
+
+/* Markdown 主题将后代统一设为正文色，行号栏保持与源码相同的次级色。 */
+.markdown :global(.x-markdown) .sourceLineNo {
+  padding-block-start: 2px;
+  color: var(--review-gutter) !important;
+}
+
+.code .readBlock {
+  min-inline-size: max-content;
 }
 
 /* ── 代码 / diff 行 ──

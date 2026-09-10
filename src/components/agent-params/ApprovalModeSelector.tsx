@@ -5,8 +5,10 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { ShieldAlert } from 'lucide-react';
 import type { ApprovalMode } from '../../../shared/types';
 import { InlineSelect, type InlineOption } from './InlineSelect';
+import styles from './approvalModeSelector.module.css';
 
 interface ApprovalModeSelectorProps {
   mode: ApprovalMode;
@@ -23,7 +25,11 @@ const ApprovalModeSelector: React.FC<ApprovalModeSelectorProps> = ({
 }) => {
   const { t } = useTranslation();
   const options: readonly InlineOption[] = [
-    { value: 'auto', label: t('sharedUi.agentParams.auto') },
+    {
+      value: 'auto', label: t('sharedUi.agentParams.auto'),
+      icon: <ShieldAlert size={14} aria-hidden />,
+      className: styles.auto,
+    },
     { value: 'confirm', label: t('sharedUi.agentParams.confirm') },
   ];
   return (
@@ -33,7 +39,7 @@ const ApprovalModeSelector: React.FC<ApprovalModeSelectorProps> = ({
       onChange={(value) => onChange(value as ApprovalMode)}
       disabled={disabled}
       ariaLabel={t('sharedUi.agentParams.approvalAria')}
-      className={className}
+      className={[className, mode === 'auto' ? styles.auto : ''].filter(Boolean).join(' ')}
     />
   );
 };

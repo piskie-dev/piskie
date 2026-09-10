@@ -102,9 +102,8 @@ export type McpElicitationResponse =
 
 export type McpElicitationSink = (request: McpElicitationRequest) => Promise<McpElicitationResponse>
 
-export interface McpConnection {
+export interface McpClientConnection {
   client: Client
-  server: EffectiveMcpServer
   protocolVersion?: string
   /** 传输已关闭时为 true；连接池据此避免复用断流连接。 */
   isClosed(): boolean
@@ -119,6 +118,27 @@ export interface McpConnection {
   close(): Promise<void>
 }
 
+export interface McpConnection extends McpClientConnection {
+  server: EffectiveMcpServer
+}
+
+/** Explicit HTTP dependencies for built-in consumers of the shared SDK client. */
+export async function connectHttpMcpClient(options: {
+  url: string
+  headers: Record<string, string>
+  fetch: typeof globalThis.fetch
+  signal: AbortSignal
+  timeoutMs: number
+}): Promise<McpClientConnection> {
+  return connectMcpClient(
+    new StreamableHTTPClientTransport(new URL(options.url), {
+      requestInit: { headers: options.headers },
+      fetch: options.fetch,
+    }),
+    { mode: 'auto', timeout: options.timeoutMs, signal: options.signal },
+  )
+}
+
 export function protocolNegotiationMode(server: EffectiveMcpServer): 'auto' | 'legacy' {
   return server.transport === 'streamable_http' || server.config.enable_2026_protocol === true
     ? 'auto'
@@ -130,9 +150,31 @@ export async function connectMcpServer(
   server: EffectiveMcpServer,
   options: { signal?: AbortSignal; resolveFetch?: ProxyFetchResolver } = {},
 ): Promise<McpConnection> {
+  const timeout = startupTimeoutMs(server.config)
+  try {
+    const connection = await connectMcpClient(createTransport(server, options.resolveFetch), {
+      mode: protocolNegotiationMode(server), timeout, signal: options.signal,
+    })
+    return { ...connection, server }
+  } catch (error) {
+    options.signal?.throwIfAborted()
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `MCP server "${server.name}" 启动/连接失败（${timeout / 1000}s 超时）：${message}。`
+      + `可在配置中调大超时，例如 {"mcpServers": {"${server.name}": {"startup_timeout_sec": ${Math.max(60, timeout / 1000 * 2)}}}}`,
+      { cause: error },
+    )
+  }
+}
+
+async function connectMcpClient(
+  transport: Parameters<Client['connect']>[0],
+  options: { mode: 'auto' | 'legacy'; timeout: number; signal?: AbortSignal },
+): Promise<McpClientConnection> {
+  options.signal?.throwIfAborted()
   const client = new Client(CLIENT_INFO, {
     capabilities: { elicitation: { form: {} } },
-    versionNegotiation: { mode: protocolNegotiationMode(server) },
+    versionNegotiation: { mode: options.mode },
   })
   let closed = false
   const closeListeners = new Set<() => void>()
@@ -162,21 +204,16 @@ export async function connectMcpServer(
     })
   })
 
-  const transport = createTransport(server, options.resolveFetch)
-  const timeout = startupTimeoutMs(server.config)
   try {
-    await client.connect(transport, { timeout, signal: options.signal })
+    await client.connect(transport, { timeout: options.timeout, signal: options.signal })
+    options.signal?.throwIfAborted()
   } catch (error) {
     await client.close().catch(() => undefined)
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(
-      `MCP server "${server.name}" 启动/连接失败（${timeout / 1000}s 超时）：${message}。`
-      + `可在配置中调大超时，例如 {"mcpServers": {"${server.name}": {"startup_timeout_sec": ${Math.max(60, timeout / 1000 * 2)}}}}`,
-    )
+    options.signal?.throwIfAborted()
+    throw error
   }
   return {
     client,
-    server,
     protocolVersion: client.getNegotiatedProtocolVersion(),
     isClosed: () => closed,
     onClose: (listener) => {

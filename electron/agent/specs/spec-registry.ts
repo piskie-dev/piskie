@@ -4,8 +4,10 @@
  */
 
 import type { AgentSpec } from './spec.js';
-import type { SubagentMode } from '../../../shared/types/index.js';
 import type { SubagentTypeDescriptor } from '../../tools/types.js';
+import type { ToolCatalog } from '../../tools/catalog.js';
+import { workerDefinitionSchema, type WorkerDefinition } from './worker-definition.js';
+import { assemble } from '../prompts/assemble.js';
 const PROTECTED_BROWSER_SKILL_TOOLS = Object.freeze(
   new Map<string, string>([
     ['browser_skill_build', 'browser-skill-builder'],
@@ -13,19 +15,70 @@ const PROTECTED_BROWSER_SKILL_TOOLS = Object.freeze(
     ['browser_skill_publish', 'browser-skill-director'],
   ])
 );
-const BASE_WORKER_SPECS = new Set(['browser-worker', 'local-worker']);
 
-export function deriveWorkerMode(spec: AgentSpec): SubagentMode {
-  if (spec.role !== 'worker') {
-    throw new Error(`AgentSpec '${spec.name}' is not a Worker and cannot be created as a subagent`);
-  }
-  const hasBrowser = spec.modules.includes('browser');
-  if (hasBrowser) return 'browser';
-  return 'local';
+/** Type description shown to the parent model: the declared purpose plus the granted tool list. */
+/** 技能组工具统一以 `${skill}_` 为前缀，清单里用通配代表整组，并排在共有工具之前。 */
+function describeWorkerType(spec: AgentSpec): string {
+  const purpose = spec.subagentTypeDescription ?? spec.name;
+  const skillGroups = (spec.tools.sdkGroups ?? []).map((skill) =>
+    skill === 'browser' ? 'browser_* 浏览器操作' : `${skill}_*`
+  );
+  const custom = spec.tools.customTools.filter((name) => !spec.tools.exclude?.includes(name));
+  const tools = [...skillGroups, ...custom];
+  return tools.length ? `${purpose}（工具：${tools.join('、')}）` : purpose;
 }
 
 export class SpecRegistry {
   private specs = new Map<string, AgentSpec>();
+
+  registerWorker(input: WorkerDefinition, catalog: ToolCatalog): AgentSpec {
+    const definition = workerDefinitionSchema.parse(input);
+    const names = definition.tools.map((tool) => tool.name);
+    if (new Set(names).size !== names.length) throw new Error('Worker tool names must be unique');
+    const excluded = new Set(definition.excludedTools ?? []);
+    const granted = names.filter((name) => !excluded.has(name));
+    const options = Object.fromEntries(definition.tools.map((tool) => [
+      tool.name, catalog.configure(tool.name, tool.options, 'subagent'),
+    ]));
+    if (!granted.includes('send_event')) throw new Error('Worker requires send_event for result reporting');
+    const events = options.send_event.events as readonly string[];
+    if (!['completed', 'failed', 'user_stopped'].every((event) => events.includes(event))) {
+      throw new Error('Worker must report completed, failed, and user_stopped');
+    }
+    if ((definition.assignment === 'task-board') !== granted.includes('task')) {
+      throw new Error('Task-board assignments require task; question assignments use independent results');
+    }
+    const browser = definition.resources?.browser;
+    const spec: AgentSpec = {
+      name: definition.name,
+      role: 'worker',
+      assignment: definition.assignment,
+      subagentTypeDescription: definition.description,
+      tools: {
+        customTools: names,
+        sdkGroups: browser ? ['browser'] : [],
+        options,
+        exclude: definition.excludedTools,
+      },
+      modules: [...(browser ? ['browser'] : []), ...(definition.resources?.image ? ['image'] : [])],
+      allowedParentSpecs: definition.allowedParentSpecs,
+      shareDirectorBrowser: browser?.shareWithParent,
+      lifecycle: definition.lifecycle,
+      mcpServers: definition.mcpServers,
+      buildSystemPrompt: (ctx) => assemble({
+        includeSkillDocs: definition.includeSkillDocs ?? granted.includes('load_skill'),
+        render: () => definition.instructions,
+      }, {
+        ...ctx,
+        role: 'worker',
+        assignment: definition.assignment,
+        toolNames: ctx.toolNames ?? granted,
+        sendEventTypes: ctx.sendEventTypes ?? events,
+      }),
+    };
+    this.register(spec);
+    return spec;
+  }
 
   /**
    * 注册一个 AgentSpec
@@ -59,13 +112,6 @@ export class SpecRegistry {
     return Array.from(this.specs.values());
   }
 
-  /** Resolve a Worker spec from the trusted override or its base mode. */
-  resolveWorkerSpec(config: { mode: string; agentSpec?: string }): string {
-    if (config.agentSpec) return config.agentSpec;
-    if (config.mode === 'browser') return 'browser-worker';
-    return 'local-worker';
-  }
-
   /** 领域专属 Worker 的创建权限由 AgentSpec 决定，不从 Assignment 文本推断。 */
   assertParentMayCreate(parentSpec: string, childSpec: AgentSpec): void {
     const allowed = childSpec.allowedParentSpecs;
@@ -77,21 +123,20 @@ export class SpecRegistry {
     }
   }
 
-  /** 当前 Director 获准创建且需要按名称调用的专属 Worker。 */
-  getNamedWorkersForParent(parentSpec: string): SubagentTypeDescriptor[] {
+  /** 当前父代理获准创建的 Worker 及其输入能力。 */
+  getWorkersForParent(parentSpec: string): SubagentTypeDescriptor[] {
     return [...this.specs.values()]
       .filter(
         (spec) =>
           spec.role === 'worker' &&
-          !BASE_WORKER_SPECS.has(spec.name) &&
           (!spec.allowedParentSpecs || spec.allowedParentSpecs.includes(parentSpec))
       )
       .map((spec) => ({
         name: spec.name,
-        mode: deriveWorkerMode(spec),
-        description:
-          spec.subagentTypeDescription ??
-          `已注册的${deriveWorkerMode(spec) === 'browser' ? '浏览器' : '本地'} Worker`,
+        assignment: spec.assignment ?? 'task-board',
+        browser: spec.modules.includes('browser'),
+        skills: spec.tools.customTools.includes('load_skill') && !spec.tools.exclude?.includes('load_skill'),
+        description: describeWorkerType(spec),
       }))
       .sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -148,14 +193,12 @@ export class SpecRegistry {
       if (!spec.subagentTypeDescription?.trim()) {
         throw new Error(`Protected Worker '${spec.name}' must declare subagentTypeDescription`);
       }
-    } else if (spec.subagentTypeDescription !== undefined) {
-      throw new Error(`'${spec.name}' subagentTypeDescription requires allowedParentSpecs`);
     }
 
-    const hasSubagentTool = spec.tools.customTools.includes('subagent');
+    const hasSubagentTool = spec.tools.customTools.includes('subagent') || spec.tools.customTools.includes('subagent_stop');
     const hasSubagentModule = spec.modules.includes('subagent');
     if (hasSubagentTool !== hasSubagentModule) {
-      throw new Error(`'${spec.name}' must pair the subagent tool with the subagent module`);
+      throw new Error(`'${spec.name}' must pair the subagent/subagent_stop tools with the subagent module`);
     }
     if ((hasSubagentTool || hasSubagentModule) && spec.role !== 'director') {
       throw new Error(`'${spec.name}' may use the subagent tool/module only as a director`);

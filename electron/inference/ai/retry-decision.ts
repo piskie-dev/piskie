@@ -5,6 +5,7 @@ type ProviderCodeRetryDecision = 'retry' | 'do_not_retry';
 const PROVIDER_CODE_RETRY_DECISIONS: ReadonlyMap<string, ProviderCodeRetryDecision> = new Map([
   ['context_length_exceeded', 'do_not_retry'],
   ['server_is_overloaded', 'retry'],
+  ['stream_read_error', 'retry'],
 ]);
 const RETRYABLE_PROVIDER_STATUSES: ReadonlySet<number> = new Set([408, 409, 425, 429]);
 

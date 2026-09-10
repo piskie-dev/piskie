@@ -11,6 +11,7 @@ export type CapabilityId =
   | 'configuration'
   | 'desktop'
   | 'inference'
+  | 'web-search'
   | 'messaging'
   | 'modes'
   | 'observability'

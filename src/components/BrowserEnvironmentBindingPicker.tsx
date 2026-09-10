@@ -16,7 +16,7 @@ import { PopShell } from './shared/PopShell';
 import styles from './bindingPicker.module.css';
 
 interface BrowserEnvironmentBindingPickerProps {
-  value: string[];
+  value: readonly string[];
   onChange: (environmentIds: string[]) => void;
   className?: string;
   compact?: boolean;

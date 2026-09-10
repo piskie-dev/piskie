@@ -14,6 +14,12 @@ function shape(displayName: string, driver: string, baseUrl: string) {
 }
 
 describe('matchVendor', () => {
+  it('matches the Grok endpoint and creates bearer authentication', () => {
+    const spec = matchVendor(shape('Example provider', 'openai', 'https://api.x.ai/v1'), 'ai');
+    expect(spec.key).toBe('xai');
+    expect(spec.title).toBe('Grok');
+    expect(forgeAuth(spec, 'example-key')).toEqual({ kind: 'bearer', value: 'example-key' });
+  });
   it('端点指纹优先命中(名字对不上也认端点)', () => {
     const spec = matchVendor(shape('随便叫', 'openai', 'https://api.openai.com/v1'), 'ai');
     expect(spec.key).toBe('openai');

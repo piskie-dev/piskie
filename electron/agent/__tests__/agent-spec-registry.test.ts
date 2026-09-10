@@ -6,11 +6,13 @@ vi.mock('electron', () => ({
 }));
 
 import { specRegistry } from '../specs/index.js';
-import { BUILTIN_AGENT_SPECS } from '../specs/builtin/index.js';
+import { BUILTIN_DIRECTOR_SPECS, BUILTIN_WORKER_DEFINITIONS } from '../specs/builtin/index.js';
 
 describe('AgentSpec registry', () => {
   it('registers exactly the single built-in Spec manifest', () => {
-    expect(specRegistry.getAll()).toEqual(BUILTIN_AGENT_SPECS);
+    expect(specRegistry.getAll().map((spec) => spec.name)).toEqual(
+      [...BUILTIN_DIRECTOR_SPECS, ...BUILTIN_WORKER_DEFINITIONS].map((definition) => definition.name),
+    );
   });
 
   it('requires every built-in Spec source to be present in the manifest', async () => {
@@ -19,7 +21,7 @@ describe('AgentSpec registry', () => {
       .map((name) => name.slice(0, -'.ts'.length))
       .sort();
 
-    expect(BUILTIN_AGENT_SPECS.map((spec) => spec.name).sort()).toEqual(sourceNames);
+    expect(specRegistry.getAll().map((spec) => spec.name).sort()).toEqual(sourceNames);
   });
 
   it('does not register the retired direct-execution top-level spec', () => {

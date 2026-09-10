@@ -1,6 +1,4 @@
 {
-  "version": "2026.07.10.4",
-  "verifiedAt": "2026-07-10",
   "policy": {
     "outputModality": "text",
     "requireExclusiveOutputModality": true,

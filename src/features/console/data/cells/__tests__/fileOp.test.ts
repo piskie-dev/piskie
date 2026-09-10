@@ -70,10 +70,10 @@ describe('extractFileOp · write', () => {
 });
 
 describe('extractFileOp · read', () => {
-  it('剥掉行号前缀，并记住真实起始行号', () => {
+  it('按实际返回内容记录首尾行号，即使请求的行数更多', () => {
     const op = extractFileOp({
       tool: 'read',
-      params: { file_path: '/a/b.ts', offset: 10 },
+      params: { file_path: '/a/b.ts', offset: 10, limit: 200 },
       resultText: numbered(10, 'const a = 1;', 'const b = 2;'),
       ok: true,
     });
@@ -83,6 +83,7 @@ describe('extractFileOp · read', () => {
       path: '/a/b.ts',
       content: 'const a = 1;\nconst b = 2;',
       startLine: 10,
+      endLine: 11,
     });
   });
 
@@ -96,6 +97,7 @@ describe('extractFileOp · read', () => {
     const op = extractFileOp({ tool: 'read', params: { file_path: '/a/b' }, resultText: text, ok: true });
 
     expect(op && 'content' in op ? op.content : undefined).toBe('line one\nline two');
+    expect(op).toMatchObject({ startLine: 1, endLine: 2 });
   });
 
   it('保留内容里的空行', () => {
@@ -107,6 +109,24 @@ describe('extractFileOp · read', () => {
     });
 
     expect(op && 'content' in op ? op.content : undefined).toBe('a\n\nb');
+    expect(op).toMatchObject({ startLine: 1, endLine: 3 });
+  });
+
+  it('只读取一个空白行时保留内容与真实范围', () => {
+    const op = extractFileOp({
+      tool: 'read',
+      params: { file_path: '/example/blank.txt', offset: 12, limit: 1 },
+      resultText: numbered(12, ''),
+      ok: true,
+    });
+
+    expect(op).toEqual({
+      kind: 'read',
+      path: '/example/blank.txt',
+      content: '',
+      startLine: 12,
+      endLine: 12,
+    });
   });
 
   it('二进制 / 不支持的媒体 ⇒ unreadable 带上后端原文（含 mime 与大小）', () => {

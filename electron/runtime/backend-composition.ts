@@ -1,3 +1,6 @@
+import { SearchService } from '../search/service.js';
+import { SearchAuth } from '../search/auth.js';
+import { createWebSearchComponent } from './components/web-search.component.js';
 import path from 'node:path';
 import { createMarketChanges, type MarketChanges } from '../market/change-source.js';
 import { mcpConnectionManager } from '../mcp/runtime/index.js';
@@ -38,6 +41,7 @@ export interface BackendCapabilitySet {
   readonly incidents: typeof agentIncidentStore;
   readonly messaging: typeof imGateway;
   readonly inference: AgentServiceRuntimeBindings;
+  readonly webSearch: SearchService;
   readonly pilot: typeof pilotRuntimeHost;
   readonly mcp: typeof mcpConnectionManager;
   readonly marketChanges: MarketChanges;
@@ -67,6 +71,7 @@ export function createBackendComposition(options: {
     });
   });
   const inferenceState: InferenceComponentState = {};
+  const webSearch = new SearchService(new SearchAuth(options.userDataDirectory));
   const hostAssetsState: HostAssetsState = {};
 
   const components: readonly RuntimeComponent[] = Object.freeze([
@@ -74,7 +79,9 @@ export function createBackendComposition(options: {
       agentIncidentStore,
     }),
     createProxyTransportsComponent(),
+    createWebSearchComponent(webSearch),
     createInferenceComponent({
+      search: webSearch,
       userDataDirectory: options.userDataDirectory,
       agentService,
       state: inferenceState,
@@ -112,6 +119,7 @@ export function createBackendComposition(options: {
         incidents: agentIncidentStore,
         messaging: imGateway,
         inference,
+        webSearch,
         pilot: pilotRuntimeHost,
         mcp: mcpConnectionManager,
         marketChanges,

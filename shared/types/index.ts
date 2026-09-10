@@ -46,6 +46,7 @@ export type {
   InferenceModelDefinition,
   InferenceCatalogModelInput,
   InferenceLocalCatalogDocument,
+  InferenceCatalogRefreshResult,
   InferenceModelQueryResult,
   InferenceDriverSummary,
   InferenceDriverSchema,
@@ -138,7 +139,8 @@ export type MessageSubtype =
   | 'assignment'            // Worker 创建期唯一 Assignment + 紧凑 Task Board
   | 'system_event'          // 系统事件（initial_start、定时唤醒）
   | 'subagent_notification' // 子流程通知
-  | 'context_summary';      // 上下文压缩摘要
+  | 'context_summary'       // 上下文压缩摘要
+  | 'agent_instructions';   // Runtime 从 AGENTS.md 加载的用户指令
 
 export interface Message {
   role: 'user' | 'assistant';
@@ -300,8 +302,10 @@ export interface PendingToolCall {
   category: 'document' | 'agent' | 'browser' | 'system' | 'local';
   /** 预览信息（dryRun 模式下的预览内容） */
   preview?: PreviewInfo;
-  /** 工作流确认不受工具 Auto 模式影响，例如计划正文批准。 */
+  /** 工作流确认不随工具 Auto 模式立即放行，例如计划正文批准。 */
   modeInvariant?: boolean;
+  /** 自动执行下计划批准的绝对时间，由执行端计时，供页面显示。 */
+  autoApproveAt?: number;
 }
 
 /**
@@ -323,29 +327,21 @@ export interface ToolApprovalDecision {
 }
 
 /**
- * 子流程模式: browser(浏览器) / local(本地)
- * AI 必须显式传递模式
- */
-export type SubagentMode = 'browser' | 'local';
-
-/**
  * 子流程创建配置
  * 统一的 Subagent 可同时使用固定 Skill 工具（如 browser_*）和本地原生工具。
  */
 export interface SubagentConfig {
-  /** 子流程模式: browser(浏览器) / local(本地)。AI 必须传递。 */
-  mode: SubagentMode;
+  /** 注册的 Worker 类型，与 AgentSpec.name 一致。 */
+  type: string;
   /** 整个 Assignment 的简短显示标题 */
   subject: string;
   /** 本次 Assignment 包含的细任务 ID */
-  taskIds: string[];
+  taskIds?: string[];
   /** 整个多任务工作包的完整、自包含执行标准 */
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
   skills?: string[];
-  /** Runtime AgentSpec override supplied by the trusted parent runtime. */
-  agentSpec?: string;
-  /** Browser 模式下绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
+  /** 浏览器 Worker 绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
   browserEnvironmentId?: string;
   /** Worker-specific settings; never mutate the parent run snapshot. */
   advancedSettings?: TaskAdvancedSettings;

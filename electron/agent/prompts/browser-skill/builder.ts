@@ -3,7 +3,7 @@ import { browserWorkerIdentity } from '../identities/worker.js';
 import { renderBrowserSkillAuthoringGuide } from './authoring-guide.js';
 import { renderBrowserSkillSdkReference } from './sdk-reference.js';
 
-const EXTENSION = `## Browser Skill 编写、测试与修复职责
+export const BROWSER_SKILL_BUILDER_INSTRUCTIONS = `## Browser Skill 编写、测试与修复职责
 
 Assignment 中的已批准验收要求是本工作包的完成标准，不是让你完成一次普通网站业务。亲自完成该范围内的目标流程探索、公开业务工具设计、SKILL.md/skill.ts 编写、即时调用测试和修复；不要再委派同一工作包，不得通过删除场景、参数或返回字段降低验收标准。
 
@@ -19,7 +19,7 @@ export const browserSkillBuilderIdentity: Identity = {
   includeSkillDocs: browserWorkerIdentity.includeSkillDocs,
   render: (ctx) => [
     browserWorkerIdentity.render(ctx),
-    EXTENSION,
+    BROWSER_SKILL_BUILDER_INSTRUCTIONS,
     renderBrowserSkillAuthoringGuide(),
     renderBrowserSkillSdkReference(),
   ].join('\n\n'),

@@ -4,7 +4,6 @@ import { z } from '../params.js';
 import { createDirectorRunConfig } from '../../agent/launch/agent-run-config-factory.js';
 import { directorSpec } from '../../agent/specs/builtin/director.js';
 import { agentRunTraceService } from '../../agent-runs/agent-run-trace-service.js';
-import { agentService } from '../../services/agent.service.js';
 
 const agentRunSchema = z
   .object({
@@ -121,6 +120,7 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
     });
 
     try {
+      const { agentService } = await import('../../services/agent.service.js');
       const state = await agentService.startAgent({
         runConfig,
         agentSpec: directorSpec,
@@ -143,6 +143,7 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
 
   private async list(): Promise<ToolOutput<unknown>> {
     try {
+      const { agentService } = await import('../../services/agent.service.js');
       const traces = new Map(
         (await agentRunTraceService.list()).map((trace) => [trace.agentId, trace] as const)
       );
@@ -187,6 +188,7 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
     const agentId = params.agentId;
     if (!agentId) return this.error('停止顶层智能体需要 agentId');
     if (agentId === context.mainAgentId) return this.error('不能停止你自己');
+    const { agentService } = await import('../../services/agent.service.js');
     if (!agentService.hasAgentInMemory(agentId)) {
       return this.error(`顶层智能体不存在或已经停止: ${agentId}`);
     }

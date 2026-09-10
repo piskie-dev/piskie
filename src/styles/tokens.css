@@ -66,6 +66,8 @@
   --cyber-text-muted: #8a8a94;
   --cyber-success: #3ecf8e;
   --cyber-warning: #e0b263;
+  /* 自动执行：橙色权限警示，深浅主题共用。 */
+  --approval-auto: #ff8649;
   --cyber-error: #e58a7b;
   --cyber-purple: #a78bfa;
   --console-canvas-bg: #0a0a0c;

@@ -8,8 +8,9 @@
  */
 
 import { memo, useCallback, useState } from 'react';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useTimeSeconds } from '../../../../hooks/useTimeSeconds';
 
 import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
 import type { GateCommonProps, GateRequest } from './contract';
@@ -24,6 +25,7 @@ export const PlanGate = memo<PlanGateProps>(
   ({ request, disabled, onDecide, onPreviewImage }) => {
     const { t } = useTranslation();
     const { call, taskSummary } = request;
+    const seconds = useTimeSeconds(call.autoApproveAt, 'remaining');
     const [feedback, setFeedback] = useState('');
     const attachments = useAttachmentDraft();
 
@@ -55,6 +57,12 @@ export const PlanGate = memo<PlanGateProps>(
         <div className={styles.options}>
           <div className={styles.actionRow}>
             <GateOption ordinal={1} label={t('sessionWorkbenchUi.gate.approvePlan')} disabled={disabled} onSelect={allow} />
+            {call.autoApproveAt !== undefined && !disabled && (
+              <span className={styles.autoApprovalCountdown} role="timer">
+                <Timer size={13} aria-hidden />
+                {t('sessionWorkbenchUi.gate.autoApproveSeconds', { seconds })}
+              </span>
+            )}
           </div>
 
           <GateAttachments

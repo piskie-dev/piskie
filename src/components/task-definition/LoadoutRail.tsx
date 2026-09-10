@@ -21,7 +21,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { resolveBrowserEnvironmentPurpose } from '../../../shared/utils/browser-environment';
@@ -48,10 +48,14 @@ const Choice: React.FC<{
   onPick: () => void;
   title: string;
   desc: string;
-}> = ({ on, onPick, title, desc }) => (
-  <button type="button" className={styles.choiceCard} data-on={on || undefined} onClick={onPick}>
+  warning?: boolean;
+}> = ({ on, onPick, title, desc, warning }) => (
+  <button type="button" className={styles.choiceCard} data-on={on || undefined} data-warning={warning || undefined} onClick={onPick}>
     <span className={styles.choiceMain}>
-      <span className={styles.choiceTitle}>{title}</span>
+      <span className={styles.choiceTitle}>
+        {warning && <ShieldAlert size={13} />}
+        {title}
+      </span>
       <span className={styles.choiceDesc}>{desc}</span>
     </span>
     <span className={styles.check}>
@@ -242,13 +246,13 @@ export const LoadoutRail: React.FC<{
     {
       key: 'mode',
       label: t('console.modeId'),
-      value: draft.mode === 'plan' ? t('console.modeReviewFirst') : t('console.modeRunNow'),
+      value: draft.mode === 'plan' ? t('sharedUi.agentParams.plan') : t('sharedUi.agentParams.normal'),
       lit: draft.mode !== 'normal',
     },
     {
       key: 'approval',
       label: t('console.approvalMode'),
-      value: approvalAuto ? t('console.approvalAutoShort') : t('console.approvalConfirmShort'),
+      value: approvalAuto ? t('sharedUi.agentParams.auto') : t('sharedUi.agentParams.confirm'),
       lit: approvalAuto,
       locked: draft.im,
     },
@@ -309,7 +313,7 @@ export const LoadoutRail: React.FC<{
         <>
           <Choice
             on={draft.mode === 'normal'}
-            title={t('console.modeRunNow')}
+            title={t('sharedUi.agentParams.normal')}
             desc={t('console.modeNormalDesc')}
             onPick={() => {
               patch({ mode: 'normal' });
@@ -318,7 +322,7 @@ export const LoadoutRail: React.FC<{
           />
           <Choice
             on={draft.mode === 'plan'}
-            title={t('console.modeReviewFirst')}
+            title={t('sharedUi.agentParams.plan')}
             desc={t('console.modePlanDesc')}
             onPick={() => {
               patch({ mode: 'plan' });
@@ -333,7 +337,7 @@ export const LoadoutRail: React.FC<{
         <>
           <Choice
             on={!approvalAuto}
-            title={t('console.approvalConfirmShort')}
+            title={t('sharedUi.agentParams.confirm')}
             desc={t('console.approvalConfirmDesc')}
             onPick={() => {
               patch({ approval: 'confirm' });
@@ -342,7 +346,8 @@ export const LoadoutRail: React.FC<{
           />
           <Choice
             on={approvalAuto}
-            title={t('console.approvalAutoShort')}
+            warning
+            title={t('sharedUi.agentParams.auto')}
             desc={t('console.approvalAutoDesc')}
             onPick={() => {
               patch({ approval: 'auto' });
@@ -533,6 +538,7 @@ export const LoadoutRail: React.FC<{
             <div
               className={styles.tile}
               data-tile={tile.key}
+              data-warning={tile.key === 'approval' && approvalAuto || undefined}
               data-lit={tile.lit || undefined}
               data-locked={tile.locked || undefined}
               data-open={shown === tile.key || undefined}
@@ -568,7 +574,10 @@ export const LoadoutRail: React.FC<{
                     {tile.label}
                     <span className={styles.dot} />
                   </span>
-                  <span className={styles.tileValue}>{tile.value}</span>
+                  <span className={styles.tileValue}>
+                    {tile.key === 'approval' && approvalAuto && <ShieldAlert size={13} />}
+                    {tile.value}
+                  </span>
                 </button>
               )}
             </div>

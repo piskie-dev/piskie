@@ -92,6 +92,30 @@ describe('上下文用量：一个数，一个来源', () => {
 });
 
 describe('两级准入', () => {
+  it('file instructions share the request, token-count and inspection projection', async () => {
+    const countInputTokens = vi.fn<AgentInferencePort['countInputTokens']>(async () => 1200);
+    const { manager } = makeManager({ countInputTokens });
+    const persisted = vi.fn();
+    manager.setPersistHook(persisted);
+    manager.addUserMessage('Sample task');
+    finishTurn(manager);
+    manager.setAgentInstructions('Global rules.\nProject rules.');
+    expect(manager.getContextUsage()).toEqual({ limit: LIMIT });
+
+    const first = await manager.getMessagesForAI(REQUEST_SHAPE);
+    expect(first.messages[0]).toEqual({
+      role: 'user', subtype: 'agent_instructions', content: 'Global rules.\nProject rules.',
+    });
+    expect(countInputTokens.mock.calls[0]?.[0]).toMatchObject({ messages: first.messages });
+    expect(manager.buildContextSnapshot('sys', []).messages).toEqual(first.messages);
+    manager.flush();
+    expect(persisted.mock.calls.map(([entry]) => entry.content)).toEqual(['Sample task']);
+
+    manager.addUserMessage('Follow-up task');
+    const second = await manager.getMessagesForAI(REQUEST_SHAPE);
+    expect(second.messages.filter((message) => message.subtype === 'agent_instructions')).toHaveLength(1);
+  });
+
   it('普通一轮：走一级，不产生任何额外网络请求', async () => {
     const countInputTokens = vi.fn(async () => 1);
     const { manager } = makeManager({ countInputTokens });

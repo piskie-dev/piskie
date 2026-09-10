@@ -566,7 +566,7 @@ function toolContext(
       ? {}
       : {
           subagentConfig: {
-            mode: 'browser',
+            type: 'browser-worker',
             subject: agentSpecName,
             taskIds: ['task-1'],
             prompt: 'test',

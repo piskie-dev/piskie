@@ -26,6 +26,7 @@ import {
   ChevronDown,
   FileText,
   Loader2,
+  ShieldAlert,
   ShieldCheck,
   Square,
   X,
@@ -53,6 +54,7 @@ import styles from './conversationComposer.module.css';
 interface PillOption<K extends string> {
   readonly key: K;
   readonly label: string;
+  readonly warning?: boolean;
 }
 
 interface PillSelectProps<K extends string> {
@@ -63,6 +65,7 @@ interface PillSelectProps<K extends string> {
   readonly onSelect: (key: K) => void;
   readonly disabled?: boolean;
   readonly ariaLabel: string;
+  readonly warning?: boolean;
 }
 
 /** 泛型组件走「具名函数 + memo 后断言」的写法（与 `chrome/MenuButton` 同款） */
@@ -74,6 +77,7 @@ function PillSelectImpl<K extends string>({
   onSelect,
   disabled,
   ariaLabel,
+  warning,
 }: PillSelectProps<K>): React.ReactElement {
     const [open, setOpen] = useState(false);
 
@@ -91,6 +95,7 @@ function PillSelectImpl<K extends string>({
             aria-expanded={open}
             aria-label={ariaLabel}
             data-compact="true"
+            data-warning={warning || undefined}
             onClick={() => setOpen((value) => !value)}
           >
             <span className={styles.compactIcon} aria-hidden>{compactIcon}</span>
@@ -108,11 +113,13 @@ function PillSelectImpl<K extends string>({
               aria-checked={option.key === selectedKey}
               className={styles.option}
               data-selected={option.key === selectedKey ? 'true' : undefined}
+              data-warning={option.warning || undefined}
               onClick={() => {
                 setOpen(false);
                 onSelect(option.key);
               }}
             >
+              {option.warning && <ShieldAlert size={13} aria-hidden />}
               <span className={styles.optionLabel}>{option.label}</span>
               {option.key === selectedKey && <Check size={12} className={styles.optionCheck} />}
             </button>
@@ -262,13 +269,13 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
-      { key: 'auto', label: t('sessionWorkbenchUi.composer.automaticApproval') },
-      { key: 'confirm', label: t('sessionWorkbenchUi.composer.confirmApproval') },
+      { key: 'auto', label: t('sharedUi.agentParams.auto'), warning: true },
+      { key: 'confirm', label: t('sharedUi.agentParams.confirm') },
     ];
 
     const modeLabel = (name: string): string => {
-      if (name === 'normal') return t('sessionWorkbenchUi.composer.modeNormal');
-      if (name === 'plan') return t('sessionWorkbenchUi.composer.modePlan');
+      if (name === 'normal') return t('sharedUi.agentParams.normal');
+      if (name === 'plan') return t('sharedUi.agentParams.plan');
       if (name === 'browser-skill') return t('sessionWorkbenchUi.composer.modeBrowserSkill');
       return capitalize(name);
     };
@@ -351,9 +358,10 @@ export const ConversationComposer = memo<ConversationComposerProps>(
 
           <PillSelect
             label={approvalMode === 'auto'
-              ? t('sessionWorkbenchUi.composer.automaticApproval')
-              : t('sessionWorkbenchUi.composer.confirmApproval')}
-            compactIcon={<ShieldCheck size={12} />}
+              ? t('sharedUi.agentParams.auto')
+              : t('sharedUi.agentParams.confirm')}
+            compactIcon={approvalMode === 'auto' ? <ShieldAlert size={13} /> : <ShieldCheck size={12} />}
+            warning={approvalMode === 'auto'}
             selectedKey={approvalMode}
             options={approvalOptions}
             onSelect={(key) => void settings.onApprovalModeChange(key)}

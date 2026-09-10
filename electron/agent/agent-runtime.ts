@@ -46,7 +46,6 @@ import type {
   NotificationDelivery,
   MessageSubtype,
   ContentBlock,
-  SubagentMode,
   SubagentConfig,
   AIQuestion,
   ToolArtifact,
@@ -76,6 +75,8 @@ import { ContextSettlementConversation, Settler } from './conversation/settler.j
 import { AgentMailbox, EventBatchApplyError } from './agent-mailbox.js';
 import { agentIncidentStore } from '../observability/incidents/agent-incident-store.js';
 import { AgentConversationContext } from './context/index.js';
+import { loadAgentInstructions } from './context/agent-instructions.js';
+import { app } from 'electron';
 import type { CatalogSnapshot, FinalToolFace } from '../tools/catalog.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
 import { createRole } from './roles/index.js';
@@ -327,7 +328,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
             id: childState.agentId,
             phase: childState.phase,
             interrupted: childState.interrupted,
-            mode: (childConfig?.mode as SubagentMode | undefined) || 'browser',
+            type: (child as AgentRuntime).spec.name,
             subject: childConfig?.subject || '',
             taskIds: childConfig?.taskIds || [],
             browserReady: childBrowserMod?.getBrowserReady() ?? false,
@@ -666,6 +667,10 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       // 每个 Runtime 使用独立的系统临时目录，避免运行时文件污染用户工作区。
       await pathsService.ensureTempDir(this.id);
 
+      this.context.setAgentInstructions(await loadAgentInstructions(
+        app.getPath('userData'), this.getEffectiveWorkspace(),
+      ));
+
       // 1. Role 启动逻辑（isResume 时 Role 内部跳过初始任务注入）
       await this.role.onStart(this, this.options);
 
@@ -781,7 +786,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       ? (this.browserSkillCandidatePin?.candidate ??
         browserSkillCandidateOverlay.candidate(this.mainAgentId, undefined, this.id))
       : undefined;
-    return this.toolCatalog.snapshot(this.toolFace, {
+    return this.toolCatalog.snapshot({ ...this.toolFace, searchCapabilities: this.options.search?.capabilities }, {
       entries: [...(this.mcpSession?.snapshot().entries ?? []), ...(candidate?.entries ?? [])],
       replaceSkills: candidate ? [candidate.skillName] : undefined,
     });
@@ -800,7 +805,9 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         browserSkillCandidateOverlay.candidate(this.mainAgentId)?.id ??
         '')
       : '';
-    const key = `${mcpRevision}:${candidateRevision}:${candidateId}`;
+    const capabilities = this.options.search?.capabilities;
+    const searchKey = `${Boolean(capabilities?.domains)}:${Boolean(capabilities?.publishedAfter)}:${Boolean(capabilities?.publishedBefore)}`;
+    const key = `${mcpRevision}:${candidateRevision}:${candidateId}:${searchKey}`;
     if (key !== this.modelBoundaryProjectionKey) {
       this.modelBoundaryProjectionKey = key;
       this.modelBoundaryProjectionRevision += 1;
@@ -955,6 +962,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
 
   private createToolContext(): ToolActivationContext {
     const builder = new ToolContextBuilder();
+    if (this.options.search) builder.setSearch(this.options.search);
 
     builder.setModes({
       modeId: () => {
@@ -989,17 +997,14 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     const typed = builder.build();
     const info = typed.agentInfo;
     const runConfig = info.runConfig ?? defaultRunConfig(this._spec.name);
-    const workspaceDir =
-      runConfig.workspace ??
-      (this.options.workspace as string | undefined) ??
-      pathsService.getDefaultWorkspaceDir();
+    const workspaceDir = this.getEffectiveWorkspace();
 
     return {
       agentType: info.role === 'worker' ? 'worker' : 'main',
       agentSpec: info.agentSpec,
       agentId: info.agentId,
       mainAgentId: info.mainAgentId,
-      runConfig: Object.freeze({ ...runConfig }),
+      runConfig: Object.freeze({ ...runConfig, workspace: workspaceDir }),
       subagentConfig: info.subagentConfig,
       resourceIds: typed.resourceIds,
       assignmentSnapshot: typed.assignmentSnapshot,
@@ -1012,6 +1017,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       subagents: typed.subagents,
       events: typed.events,
       imageOps: typed.imageOps,
+      search: typed.search,
       browser: typed.browser,
       post: (event) => {
         if (info.role === 'worker' && event.source === 'subagent') {
@@ -1035,12 +1041,27 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     return [...new Set(this._spec.tools?.customTools ?? [])].filter((name) => !excluded.has(name));
   }
 
+  private getEffectiveWorkspace(): string {
+    return this.options.runConfig?.workspace
+      ?? (this.options.workspace as string | undefined)
+      ?? pathsService.getDefaultWorkspaceDir();
+  }
+
   private buildPromptContext(): PromptContext {
+    const tools = this.getAvailableTools();
+    const eventType = tools.find((tool) => tool.name === 'send_event')?.input_schema.properties.type as
+      { enum?: string[]; const?: string } | undefined;
     const ctx: PromptContext = {
       agentId: this.id,
       role: 'director',
       runName: this._spec.name,
-      canManageAgentRuns: this.getAvailableTools().some((tool) => tool.name === 'agent_run'),
+      canManageAgentRuns: tools.some((tool) => tool.name === 'agent_run'),
+      toolNames: tools.map((tool) => tool.name),
+      sendEventTypes: eventType?.enum ?? (eventType?.const ? [eventType.const] : []),
+      assignment: this._spec.assignment,
+      investigatorTypes: tools.some((tool) => tool.name === 'subagent')
+        ? (this.toolFace?.subagentTypes ?? []).filter((type) => type.assignment === 'question').map((type) => type.name)
+        : [],
       skillDocs: this.skillDocs,
       workspaceDir: pathsService.getDefaultWorkspaceDir(),
       tempDir: pathsService.getTempDir(this.id),
@@ -1067,7 +1088,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
 
   private createToolFace(activation: ToolActivationContext): FinalToolFace {
     const sdkGroups = this.getSdkSkillsToLoad();
-    const customTools = [...new Set([...this.mergedCustomTools(), 'load_skill', 'skill_call'])];
+    const customTools = this.mergedCustomTools();
     const domains = new Set<'local' | 'browser'>(['local']);
     if (activation.resourceIds.browserId && activation.browser) domains.add('browser');
     const metadata = activation.runConfig?.bindings;
@@ -1081,12 +1102,13 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       scope: activation.agentType === 'worker' ? 'subagent' : 'main',
       agentType: activation.agentType,
       customTools: Object.freeze(customTools),
+      toolOptions: this._spec.tools.options,
       exposedSkillFunctions: Object.freeze(
         this.pilotPorts?.skills.getDirectSkillToolNames(sdkGroups) ?? []
       ),
       excluded: new Set(this._spec.tools?.exclude ?? []),
       domains,
-      subagentTypes: Object.freeze(specRegistry.getNamedWorkersForParent(this._spec.name)),
+      subagentTypes: Object.freeze(specRegistry.getWorkersForParent(this._spec.name)),
       subagentResources: Object.freeze({
         browserEnvironmentIds: Object.freeze([...new Set(browserEnvironmentIds)]),
       }),

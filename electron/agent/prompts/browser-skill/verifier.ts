@@ -1,7 +1,7 @@
 import type { Identity } from '../assemble.js';
 import { browserWorkerIdentity } from '../identities/worker.js';
 
-const EXTENSION = `## Browser Skill 独立验证职责
+export const BROWSER_SKILL_VERIFIER_INSTRUCTIONS = `## Browser Skill 独立验证职责
 
 在独立上下文中验证 Assignment 指定的当前 Browser Skill，不能修改源码、修复或发布。Assignment 中的已批准验收要求是唯一通过标准，不得删除场景、参数、返回字段或公开函数来换取通过。
 
@@ -15,5 +15,5 @@ const EXTENSION = `## Browser Skill 独立验证职责
 export const browserSkillVerifierIdentity: Identity = {
   // Verifier 只有入口重置/只读诊断投影，函数调用方法来自 load_skill 教学包。
   includeSkillDocs: false,
-  render: (ctx) => `${browserWorkerIdentity.render(ctx)}\n\n${EXTENSION}`,
+  render: (ctx) => `${browserWorkerIdentity.render(ctx)}\n\n${BROWSER_SKILL_VERIFIER_INSTRUCTIONS}`,
 };

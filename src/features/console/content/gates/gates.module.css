@@ -59,6 +59,16 @@
   pointer-events: none;
 }
 
+.autoApprovalCountdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 8px;
+  color: var(--approval-auto);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 等待指示灯：waiting 色脉冲小灯，门在场即亮 */
 .pulse {
   flex: 0 0 auto;
