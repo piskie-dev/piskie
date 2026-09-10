@@ -167,6 +167,8 @@ export type FileOp =
       readonly content?: string;
       /** 内容首行在文件中的真实行号（来自 read 的行号前缀） */
       readonly startLine?: number;
+      /** 本次返回内容末行的真实行号 */
+      readonly endLine?: number;
       /** 读取失败 / 不可预览（二进制、超大…）时的原文说明 */
       readonly unreadable?: PresentationText;
     };
@@ -221,6 +223,7 @@ export interface PlanNode extends TranscriptNodeBase {
 export interface WorkerNode extends TranscriptNodeBase {
   readonly kind: 'worker';
   readonly workerId: string;
+  readonly workerType: string;
   readonly subject: string;
   readonly mode: string;
   readonly taskIds: readonly string[];
@@ -231,6 +234,7 @@ export interface NoticeNode extends TranscriptNodeBase {
   readonly kind: 'notice';
   readonly source: string;
   readonly text: string;
+  readonly images?: readonly CellMedia[];
   readonly eventType?: string;
   readonly errorType?: string;
   readonly badge?: TranscriptBadge;

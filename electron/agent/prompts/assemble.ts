@@ -37,8 +37,8 @@ export function assemble(identity: Identity, ctx: PromptContext): string {
 
   const parts: string[] = [
     identity.render(ctx),                                        // L0
-    policies(),                                                  // L1
-    isWorker ? workerProtocol() : directorProtocol(),            // L2
+    policies(ctx),                                                  // L1
+    isWorker ? workerProtocol(ctx) : directorProtocol(),            // L2
     userInstructions(ctx),                                       // <user_instructions>
     !isWorker && ctx.modeId ? modeFragment(ctx) : '',          // L3
     identity.includeSkillDocs ? skillNotes(ctx.skillDocs) : '',  // L4

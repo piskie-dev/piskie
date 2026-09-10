@@ -98,7 +98,7 @@ describe('resolveRequest', () => {
         children: [{
           id: 'worker',
           subject: 'Worker',
-          mode: 'local',
+          type: 'local-worker',
           phase: 'waiting',
           currentModel: 'provider::model',
           approvalMode: 'confirm',

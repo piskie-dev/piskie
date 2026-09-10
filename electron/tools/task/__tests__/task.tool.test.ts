@@ -54,7 +54,7 @@ function workerContext(mainAgentId: string, workerId: string, snapshotOwner: str
     runConfig: { name: 'Run', description: '', promptTemplate: '' },
     modes: { modeId: () => 'normal', approvalMode: () => 'auto' },
     subagentConfig: {
-      mode: 'local',
+      type: 'local-worker',
       subject: '后端工作包',
       taskIds: ['task-a'],
       prompt: '完成 task-a。',

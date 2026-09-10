@@ -60,7 +60,7 @@ function soleToolCell(entries: readonly ConversationEntry[]): TranscriptNode {
   return cell;
 }
 
-const SUBAGENT_INPUT = { action: 'create', type: 'local', subject: '实现山川平原河流地形' };
+const SUBAGENT_INPUT = { type: 'local-worker', subject: '实现山川平原河流地形' };
 
 describe('降级态回落通用工具行', () => {
   it('subagent 创建失败 → tool cell + danger，而非子流程行', () => {

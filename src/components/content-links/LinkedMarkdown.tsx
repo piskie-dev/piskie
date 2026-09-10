@@ -4,6 +4,8 @@ import {
   type XMarkdownProps,
 } from '@ant-design/x-markdown';
 import {
+  useMemo,
+  type ComponentType,
   type ReactNode,
 } from 'react';
 
@@ -13,6 +15,7 @@ import {
   targetFromHref,
   type ContentTargetKind,
 } from './scanTargets';
+import { markdownSourceBlocks, SOURCE_BLOCK_TAG } from './markdownSourceBlocks';
 
 const TARGET_TAG = 'piskie-content-target';
 let explicitLinkDepth = 0;
@@ -129,16 +132,43 @@ const linkedMarkdownComponents: NonNullable<XMarkdownProps['components']> = {
   [TARGET_TAG]: MarkdownDetectedTarget,
 };
 
-export type LinkedMarkdownProps = Omit<XMarkdownProps, 'components' | 'config'>;
+export interface SourceBlockProps {
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly children: ReactNode;
+}
+
+export type LinkedMarkdownProps = Omit<XMarkdownProps, 'components' | 'config'> & {
+  readonly sourceBlocks?: {
+    readonly startLine: number;
+    readonly component: ComponentType<SourceBlockProps>;
+  };
+};
 
 /** XMarkdown with full-text URL/path detection and the shared activation behavior. */
-export function LinkedMarkdown({ escapeRawHtml = true, ...props }: LinkedMarkdownProps) {
+export function LinkedMarkdown({ escapeRawHtml = true, sourceBlocks, ...props }: LinkedMarkdownProps) {
+  const startLine = sourceBlocks?.startLine;
+  const SourceBlock = sourceBlocks?.component;
+  const config = useMemo(() => startLine === undefined ? linkedMarkdownConfig : {
+    ...linkedMarkdownConfig,
+    ...markdownSourceBlocks(startLine),
+  }, [startLine]);
+  const components = useMemo(() => !SourceBlock ? linkedMarkdownComponents : {
+    ...linkedMarkdownComponents,
+    [SOURCE_BLOCK_TAG]: function MarkdownSourceBlock(props: ComponentProps) {
+      return (
+        <SourceBlock startLine={Number(props['data-source-start'])} endLine={Number(props['data-source-end'])}>
+          {props.children}
+        </SourceBlock>
+      );
+    },
+  }, [SourceBlock]);
   return (
     <XMarkdown
       {...props}
       escapeRawHtml={escapeRawHtml}
-      components={linkedMarkdownComponents}
-      config={linkedMarkdownConfig}
+      components={components}
+      config={config}
     />
   );
 }

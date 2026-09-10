@@ -9,7 +9,7 @@ import { ThreadMode, type ThreadModeProps } from '../ThreadMode';
 vi.mock('../../../data/vm', () => ({
   useAgentVM: (agentId: string) => ({
     agentId, title: agentId, status: 'waiting', workers: [
-      { id: 'worker-one', subject: 'Worker one', mode: 'browser', status: 'waiting' },
+      { id: 'worker-one', subject: 'Worker one', type: 'browser-worker', status: 'waiting' },
     ],
   }),
   useWorkerVM: (_agentId: string, workerId?: string) => workerId ? {

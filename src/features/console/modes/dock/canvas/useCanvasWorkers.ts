@@ -23,7 +23,6 @@ import { useDisplayAgentState } from '../../../../../renderer-runtime/hooks';
 export interface CanvasWorker {
   readonly id: string;
   readonly subject: string;
-  readonly mode: string;
   /** 小地图按状态着色要用 */
   readonly phase: string;
   readonly interrupted: boolean;
@@ -41,7 +40,6 @@ export function useCanvasWorkers(agentId: string | null): readonly CanvasWorker[
     return children.map<CanvasWorker>((child) => ({
       id: child.id,
       subject: child.subject,
-      mode: child.mode,
       phase: child.phase,
       interrupted: isInterrupted(child),
       browserId: child.browserId,

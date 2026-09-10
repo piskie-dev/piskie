@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NoticeNode, ToolNode, UserNode } from '@/domains/transcript/nodes';
+import { projectConversationNodes } from '@/domains/transcript/project-entry';
+import type { ConversationEntry } from '../../../../../shared/types/agent-control';
 import '@/i18n';
 import { messageText, rawText } from '../../data/presentationText';
 
@@ -50,6 +52,35 @@ afterAll(() => {
 });
 
 describe('ThreadCell locale presentation', () => {
+  it('presents injected interruptions as localized system rows alongside user messages', async () => {
+    const body = 'sample-worker was interrupted; further work can be assigned when needed.';
+    const entries: ConversationEntry[] = [
+      {
+        t: 'msg', ts: 1, id: 'sample-interruption', role: 'user', subtype: 'system_event',
+        content: `<agent_input source="system">\n<worker_interrupted>\n${body}\n</worker_interrupted>\n</agent_input>`,
+      },
+      { t: 'msg', ts: 2, id: 'sample-user', role: 'user', subtype: 'user_input', content: 'Continue the sample task.' },
+    ];
+    const nodes = projectConversationNodes(entries);
+    await act(async () => root.render(createElement('div', null,
+      ...nodes.map((cell) => createElement(ThreadCell, { key: cell.id, cell })),
+    )));
+
+    const row = container.querySelector('[data-flow-direction="system"]');
+    const toggle = row?.querySelector<HTMLButtonElement>('button');
+    expect(toggle?.textContent).toContain('子流程已中断');
+    expect(toggle?.textContent).toContain('已暂停执行，后续可继续安排任务。');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('[class*="userRow"]')).toHaveLength(1);
+    expect(container.querySelector('[class*="bubble"]')?.textContent).toBe('Continue the sample task.');
+
+    await act(async () => i18n.changeLanguage('en-US'));
+    expect(toggle?.textContent).toContain('Worker interrupted');
+    expect(toggle?.textContent).toContain('Execution is paused; more work can be assigned later.');
+    await act(async () => toggle?.click());
+    expect(row?.querySelector('[class*="flowEventBody"]')?.textContent).toBe(body);
+  });
+
   it('renders parent and child flow messages with the same disclosure structure', async () => {
     const parentNode: UserNode = {
       kind: 'user',
@@ -99,15 +130,15 @@ describe('ThreadCell locale presentation', () => {
     expect(toggles[0]?.className).toBe(toggles[1]?.className);
     expect(flowEvents[0]?.dataset.eventType).toBe('message');
     expect(flowEvents[1]?.dataset.eventType).toBe('message');
-    expect(container.textContent).toContain('收到主流程消息');
-    expect(container.textContent).toContain('收到子流程消息');
+    expect(container.textContent).toContain('接收主流程消息');
+    expect(container.textContent).toContain('接收子流程消息');
 
     await act(async () => toggles[0]?.click());
     expect(toggles[0]?.getAttribute('aria-expanded')).toBe('true');
     expect(flowEvents[0]?.textContent).toContain('请继续检查完整构建结果。');
   });
 
-  it('renders completed flow events with their success state and icon', async () => {
+  it('keeps the incoming direction and a separate completion label', async () => {
     const completedNode: NoticeNode = {
       kind: 'notice',
       id: 'child-completed-1',
@@ -131,8 +162,55 @@ describe('ThreadCell locale presentation', () => {
 
     const flowEvent = container.querySelector<HTMLElement>('[data-flow-event]');
     expect(flowEvent?.dataset.eventType).toBe('completed');
-    expect(flowEvent?.querySelector('svg')?.classList.contains('lucide-circle-check')).toBe(true);
-    expect(container.textContent).toContain('子流程完成');
+    expect(flowEvent?.querySelector('svg')?.classList.contains('lucide-arrow-down-left')).toBe(true);
+    expect(flowEvent?.querySelector('[class*="flowEventStatus"]')?.textContent).toBe('完成');
+    expect(container.textContent).toContain('接收子流程消息');
+  });
+
+  it.each([
+    { phase: 'running', result: undefined, label: '发送中', bodyPrefix: '' },
+    { phase: 'ok', result: { ok: true, text: 'Message delivered.' }, label: undefined, bodyPrefix: '' },
+    { phase: 'failed', result: { ok: false, text: 'Recipient unavailable.' }, label: '失败', bodyPrefix: 'Recipient unavailable.' },
+    { phase: 'cancelled', result: { ok: true, text: 'Tool call denied by user.' }, label: '已停止', bodyPrefix: '已取消' },
+  ])('shows outgoing $phase messages with readable content and delivery state', async ({ phase, result, label, bodyPrefix }) => {
+    const message = 'Please check the complete sample result.\nInclude the verification notes.';
+    const entries: ConversationEntry[] = [{
+      t: 'msg', ts: 1, id: 'sample-message', role: 'assistant',
+      content: [{ type: 'tool_use', id: 'sample-call', name: 'send_event', input: {
+        type: 'message', targetId: 'sample-worker', summary: 'Check the sample result', message,
+      } }],
+    }];
+    if (result) {
+      entries.push({
+        t: 'tool', ts: 2, toolUseId: 'sample-call', ok: result.ok,
+        result: [{ type: 'text', text: result.text }],
+      });
+    }
+    const cell = projectConversationNodes(entries).find((node) => node.kind === 'tool');
+    if (!cell) throw new Error('Expected an outgoing message');
+    const onAction = vi.fn();
+    await act(async () => root.render(createElement(ThreadCell, { cell, onAction })));
+
+    const row = container.querySelector<HTMLElement>('[data-flow-direction="outgoing"]');
+    const toggle = row?.querySelector<HTMLButtonElement>('button');
+    expect(toggle?.textContent).toContain('发送消息');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(row?.querySelector('svg')?.classList.contains('lucide-arrow-up-right')).toBe(true);
+    expect(row?.querySelector('[class*="flowEventStatus"]')?.textContent).toBe(label);
+    if (phase === 'failed') expect(row?.dataset.tone).toBe('danger');
+    if (phase === 'running') {
+      const background = [...row!.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === '转入后台');
+      await act(async () => background?.click());
+      expect(onAction).toHaveBeenCalledWith(cell, cell.actions[0]);
+      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    }
+
+    await act(async () => toggle?.click());
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(row?.querySelector('[class*="flowEventBody"]')?.textContent).toBe(bodyPrefix + message);
+    await act(async () => toggle?.click());
+    expect(row?.querySelector('[class*="flowEventBody"]')).toBeNull();
   });
 
   it('translates the same projected node without rebuilding its semantic title', async () => {

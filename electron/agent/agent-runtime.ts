@@ -46,7 +46,6 @@ import type {
   NotificationDelivery,
   MessageSubtype,
   ContentBlock,
-  SubagentMode,
   SubagentConfig,
   AIQuestion,
   ToolArtifact,
@@ -327,7 +326,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
             id: childState.agentId,
             phase: childState.phase,
             interrupted: childState.interrupted,
-            mode: (childConfig?.mode as SubagentMode | undefined) || 'browser',
+            type: (child as AgentRuntime).spec.name,
             subject: childConfig?.subject || '',
             taskIds: childConfig?.taskIds || [],
             browserReady: childBrowserMod?.getBrowserReady() ?? false,
@@ -1040,11 +1039,20 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   }
 
   private buildPromptContext(): PromptContext {
+    const tools = this.getAvailableTools();
+    const eventType = tools.find((tool) => tool.name === 'send_event')?.input_schema.properties.type as
+      { enum?: string[]; const?: string } | undefined;
     const ctx: PromptContext = {
       agentId: this.id,
       role: 'director',
       runName: this._spec.name,
-      canManageAgentRuns: this.getAvailableTools().some((tool) => tool.name === 'agent_run'),
+      canManageAgentRuns: tools.some((tool) => tool.name === 'agent_run'),
+      toolNames: tools.map((tool) => tool.name),
+      sendEventTypes: eventType?.enum ?? (eventType?.const ? [eventType.const] : []),
+      assignment: this._spec.assignment,
+      investigatorTypes: tools.some((tool) => tool.name === 'subagent')
+        ? (this.toolFace?.subagentTypes ?? []).filter((type) => type.assignment === 'question').map((type) => type.name)
+        : [],
       skillDocs: this.skillDocs,
       workspaceDir: pathsService.getDefaultWorkspaceDir(),
       tempDir: pathsService.getTempDir(this.id),
@@ -1071,7 +1079,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
 
   private createToolFace(activation: ToolActivationContext): FinalToolFace {
     const sdkGroups = this.getSdkSkillsToLoad();
-    const customTools = [...new Set([...this.mergedCustomTools(), 'load_skill', 'skill_call'])];
+    const customTools = this.mergedCustomTools();
     const domains = new Set<'local' | 'browser'>(['local']);
     if (activation.resourceIds.browserId && activation.browser) domains.add('browser');
     const metadata = activation.runConfig?.bindings;
@@ -1085,12 +1093,13 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       scope: activation.agentType === 'worker' ? 'subagent' : 'main',
       agentType: activation.agentType,
       customTools: Object.freeze(customTools),
+      toolOptions: this._spec.tools.options,
       exposedSkillFunctions: Object.freeze(
         this.pilotPorts?.skills.getDirectSkillToolNames(sdkGroups) ?? []
       ),
       excluded: new Set(this._spec.tools?.exclude ?? []),
       domains,
-      subagentTypes: Object.freeze(specRegistry.getNamedWorkersForParent(this._spec.name)),
+      subagentTypes: Object.freeze(specRegistry.getWorkersForParent(this._spec.name)),
       subagentResources: Object.freeze({
         browserEnvironmentIds: Object.freeze([...new Set(browserEnvironmentIds)]),
       }),

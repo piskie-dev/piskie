@@ -240,6 +240,7 @@ describe('web search and ordinary tools share Engine cancellation', () => {
     } });
     engine.setActualCoordinator(new ToolCoordinator({ contexts, observer: { start: vi.fn(), finish: vi.fn() } }));
     const snapshot = catalog.snapshot({ scope: 'main', agentType: 'main', customTools: ['web_search', 'read'],
+      searchCapabilities: { domains: true, publishedAfter: true, publishedBefore: true },
       exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
     const running = engine.runExecuteTools([
       { type: 'tool_use', id: 'sample-search', name: 'web_search', input: { query: 'sample',

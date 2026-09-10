@@ -21,7 +21,7 @@ function child(over: Partial<ChildControlState> & { id: string }): ChildControlS
   return {
     phase: 'executing',
     subject: over.id,
-    mode: 'browser',
+    type: 'browser-worker',
     ...over,
   } as ChildControlState;
 }

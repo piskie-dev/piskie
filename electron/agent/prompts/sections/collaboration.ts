@@ -1,3 +1,5 @@
+import type { PromptContext } from '../types.js';
+
 /**
  * L2 collaboration：协作协议（按角色二选一）
  * - 共有段：消息信封语义
@@ -36,7 +38,7 @@ function notificationEvaluation(): string {
 | failed | Assignment 未能完成 | 根据事件中的事实决定重派、接管或向用户报告 |
 | need_user_action | 只有用户能解除的阻断 | 立即用 ask_user 告知所需操作并询问是否完成；用户确认后，告知原 Worker 用户已完成操作 |
 
-completed 通知应自包含关键结果、产出路径和未完成项。摘要足以决策时无需读取落盘原文；信息不足时明确指出缺少的事实。
+completed 通知应自包含关键结果、产出路径和未完成项。摘要足以决策时无需读取落盘原文；信息不足时明确指出缺少的事实。Worker 尚未汇报时不要预测或代写它的结果。
 
 ### 处理 failed 通知
 
@@ -72,7 +74,8 @@ export function directorProtocol(): string {
  * 子流程协作协议（worker）
  * 会话配置在 L5 <context>；Assignment 只在创建期初始消息中出现。
  */
-export function workerProtocol(): string {
+export function workerProtocol(ctx?: PromptContext): string {
+  if (ctx?.assignment === 'question') return questionProtocol(ctx);
   return `${messageModel()}
 
 ## 执行原则
@@ -127,4 +130,26 @@ export function workerProtocol(): string {
 **completed 契约**：跨上下文通知不携带完整执行历史，因此在这一条通知里带全结果。
 - **message**：完整结果内容，包括关键数据、产出文件绝对路径和未完成项
 - **summary**：概括核心结果和关键数据；只写“任务完成”不构成有效摘要`;
+}
+
+function questionProtocol(ctx: PromptContext): string {
+  const canRequestUser = ctx.sendEventTypes?.includes('need_user_action');
+  return [
+    messageModel(),
+    `## 问题处理
+
+以 \`<assignment>\` 中的问题、范围和预期结果为准。收到补充事实或范围调整后，继续核对受影响的结论。`,
+    `## 执行与结果
+
+- 执行前核对已有工具结果，已成功且未受新事实影响的步骤无需重复。
+- 临时错误在安全且仍有价值时自行重试；权限不足、材料不可用或重试后仍不能完成时，如实报告原因、原始错误和已完成部分。
+- 结论和完成状态必须有实际取得的证据支持；区分已经验证的结果与仍未验证的内容。
+- 持续处理当前任务及后续要求，完成后通过 send_event 报告完整结果；无法完成时报告原因和缺失条件。结果应自包含关键结论、证据、产出路径和未完成项。
+- 用户修改范围后按新范围执行，结果中说明影响结论的范围变化。`,
+    canRequestUser ? `## 用户介入
+
+遇到登录、验证码、授权确认、用户选择等只有用户能完成的阻断时，通过 send_event 报告当前状态、用户要做的动作和恢复检查点，然后等待。
+
+收到“用户已完成操作”消息后，先验证阻断条件确已解除，再从原检查点继续。` : '',
+  ].filter(Boolean).join('\n\n');
 }

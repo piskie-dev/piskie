@@ -3,4 +3,4 @@ export {
   ContentLinkUrlScope,
   LinkedText,
 } from './ContentLinks';
-export { LinkedMarkdown } from './LinkedMarkdown';
+export { LinkedMarkdown, type SourceBlockProps } from './LinkedMarkdown';

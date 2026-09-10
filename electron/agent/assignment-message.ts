@@ -20,8 +20,14 @@ function neutralizeAssignmentClosings(text: string): string {
 
 export function renderAssignmentInitialMessage(
   config: Pick<SubagentConfig, 'prompt'>,
-  snapshot: AssignmentTaskBoardSnapshot,
+  snapshot?: AssignmentTaskBoardSnapshot,
 ): string {
+  const assignment = `<assignment>
+  <prompt>
+${neutralizeAssignmentClosings(config.prompt)}
+  </prompt>
+</assignment>`;
+  if (!snapshot) return assignment;
   const items = snapshot.items.map((item) => {
     const attributes = [
       `id="${xmlEscape(item.id)}"`,
@@ -38,11 +44,7 @@ export function renderAssignmentInitialMessage(
     return `  <item ${attributes}>\n${dependencies}\n  </item>`;
   }).join('\n');
 
-  return `<assignment>
-  <prompt>
-${neutralizeAssignmentClosings(config.prompt)}
-  </prompt>
-</assignment>
+  return `${assignment}
 
 <task_board summary="${xmlEscape(snapshot.taskSummary)}">
 ${items}

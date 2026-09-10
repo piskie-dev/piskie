@@ -54,7 +54,6 @@ export const CANVAS_LAYOUT = {
 /** 布局只需要这些字段——收窄入参，不让布局层依赖控制态全量类型 */
 export interface CanvasWorkerInput {
   readonly id: string;
-  readonly mode: string;
   readonly browserId?: string;
 }
 
@@ -93,9 +92,9 @@ export interface CanvasLayout {
 
 // ==================== 判据 ====================
 
-/** 有浏览器且非 local 才有屏幕 */
+/** 按实际浏览器资源决定是否显示屏幕 */
 export function workerHasScreen(worker: CanvasWorkerInput): boolean {
-  return !!worker.browserId && worker.mode !== 'local';
+  return !!worker.browserId;
 }
 
 /** lane 主体高度：worker 节点与附属（屏幕）取较高者 */

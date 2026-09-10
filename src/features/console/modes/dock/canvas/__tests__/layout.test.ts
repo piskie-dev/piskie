@@ -19,7 +19,7 @@ import {
 } from '../layout';
 
 function worker(over: Partial<CanvasWorkerInput> & { id: string }): CanvasWorkerInput {
-  return { mode: 'browser', browserId: 'b1', ...over };
+  return { browserId: 'b1', ...over };
 }
 
 function base(over: Partial<Parameters<typeof buildCanvasLayout>[0]> = {}) {
@@ -40,9 +40,8 @@ const LANE_WIDTH =
 const COLUMN_STRIDE = LANE_WIDTH + CANVAS_LAYOUT.subColumnGap; // 990+140 = 1130
 
 describe('能力判据', () => {
-  it('有 browserId 且非 local 才有屏幕', () => {
+  it('有 browserId 才有屏幕', () => {
     expect(workerHasScreen(worker({ id: 'w' }))).toBe(true);
-    expect(workerHasScreen(worker({ id: 'w', mode: 'local' }))).toBe(false);
     expect(workerHasScreen(worker({ id: 'w', browserId: undefined }))).toBe(false);
   });
 });
@@ -65,7 +64,7 @@ describe('laneHeight', () => {
   });
 
   it('无屏幕（local）时同样取 worker 高度 880', () => {
-    expect(laneHeight(worker({ id: 'w', mode: 'local' }))).toBe(880);
+    expect(laneHeight(worker({ id: 'w', browserId: undefined }))).toBe(880);
   });
 });
 

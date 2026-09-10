@@ -20,7 +20,7 @@ function makeOptions(): RuntimeOptions {
     mainAgentId: 'main-1',
     workspace: '/workspace',
     subagentConfig: {
-      mode: 'local',
+      type: 'local-worker',
       subject: 'PARENT_ONLY_ASSIGNMENT_SUBJECT',
       taskIds: ['task-a'],
       prompt: 'UNIQUE_ASSIGNMENT_PROMPT',

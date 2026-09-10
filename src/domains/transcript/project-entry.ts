@@ -163,7 +163,7 @@ function buildUserNode(
 
   const summary = rawSummary(text, 120) ?? attachmentSummary(images?.length ?? 0, files?.length ?? 0);
 
-  const hasDetail = !!text || !!assignment?.taskBoard;
+  const hasDetail = !!text || !!assignment?.taskBoard || !!images?.length;
   const interaction = resolveInteraction({ kind: 'user', sections: [], hasDetail });
 
   return {
@@ -193,9 +193,13 @@ function buildNoticeNode(
   sourceIndex: number,
   presentation: NoticeMessagePresentation,
 ): NoticeNode {
+  const images = extractCellMedia(entry.content);
   const summary =
-    rawSummary(presentation.summary, 120)
+    (typeof presentation.summary === 'string'
+      ? rawSummary(presentation.summary, 120)
+      : presentation.summary)
     ?? rawSummary(presentation.text, 120)
+    ?? attachmentSummary(images?.length ?? 0, 0)
     ?? (presentation.source
       ? messageText('transcript.summary.fromSource', {
           source: rawPresentationText(presentation.source),
@@ -205,7 +209,7 @@ function buildNoticeNode(
     kind: 'notice',
     sections: [],
     noticeContent: presentation.text,
-    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.detailFile,
+    hasDetail: !!presentation.text || !!presentation.guidance || !!presentation.detailFile || !!images?.length,
   });
   const meta = [
     ...(presentation.source
@@ -226,6 +230,7 @@ function buildNoticeNode(
     meta: meta.length > 0 ? meta : undefined,
     source: presentation.source,
     text: presentation.text,
+    images,
     ...(presentation.badge && { badge: presentation.badge }),
     ...(presentation.eventType && { eventType: presentation.eventType }),
     ...(presentation.errorType && { errorType: presentation.errorType }),
@@ -349,6 +354,7 @@ function buildWorkerNode(
     ...title,
     summary: rawSummary(subject, 140),
     workerId: typeof params.id === 'string' ? params.id : '',
+    workerType: typeof params.type === 'string' ? params.type : '',
     subject,
     mode: typeof params.mode === 'string' ? params.mode : '',
     taskIds,
@@ -407,7 +413,7 @@ export function projectEntryNodes(
   if (entry.t !== 'msg') return [];
 
   if (entry.role === 'user') {
-    const presented = presentUserMessage(entry.subtype, readableMessageText(entry.content));
+    const presented = presentUserMessage(entry.subtype, readableMessageText(entry.content), entry.id);
     return [
       presented.as === 'user'
         ? buildUserNode(entry, sourceIndex, presented.origin, presented.text)

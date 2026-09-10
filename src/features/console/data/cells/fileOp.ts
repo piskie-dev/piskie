@@ -41,15 +41,16 @@ function str(record: Record<string, unknown>, key: string): string | undefined {
 }
 
 /**
- * 从 read 的返回文本里剥出内容与起始行号。
+ * 从 read 的返回文本里剥出内容与实际读取范围。
  *
  * read 的返回是「行号 + TAB + 原行」逐行拼接，末尾可能追加若干条以空行分隔的提示
  * （已显示 x-y 行 / 并发修改警告…）。提示不带行号前缀，据此切断。
  */
-function parseNumberedRead(text: string): { content: string; startLine?: number } {
+function parseNumberedRead(text: string): { content: string; startLine?: number; endLine?: number } {
   const lines = text.split('\n');
   const body: string[] = [];
   let startLine: number | undefined;
+  let endLine: number | undefined;
 
   for (const line of lines) {
     const match = READ_LINE_RE.exec(line);
@@ -59,10 +60,11 @@ function parseNumberedRead(text: string): { content: string; startLine?: number 
       continue;
     }
     if (startLine === undefined) startLine = Number(match[1]);
+    endLine = Number(match[1]);
     body.push(match[2] ?? '');
   }
 
-  return { content: body.join('\n'), startLine };
+  return { content: body.join('\n'), startLine, endLine };
 }
 
 export function extractFileOp(input: {
@@ -108,9 +110,9 @@ export function extractFileOp(input: {
             : messageText('sessionWorkbenchUi.file.readFailed'),
         };
       }
-      const { content, startLine } = parseNumberedRead(text);
+      const { content, startLine, endLine } = parseNumberedRead(text);
       // 解析不出任何带行号的行 ⇒ 不装作能预览（可能是空文件提示）
-      if (!content) {
+      if (startLine === undefined) {
         return {
           kind: 'read',
           path,
@@ -119,7 +121,7 @@ export function extractFileOp(input: {
             : messageText('sessionWorkbenchUi.file.empty'),
         };
       }
-      return { kind: 'read', path, content, startLine };
+      return { kind: 'read', path, content, startLine, endLine };
     }
 
     default:

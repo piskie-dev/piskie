@@ -87,6 +87,17 @@ export function toolSections(input: ToolDetailInput): DetailSection[] {
   const out: DetailSection[] = [];
   const { state } = input;
 
+  if (input.tool === 'send_event' && input.params && typeof input.params === 'object'
+    && 'message' in input.params && typeof input.params.message === 'string') {
+    if (state.phase === 'failed') {
+      pushSection(out, { value: state.error, format: 'text' });
+    } else if (state.phase === 'cancelled' && state.reason) {
+      pushSection(out, { value: state.reason, format: 'text' });
+    }
+    pushSection(out, { value: input.params.message, format: 'text' });
+    return out;
+  }
+
   if (state.phase === 'running' || state.phase === 'awaiting-approval') {
     pushToolFacts(out, input, { skipRawResult: true });
     return out;

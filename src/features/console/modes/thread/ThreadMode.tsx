@@ -119,7 +119,7 @@ export const ThreadMode = memo<ThreadModeProps>(
         ...agent.workers.map((item) => ({
           workerId: item.id,
           label: item.subject,
-          mode: item.mode,
+          type: item.type,
           status: item.status,
         })),
       ];

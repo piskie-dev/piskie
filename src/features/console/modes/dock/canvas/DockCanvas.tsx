@@ -87,7 +87,6 @@ function initialSizeOf(kind: CanvasNode['kind']): { width: number; height: numbe
 function toWorkerInput(worker: CanvasWorker): CanvasWorkerInput {
   return {
     id: worker.id,
-    mode: worker.mode,
     browserId: worker.browserId,
   };
 }

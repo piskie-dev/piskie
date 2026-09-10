@@ -11,7 +11,6 @@ import type {
   AgentModeId,
   SubagentNotification,
   SubagentConfig,
-  SubagentMode,
   TaskItem,
   ToolArtifact,
   ToolInputSchema,
@@ -135,14 +134,13 @@ export interface PlanPort {
 export type SubagentTypeDescriptor = Readonly<{
   name: string;
   description: string;
-  mode: SubagentMode;
+  assignment: 'question' | 'task-board';
+  browser: boolean;
+  skills: boolean;
 }>;
 
 export interface SubagentPort {
-  resolveType(type: string):
-    | { mode: SubagentMode; agentSpec?: string }
-    | { error: string };
-  create(config: SubagentConfig, snapshot: AssignmentTaskBoardSnapshot): Promise<string>;
+  create(config: SubagentConfig): Promise<string>;
   destroy(id: string): Promise<void>;
   traceFilePath(id: string): string | undefined;
 }
@@ -226,22 +224,29 @@ export type ToolDef<TParams> = {
   name: string;
   description: string | ((agentType: ToolAgentType) => string);
   schema: ParamSpec<TParams>;
-  /** Optional model-only refinement; runtime validation always uses schema above. */
-  modelInputSchema?: (
-    schema: ToolInputSchema,
-    context: Readonly<{
-      agentType: ToolAgentType;
-      searchCapabilities?: SearchCapabilities;
-      subagentTypes: readonly SubagentTypeDescriptor[];
-      subagentResources: Readonly<{
-        browserEnvironmentIds: readonly string[];
-      }>;
-    }>,
-  ) => ToolInputSchema;
+  /** Configuration accepted when a Worker selects this tool. */
+  optionsSchema?: ParamSpec<Record<string, unknown>>;
+  /** One contract supplies both the model definition and execution validation. */
+  resolveContract?: (
+    options: Readonly<Record<string, unknown>>,
+    context: ToolContractContext,
+  ) => ToolContract<TParams>;
   scope: ToolScope;
   effects: ToolEffect[];
   policy?: ToolPolicy<TParams>;
 };
+
+export type ToolContract<TParams = unknown> = Readonly<{
+  schema: ParamSpec<TParams>;
+  description: string;
+}>;
+
+export type ToolContractContext = Readonly<{
+  agentType: ToolAgentType;
+  searchCapabilities?: SearchCapabilities;
+  subagentTypes: readonly SubagentTypeDescriptor[];
+  subagentResources: Readonly<{ browserEnvironmentIds: readonly string[] }>;
+}>;
 
 export type PreviewThunk = () => Promise<PreviewInfo>;
 
@@ -257,7 +262,7 @@ export interface ITool<TParams = unknown, TData = undefined> {
 export type RawCall = { modelName: string; rawParams: unknown; callId: string };
 
 export type PreparedCall<TParams> = {
-  readonly entry: import('./catalog.js').CatalogEntry;
+  readonly entry: import('./catalog.js').ResolvedCatalogEntry;
   readonly params: TParams;
   readonly ctx: ToolContext;
   readonly callId: string;

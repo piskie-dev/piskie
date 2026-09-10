@@ -53,7 +53,6 @@ function makeModule() {
   } as unknown as AgentHost;
   const module = new BrowserModule();
   module.init(host, {
-    mode: 'browser',
     mainAgentId: 'parent-1',
     browserEnvironmentId: 'p1',
     binding: { browserId: 'environment-p1', userDataId: 'login-p1' },

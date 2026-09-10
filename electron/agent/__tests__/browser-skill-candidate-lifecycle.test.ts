@@ -1,3 +1,4 @@
+import { specRegistry } from '../specs/index.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -24,9 +25,6 @@ import {
   defineSkill,
 } from '../../piskiepilot/core/skill/define.js';
 import { browserSkillDirectorSpec } from '../specs/builtin/browser-skill-director.js';
-import { browserSkillBuilderSpec } from '../specs/builtin/browser-skill-builder.js';
-import { browserSkillVerifierSpec } from '../specs/builtin/browser-skill-verifier.js';
-import { localWorkerSpec } from '../specs/builtin/local-worker.js';
 import { fakeAgentInference } from '../../testing/fake-agent-inference.js';
 import { ToolCatalog, type CatalogSnapshot, type FinalToolFace } from '../../tools/catalog.js';
 import { buildLoadedSkillEntries } from '../../tools/skill/domain-descriptors.js';
@@ -49,7 +47,7 @@ function runtime(spec = browserSkillDirectorSpec): AgentRuntime {
         ? {
             mainAgentId: MAIN_AGENT_ID,
             subagentConfig: {
-              mode: 'local',
+              type: 'local-worker',
               subject: 'worker',
               taskIds: ['task-1'],
               prompt: 'test',
@@ -135,6 +133,10 @@ function catalogSnapshot(
   };
   return internal.captureCatalogSnapshot();
 }
+
+const browserSkillBuilderSpec = specRegistry.get('browser-skill-builder')!;
+const browserSkillVerifierSpec = specRegistry.get('browser-skill-verifier')!;
+const localWorkerSpec = specRegistry.get('local-worker')!;
 
 describe('Browser Skill candidate 生命周期', () => {
   afterEach(() => browserSkillCandidateOverlay.clear(MAIN_AGENT_ID));

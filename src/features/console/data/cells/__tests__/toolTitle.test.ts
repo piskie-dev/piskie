@@ -22,3 +22,14 @@ describe('skill_call title projection', () => {
       .toEqual({ titleKey: 'transcript.tool.skillCall' });
   });
 });
+
+describe('worker tool titles', () => {
+  it('maps creation and stop to separate tools without reading an action field', () => {
+    expect(resolveToolTitle({ tool: 'subagent', params: { type: 'explore', subject: '查明保存入口' } }))
+      .toEqual({ titleKey: 'transcript.tool.createWorker' });
+    expect(resolveToolTitle({ tool: 'subagent', params: { action: 'create', subject: '历史记录' } }))
+      .toEqual({ titleKey: 'transcript.tool.createWorker' });
+    expect(resolveToolTitle({ tool: 'subagent_stop', params: { subagentId: 'worker-a' } }))
+      .toEqual({ titleKey: 'transcript.tool.stopWorker' });
+  });
+});

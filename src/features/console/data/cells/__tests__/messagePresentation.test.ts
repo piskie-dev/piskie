@@ -12,9 +12,10 @@
  * | 3 | `agent-runtime.ts` 外部事件 source=user | `user_input` | 裸文本 |
  * | 4 | `agent-runtime.ts` 外部事件 source≠user | `system_event` | `<agent_input>` |
  * | 5 | `subagent.module.ts` 子流程通知 | `subagent_notification` | `<subagent_event>` |
- * | 6 | `agent-engine.ts` closure nudge | `system_event` | `<closure_check/>` |
+ * | 6 | `subagent.module.ts` requestClosureCheck | `system_event` | `<agent_input source="system">` 内的 `<closure_check>` |
  * | 7 | `agent.service.ts` 恢复通知 | `system_event` | **裸文本** |
  * | 8 | `settler.ts` notify | `system_event` | `<task-notification>` |
+ * | 9 | `subagent.module.ts` notifyUserInterruptedWorkers | `system_event` | `<agent_input source="system">` 内的 `<worker_interrupted>` |
  *
  * #7 是本设计的要害：**一句裸中文，没有信封**，与用户手打的消息在文本层面无法区分，
  * 所以判据只能是 subtype。它和 #8 此前都被画成用户气泡。
@@ -144,7 +145,7 @@ describe('信封覆盖', () => {
       as: 'notice',
       source: 'closure_check',
       text: '请选择收尾方式',
-      titleKey: 'transcript.notice.eventReceived',
+      titleKey: 'transcript.systemEvent.closureCheck',
     });
   });
 
@@ -200,6 +201,82 @@ describe('信封覆盖', () => {
       .toEqual(messageText('transcript.guidance.contextOverflow'));
   });
 
+});
+
+describe('system injection presentation', () => {
+  it.each(['system', 'module', 'browser', 'subagent'])('keeps %s input in a system event row', (source) => {
+    expect(presentUserMessage('system_event', `<agent_input source="${source}" ts="t">Sample automatic notice.</agent_input>`))
+      .toMatchObject({ as: 'notice', source, text: 'Sample automatic notice.', titleKey: 'transcript.systemEvent.message' });
+  });
+
+  it.each(['api', 'webhook'])('preserves externally submitted %s messages', (source) => {
+    expect(presentUserMessage('system_event', `<agent_input source="${source}" ts="t">Sample request.</agent_input>`))
+      .toEqual({ as: 'user', origin: 'user', text: 'Sample request.' });
+  });
+
+  it.each(['user_input', 'system_task'] as const)('preserves literal tags in %s text', (subtype) => {
+    const text = '<worker_interrupted>Sample quoted markup.</worker_interrupted>';
+    expect(presentUserMessage(subtype, text)).toEqual({ as: 'user', origin: 'user', text });
+  });
+
+  it('projects the nested interruption envelope as a readable system notice', () => {
+    const body = 'The sample worker was interrupted. More work may be assigned later.';
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 1, id: 'sample-notice', role: 'user', subtype: 'system_event',
+      content: `<agent_input source="system" ts="t">\n<worker_interrupted>\n${body}\n</worker_interrupted>\n</agent_input>`,
+    }]);
+    expect(cell).toMatchObject({
+      kind: 'notice', source: 'worker_interrupted', titleKey: 'transcript.systemEvent.workerInterrupted',
+      tone: 'warning', text: body, defaultExpanded: false,
+      summary: messageText('transcript.systemEvent.workerInterruptedSummary'),
+    });
+    expect(cell?.detail?.().sections).toEqual([{ value: body, format: 'text' }]);
+  });
+
+  it('recognizes the paired closure check inside a system input envelope', () => {
+    expect(presentUserMessage('system_event', '<agent_input source="system" ts="t">\n<closure_check>\nCheck the sample task.\n</closure_check>\n</agent_input>'))
+      .toMatchObject({
+        as: 'notice', source: 'closure_check', text: 'Check the sample task.',
+        summary: messageText('transcript.systemEvent.closureCheckSummary'),
+        titleKey: 'transcript.systemEvent.closureCheck', tone: 'muted',
+      });
+  });
+
+  it('presents system reminders without their transport wrapper', () => {
+    expect(presentUserMessage('system_event', '<system-reminder>Review the sample result.</system-reminder>'))
+      .toMatchObject({ as: 'notice', source: 'system_reminder', text: 'Review the sample result.', titleKey: 'transcript.systemEvent.reminder' });
+  });
+
+  it('recognizes a persisted restoration notice by its service-owned record id', () => {
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 1, id: 'worker-interruption:sample-worker', role: 'user', subtype: 'system_event',
+      content: 'The sample session was restored. Its previous worker is no longer available.',
+    }]);
+    expect(cell).toMatchObject({
+      kind: 'notice', source: 'session_restored', titleKey: 'transcript.systemEvent.sessionRestored',
+      summary: messageText('transcript.systemEvent.sessionRestoredSummary'),
+    });
+  });
+
+  it.each([
+    ['ok', 'backgroundCompleted', 'neutral'],
+    ['failed', 'backgroundFailed', 'danger'],
+    ['killed', 'backgroundStopped', 'warning'],
+  ])('preserves %s background output, its status, and the complete log link', (status, title, tone) => {
+    const tail = 'Sample output contains </tail> in a code example.\nFinal sample output.';
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 1, id: 'sample-background', role: 'user', subtype: 'system_event',
+      content: `<task-notification>\n<task-id>sample-job</task-id>\n<output-file>/tmp/sample-output.log</output-file>\n<status>${status}</status>\n<summary>Sample job result.</summary>\n<tail>${tail}</tail>\n</task-notification>`,
+    }]);
+    expect(cell).toMatchObject({
+      kind: 'notice', source: 'task_notification', titleKey: `transcript.systemEvent.${title}`,
+      tone, text: `Sample job result.\n\n${tail}`, summary: rawText('Sample job result.'),
+    });
+    expect(cell?.detail?.().sections).toEqual([
+      { value: `Sample job result.\n\n${tail}`, format: 'text' },
+      { value: messageText('transcript.detail.eventFile', { path: rawText('/tmp/sample-output.log') }), format: 'text' },
+    ]);
+  });
 });
 
 describe('通知 TranscriptNode 漏口', () => {

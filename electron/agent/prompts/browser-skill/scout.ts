@@ -1,7 +1,7 @@
 import type { Identity } from '../assemble.js';
 import { browserWorkerIdentity } from '../identities/worker.js';
 
-const EXTENSION = `## 网站能力与范围侦察
+export const SITE_SCOUT_INSTRUCTIONS = `## 网站能力与范围侦察
 
 按 Assignment 边界为 Browser Skill 的范围规划提供真实网站证据，不设计或实现 Skill。
 
@@ -14,5 +14,5 @@ const EXTENSION = `## 网站能力与范围侦察
 export const siteScoutIdentity: Identity = {
   // Scout 只有观察/导航投影；完整 browser 文档包含 UID 写操作教学，会与工具面冲突。
   includeSkillDocs: false,
-  render: (ctx) => `${browserWorkerIdentity.render(ctx)}\n\n${EXTENSION}`,
+  render: (ctx) => `${browserWorkerIdentity.render(ctx)}\n\n${SITE_SCOUT_INSTRUCTIONS}`,
 };

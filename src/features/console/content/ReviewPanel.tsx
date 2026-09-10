@@ -10,8 +10,8 @@
  * | 对象 | 形态 |
  * |---|---|
  * | 一次 write/edit | 单个文件名 + 本次 diff（着色、带行号） |
- * | 读取的文本文件 | Markdown 文档，或带真实行号的只读代码视图 |
- * | 正文里的本地路径 | 当前磁盘快照；Markdown 渲染成文档，其余文本显示源码 |
+ * | 读取的文本文件 | 带源文件行号的 Markdown 文档或只读代码视图 |
+ * | 正文里的本地路径 | 当前磁盘快照，复用相同的文本预览与行号 |
  * | 读不了的文件（二进制 / 超大 / 缺失） | **文件卡**：类型图标 + 原因 + 两个系统动作 |
  *
  * 二进制没有可读文本形态，硬渲染只会得到乱码。与其显示乱码，不如把它当**文件**呈现 ——
@@ -27,7 +27,7 @@ import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { LinkedMarkdown } from '@/components/content-links';
+import { LinkedMarkdown, type SourceBlockProps } from '@/components/content-links';
 import { collapseContext, type DiffLine } from '../data/diffLines';
 import { grammarForPath, tokenize, MAX_HIGHLIGHT_LINES, type Token } from './diff/highlight';
 import { basename, type FileChange, type ReadOp } from '../data/review';
@@ -205,6 +205,18 @@ const FileCard = memo<{
 
 FileCard.displayName = 'FileCard';
 
+/** 所有文本预览共用源行号栏；一个渲染块可以对应一行或多行源码。 */
+const ReadBlock = memo<SourceBlockProps>(({ startLine, endLine, children }) => (
+  <div className={styles.readBlock} data-source-start={startLine} data-source-end={endLine}>
+    <span className={styles.sourceLineNo} aria-hidden>
+      {startLine === endLine ? startLine : `${startLine}–${endLine}`}
+    </span>
+    <div className={styles.readContent}>{children}</div>
+  </div>
+));
+
+ReadBlock.displayName = 'ReadBlock';
+
 /** 读取的文本文件：整篇分词后逐行渲染，行号用文件里的真实行号 */
 const ReadCode = memo<{
   readonly path: string;
@@ -221,11 +233,9 @@ const ReadCode = memo<{
   return (
     <div className={styles.code}>
       {lines.map((text, index) => (
-        <div key={index} className={styles.line} data-kind="context">
-          <span className={styles.lineNo}>{startLine + index}</span>
-          <span className={styles.sign}> </span>
+        <ReadBlock key={index} startLine={startLine + index} endLine={startLine + index}>
           <CodeLine text={text} tokens={tokens[index]} />
-        </div>
+        </ReadBlock>
       ))}
     </div>
   );
@@ -233,20 +243,27 @@ const ReadCode = memo<{
 
 ReadCode.displayName = 'ReadCode';
 
-/** 文件快照按类型展示；Markdown 走文档视图，其余文本走带行号源码视图。 */
+/** 预览布局与行号共用；格式只决定正文如何渲染和映射到源文件行。 */
 const TextPreview = memo<{
   readonly path: string;
   readonly content: string;
   readonly startLine: number;
-}>(({ path, content, startLine }) => (
-  grammarForPath(path) === 'markdown' ? (
-    <div className={`${styles.markdown} markdown-dark-theme`}>
-      <LinkedMarkdown>{content}</LinkedMarkdown>
+}>(({ path, content, startLine }) => {
+  const markdown = grammarForPath(path) === 'markdown';
+  const digits = String(startLine + content.split('\n').length - 1).length;
+  return (
+    <div
+      className={markdown ? `${styles.markdown} markdown-dark-theme` : styles.textPreview}
+      style={{ '--review-line-width': `calc(${markdown ? digits * 2 + 1 : digits}ch + 20px)` } as React.CSSProperties}
+    >
+      {markdown ? (
+        <LinkedMarkdown sourceBlocks={{ startLine, component: ReadBlock }}>{content}</LinkedMarkdown>
+      ) : (
+        <ReadCode path={path} content={content} startLine={startLine} />
+      )}
     </div>
-  ) : (
-    <ReadCode path={path} content={content} startLine={startLine} />
-  )
-));
+  );
+});
 
 TextPreview.displayName = 'TextPreview';
 

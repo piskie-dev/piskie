@@ -10,9 +10,7 @@
  *
  * 1. **subtype 给默认归属**（`BY_SUBTYPE`，穷尽映射）——新增 `MessageSubtype`
  *    而未在此登记时编译失败，不留 default 分支。
- * 2. **信封做显式覆盖**（`OVERRIDES`）——只有能证明"这确实是某人说的话"的信封
- *    （`<agent_input>`）才把归属升级成消息气泡；其余信封只是把事件行的
- *    source / 摘要填得好看些。
+ * 2. 系统记录再按信封来源区分外部发言、父流程消息和系统通知；用户原文保持原样。
  *
  * 未登记的信封不会改变默认归属。这是所有未来注入点的安全网：忘了登记，最坏是显示成
  * 一条中性事件行，而不会伪装成用户发言——反过来兜底（认不出信封就当用户发言）会让运行时
@@ -47,7 +45,7 @@ export type MessagePresentation =
       readonly source: string;
       readonly text: string;
       /** 信封自带人话摘要时覆盖，否则折叠态会显示 XML 首行 */
-      readonly summary?: string;
+      readonly summary?: string | PresentationText;
       readonly titleKey: string;
       readonly tone: TranscriptTone;
       readonly badge?: TranscriptBadge;
@@ -69,10 +67,18 @@ interface NoticeStyle {
 }
 
 const DEFAULT_NOTICE_STYLE: NoticeStyle = {
-  titleKey: 'transcript.notice.eventReceived',
+  titleKey: 'transcript.systemEvent.message',
   tone: 'neutral',
   defaultExpanded: false,
 };
+
+const SYSTEM_NOTICE_STYLES = {
+  worker_interrupted: { titleKey: 'transcript.systemEvent.workerInterrupted', tone: 'warning', defaultExpanded: false },
+  closure_check: { titleKey: 'transcript.systemEvent.closureCheck', tone: 'muted', defaultExpanded: false },
+  session_restored: { titleKey: 'transcript.systemEvent.sessionRestored', tone: 'neutral', defaultExpanded: false },
+  system_reminder: { titleKey: 'transcript.systemEvent.reminder', tone: 'muted', defaultExpanded: false },
+  task_notification: { titleKey: 'transcript.systemEvent.backgroundTask', tone: 'neutral', defaultExpanded: false },
+} as const satisfies Record<string, NoticeStyle>;
 
 const SUBAGENT_NOTICE_STYLES = {
   message: { titleKey: 'transcript.notice.workerMessage', tone: 'neutral', defaultExpanded: false },
@@ -90,17 +96,20 @@ const ERROR_GUIDANCE_KEYS: Readonly<Record<string, string>> = {
 interface NoticeInput {
   readonly source: string;
   readonly text: string;
-  readonly summary?: string;
+  readonly summary?: string | PresentationText;
   readonly eventType?: SubagentEventType;
   readonly errorType?: string;
   readonly metadata?: readonly PresentationText[];
   readonly detailFile?: string;
+  readonly style?: NoticeStyle;
 }
 
 function presentNotice(input: NoticeInput): NoticeMessagePresentation {
-  const style = input.eventType
+  const style = input.style ?? (input.eventType
     ? SUBAGENT_NOTICE_STYLES[input.eventType]
-    : DEFAULT_NOTICE_STYLE;
+    : Object.hasOwn(SYSTEM_NOTICE_STYLES, input.source)
+      ? SYSTEM_NOTICE_STYLES[input.source as keyof typeof SYSTEM_NOTICE_STYLES]
+      : DEFAULT_NOTICE_STYLE);
   const guidanceKey = input.errorType
     ? ERROR_GUIDANCE_KEYS[input.errorType]
     : undefined;
@@ -168,10 +177,12 @@ function readableParentEventText(body: string): string {
 }
 
 /**
- * 外部注入事件：确有来源方，是"别人说的话"，升级为消息气泡。
- * 父流程当前通过 ATA 信封投递结构化消息；展示层只取其中可读正文。
+ * 系统来源保留通知归属；父流程与外部发言只展示可读正文。
  */
 function externalOverride(source: string, body: string): MessagePresentation {
+  if (source === 'system' || source === 'module' || source === 'browser' || source === 'subagent') {
+    return systemNoticeOverride(body.trim()) ?? presentNotice({ source, text: body });
+  }
   const fromParent = source.startsWith('parent');
   return {
     as: 'user',
@@ -262,17 +273,55 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
     });
   }
 
-  const closure = text.match(/^<closure_check\b[^>]*\/>\n?([\s\S]*)$/);
-  if (closure) return presentNotice({ source: 'closure_check', text: closure[1] ?? '' });
+  return systemNoticeOverride(text);
+}
+
+function systemNoticeOverride(text: string): NoticeMessagePresentation | undefined {
+  const interrupted = text.match(/^<worker_interrupted>\s*([\s\S]*?)\s*<\/worker_interrupted>$/);
+  if (interrupted) {
+    return presentNotice({
+      source: 'worker_interrupted',
+      text: interrupted[1] ?? '',
+      summary: messageText('transcript.systemEvent.workerInterruptedSummary'),
+    });
+  }
+
+  const closure = text.match(/^<closure_check\b[^>]*>\s*([\s\S]*?)\s*<\/closure_check>$/)
+    ?? text.match(/^<closure_check\b[^>]*\/>\n?([\s\S]*)$/);
+  if (closure) {
+    return presentNotice({
+      source: 'closure_check', text: closure[1] ?? '',
+      summary: messageText('transcript.systemEvent.closureCheckSummary'),
+    });
+  }
+
+  const reminder = text.match(/^<system-reminder>\s*([\s\S]*?)\s*<\/system-reminder>$/);
+  if (reminder) return presentNotice({ source: 'system_reminder', text: reminder[1] ?? '' });
 
   // 后台任务完成通知（`model-text.ts` renderNotification）：`<summary>` 已是人话
   const notification = text.match(/^<task-notification>\n?([\s\S]*?)\n?<\/task-notification>$/);
   if (notification) {
     const body = notification[1] ?? '';
+    const fields = body.match(/^<task-id>([\s\S]*?)<\/task-id>\n<output-file>([\s\S]*?)<\/output-file>\n<status>([\s\S]*?)<\/status>\n<summary>([\s\S]*?)<\/summary>\n<tail>([\s\S]*)<\/tail>$/);
+    if (!fields) return presentNotice({ source: 'task_notification', text: body });
+    const detailFile = fields[2]?.trim();
+    const status = fields[3]?.trim();
+    const summary = fields[4]?.trim();
+    const tail = fields[5]?.trim();
+    const titleKey = status === 'ok' ? 'transcript.systemEvent.backgroundCompleted'
+      : status === 'failed' ? 'transcript.systemEvent.backgroundFailed'
+        : status === 'killed' ? 'transcript.systemEvent.backgroundStopped'
+          : 'transcript.systemEvent.backgroundTask';
     return presentNotice({
       source: 'task_notification',
-      text: body,
-      summary: body.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim() || undefined,
+      text: [summary, tail].filter(Boolean).join('\n\n'),
+      summary,
+      detailFile,
+      style: {
+        titleKey,
+        tone: status === 'failed' ? 'danger' : status === 'killed' ? 'warning' : 'neutral',
+        defaultExpanded: false,
+      },
     });
   }
 
@@ -284,12 +333,20 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
 export function presentUserMessage(
   subtype: MessageSubtype,
   rawText: string,
+  messageId?: string,
 ): MessagePresentation {
+  const fallback = BY_SUBTYPE[subtype];
+  if (fallback.as === 'user') return { as: 'user', origin: fallback.origin, text: rawText };
+
   const override = envelopeOverride(rawText);
   if (override) return override;
 
-  const fallback = BY_SUBTYPE[subtype];
-  return fallback.as === 'user'
-    ? { as: 'user', origin: fallback.origin, text: rawText }
-    : presentNotice({ source: subtype, text: rawText });
+  // AgentService 的恢复通知使用稳定记录 ID，正文仍是普通文本。
+  if (subtype === 'system_event' && messageId?.startsWith('worker-interruption:')) {
+    return presentNotice({
+      source: 'session_restored', text: rawText,
+      summary: messageText('transcript.systemEvent.sessionRestoredSummary'),
+    });
+  }
+  return presentNotice({ source: subtype, text: rawText });
 }

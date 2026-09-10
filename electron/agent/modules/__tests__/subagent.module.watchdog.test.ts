@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import type { AgentEngine } from '../../agent-engine.js';
 import type { AgentHost } from '../../agent-host.js';
 import type {
-  AssignmentTaskBoardSnapshot,
   AgentInputEvent,
   ConversationEntry,
   SubagentConfig,
@@ -29,14 +28,17 @@ vi.mock('electron', () => ({
 vi.mock('../../agent-runtime.js', () => ({
   AgentRuntime: class {
     readonly id: string;
+    readonly spec: { assignment: 'question' | 'task-board' };
     approvalMode: 'auto' | 'confirm';
 
     constructor(config: {
       id: string;
+      spec: { assignment: 'question' | 'task-board' };
       options?: { initialApprovalMode?: 'auto' | 'confirm'; [key: string]: unknown };
     }) {
       runtimeMock.configs.push(config as unknown as Record<string, unknown>);
       this.id = config.id;
+      this.spec = config.spec;
       this.approvalMode = config.options?.initialApprovalMode ?? 'auto';
     }
 
@@ -113,6 +115,7 @@ function createMeta(overrides: Partial<WatchdogMeta> = {}): WatchdogMeta {
 function createChild(overrides: Record<string, unknown> = {}): AgentEngine {
   return {
     id: 'child-1',
+    spec: { assignment: 'task-board' },
     interrupted: false,
     post: vi.fn(() => true),
     // IdlePermit 由 runtime 从对话/后台租约派生；默认 inert 且无 permit。
@@ -157,36 +160,20 @@ function moduleConfig(prefix: string) {
   };
 }
 
+beforeEach(() => {
+  vi.spyOn(taskBoardService, 'createCompactSnapshot').mockImplementation(async (_main, ids) => ({
+    taskSummary: 'Sample tasks',
+    items: ids.map((id) => ({ id, subject: id, status: 'pending', owner: null, dependsOn: [], assignedHere: true })),
+  }));
+});
+afterEach(() => vi.restoreAllMocks());
+
 describe('SubagentModule resume boundaries', () => {
-  it('未知类型错误列出当前 Director 实际可用的专属 Worker', () => {
-    const module = new SubagentModule() as unknown as SubagentModule & {
-      host: AgentHost;
-      resolveWorkerType(type: string): { error?: string };
-    };
-    module.host = {
-      id: 'browser-skill-main',
-      mainAgentId: 'browser-skill-main',
-      spec: { name: 'browser-skill-director' },
-    } as unknown as AgentHost;
-
-    expect(module.resolveWorkerType('browser-skill-scout').error).toBe(
-      '未知的子流程类型: browser-skill-scout。当前可用 type: browser / local / browser-skill-builder / browser-skill-verifier / site-scout'
-    );
-    expect(module.resolveWorkerType('browser-worker').error).toContain(
-      '当前可用 type: browser / local'
-    );
-    expect(module.resolveWorkerType('site-scout')).toEqual({
-      mode: 'browser',
-      agentSpec: 'site-scout',
-    });
-  });
-
   it('returns a created Worker only after its trace file exists', async () => {
     const mainAgentId = `main-trace-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent: (
-        config: SubagentConfig,
-        snapshot: AssignmentTaskBoardSnapshot
+        config: SubagentConfig
       ) => Promise<string>;
     };
     const headerStore = createHeaderStore(mainAgentId);
@@ -206,14 +193,10 @@ describe('SubagentModule resume boundaries', () => {
     try {
       const subagentId = await module.createSubagent(
         {
-          mode: 'local',
+          type: 'local-worker',
           subject: 'trace initialization',
           taskIds: ['task-a'],
           prompt: 'Verify that the trace exists before creation returns.',
-        },
-        {
-          taskSummary: 'trace test',
-          items: [],
         }
       );
       const tracePath = module.getSubagentTraceFilePath(subagentId);
@@ -261,8 +244,7 @@ describe('SubagentModule resume boundaries', () => {
     const mainAgentId = `main-approval-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent: (
-        config: SubagentConfig,
-        snapshot: AssignmentTaskBoardSnapshot
+        config: SubagentConfig
       ) => Promise<string>;
     };
     const parentMcpCapability = {
@@ -287,18 +269,16 @@ describe('SubagentModule resume boundaries', () => {
       emitStateChange: vi.fn(),
     } as unknown as AgentHost & { approvalMode: 'auto' | 'confirm' };
     module.init(host, moduleConfig('worker-approval'));
-    const snapshot = { taskSummary: 'inheritance', items: [] };
 
     try {
       const firstId = await module.createSubagent(
         {
-          mode: 'local',
+          type: 'local-worker',
           subject: 'first',
           taskIds: ['task-a'],
           prompt: 'first',
           skills: ['skill-a'],
-        },
-        snapshot
+        }
       );
       const first = module.getSubagents().get(firstId)!;
       expect(first.approvalMode).toBe('auto');
@@ -311,13 +291,12 @@ describe('SubagentModule resume boundaries', () => {
       host.approvalMode = 'confirm';
       const secondId = await module.createSubagent(
         {
-          mode: 'local',
+          type: 'local-worker',
           subject: 'second',
           taskIds: ['task-b'],
           prompt: 'second',
           skills: ['skill-b-automation'],
-        },
-        snapshot
+        }
       );
 
       expect(firstId).toBe('worker-approval-1');
@@ -334,8 +313,7 @@ describe('SubagentModule resume boundaries', () => {
     const module = new SubagentModule() as unknown as {
       host: AgentHost;
       createSubagent: (
-        config: SubagentConfig,
-        snapshot: AssignmentTaskBoardSnapshot
+        config: SubagentConfig
       ) => Promise<string>;
     };
     module.host = {
@@ -348,15 +326,10 @@ describe('SubagentModule resume boundaries', () => {
     await expect(
       module.createSubagent(
         {
-          mode: 'local',
-          agentSpec: 'director',
+          type: 'director',
           subject: 'invalid child',
           taskIds: ['task-a'],
           prompt: 'This must be rejected before runtime creation.',
-        },
-        {
-          taskSummary: 'test board',
-          items: [],
         }
       )
     ).rejects.toThrow("AgentSpec 'director' is not a Worker");
@@ -367,8 +340,7 @@ describe('SubagentModule resume boundaries', () => {
     const directorId = 'a1b2c3d4';
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent(
-        config: SubagentConfig,
-        snapshot: AssignmentTaskBoardSnapshot
+        config: SubagentConfig
       ): Promise<string>;
     };
     const headerStore = createHeaderStore(directorId);
@@ -384,18 +356,15 @@ describe('SubagentModule resume boundaries', () => {
       emitStateChange: vi.fn(),
     } as unknown as AgentHost;
     module.init(host, moduleConfig('shared-worker'));
-    const snapshot = { taskSummary: 'handoff', items: [] };
 
     try {
       const scoutId = await module.createSubagent(
         {
-          mode: 'browser',
-          agentSpec: 'site-scout',
+          type: 'site-scout',
           subject: 'scout',
           taskIds: ['task-scout'],
           prompt: 'scout',
-        },
-        snapshot
+        }
       );
       const scoutConfig = runtimeMock.configs.at(-1) as { options: Record<string, unknown> };
       const sessionBinding = {
@@ -413,13 +382,11 @@ describe('SubagentModule resume boundaries', () => {
       const stop = module.stopSubagentById(scoutId);
       const builder = module.createSubagent(
         {
-          mode: 'browser',
-          agentSpec: 'browser-skill-builder',
+          type: 'browser-skill-builder',
           subject: 'builder',
           taskIds: ['task-builder'],
           prompt: 'builder',
-        },
-        snapshot
+        }
       );
 
       await Promise.resolve();
@@ -440,8 +407,7 @@ describe('SubagentModule resume boundaries', () => {
     const directorId = 'b1c2d3e4';
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent(
-        config: SubagentConfig,
-        snapshot: AssignmentTaskBoardSnapshot
+        config: SubagentConfig
       ): Promise<string>;
     };
     const headerStore = createHeaderStore(directorId);
@@ -457,17 +423,14 @@ describe('SubagentModule resume boundaries', () => {
       emitStateChange: vi.fn(),
     } as unknown as AgentHost;
     module.init(host, moduleConfig('failed-handoff-worker'));
-    const snapshot = { taskSummary: 'failed handoff', items: [] };
 
     const scoutId = await module.createSubagent(
       {
-        mode: 'browser',
-        agentSpec: 'site-scout',
+        type: 'site-scout',
         subject: 'scout',
         taskIds: ['task-scout'],
         prompt: 'scout',
-      },
-      snapshot
+      }
     );
     const runtimeCount = runtimeMock.configs.length;
     const teardownError = new Error('Chromium did not terminate');
@@ -482,13 +445,11 @@ describe('SubagentModule resume boundaries', () => {
     const stopped = module.stopSubagentById(scoutId).catch((error) => error);
     const builder = module.createSubagent(
       {
-        mode: 'browser',
-        agentSpec: 'browser-skill-builder',
+        type: 'browser-skill-builder',
         subject: 'builder',
         taskIds: ['task-builder'],
         prompt: 'builder',
-      },
-      snapshot
+      }
     );
     await Promise.resolve();
     expect(runtimeMock.configs).toHaveLength(runtimeCount);
@@ -526,7 +487,7 @@ describe('SubagentModule resume boundaries', () => {
     const interruptedChild: AgentRunHeader['childAgents'][number] = {
       id: 'worker-release',
       config: {
-        mode: 'local',
+        type: 'local-worker',
         subject: 'Open task',
         taskIds: ['task-open'],
         prompt: 'Finish the open task.',
@@ -545,6 +506,7 @@ describe('SubagentModule resume boundaries', () => {
     } as unknown as AgentHost;
     module.init(host, {});
     module.getSubagents().set('worker-release', {
+      spec: { assignment: 'task-board' },
       destroy: vi.fn().mockResolvedValue(undefined),
     } as unknown as AgentEngine);
 

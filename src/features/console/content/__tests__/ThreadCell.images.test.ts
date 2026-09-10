@@ -51,6 +51,32 @@ afterEach(async () => {
 });
 
 describe('ThreadCell canonical image refs', () => {
+  it.each(['browser', 'parent'])('preserves %s event images in the expandable message body', async (source) => {
+    const entries: ConversationEntry[] = [{
+      t: 'msg', ts: 1, id: 'sample-automatic-image', role: 'user', subtype: 'system_event',
+      content: [
+        { type: 'text', text: `<agent_input source="${source}"></agent_input>` },
+        { type: 'image_ref', path: '/workspace/sample-notice.png', size: 1, mediaType: 'image/png' },
+      ],
+    }];
+    const [cell] = projectConversationNodes(entries);
+    if (!cell) throw new Error('Expected an automatic message');
+    expect(cell.interaction).toBe('expand');
+    const onPreviewImage = vi.fn();
+    await act(async () => root.render(createElement(ThreadCell, { cell, onPreviewImage })));
+    expect(container.querySelector('img')).toBeNull();
+    expect(preview).not.toHaveBeenCalled();
+
+    const toggle = container.querySelector<HTMLButtonElement>('[data-flow-event] > button');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => toggle?.click());
+    expect(preview).toHaveBeenCalledWith('/workspace/sample-notice.png');
+    const image = container.querySelector('img');
+    expect(image?.getAttribute('src')).toBe('piskie-attachment://preview/sample-notice.png');
+    image?.click();
+    expect(onPreviewImage).toHaveBeenCalled();
+  });
+
   it('projects and renders three independent streamed thumbnails in block order', async () => {
     const imageRef = (name: string) => ({
       type: 'image_ref' as const,

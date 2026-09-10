@@ -24,7 +24,9 @@ export function renderContext(ctx: PromptContext): string {
 
   // <session_config>
   const cfg: string[] = [];
-  cfg.push(`  <agent_id>${xmlEscape(ctx.agentId)}</agent_id>`);
+  if (!isWorker || ctx.assignment !== 'question') {
+    cfg.push(`  <agent_id>${xmlEscape(ctx.agentId)}</agent_id>`);
+  }
   if (!isWorker && ctx.runName) {
     cfg.push(`  <run_name>${xmlEscape(ctx.runName)}</run_name>`);
   }
@@ -37,14 +39,17 @@ export function renderContext(ctx: PromptContext): string {
 
   // <environment>（平台事实：local worker 选 bash/powershell 语法的依据）
   const shell = process.platform === 'win32' ? 'powershell' : 'bash';
-  blocks.push(`<environment os="${process.platform}" shell="${shell}"/>`);
+  if (!isWorker || ctx.assignment !== 'question' || ctx.toolNames?.includes('shell')) {
+    blocks.push(`<environment os="${process.platform}" shell="${shell}"/>`);
+  }
 
   // <current_time>（时间锚点；只到日期粒度——细粒度时间戳在事件信封的 ts 属性，
   // 日粒度让系统提示词在一天内保持字节稳定，不破坏 prompt cache 前缀）
   blocks.push(`<current_time>${new Date().toISOString().slice(0, 10)}</current_time>`);
 
   // <file_system>
-  blocks.push(`<file_system>\n  <workspace>${xmlEscape(ctx.workspaceDir)}</workspace>\n  <temp_dir>${xmlEscape(ctx.tempDir)}</temp_dir>\n</file_system>`);
+  const canWrite = !isWorker || ctx.assignment !== 'question' || ctx.toolNames?.some((name) => ['write', 'edit', 'shell'].includes(name));
+  blocks.push(`<file_system>\n  <workspace>${xmlEscape(ctx.workspaceDir)}</workspace>${canWrite ? `\n  <temp_dir>${xmlEscape(ctx.tempDir)}</temp_dir>` : ''}\n</file_system>`);
 
   // <browser_environments>（仅绑定环境池的 director；ID 是 subagent.browserEnvironmentId 唯一合法来源）
   if (!isWorker && ctx.boundEnvironments && ctx.boundEnvironments.length > 0) {

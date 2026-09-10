@@ -46,9 +46,6 @@
   --thread-rule: var(--line-1);
   --thread-pill-bg: var(--surface-2);
   --thread-pill-bg-hover: var(--surface-3);
-  --thread-event-bg: color-mix(in srgb, var(--surface-1) 78%, transparent);
-  --thread-event-bg-hover: color-mix(in srgb, var(--surface-2) 82%, transparent);
-  --thread-event-border: color-mix(in srgb, var(--line-2) 78%, transparent);
   --thread-removed: var(--status-error);
   --thread-accent: var(--cyber-primary);
   /* Dock 的 footer 自带 8px 内边距；流水沿用同一条内容轨。 */
@@ -340,6 +337,15 @@
   white-space: nowrap;
 }
 
+.actionMeta {
+  flex: 0 0 auto;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--thread-rule);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .actionBadge {
   flex: 0 0 auto;
   padding: 1px 6px;
@@ -348,6 +354,51 @@
   font-size: 11px;
   line-height: 1.4;
   opacity: 0.8;
+}
+
+/* 子流程类型始终可见；较长的任务标题省略，悬停可读全文。 */
+.workerCreation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--thread-muted);
+}
+
+.workerCreationIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--thread-accent);
+}
+
+.workerCreationLabel {
+  flex: 0 0 auto;
+}
+
+.workerCreationType {
+  flex: 0 0 auto;
+  padding-inline: 6px;
+  border: 1px solid var(--thread-rule);
+  border-radius: 4px;
+  background: var(--thread-pill-bg);
+  color: var(--thread-text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.workerCreationSubject {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--thread-text-soft);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
 }
 
 /*
@@ -423,28 +474,13 @@
   user-select: text;
 }
 
-/* ── 流程消息：主流程下发与子流程回传共用同一形态 ── */
+/* ── 消息收发：方向图标 + 动作 + 状态 + 摘要，展开正文沿文字轨缩进 ── */
 
 .flowEvent {
   --flow-event-tone: var(--thread-accent);
 
-  position: relative;
   container-type: inline-size;
-  overflow: clip;
-  border: 1px solid var(--thread-event-border);
-  border-radius: var(--radius-badge);
-  background: var(--thread-event-bg);
-}
-
-.flowEvent::before {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  inset-block: 8px;
-  inset-inline-start: 0;
-  inline-size: 2px;
-  border-radius: 0 2px 2px 0;
-  background: color-mix(in srgb, var(--flow-event-tone) 68%, transparent);
+  min-inline-size: 0;
 }
 
 .flowEvent[data-tone='warning'] { --flow-event-tone: var(--status-waiting); }
@@ -459,27 +495,30 @@
   box-sizing: border-box;
   inline-size: 100%;
   min-inline-size: 0;
-  min-block-size: 42px;
-  padding: 7px 9px 7px 10px;
+  min-block-size: 24px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--thread-muted);
   font: inherit;
+  font-size: 13px;
+  line-height: 20px;
   text-align: start;
 }
 
 button.flowEventHeader {
   cursor: pointer;
-  transition: background-color 160ms ease;
+  transition: color 160ms ease;
 }
 
 button.flowEventHeader:hover {
-  background: var(--thread-event-bg-hover);
+  color: var(--thread-text-soft);
 }
 
 button.flowEventHeader:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--flow-event-tone) 52%, transparent);
-  outline-offset: -2px;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .flowEventIcon {
@@ -487,23 +526,35 @@ button.flowEventHeader:focus-visible {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  inline-size: 26px;
-  block-size: 26px;
-  border: 1px solid color-mix(in srgb, var(--flow-event-tone) 18%, var(--thread-event-border));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--flow-event-tone) 9%, transparent);
-  color: color-mix(in srgb, var(--flow-event-tone) 72%, var(--thread-text));
+  inline-size: 14px;
+  block-size: 14px;
+  color: var(--thread-accent);
+}
+
+.flowEvent[data-flow-direction='system'] .flowEventIcon {
+  color: var(--flow-event-tone);
 }
 
 .flowEventTitle {
   flex: 0 0 auto;
-  max-inline-size: 42%;
+  max-inline-size: 65%;
   min-inline-size: 0;
   overflow: hidden;
-  color: var(--thread-text-soft);
-  font-size: 13px;
-  font-weight: 600;
+  color: inherit;
+  font-weight: 400;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flowEventStatus {
+  flex: 0 0 auto;
+  padding-inline: 5px;
+  border: 1px solid var(--thread-rule);
+  border-radius: 4px;
+  background: var(--thread-pill-bg);
+  color: var(--flow-event-tone);
+  font-size: 11px;
+  line-height: 18px;
   white-space: nowrap;
 }
 
@@ -516,7 +567,7 @@ button.flowEventHeader:focus-visible {
 }
 
 .flowEventSummary {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-inline-size: 0;
   overflow: hidden;
   color: var(--thread-muted);
@@ -525,13 +576,17 @@ button.flowEventHeader:focus-visible {
   white-space: nowrap;
 }
 
+.flowEvent[data-tone='danger'] .flowEventSummary {
+  color: var(--thread-removed);
+}
+
 .flowEventChevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  inline-size: 24px;
-  block-size: 24px;
+  inline-size: 14px;
+  block-size: 14px;
   margin-inline-start: auto;
   color: var(--thread-muted-soft);
   transition: rotate 180ms ease, color 160ms ease;
@@ -546,9 +601,8 @@ button.flowEventHeader:focus-visible {
 }
 
 .flowEventBody {
-  margin-inline: 11px;
-  padding: 10px 8px 12px 34px;
-  border-block-start: 1px solid var(--thread-rule);
+  margin-block-start: 6px;
+  padding-inline-start: 22px;
   color: var(--thread-text-soft);
   font-size: 13px;
   line-height: 1.65;
@@ -568,12 +622,6 @@ button.flowEventHeader:focus-visible {
 @container (max-width: 260px) {
   .flowEventHeader {
     gap: 6px;
-    padding-inline: 7px;
-  }
-
-  .flowEventIcon {
-    inline-size: 24px;
-    block-size: 24px;
   }
 
   .flowEventTitle {
@@ -586,14 +634,8 @@ button.flowEventHeader:focus-visible {
     display: none;
   }
 
-  .flowEventChevron {
-    inline-size: 20px;
-    block-size: 20px;
-  }
-
   .flowEventBody {
-    margin-inline: 7px;
-    padding-inline: 6px;
+    padding-inline-start: 20px;
   }
 }
 
@@ -814,6 +856,10 @@ button.flowEventHeader:focus-visible {
   gap: 8px;
   margin-block-start: 6px;
   padding-inline-start: 22px; /* 与动作行文字对齐（图标 14 + gap 8） */
+}
+
+.flowEventBody .imageRow {
+  padding-inline-start: 0;
 }
 
 .imageThumb {

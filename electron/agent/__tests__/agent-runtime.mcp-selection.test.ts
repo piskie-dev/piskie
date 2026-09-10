@@ -118,7 +118,7 @@ function runtime(
         ? {
             mainAgentId: 'parent-1',
             subagentConfig: {
-              mode: 'local', skills: [], subject: 'task', taskIds: [], prompt: 'task',
+              type: 'local-worker', skills: [], subject: 'task', taskIds: [], prompt: 'task',
             },
           }
         : {}),

@@ -3,20 +3,21 @@ import { ToolCallContextFactory, type ToolActivationContext } from '../../agent/
 import { ToolCatalog } from '../catalog.js';
 import { ToolCoordinator } from '../coordinator.js';
 import { WebSearchTool } from './web-search.tool.js';
-import { BASIC_SEARCH_CAPABILITIES, type SearchPort } from '../../../shared/types/web-search.js';
+import { BASIC_SEARCH_CAPABILITIES, type SearchCapabilities, type SearchPort } from '../../../shared/types/web-search.js';
 import { searchError } from '../../search/errors.js';
 
-function fixture(search: SearchPort['search'], signal = new AbortController().signal) {
+function fixture(search: SearchPort['search'], signal = new AbortController().signal,
+  capabilities: SearchCapabilities = { domains: true, publishedAfter: true, publishedBefore: true }) {
   const activation: ToolActivationContext = {
     agentType: 'worker', agentSpec: 'local-worker', agentId: 'sample-worker', mainAgentId: 'sample-main',
     runConfig: { name: 'sample', description: '', promptTemplate: '' }, resourceIds: {},
     currentModel: () => 'sample::model', workspace: { dir: '/workspace', tempDir: '/tmp/sample-run' },
-    modes: { modeId: () => 'normal', approvalMode: () => 'confirm' }, post: () => true, search: { search, capabilities: BASIC_SEARCH_CAPABILITIES },
+    modes: { modeId: () => 'normal', approvalMode: () => 'confirm' }, post: () => true, search: { search, capabilities },
   };
   const catalog = new ToolCatalog();
   catalog.register(new WebSearchTool(), 'builtin');
   const snapshot = catalog.snapshot({ scope: 'subagent', agentType: 'worker', customTools: ['web_search'],
-    exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
+    exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']), searchCapabilities: capabilities });
   const observer = { start: vi.fn(), finish: vi.fn() };
   const coordinator = new ToolCoordinator({ contexts: new ToolCallContextFactory({ activation, signal: () => signal }), observer });
   return { observer, run: (input: string | Record<string, unknown>) => coordinator.run({ modelName: 'web_search', callId: 'sample-call',
@@ -83,6 +84,14 @@ describe('web_search on the built-in tool execution path', () => {
     expect(search).toHaveBeenCalledWith(request, { signal, sessionId: 'conversation:sample-main' });
     await run({ ...request, publishedBefore: '2025-01-01' });
     expect(search).toHaveBeenCalledOnce();
+  });
+
+  it('rejects filters omitted from the provider contract before executing search', async () => {
+    const search = vi.fn<SearchPort['search']>();
+    const { run } = fixture(search, new AbortController().signal, BASIC_SEARCH_CAPABILITIES);
+    expect(await run({ query: 'sample', domains: { mode: 'include', values: ['example.org'] } }))
+      .toMatchObject({ result: { ok: false } });
+    expect(search).not.toHaveBeenCalled();
   });
 
   it('preserves the original cancellation reason at the tool boundary', async () => {

@@ -2,20 +2,20 @@ import { BASIC_SEARCH_CAPABILITIES, type SearchDiagnostics, type SearchFailure }
 import { SearchError } from '../../search/contracts.js';
 import { searchError } from '../../search/errors.js';
 import { formatSearchDocument } from '../../search/format-result.js';
-import { searchRequestSchema } from '../../search/request.js';
+import { createSearchRequestSchema, searchRequestSchema } from '../../search/request.js';
 import { BaseTool } from '../base-tool.js';
 import { z } from '../params.js';
 import type { ToolContext, ToolDef } from '../types.js';
 
+const DESCRIPTION = '搜索公开网页并返回相关摘录和来源链接。需要最新信息、事实核实或资料检索时使用。';
+
 export class WebSearchTool extends BaseTool<z.infer<typeof searchRequestSchema>, SearchDiagnostics | SearchFailure> {
   readonly def: ToolDef<z.infer<typeof searchRequestSchema>> = {
     name: 'web_search', scope: 'shared', effects: ['external'], schema: searchRequestSchema,
-    description: '搜索公开网页并返回相关摘录和来源链接。需要最新信息、事实核实或资料检索时使用。',
-    modelInputSchema: (schema, { searchCapabilities = BASIC_SEARCH_CAPABILITIES }) => ({
-      ...schema,
-      properties: Object.fromEntries(Object.entries(schema.properties).filter(([name]) => (
-        name === 'query' || searchCapabilities[name as keyof typeof searchCapabilities]
-      ))),
+    description: DESCRIPTION,
+    resolveContract: (_options, { searchCapabilities = BASIC_SEARCH_CAPABILITIES }) => ({
+      schema: createSearchRequestSchema(searchCapabilities),
+      description: DESCRIPTION,
     }),
   };
 

@@ -5,6 +5,7 @@ import { ToolCatalog } from './catalog.js';
 import { buildLoadedSkillEntries } from './skill/domain-descriptors.js';
 import type { ITool } from './types.js';
 import { SubagentTool } from './agent/subagent.tool.js';
+import { SubagentStopTool } from './agent/subagent-stop.tool.js';
 import { SendEventTool } from './agent/send-event.tool.js';
 import { AgentRunTool } from './agent/agent-run.tool.js';
 import { PlanTool } from './plan/plan.tool.js';
@@ -32,6 +33,7 @@ const builtinTools = (
   catalog?: ToolCatalog,
 ): ITool<any, any>[] => [
   new SubagentTool(),
+  new SubagentStopTool(),
   new SendEventTool(),
   new AgentRunTool(),
   new PlanTool(),

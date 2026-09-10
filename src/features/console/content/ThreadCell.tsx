@@ -18,10 +18,12 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
   BookOpen,
   Camera,
   ChevronRight,
-  CircleCheck,
   CircleHelp,
   CircleSlash2,
   ClipboardList,
@@ -37,11 +39,11 @@ import {
   ImagePlus,
   ListChecks,
   Loader2,
-  MessageSquareText,
   Network,
   Puzzle,
+  Pause,
+  RotateCcw,
   Search,
-  Send,
   ShieldQuestion,
   Smartphone,
   Terminal,
@@ -73,6 +75,7 @@ import type {
 import styles from './thread.module.css';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { isBrowserToolName } from '../data/cells/toolPresentation';
+import { workerPresentation } from '../chrome/workerPresentation';
 
 const ICON = 14;
 
@@ -81,6 +84,14 @@ const BADGE_KEYS: Record<TranscriptBadge, string> = {
   'awaiting-approval': 'transcript.badge.awaitingApproval',
   failed: 'transcript.badge.failed',
   cancelled: 'transcript.badge.cancelled',
+};
+
+const FLOW_EVENT_STATUS_KEYS: Readonly<Record<string, string>> = {
+  completed: 'transcript.flowEvent.completed',
+  failed: 'transcript.badge.failed',
+  user_stopped: 'transcript.badge.cancelled',
+  need_user_action: 'transcript.flowEvent.needsAction',
+  stalled: 'transcript.flowEvent.stalled',
 };
 
 /**
@@ -107,8 +118,8 @@ function toolGlyph(tool: string): React.ReactNode {
     case 'task': return <ListChecks size={ICON} />;
     case 'plan': return <ClipboardList size={ICON} />;
     case 'ask_user': return <CircleHelp size={ICON} />;
-    case 'subagent': return <Workflow size={ICON} />;
-    case 'send_event': return <Send size={ICON} />;
+    case 'subagent':
+    case 'subagent_stop': return <Workflow size={ICON} />;
     case 'skill_call': return <Puzzle size={ICON} />;
     case 'load_skill': return <BookOpen size={ICON} />;
     case 'tool_search': return <Search size={ICON} />;
@@ -146,6 +157,7 @@ function toolIcon(cell: ToolNode): React.ReactNode {
 const ActionLine = memo<{
   readonly icon: React.ReactNode;
   readonly text: string;
+  readonly metadata?: string;
   readonly state?: 'failed' | 'cancelled';
   readonly tone?: TranscriptTone;
   readonly badge?: TranscriptBadge;
@@ -157,7 +169,7 @@ const ActionLine = memo<{
    * 是非法 HTML；有 aside 时整行外面才包一层 flex 行，没有时不多包这一层。
    */
   readonly aside?: React.ReactNode;
-}>(({ icon, text, state, tone, badge, detail, defaultOpen = false, onActivate, aside }) => {
+}>(({ icon, text, metadata, state, tone, badge, detail, defaultOpen = false, onActivate, aside }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const toggle = useCallback(() => setOpen((value) => !value), []);
@@ -174,7 +186,8 @@ const ActionLine = memo<{
       onClick={onActivate ?? (detail ? toggle : undefined)}
     >
       <span className={styles.actionIcon}>{icon}</span>
-      <span className={styles.actionText}>{text}</span>
+      <span className={styles.actionText} title={text}>{text}</span>
+      {metadata && <span className={styles.actionMeta}>{metadata}</span>}
       {badge && <span className={styles.actionBadge}>{t(BADGE_KEYS[badge])}</span>}
       {clickable && (
         <span className={styles.chevron}>
@@ -204,6 +217,7 @@ const ActionLine = memo<{
 ActionLine.displayName = 'ActionLine';
 
 const FlowEventDisclosure = memo<{
+  readonly direction: 'incoming' | 'outgoing' | 'system';
   readonly icon: React.ReactNode;
   readonly title: string;
   readonly summary?: string;
@@ -213,51 +227,60 @@ const FlowEventDisclosure = memo<{
   readonly meta?: readonly string[];
   readonly detail?: React.ReactNode;
   readonly defaultOpen?: boolean;
-}>(({ icon, title, summary, tone, badge, eventType, meta, detail, defaultOpen = false }) => {
+  readonly aside?: React.ReactNode;
+}>(({ direction, icon, title, summary, tone, badge, eventType, meta, detail, defaultOpen = false, aside }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const toggle = useCallback(() => setOpen((value) => !value), []);
   const hasMeta = !!meta && meta.length > 0;
   const expandable = !!detail || hasMeta;
+  const statusKey = badge
+    ? direction === 'outgoing' && badge === 'running'
+      ? 'transcript.flowEvent.sending'
+      : BADGE_KEYS[badge]
+    : eventType ? FLOW_EVENT_STATUS_KEYS[eventType] : undefined;
 
   const headerContent = (
     <>
       <span className={styles.flowEventIcon} aria-hidden>{icon}</span>
-      <span className={styles.flowEventTitle}>{title}</span>
+      <span className={styles.flowEventTitle} title={title}>{title}</span>
+      {statusKey && <span className={styles.flowEventStatus}>{t(statusKey)}</span>}
       {!open && summary && (
         <>
           <span className={styles.flowEventSeparator} aria-hidden />
-          <span className={styles.flowEventSummary}>{summary}</span>
+          <span className={styles.flowEventSummary} title={summary}>{summary}</span>
         </>
       )}
-      {badge && <span className={styles.actionBadge}>{t(BADGE_KEYS[badge])}</span>}
       {expandable && (
         <span className={styles.flowEventChevron} aria-hidden>
-          <ChevronRight size={14} />
+          <ChevronRight size={12} />
         </span>
       )}
     </>
+  );
+
+  const header = expandable ? (
+    <button
+      type="button"
+      className={styles.flowEventHeader}
+      aria-expanded={open}
+      onClick={toggle}
+    >
+      {headerContent}
+    </button>
+  ) : (
+    <div className={styles.flowEventHeader}>{headerContent}</div>
   );
 
   return (
     <div
       className={styles.flowEvent}
       data-flow-event=""
+      data-flow-direction={direction}
       data-tone={tone}
       data-event-type={eventType}
     >
-      {expandable ? (
-        <button
-          type="button"
-          className={styles.flowEventHeader}
-          aria-expanded={open}
-          onClick={toggle}
-        >
-          {headerContent}
-        </button>
-      ) : (
-        <div className={styles.flowEventHeader}>{headerContent}</div>
-      )}
+      {aside ? <div className={styles.toolRow}>{header}{aside}</div> : header}
       {expandable && open && (
         <div className={styles.flowEventBody}>
           {detail}
@@ -274,18 +297,16 @@ const FlowEventDisclosure = memo<{
 
 FlowEventDisclosure.displayName = 'FlowEventDisclosure';
 
-function noticeIcon(cell: NoticeNode, flowEvent = false): React.ReactNode {
-  switch (cell.eventType) {
-    case 'message': return <MessageSquareText size={ICON} />;
-    case 'completed': return <CircleCheck size={ICON} />;
-    case 'failed': return <XCircle size={ICON} />;
-    case 'user_stopped': return <CircleSlash2 size={ICON} />;
-    case 'need_user_action': return <CircleHelp size={ICON} />;
-    case 'stalled': return <Hourglass size={ICON} />;
+function noticeIcon(cell: NoticeNode): React.ReactNode {
+  switch (cell.source) {
+    case 'worker_interrupted': return <Pause size={ICON} />;
+    case 'closure_check': return <ListChecks size={ICON} />;
+    case 'session_restored': return <RotateCcw size={ICON} />;
+    case 'task_notification': return <Terminal size={ICON} />;
   }
   if (cell.tone === 'danger') return <XCircle size={ICON} />;
   if (cell.badge === 'cancelled') return <CircleSlash2 size={ICON} />;
-  return flowEvent ? <Workflow size={ICON} /> : <FileText size={ICON} />;
+  return <Bell size={ICON} />;
 }
 
 // ==================== 详情 format renderer registry ====================
@@ -360,7 +381,8 @@ const Detail = memo<{
 }>(({ cell, onPreviewImage }) => {
   const { t } = useTranslation();
   const detail = useMemo(() => cell.detail?.(), [cell]);
-  if (!detail || detail.sections.length === 0) return null;
+  const images = cell.kind === 'notice' || cell.kind === 'user' ? cell.images : undefined;
+  if (!detail?.sections.length && !images?.length) return null;
 
   const presentValue = (format: DetailFormat, value: unknown): unknown => (
     (format === 'text' || format === 'markdown') && isPresentationText(value)
@@ -370,7 +392,7 @@ const Detail = memo<{
 
   return (
     <>
-      {detail.sections.map((section, index) => (
+      {detail?.sections.map((section, index) => (
         <div key={index} className={styles.cardBody} style={{ padding: 0 }}>
           {DETAIL_RENDERERS[section.format](
             presentValue(section.format, section.value),
@@ -378,6 +400,19 @@ const Detail = memo<{
           )}
         </div>
       ))}
+      {!!images?.length && (
+        <div className={styles.imageRow}>
+          {images.map((image, index) => (
+            <ImageThumbnail
+              key={`${image.kind === 'file' ? image.path : image.url}:${index}`}
+              resource={image}
+              className={styles.imageThumb}
+              alt={t('sessionWorkbenchUi.transcript.attachmentImage')}
+              onPreview={onPreviewImage}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 });
@@ -544,7 +579,8 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
       if (cell.origin === 'parent') {
         return (
           <FlowEventDisclosure
-            icon={<MessageSquareText size={ICON} />}
+            direction="incoming"
+            icon={<ArrowDownLeft size={ICON} />}
             title={title}
             summary={summary}
             tone={cell.tone}
@@ -619,12 +655,49 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
        * 于是 `TranscriptAction` 在这个模式里只是数据、点不到（快捷键也一样，见 `useActionScope`）。
        */
       const action = onAction ? cell.actions.find((item) => item.enabled) : undefined;
+      const backgroundAction = action && (
+        <button
+          type="button"
+          className={styles.actionAside}
+          onClick={() => onAction?.(cell, action)}
+          title={t('transcript.action.promoteToBackgroundWithShortcut', {
+            shortcut: SHORTCUT_HINT,
+          })}
+        >
+          {t('transcript.action.promoteToBackground')}
+        </button>
+      );
+      if (cell.tool === 'send_event') {
+        return (
+          <FlowEventDisclosure
+            direction="outgoing"
+            icon={<ArrowUpRight size={ICON} />}
+            title={title}
+            summary={summary}
+            tone={cell.tone}
+            badge={cell.badge}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            defaultOpen={cell.defaultExpanded}
+            aside={backgroundAction}
+          />
+        );
+      }
+      const read = cell.fileOp?.kind === 'read'
+        && cell.fileOp.startLine !== undefined
+        && cell.fileOp.endLine !== undefined
+        ? cell.fileOp
+        : undefined;
+      const actionSummary = read?.path ?? summary;
 
       return (
         <div className={styles.cell}>
           <ActionLine
             icon={toolIcon(cell)}
-            text={summary ? `${title} · ${summary}` : title}
+            text={actionSummary ? `${title} · ${actionSummary}` : title}
+            metadata={read ? t(
+              read.startLine === read.endLine ? 'transcript.fileRead.line' : 'transcript.fileRead.lineRange',
+              { start: read.startLine, end: read.endLine },
+            ) : undefined}
             state={
               cell.state.phase === 'failed'
                 ? 'failed'
@@ -634,20 +707,7 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
             }
             onActivate={toReview}
             detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
-            aside={
-              action && (
-                <button
-                  type="button"
-                  className={styles.actionAside}
-                  onClick={() => onAction?.(cell, action)}
-                  title={t('transcript.action.promoteToBackgroundWithShortcut', {
-                    shortcut: SHORTCUT_HINT,
-                  })}
-                >
-                  {t('transcript.action.promoteToBackground')}
-                </button>
-              )
-            }
+            aside={backgroundAction}
           />
 
           {cell.generatedImages && (
@@ -707,8 +767,24 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
         </CollapsibleCard>
       );
 
-    // 子流程创建：一行灰字
-    case 'worker':
+    // 子流程创建：类型图标和短标签用于扫读，任务标题占据剩余宽度。
+    case 'worker': {
+      const presentation = cell.workerType ? workerPresentation(cell.workerType) : undefined;
+      if (presentation) {
+        const Icon = presentation.icon;
+        return (
+          <div className={styles.workerCreation}>
+            <span className={styles.workerCreationIcon} aria-hidden>
+              <Icon size={ICON} />
+            </span>
+            <span className={styles.workerCreationLabel}>{title}</span>
+            <span className={styles.workerCreationType} title={t(presentation.labelKey)}>
+              {t(presentation.shortLabelKey)}
+            </span>
+            <span className={styles.workerCreationSubject} title={cell.subject}>{cell.subject}</span>
+          </div>
+        );
+      }
       return (
         <div className={styles.cell}>
           <ActionLine
@@ -717,6 +793,7 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
           />
         </div>
       );
+    }
 
     // 上下文压缩：一行灰字 + 可展开摘要
     case 'summary':
@@ -734,8 +811,9 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
       if (cell.eventType) {
         return (
           <FlowEventDisclosure
-            icon={noticeIcon(cell, true)}
-            title={title}
+            direction="incoming"
+            icon={<ArrowDownLeft size={ICON} />}
+            title={t('transcript.notice.workerMessage')}
             summary={summary}
             tone={cell.tone}
             badge={cell.badge}
@@ -748,16 +826,16 @@ export const ThreadCell = memo<ThreadCellProps>(({ cell, onPreviewImage, onOpenF
       }
 
       return (
-        <div className={styles.cell}>
-          <ActionLine
-            icon={noticeIcon(cell)}
-            text={summary ? `${title} · ${summary}` : title}
-            tone={cell.tone}
-            badge={cell.badge}
-            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
-            defaultOpen={cell.defaultExpanded}
-          />
-        </div>
+        <FlowEventDisclosure
+          direction="system"
+          icon={noticeIcon(cell)}
+          title={title}
+          summary={summary}
+          tone={cell.tone}
+          badge={cell.badge}
+          detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+          defaultOpen={cell.defaultExpanded}
+        />
       );
   }
 });

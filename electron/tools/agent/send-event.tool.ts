@@ -12,7 +12,6 @@ import type {
   ToolOutput,
 } from '../types.js';
 import { z } from '../params.js';
-import type { ToolInputSchema } from '../../../shared/types/index.js';
 import type { AgentTarget } from '../../../shared/types/agent-control.js';
 import type {
   ATAEventEnvelope,
@@ -41,70 +40,54 @@ const sendEventSchema = z.object({
 });
 type SendEventParams = z.infer<typeof sendEventSchema>;
 
-function roleSpecificSchema(
-  schema: ToolInputSchema,
-  agentType: 'main' | 'worker',
-): ToolInputSchema {
-  const summary = schema.properties.summary ?? {};
-  if (agentType === 'main') {
-    return {
-      ...schema,
-      properties: {
-        type: {
-          type: 'string',
-          const: 'message',
-          description: '固定为 message',
-        },
-        targetId: {
-          ...(schema.properties.targetId as Record<string, unknown>),
-          description: '接收消息的完整 subagentId（由 subagent 创建结果返回）',
-        },
-        message: {
-          ...(schema.properties.message as Record<string, unknown>),
-          description: 'Worker 继续工作所需的新事实或要求。涉及新增或变更任务时，明确交付要求及原任务如何处理。',
-        },
-        summary,
-      },
-      required: ['type', 'targetId', 'message'],
-      additionalProperties: false,
-    };
-  }
+export const sendEventOptionsSchema = z.strictObject({
+  events: z.array(z.enum(EVENT_TYPES)).min(1)
+    .refine((events) => new Set(events).size === events.length, 'events must be unique')
+    .default([...EVENT_TYPES]),
+});
 
-  return {
-    ...schema,
-    properties: {
-      type: {
-        ...(schema.properties.type as Record<string, unknown>),
-        enum: [...EVENT_TYPES],
-        description: 'message 为协作请求；completed、failed、user_stopped 为终态；need_user_action 表示需要用户介入',
-      },
-      message: {
-        ...(schema.properties.message as Record<string, unknown>),
-        description: '完整、自包含的事件正文',
-      },
-      summary,
-    },
-    required: ['type', 'message'],
-    additionalProperties: false,
-  };
+const EVENT_GUIDANCE: Record<(typeof EVENT_TYPES)[number], string> = {
+  "message": "普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。",
+  "completed": "当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径和验证结论。",
+  "failed": "当前 Assignment 无法完成；message 写明原因、原始错误、已完成部分和未完成项。",
+  "user_stopped": "用户明确停止当前 Assignment。",
+  "need_user_action": "登录、验证码、授权确认或用户选择等只有用户能解除的阻断；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。"
+};
+
+function terminalEvents(events: readonly (typeof EVENT_TYPES)[number][]): string[] {
+  return ['completed', 'failed', 'user_stopped'].filter((event) => events.includes(event as (typeof EVENT_TYPES)[number]));
+}
+
+function eventTypeDescription(events: readonly (typeof EVENT_TYPES)[number][]): string {
+  const terminals = terminalEvents(events);
+  return [
+    events.includes('message') ? 'message 为协作请求' : '',
+    terminals.length ? `${terminals.join('、')} 为终态` : '',
+    events.includes('need_user_action') ? 'need_user_action 表示需要用户介入' : '',
+  ].filter(Boolean).join('；');
+}
+
+function workerDescription(events: readonly (typeof EVENT_TYPES)[number][]): string {
+  const terminals = terminalEvents(events);
+  const terminalNames = terminals.length > 1
+    ? `${terminals.slice(0, -1).join('、')} 或 ${terminals.at(-1)}`
+    : terminals[0];
+  const canRequestUser = events.includes('need_user_action');
+  const afterSend = [
+    terminals.length ? terminalNames + " 发送成功后，结束当前响应并等待新输入；之后收到新的用户要求或 Director 消息时，继续按新要求处理。" : '',
+    canRequestUser ? "need_user_action 发送成功后结束当前响应，等待 Director 转达用户结果，不要轮询。" : '',
+  ].join('');
+  return [
+    events.map((event) => `- ${event}：${EVENT_GUIDANCE[event]}`).join('\n'),
+    afterSend,
+    "send_event 必须单独调用，不得与其他工具混在同一响应中。",
+    canRequestUser ? "需要用户介入的示例：\n`send_event({ type: \"need_user_action\", message: \"当前停在登录页。请完成登录；出现工作台首页即表示阻断解除。收到确认后，我会先验证登录状态，再从提交前的检查点继续。\" })`" : '',
+  ].filter(Boolean).join('\n\n');
 }
 
 const DIRECTOR_DESCRIPTION = `当用户要求变化、需要解决 Worker 的协作请求，或已确认的新事实使原有任务安排不再适用时，向对应 Worker 发送继续执行所需的信息或调整。只发送 type="message"，并指定目标 Worker 的完整 subagentId。
 
 send_event 必须单独调用，不得与其他工具混在同一响应中。`;
-
-const WORKER_DESCRIPTION = `- message：普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。
-- completed：当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径和验证结论。
-- failed：当前 Assignment 无法完成；message 写明原因、原始错误、已完成部分和未完成项。
-- user_stopped：用户明确停止当前 Assignment。
-- need_user_action：登录、验证码、授权确认或用户选择等只有用户能解除的阻断；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。
-
-completed、failed 或 user_stopped 发送成功后，结束当前响应并等待新输入；之后收到新的用户要求或 Director 消息时，继续按新要求处理。need_user_action 发送成功后结束当前响应，等待 Director 转达用户结果，不要轮询。
-
-send_event 必须单独调用，不得与其他工具混在同一响应中。
-
-需要用户介入的示例：
-\`send_event({ type: "need_user_action", message: "当前停在登录页。请完成登录；出现工作台首页即表示阻断解除。收到确认后，我会先验证登录状态，再从提交前的检查点继续。" })\``;
 
 export class SendEventTool extends BaseTool<SendEventParams> {
   readonly def: ToolDef<SendEventParams> = {
@@ -112,10 +95,28 @@ export class SendEventTool extends BaseTool<SendEventParams> {
     scope: 'shared',
     effects: ['agent-control'],
     schema: sendEventSchema,
-    modelInputSchema: (schema, context) => roleSpecificSchema(schema, context.agentType),
+    optionsSchema: sendEventOptionsSchema,
+    resolveContract: (options, context) => {
+      if (context.agentType === 'main') {
+        return {
+          schema: z.strictObject({
+            type: z.literal('message').describe('固定为 message'),
+            targetId: z.string().min(1).describe('接收消息的完整 subagentId（由 subagent 创建结果返回）'),
+            message: sendEventSchema.shape.message.describe('Worker 继续工作所需的新事实或要求。涉及新增或变更任务时，明确交付要求及原任务如何处理。'),
+            summary: sendEventSchema.shape.summary,
+          }),
+          description: DIRECTOR_DESCRIPTION,
+        };
+      }
+      const events = options.events as (typeof EVENT_TYPES)[number][];
+      return {
+        schema: sendEventSchema.omit({ targetId: true }).extend({ type: z.enum(events).describe(eventTypeDescription(events)) }).strict(),
+        description: workerDescription(events),
+      };
+    },
     policy: { exclusive: true },
     description: (agentType) => agentType === 'worker'
-      ? WORKER_DESCRIPTION
+      ? workerDescription(EVENT_TYPES)
       : DIRECTOR_DESCRIPTION,
   };
 

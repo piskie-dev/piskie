@@ -26,7 +26,6 @@ import type {
   ApprovalMode,
   PendingToolCall,
   AgentModeId,
-  SubagentMode,
   TaskItem,
 } from '../../../../shared/types';
 import type { ContextUsage } from '../../../../shared/types/token';
@@ -146,7 +145,7 @@ export interface AskUserVM {
 export interface WorkerRef {
   readonly id: string;
   readonly subject: string;
-  readonly mode: SubagentMode;
+  readonly type: string;
   readonly status: StatusKey;
 }
 
@@ -187,7 +186,7 @@ function projectAgent(
     workers: state.children.map((child) => ({
       id: child.id,
       subject: child.subject,
-      mode: child.mode,
+      type: child.type,
       status: resolveStatus(child),
     })),
     imageNodeIds: (state.imageNodes ?? []).map((node) => node.id),
@@ -214,7 +213,7 @@ export interface WorkerVM {
   readonly id: string;
   readonly mainAgentId: string;
   readonly subject: string;
-  readonly mode: SubagentMode;
+  readonly type: string;
   readonly phase: AgentPhase;
   readonly status: StatusKey;
   readonly interrupted: boolean;
@@ -247,7 +246,7 @@ function projectWorker(
     id: child.id,
     mainAgentId,
     subject: child.subject,
-    mode: child.mode,
+    type: child.type,
     phase: child.phase,
     status: resolveStatus(child),
     interrupted: isInterrupted(child),

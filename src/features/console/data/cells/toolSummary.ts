@@ -103,7 +103,9 @@ export function toolParamsSummary(view: ToolResultView): PresentationText | unde
     case 'ask_user':
       return firstQuestion(params);
     case 'subagent':
-      return stringField(params, 'subject') ?? stringField(params, 'subagentId');
+      return stringField(params, 'subject');
+    case 'subagent_stop':
+      return stringField(params, 'subagentId');
     case 'plan':
     case 'task':
       return stringField(params, 'taskSummary');

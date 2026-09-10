@@ -326,29 +326,21 @@ export interface ToolApprovalDecision {
 }
 
 /**
- * 子流程模式: browser(浏览器) / local(本地)
- * AI 必须显式传递模式
- */
-export type SubagentMode = 'browser' | 'local';
-
-/**
  * 子流程创建配置
  * 统一的 Subagent 可同时使用固定 Skill 工具（如 browser_*）和本地原生工具。
  */
 export interface SubagentConfig {
-  /** 子流程模式: browser(浏览器) / local(本地)。AI 必须传递。 */
-  mode: SubagentMode;
+  /** 注册的 Worker 类型，与 AgentSpec.name 一致。 */
+  type: string;
   /** 整个 Assignment 的简短显示标题 */
   subject: string;
   /** 本次 Assignment 包含的细任务 ID */
-  taskIds: string[];
+  taskIds?: string[];
   /** 整个多任务工作包的完整、自包含执行标准 */
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
   skills?: string[];
-  /** Runtime AgentSpec override supplied by the trusted parent runtime. */
-  agentSpec?: string;
-  /** Browser 模式下绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
+  /** 浏览器 Worker 绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
   browserEnvironmentId?: string;
   /** Worker-specific settings; never mutate the parent run snapshot. */
   advancedSettings?: TaskAdvancedSettings;
