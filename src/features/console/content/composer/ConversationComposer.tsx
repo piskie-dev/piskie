@@ -269,13 +269,13 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
-      { key: 'auto', label: t('sessionWorkbenchUi.composer.automaticApproval'), warning: true },
-      { key: 'confirm', label: t('sessionWorkbenchUi.composer.confirmApproval') },
+      { key: 'auto', label: t('sharedUi.agentParams.auto'), warning: true },
+      { key: 'confirm', label: t('sharedUi.agentParams.confirm') },
     ];
 
     const modeLabel = (name: string): string => {
-      if (name === 'normal') return t('sessionWorkbenchUi.composer.modeNormal');
-      if (name === 'plan') return t('sessionWorkbenchUi.composer.modePlan');
+      if (name === 'normal') return t('sharedUi.agentParams.normal');
+      if (name === 'plan') return t('sharedUi.agentParams.plan');
       if (name === 'browser-skill') return t('sessionWorkbenchUi.composer.modeBrowserSkill');
       return capitalize(name);
     };
@@ -358,8 +358,8 @@ export const ConversationComposer = memo<ConversationComposerProps>(
 
           <PillSelect
             label={approvalMode === 'auto'
-              ? t('sessionWorkbenchUi.composer.automaticApproval')
-              : t('sessionWorkbenchUi.composer.confirmApproval')}
+              ? t('sharedUi.agentParams.auto')
+              : t('sharedUi.agentParams.confirm')}
             compactIcon={approvalMode === 'auto' ? <ShieldAlert size={13} /> : <ShieldCheck size={12} />}
             warning={approvalMode === 'auto'}
             selectedKey={approvalMode}

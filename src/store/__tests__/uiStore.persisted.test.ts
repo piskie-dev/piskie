@@ -31,8 +31,25 @@ describe('uiStore persisted boundary', () => {
       theme: 'dark',
       sidebarCollapsed: false,
       consoleMode: 'dock',
-      collapsedWorkspaceGroups: ['workspace-a'],
     });
+  });
+
+  it('restores workspace preferences by full key, including the default workspace', () => {
+    expect(readPersistedUIState({
+      expandedWorkspaceGroups: ['', '/sample/alpha', '/sample/alpha'],
+      workspaceGroupOrder: ['/sample/beta', '', '/sample/alpha', ''],
+    }, 4)).toEqual({
+      expandedWorkspaceGroups: ['', '/sample/alpha'],
+      workspaceGroupOrder: ['/sample/beta', '', '/sample/alpha'],
+    });
+  });
+
+  it('ignores malformed persisted workspace preferences', () => {
+    expect(readPersistedUIState({
+      theme: 'light',
+      expandedWorkspaceGroups: [null],
+      workspaceGroupOrder: 'invalid',
+    }, 4)).toEqual({ theme: 'light' });
   });
 
   it('does not infer the current console mode from pre-v1 layout data', () => {
@@ -52,6 +69,8 @@ describe('uiStore persisted boundary', () => {
       theme: 'auto',
       sidebarCollapsed: true,
       consoleMode: 'thread',
+      expandedWorkspaceGroups: [''],
+      workspaceGroupOrder: ['/sample/alpha', ''],
       collapsedWorkspaceGroups: [],
       navEdgeDockEnabled: true,
       navPrismEnabled: false,
@@ -65,7 +84,8 @@ describe('uiStore persisted boundary', () => {
       theme: 'auto',
       sidebarCollapsed: true,
       consoleMode: 'thread',
-      collapsedWorkspaceGroups: [],
+      expandedWorkspaceGroups: [''],
+      workspaceGroupOrder: ['/sample/alpha', ''],
     });
   });
 

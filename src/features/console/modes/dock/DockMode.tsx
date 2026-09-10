@@ -42,7 +42,7 @@ export interface DockModeProps {
   readonly devMode?: boolean;
   readonly onNewSession?: () => void;
   readonly onNewSessionIn?: (workspace?: string) => void;
-  readonly onStartTask?: () => void;
+  readonly renderTaskLauncher?: (trigger: React.ReactNode) => React.ReactNode;
   /** 空态用（logo / tagline / tip / 模板卡片 + composer 插槽） */
   /**
    * 顶栏徽标的 worker 级定位请求（一次性）。`requestId` 变化即消费一次 ——
@@ -67,7 +67,7 @@ export const DockMode = memo<DockModeProps>(
     devMode,
     onNewSession,
     onNewSessionIn,
-    onStartTask,
+    renderTaskLauncher,
     emptyState,
     onPreviewImage,
     revealWorker,
@@ -146,7 +146,7 @@ export const DockMode = memo<DockModeProps>(
         data-sessions-collapsed={sessionsCollapsed ? 'true' : undefined}
       >
         {/* 左栏：全高兄弟节点。内容与 thread 完全一致，
-            走共享的 ThreadSidebar（搜索 + `+` 菜单 + 在跑/历史合并的工作区树） */}
+            走共享的 ThreadSidebar（搜索 + 常驻入口 + 工作区会话树） */}
         <aside className={styles.sessions}>
           <ThreadSidebar
             sessions={sessions}
@@ -159,7 +159,7 @@ export const DockMode = memo<DockModeProps>(
             menuSourceOf={menuSourceOf}
             onNewSession={onNewSession}
             onNewSessionIn={onNewSessionIn}
-            onStartTask={onStartTask}
+            renderTaskLauncher={renderTaskLauncher}
           />
         </aside>
 

@@ -12,7 +12,7 @@
   block-size: 100%;
 }
 
-/* ── 顶部：搜索 + 新建 ── */
+/* ── 搜索置顶，下方常驻两个入口 ── */
 
 .top {
   display: flex;
@@ -56,25 +56,45 @@
   color: color-mix(in srgb, var(--cyber-text-muted) 55%, transparent);
 }
 
-.newButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 0 0 auto;
-  inline-size: 28px;
-  block-size: 28px;
-  padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
-  color: var(--cyber-text);
-  cursor: pointer;
-  transition: background-color 180ms ease, border-color 180ms ease;
+  margin: 0 10px 10px;
+  padding-block-end: 10px;
+  border-block-end: 1px solid var(--line-1);
 }
 
-.newButton:hover {
-  border-color: var(--line-3);
+.actionButton {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  inline-size: 100%;
+  min-block-size: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.actionButton:hover {
   background: var(--surface-2);
+}
+
+.actionButton svg { flex: 0 0 auto; }
+
+.actionButton:focus-visible,
+.groupToggle:focus-visible,
+.moreRow:focus-visible {
+  outline: 1px solid var(--line-3);
+  outline-offset: -1px;
 }
 
 /* ── 滚动区 ── */
@@ -107,10 +127,26 @@
 /* ── 工作区分组 ── */
 
 .group {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
 }
+
+.group[data-dragging='true'] { opacity: 0.45; }
+
+.group[data-drop-edge]::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset-inline: 10px;
+  block-size: 1px;
+  background: var(--cyber-primary);
+  pointer-events: none;
+}
+
+.group[data-drop-edge='before']::after { inset-block-start: 0; }
+.group[data-drop-edge='after']::after { inset-block-end: 0; }
 
 /* 组头粘顶：滚到长组中间时始终知道自己在哪个工作区，随手可折叠。
    背景用画布面变量——透壁纸场景与所在面同色，不砸实底。
@@ -142,7 +178,6 @@
   background: transparent;
   color: var(--cyber-text-muted);
   font-size: 11px;
-  /* 名称与计数同置 line-height:1——两者字号/字族不同,默认行高不一致会错位 */
   line-height: 1;
   text-align: start;
   cursor: pointer;
@@ -152,6 +187,9 @@
 .groupToggle:hover {
   color: var(--cyber-text);
 }
+
+.groupToggle[draggable='true'] { cursor: grab; }
+.groupToggle[draggable='true']:active { cursor: grabbing; }
 
 /* 在此工作区新建会话:悬停组头才显形 */
 .groupNew {
@@ -171,7 +209,7 @@
 }
 
 .groupHead:hover .groupNew,
-.groupNew:focus-visible {
+.groupHead:focus-within .groupNew {
   opacity: 1;
 }
 
@@ -195,14 +233,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.groupCount {
-  flex: 0 0 auto;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.7;
 }
 
 /* ── 会话 / 历史行 ── */
@@ -242,7 +272,7 @@
   padding-inline-start: 22px;
 }
 
-/* 组尾「还有 N 条…」：与行同构的弱化入口，点开全量 */
+/* 组尾展开全部 / 收起列表 */
 .moreRow {
   display: flex;
   align-items: center;
@@ -310,7 +340,7 @@
 }
 
 /* ── 收起态（52px）──
-   与 dock 的收起态**同宽同形**（用户要求两边统一）：展开按钮 + 状态点竖列 + 底部动作。
+   与 dock 的收起态同宽同形：展开按钮 + 常驻入口 + 状态点竖列。
    历史在收起态下不可达，与 dock 一致（dock 收起时「历史」tab 同样进不去）。 */
 
 .collapsed {

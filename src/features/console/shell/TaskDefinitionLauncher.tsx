@@ -2,7 +2,7 @@
  * TaskDefinitionLauncher —— 任务模板启动器。
  *
  * 原生 popover（`chrome/Popover` 负责 light-dismiss 与 Esc），开合不用手工管。
- * 三个入口共用同一个组件：左栏 `+`、左栏搜索的 Enter、空态卡片。
+ * 左栏「启动任务」在展开态和收起态使用同一模板列表与管理操作。
  *
  * **「启动任务模板」= 新建一次运行**，与「打开历史会话」= 恢复已有会话
  * 是两个不同动作，必须在视觉上区分。这里的行一律带「启动」语义的图标与措辞。
@@ -22,8 +22,7 @@ export interface TaskDefinitionLauncherProps {
   readonly onCreate: () => void;
   readonly onEdit?: (definition: TaskDefinitionSnapshot) => void;
   readonly onDelete?: (definitionId: string) => void;
-  /** 触发器；不传用默认的 `+` 按钮 */
-  readonly trigger?: React.ReactNode;
+  readonly trigger: React.ReactNode;
   /** 外部过滤词（左栏搜索联动） */
   readonly filter?: string;
 }
@@ -57,18 +56,15 @@ export const TaskDefinitionLauncher = memo<TaskDefinitionLauncherProps>(
       <Popover
         open={open}
         onClose={close}
-        placement="block-end"
+        placement="inline-end"
+        triggerClassName={styles.triggerWrap}
         trigger={
-          <span onClick={() => setOpen((value) => !value)}>
-            {trigger ?? (
-              <button type="button" className={styles.trigger} aria-label={t('sessionWorkbenchUi.launcher.open')}>
-                <Plus size={13} />
-              </button>
-            )}
+          <span className={styles.triggerWrap} onClick={() => setOpen((value) => !value)}>
+            {trigger}
           </span>
         }
       >
-        <div className={styles.panel}>
+        <div className={styles.panel} role="dialog" aria-label={t('sessionWorkbenchUi.launcher.heading')}>
           <div className={styles.head}>
             <span className={styles.title}>{t('sessionWorkbenchUi.launcher.heading')}</span>
             <span className={styles.count}>{t('sessionWorkbenchUi.launcher.templateCount', { count: visible.length })}</span>

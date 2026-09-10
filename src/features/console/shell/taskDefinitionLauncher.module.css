@@ -9,24 +9,12 @@
  * 且 Electron 没有浏览器式省电降级，全局只保留必要的一处。一个任务列表不需要毛玻璃。
  */
 
-.trigger {
-  display: inline-flex;
-  align-items: center;
+.triggerWrap {
+  display: flex;
+  min-inline-size: 0;
+  inline-size: 100%;
   justify-content: center;
-  inline-size: 28px;
-  block-size: 28px;
-  padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
-  color: var(--cyber-text);
-  cursor: pointer;
-  transition: background-color 180ms ease, border-color 180ms ease;
-}
-
-.trigger:hover {
-  border-color: var(--line-3);
-  background: var(--surface-2);
+  flex: 0 0 auto;
 }
 
 .panel {

@@ -40,6 +40,11 @@ export function useSessionRows(): readonly SessionRow[] {
   }, [controlStates, t]);
 }
 
+/** 首次完整历史读取成功后才能固定工作区的初始顺序。 */
+export function useHistoryRowsReady(): boolean {
+  return useAgentRunList((state) => state.revision > 0);
+}
+
 export function useHistoryRows(): readonly HistoryRow[] {
   const agentRuns = useAgentRunList((state) => state.runs);
   const controlStates = useAgentControl((state) => state.agentsById);

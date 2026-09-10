@@ -216,21 +216,20 @@ const ConsoleShellView: React.FC = () => {
     />
   );
 
-  const topRailActions = useMemo(
-    () => (
-      <>
-        <TaskDefinitionLauncher
-          definitions={taskDefinitions}
-          onStart={(definition) => void launch(definition)}
-          onCreate={() => setTaskEditor({ kind: 'create' })}
-          onEdit={(definition) => setTaskEditor({ kind: 'edit', definition })}
-          onDelete={(definitionId) => void deleteTaskDefinition(definitionId)}
-        />
-        {hasActiveSession && <ModeSwitch mode={shell.mode} onChange={shell.setMode} />}
-      </>
-    ),
-    [deleteTaskDefinition, hasActiveSession, launch, shell.mode, shell.setMode, taskDefinitions],
-  );
+  const renderTaskLauncher = useCallback((trigger: React.ReactNode) => (
+    <TaskDefinitionLauncher
+      definitions={taskDefinitions}
+      onStart={(definition) => void launch(definition)}
+      onCreate={() => setTaskEditor({ kind: 'create' })}
+      onEdit={(definition) => setTaskEditor({ kind: 'edit', definition })}
+      onDelete={(definitionId) => void deleteTaskDefinition(definitionId)}
+      trigger={trigger}
+    />
+  ), [deleteTaskDefinition, launch, taskDefinitions]);
+
+  const topRailActions = hasActiveSession
+    ? <ModeSwitch mode={shell.mode} onChange={shell.setMode} />
+    : undefined;
 
   const shared = {
     sessions: shell.sessions,
@@ -241,7 +240,7 @@ const ConsoleShellView: React.FC = () => {
     menuSourceOf: shell.menuSourceOf,
     emptyState,
     onPreviewImage: shell.setPreviewImage,
-    onStartTask: () => setTaskEditor({ kind: 'create' }),
+    renderTaskLauncher,
     onNewSession: shell.newSession,
     onNewSessionIn: shell.newSessionIn,
     devMode,

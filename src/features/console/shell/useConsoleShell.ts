@@ -110,9 +110,23 @@ export function useConsoleShell(): ConsoleShell {
     });
   }, [controlStates, selection, sessions]);
 
+  const pendingWorkspaceReveal = useRef<string | null>(null);
+  const expandWorkspaceGroup = useUIStore((store) => store.expandWorkspaceGroup);
   const selectSession = useCallback((agentId: string) => {
+    pendingWorkspaceReveal.current = agentId;
     setSelection({ agentId, kind: 'live' });
   }, [setSelection]);
+
+  // 新启动的会话可能稍后才出现在列表；每次明确导航只揭示一次。
+  useEffect(() => {
+    const agentId = pendingWorkspaceReveal.current;
+    if (!agentId) return;
+    const row = sessions.find((item) => item.agentId === agentId)
+      ?? history.find((item) => item.agentId === agentId);
+    if (!row) return;
+    pendingWorkspaceReveal.current = null;
+    expandWorkspaceGroup(row.workspace ?? '');
+  }, [sessions, history, selection, expandWorkspaceGroup]);
 
   const [revealWorker, setRevealWorker] = useState<ConsoleShell['revealWorker']>(null);
   const revealSeq = useRef(0);
@@ -129,20 +143,24 @@ export function useConsoleShell(): ConsoleShell {
   );
 
   const newSessionIn = useCallback((workspace?: string) => {
+    pendingWorkspaceReveal.current = null;
+    expandWorkspaceGroup(workspace ?? '');
     useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY, { workspace });
     setSelection({ kind: 'empty' });
-  }, [setSelection]);
+  }, [expandWorkspaceGroup, setSelection]);
 
   const newSession = useCallback(() => newSessionIn(), [newSessionIn]);
 
   const openHistory = useCallback(
     (row: HistoryRow) => {
+      pendingWorkspaceReveal.current = null;
+      expandWorkspaceGroup(row.workspace ?? '');
       // 已加载的历史行就是普通在跑会话，按 live 选中；否则拉磁盘预览态
       const loaded = !!controlStates[row.agentId];
       setSelection({ agentId: row.agentId, kind: loaded ? 'live' : 'history' });
       if (!loaded) void actions.loadHistory(row.agentId);
     },
-    [actions, controlStates, setSelection],
+    [actions, controlStates, expandWorkspaceGroup, setSelection],
   );
 
   /**

@@ -49,8 +49,7 @@ export interface ThreadModeProps {
   readonly devMode?: boolean;
   readonly onNewSession?: () => void;
   readonly onNewSessionIn?: (workspace?: string) => void;
-  /** 打开创建/配置任务弹层（与 dock 侧栏底部的「启动任务」同一入口） */
-  readonly onStartTask?: () => void;
+  readonly renderTaskLauncher?: (trigger: React.ReactNode) => React.ReactNode;
   /** 与 dock 共用同一份壳级状态，保证切模式时左栏宽度不变（52 / 240） */
   readonly sessionsCollapsed: boolean;
   readonly onToggleSessions: () => void;
@@ -75,7 +74,7 @@ export const ThreadMode = memo<ThreadModeProps>(
     devMode,
     onNewSession,
     onNewSessionIn,
-    onStartTask,
+    renderTaskLauncher,
     sessionsCollapsed,
     onToggleSessions,
     emptyState,
@@ -281,7 +280,7 @@ export const ThreadMode = memo<ThreadModeProps>(
             menuSourceOf={menuSourceOf}
             onNewSession={onNewSession}
             onNewSessionIn={onNewSessionIn}
-            onStartTask={onStartTask}
+            renderTaskLauncher={renderTaskLauncher}
           />
         </div>
 

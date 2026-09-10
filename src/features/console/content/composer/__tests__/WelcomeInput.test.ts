@@ -3,6 +3,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useInferenceStore } from '../../../../../store/inferenceStore';
+import { useUIStore } from '../../../../../store/uiStore';
+import type { HistoryRow, SessionRow } from '../../../data/sessionRow';
+import { rawText } from '../../../data/presentationText';
 import {
   clearAllComposerDrafts,
   composerDraftKey,
@@ -18,10 +21,10 @@ import { useComposerSettings, type ComposerSettings } from '../useComposerSettin
 import { WelcomeInput } from '../WelcomeInput';
 import type { WelcomeComposerProps } from '../WelcomeComposer';
 
-const { renderComposer, runtime, control, preview } = vi.hoisted(() => ({
+const { renderComposer, runtime, control, preview, rows } = vi.hoisted(() => ({
   renderComposer: vi.fn(),
   runtime: {
-    agentRuns: { refresh: vi.fn().mockResolvedValue(undefined) },
+    agentRuns: { refresh: vi.fn().mockResolvedValue(undefined), loadPreview: vi.fn().mockResolvedValue(null) },
     agentCommands: {
       setApprovalMode: vi.fn(), setSubagentApprovalMode: vi.fn(),
       respondToApproval: vi.fn(), start: vi.fn(),
@@ -29,6 +32,7 @@ const { renderComposer, runtime, control, preview } = vi.hoisted(() => ({
   },
   control: { agentsById: {} },
   preview: { state: null },
+  rows: { sessions: [] as SessionRow[], history: [] as HistoryRow[] },
 }));
 
 vi.mock('../WelcomeComposer', () => ({
@@ -43,8 +47,8 @@ vi.mock('../../../../../renderer-runtime/hooks', () => ({
   useAgentRunPreview: (select: (state: typeof preview) => unknown) => select(preview),
 }));
 vi.mock('../../../data/session', () => ({
-  useSessionRows: () => [],
-  useHistoryRows: () => [],
+  useSessionRows: () => rows.sessions,
+  useHistoryRows: () => rows.history,
 }));
 
 const selectFolder = vi.fn();
@@ -128,6 +132,9 @@ beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.clearAllMocks();
   clearAllComposerDrafts();
+  rows.sessions = [];
+  rows.history = [];
+  useUIStore.setState({ consoleSelection: null, expandedWorkspaceGroups: [] });
   useComposerDraftStore.setState({ defaults: DEFAULT_COMPOSER_SETTINGS });
   selectFolder.mockReset().mockResolvedValue(['/tmp/sample-workspace']);
   onStart.mockReset().mockResolvedValue({ kind: 'failed' });
@@ -158,6 +165,41 @@ afterEach(async () => {
   clearAllComposerDrafts();
   dom.window.close();
   vi.unstubAllGlobals();
+});
+
+describe('workspace navigation reveal', () => {
+  it('reveals a newly selected session once its row arrives, and respects later manual collapse', async () => {
+    act(() => shellRef.current!.selectSession('session-a'));
+    rows.sessions = [{
+      agentId: 'session-a', title: 'Sample session', workspace: '/sample/alpha',
+      phase: 'executing', status: 'running', createdAt: '2026-01-01T00:00:00Z',
+      workerCount: 0, model: 'sample-provider::sample-model', interrupted: false,
+      activity: { kind: 'idle', text: rawText('Sample activity') },
+    }];
+    await act(async () => root.render(React.createElement(Harness)));
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/alpha']);
+    act(() => useUIStore.getState().toggleWorkspaceGroup('/sample/alpha'));
+    rows.sessions = rows.sessions.map((row) => ({ ...row, workerCount: 1 }));
+    await act(async () => root.render(React.createElement(Harness)));
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual([]);
+    act(() => shellRef.current!.selectSession('session-a'));
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/alpha']);
+    act(() => useUIStore.getState().toggleWorkspaceGroup('/sample/alpha'));
+    await remount();
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual([]);
+  });
+
+  it('reveals history and new-session workspaces through explicit actions', () => {
+    const record: HistoryRow = {
+      agentId: 'history-a', title: 'Sample history', taskDescription: 'Sample history',
+      workspace: '/sample/beta', agentSpec: 'system-chat', running: false,
+      lastActiveAt: '2026-01-01T00:00:00Z',
+    };
+    act(() => shellRef.current!.openHistory(record));
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/beta']);
+    act(() => shellRef.current!.newSession());
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/beta', '']);
+  });
 });
 
 describe('welcome composer lifecycle', () => {
