@@ -1,3 +1,4 @@
+import type { WorkerInferenceResolver } from '../worker-inference.js';
 import type { SearchPort } from '../../../shared/types/web-search.js';
 /**
  * AgentRole — 角色行为策略接口
@@ -82,6 +83,7 @@ export interface RoleDefaults {
 // ============================================================
 
 export interface RuntimeOptions {
+  resolveWorkerInference?: WorkerInferenceResolver;
   search?: SearchPort;
   mainAgentId: string;
   runConfig?: AgentRunConfig;

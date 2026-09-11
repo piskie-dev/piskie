@@ -66,14 +66,17 @@
   -webkit-app-region: no-drag;
   top: 50%;
   z-index: 890;
-  width: 168px;
+  width: 196px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 2px;
   padding: 10px 8px;
   border-radius: 18px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--nh-ink) 3%, transparent), transparent 30%),
     var(--nh-sheet);
@@ -121,6 +124,7 @@
 }
 
 .stopRow {
+  flex-shrink: 0;
   position: relative;
   display: flex;
   align-items: center;

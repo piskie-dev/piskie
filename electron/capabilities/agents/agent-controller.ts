@@ -1,3 +1,4 @@
+import type { WorkerTypeDescriptor } from '../../../shared/types/worker-preferences.js';
 import { z } from 'zod';
 import {
   AGENT_OPERATIONS,
@@ -102,11 +103,13 @@ const conversationPageSchema = z.discriminatedUnion('direction', [
 export function createAgentController(
   agent: AgentService,
   modes: AgentModeCatalog,
+  getWorkerTypes: () => readonly WorkerTypeDescriptor[],
 ): {
   operations: readonly OperationDefinition[];
   topics: readonly TopicDefinition[];
 } {
   const operations: OperationDefinition[] = [
+    operation(AGENT_OPERATIONS.listWorkerTypes, args([]), () => getWorkerTypes()),
     operation(AGENT_OPERATIONS.start, args([startRequestSchema]), async ([request]) => {
       const state = await callModeCatalog(() => modes.start(request as StartAgentRequest));
       return agentControlSnapshot(state);

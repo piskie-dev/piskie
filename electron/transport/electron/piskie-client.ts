@@ -87,6 +87,7 @@ export function createElectronPiskieClient(options: {
       start: (input) => request(AGENT_OPERATIONS.start, input),
       setMode: (agentId, modeId) => request(AGENT_OPERATIONS.setMode, agentId, modeId),
       listStates: () => request(AGENT_OPERATIONS.listStates),
+      listWorkerTypes: () => request(AGENT_OPERATIONS.listWorkerTypes),
       stop: (agentId) => request(AGENT_OPERATIONS.stop, agentId),
       resume: (agentId) => request(AGENT_OPERATIONS.resume, agentId),
       inject: (agentId, event) => request(AGENT_OPERATIONS.inject, agentId, event),

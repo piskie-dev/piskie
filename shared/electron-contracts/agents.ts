@@ -1,3 +1,4 @@
+import type { WorkerTypeDescriptor } from '../types/worker-preferences.js';
 import type {
   AgentLaunchOptions,
   AgentModeId,
@@ -18,6 +19,7 @@ export const AGENT_OPERATIONS = Object.freeze({
   start: 'agents.start',
   setMode: 'agents.setMode',
   listStates: 'agents.listStates',
+  listWorkerTypes: 'agents.listWorkerTypes',
   stop: 'agents.stop',
   resume: 'agents.resume',
   inject: 'agents.inject',
@@ -130,6 +132,7 @@ export type StartAgentRequest = StartAgentCommon & (
 );
 
 export interface AgentClient {
+  listWorkerTypes(): Promise<WorkerTypeDescriptor[]>;
   start(request: StartAgentRequest): Promise<AgentControlSnapshot>;
   setMode(agentId: string, modeId: AgentModeId): Promise<void>;
   listStates(): Promise<Record<string, AgentControlSnapshot>>;

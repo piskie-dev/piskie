@@ -36,7 +36,9 @@ function clampSpot(spot: NavPrismSpot): NavPrismSpot {
 export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, tone, spot, onSpot }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [, refreshViewport] = useState(0);
   const hubRef = useRef<HTMLDivElement>(null);
+  const prismRef = useRef<HTMLButtonElement>(null);
   const fanRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     sx: number; sy: number; ox: number; oy: number; moved: boolean;
@@ -46,14 +48,20 @@ export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, ton
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        if (hubRef.current?.contains(document.activeElement)) prismRef.current?.focus();
+      }
     };
     const onDocDown = (event: PointerEvent): void => {
       if (hubRef.current && !hubRef.current.contains(event.target as Node)) setOpen(false);
     };
+    const onResize = (): void => { setOpen(false); refreshViewport((value) => value + 1); };
+    window.addEventListener('resize', onResize);
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onDocDown);
     return () => {
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDocDown);
     };
@@ -174,6 +182,7 @@ export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, ton
         {stops.map((stop, index) => (
           <button
             key={stop.path}
+            tabIndex={open ? 0 : -1}
             type="button"
             className={styles.fanStop}
             data-on={stop.path === activePath ? 'true' : 'false'}
@@ -186,6 +195,7 @@ export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, ton
               event.stopPropagation();
               onGo(stop.path);
               setOpen(false);
+              prismRef.current?.focus();
             }}
           >
             <stop.Icon />
@@ -196,9 +206,19 @@ export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, ton
       </div>
       <button
         type="button"
+        ref={prismRef}
         className={styles.prism}
         aria-label={t('sharedUi.navigation.open')}
         aria-expanded={open}
+        onClick={(event) => {
+          // Pointer activation is handled on release to distinguish dragging.
+          if (event.detail !== 0) return;
+          if (!open) {
+            layoutFan();
+            requestAnimationFrame(() => fanRef.current?.querySelector<HTMLButtonElement>('button')?.focus());
+          }
+          setOpen((current) => !current);
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

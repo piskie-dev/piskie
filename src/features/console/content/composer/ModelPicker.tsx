@@ -18,12 +18,14 @@ import {
   reasoningOptionKey,
   reasoningSelectionLabel,
 } from '../../../../utils/reasoning-options';
+import { isReasoningInputValid } from '../../../../utils/reasoning-capabilities';
 import { Popover } from '../../chrome/Popover';
 import styles from './conversationComposer.module.css';
 
 export interface ModelPickerProps {
   readonly modelGroups: ModelOptGroup[];
   readonly model: string;
+  /** 目标运行时实际保存的思考值；主 Agent 与 Worker 一致，选择器只展示、不自动写回。 */
   readonly reasoningOverride: ReasoningSelection;
   readonly onModelChange: (next: string) => Promise<void>;
   readonly onReasoningChange: (selection?: ReasoningSelection) => Promise<void>;
@@ -43,6 +45,9 @@ export const ModelPicker = memo<ModelPickerProps>(
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
+    // 预算输入的未提交草稿：输入过程中不回写，失焦或回车且校验通过才提交。
+    const [budgetDraft, setBudgetDraft] = useState<string | null>(null);
+    useEffect(() => { setBudgetDraft(null); }, [model, reasoningOverride, open]);
     const listRef = useRef<HTMLDivElement>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
 
@@ -89,6 +94,12 @@ export const ModelPicker = memo<ModelPickerProps>(
       else options[currentIndex] = reasoningOverride;
       return options;
     }, [profile, reasoningOverride]);
+    const draftBudget: ReasoningSelection | null =
+      budgetDraft === null ? null : { kind: 'budget', tokens: Number(budgetDraft) };
+    const draftInvalid = draftBudget !== null && !isReasoningInputValid(draftBudget, profile);
+    // 已保存的值可能因模型目录变更而不再受支持；只提示，不替用户改。
+    const savedInvalid =
+      profile !== undefined && profile.mode !== 'none' && !isReasoningInputValid(reasoningOverride, profile);
 
     // 打开时把选中项滚到列表中间（popover 展示后才有布局，等一帧）
     useEffect(() => {
@@ -209,18 +220,23 @@ export const ModelPicker = memo<ModelPickerProps>(
                       className={styles.budgetInput}
                       min={profile.minBudgetTokens ?? 1}
                       max={profile.maxBudgetTokens}
-                      step={1024}
-                      value={reasoningOverride.tokens}
-                      onChange={(event) => {
-                        const tokens = Number(event.target.value);
-                        if (Number.isFinite(tokens) && tokens > 0) {
-                          void onReasoningChange({ kind: 'budget', tokens });
-                        }
+                      step={1}
+                      value={budgetDraft ?? reasoningOverride.tokens}
+                      onChange={(event) => setBudgetDraft(event.target.value)}
+                      onBlur={() => {
+                        if (draftBudget === null || !isReasoningInputValid(draftBudget, profile)) return;
+                        void onReasoningChange(draftBudget);
+                        setBudgetDraft(null);
                       }}
+                      onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                      aria-invalid={draftInvalid}
                       aria-label={t('sessionWorkbenchUi.composer.reasoningBudget')}
                     />
                     <span className={styles.panelNote}>tokens</span>
                   </div>
+                )}
+                {(savedInvalid || draftInvalid) && (
+                  <div className={styles.panelNote} role="alert">{t('agentManagement.reasoningInvalid')}</div>
                 )}
                 {profile.mandatory && (
                   <div className={styles.panelNote}>

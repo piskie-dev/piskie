@@ -2,6 +2,7 @@ import type { PiskieDesktopApi } from '@shared/electron-contracts/api';
 import { subscribeToConfigDomainRefreshes } from '../features/config/domain-refresh-coordinator';
 import { subscribeToIncidentEvents } from '../store/incidentStore';
 import { useBrowserEnvironmentStore } from '../store/browserEnvironmentStore';
+import { useWorkerPreferencesStore } from '../features/agents/worker-preferences-store';
 import { useInferenceStore } from '../store/inferenceStore';
 import { useMessagingStore } from '../store/messagingStore';
 import { subscribeToOccupancyEvents } from '../store/occupancyStore';
@@ -12,12 +13,22 @@ import { createRuntime, type RendererRuntime } from './renderer-runtime';
 export function createRendererRuntime(api: PiskieDesktopApi): RendererRuntime {
   return createRuntime(api, {
     startSubscriptions(register, domains) {
+      // Drafts survive navigation to model settings; protect them until the renderer stops.
+      const guardWorkerDrafts = (event: BeforeUnloadEvent): void => {
+        if (Object.keys(useWorkerPreferencesStore.getState().drafts).length > 0) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      };
+      window.addEventListener('beforeunload', guardWorkerDrafts);
+      register(() => window.removeEventListener('beforeunload', guardWorkerDrafts));
       const refreshInference = useInferenceStore.getState().refresh;
       const fetchSettings = useUIStore.getState().fetchSettings;
       const refreshConnections = useMessagingStore.getState().fetchConnections;
       const refreshEnvironments = useBrowserEnvironmentStore.getState().fetchEnvironments;
       const refreshGlobalProxies = useProxyStore.getState().fetchConfig;
       const unsubscribeConfig = subscribeToConfigDomainRefreshes({
+        'worker-preferences': useWorkerPreferencesStore.getState().refresh,
         inference: refreshInference,
         'inference-selections': refreshInference,
         'model-catalog': refreshInference,

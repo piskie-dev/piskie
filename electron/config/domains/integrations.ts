@@ -18,6 +18,9 @@ export interface BrowserEnvironmentsSnapshot {
 export type ConfigDomainReader = (domain: string) => Promise<unknown>;
 
 export interface ConfigDomainIntegrations {
+  workerPreferences?: {
+    listTypes(): readonly import('../../../shared/types/worker-preferences.js').WorkerTypeDescriptor[];
+  };
   webSearch: {
     publish(config: import('../../../shared/types/web-search.js').WebSearchConfig, context: ConfigDomainPublishContext): Promise<void> | void;
   };

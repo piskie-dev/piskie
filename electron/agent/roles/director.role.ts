@@ -125,6 +125,7 @@ export class DirectorRole implements AgentRole {
     const runConfig = options.runConfig!;
     return {
       subagent: {
+        resolveWorkerInference: options.resolveWorkerInference,
         runConfig,
         allocateAgentId: options.allocateAgentId,
         createRuntimeObserver: options.createRuntimeObserver,

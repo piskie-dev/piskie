@@ -47,10 +47,15 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
   const onReasoningChange = useCallback(
     async (selection?: ReasoningSelection) => {
       if (!model || !selection) return;
+      // Worker 只改自己的实例，不触碰全局模型默认值。
+      if (workerId) {
+        await agentCommands.setSubagentReasoning(agentId, workerId, selection);
+        return;
+      }
+      // 主 Agent：先保存模型默认值，成功后再把实例设为所选值。
       const updated = await updateModelReasoningDefault(model, selection);
       if (!updated) return;
-      if (workerId) await agentCommands.setSubagentReasoning(agentId, workerId, selection);
-      else await agentCommands.setReasoning(agentId, selection);
+      await agentCommands.setReasoning(agentId, selection);
     },
     [agentCommands, agentId, model, updateModelReasoningDefault, workerId],
   );

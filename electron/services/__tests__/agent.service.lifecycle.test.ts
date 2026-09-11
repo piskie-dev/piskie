@@ -176,7 +176,7 @@ const h = vi.hoisted(() => {
     aiGateway = {};
     imageGateway = {};
     artifacts = {};
-    configHost = {};
+    configHost = { show: vi.fn(async () => ({ schemaVersion: 1, revision: 0, profiles: {} })) };
     control = { runtime: { capture: () => ({ configRevision: 1 }) } };
     selections = {
       read: async () => ({
@@ -193,6 +193,7 @@ const h = vi.hoisted(() => {
 
   class FakeAgentInference {
     assertTarget(): void {}
+    resolveReasoning(_target: unknown, selection: unknown) { return { selection }; }
     contextWindow(): number { return 200_000; }
   }
 
@@ -310,6 +311,18 @@ beforeEach(() => {
 });
 
 describe('AgentService AgentRun 生命周期串行化', () => {
+  it('injects live Worker preference resolution for both start and resume', async () => {
+    await agentService.startAgent(launch());
+    const first = h.instances[0]!;
+    const input = { type: 'explore', parentModel: 'parent::actual', parentReasoning: { kind: 'effort', effort: 'high' } };
+    await expect(first.config.options.resolveWorkerInference(input)).resolves.toEqual({ model: input.parentModel, reasoning: input.parentReasoning });
+    await agentService.stopAgent(first.id);
+    await agentService.resumeAgent(first.id);
+    const resumed = h.instances.at(-1)!;
+    expect(resumed).not.toBe(first);
+    await expect(resumed.config.options.resolveWorkerInference(input)).resolves.toEqual({ model: input.parentModel, reasoning: input.parentReasoning });
+  });
+
   it('stop 只在 destroy settle 后摘牌并发布 release', async () => {
     await agentService.startAgent(launch());
     const runtime = h.instances[0]!;

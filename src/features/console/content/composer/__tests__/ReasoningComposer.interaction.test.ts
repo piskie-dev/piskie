@@ -147,7 +147,7 @@ describe.each(['main', 'worker'] as const)('%s reasoning selection', (variant) =
   const key = variant === 'main' ? 'session-example' : 'worker-example';
   const model = `sample-provider::${variant}-model`;
 
-  it('saves the exact model default and updates only the selected runtime and its display', async () => {
+  it('updates only the selected runtime and its display, saving the model default for the main Agent only', async () => {
     await act(async () => render());
     for (const target of targets) await open(targetKey(target.agentId, target.workerId));
     expect(selected('session-example')).toEqual(['中']);
@@ -156,11 +156,15 @@ describe.each(['main', 'worker'] as const)('%s reasoning selection', (variant) =
 
     await choose(key, '高');
 
-    expect(saveDefault).toHaveBeenCalledExactlyOnceWith(model, high);
     if (variant === 'main') {
+      // 主 Agent：先保存模型默认值，再写运行时。
+      expect(saveDefault).toHaveBeenCalledExactlyOnceWith(model, high);
       expect(runtime.agentCommands.setReasoning).toHaveBeenCalledExactlyOnceWith('session-example', high);
       expect(runtime.agentCommands.setSubagentReasoning).not.toHaveBeenCalled();
+      expect(saveDefault.mock.invocationCallOrder[0]).toBeLessThan(runtime.agentCommands.setReasoning.mock.invocationCallOrder[0]!);
     } else {
+      // Worker：只写自己的运行时，不触碰全局模型默认值。
+      expect(saveDefault).not.toHaveBeenCalled();
       expect(runtime.agentCommands.setSubagentReasoning).toHaveBeenCalledExactlyOnceWith('session-example', 'worker-example', high);
       expect(runtime.agentCommands.setReasoning).not.toHaveBeenCalled();
     }
@@ -170,8 +174,6 @@ describe.each(['main', 'worker'] as const)('%s reasoning selection', (variant) =
       expect(trigger(targetId).getAttribute('aria-label')).toContain(label);
       expect(selected(targetId)).toEqual([label]);
     }
-    const setter = variant === 'main' ? runtime.agentCommands.setReasoning : runtime.agentCommands.setSubagentReasoning;
-    expect(saveDefault.mock.invocationCallOrder[0]).toBeLessThan(setter.mock.invocationCallOrder[0]!);
   });
 
   it('still updates the current runtime when the real store already has the selected default', async () => {
@@ -185,16 +187,17 @@ describe.each(['main', 'worker'] as const)('%s reasoning selection', (variant) =
     expect(useInferenceStore.getState().error).toBeNull();
   });
 
-  it('keeps the runtime and displayed value when saving the default fails', async () => {
-    saveDefault.mockResolvedValue(false);
-    await act(async () => render());
-    await open(key);
-    await choose(key, '高');
-    expect(saveDefault).toHaveBeenCalledExactlyOnceWith(model, high);
-    expect(runtime.agentCommands.setReasoning).not.toHaveBeenCalled();
-    expect(runtime.agentCommands.setSubagentReasoning).not.toHaveBeenCalled();
-    expect(selected(key)).toEqual([variant === 'main' ? '中' : '低']);
-  });
+});
+
+it('keeps the main Agent runtime and displayed value when saving the default fails', async () => {
+  saveDefault.mockResolvedValue(false);
+  await act(async () => render());
+  await open('session-example');
+  await choose('session-example', '高');
+  expect(saveDefault).toHaveBeenCalledExactlyOnceWith('sample-provider::main-model', high);
+  expect(runtime.agentCommands.setReasoning).not.toHaveBeenCalled();
+  expect(runtime.agentCommands.setSubagentReasoning).not.toHaveBeenCalled();
+  expect(selected('session-example')).toEqual(['中']);
 });
 
 it('keeps existing labels and menu values through global default refreshes without writing back', async () => {
@@ -247,10 +250,22 @@ it('shows and edits the runtime token budget independently of the model default'
   expect(input.value).toBe('4096');
   expect(selected('session-example')).toEqual(['预算 4.1K']);
   expect(trigger('session-example').getAttribute('aria-label')).toContain('4.1K');
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '6144');
+  const type = (value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  const blur = () => act(async () => { input.dispatchEvent(new Event('focusout', { bubbles: true })); });
+  // 超出模型范围的草稿只标记无效，不回写。
+  await type('512');
+  await blur();
+  expect(input.getAttribute('aria-invalid')).toBe('true');
+  expect(panel('session-example').querySelector('[class*="reasoningSection"] [role="alert"]')).not.toBeNull();
+  expect(saveDefault).not.toHaveBeenCalled();
+  expect(runtime.agentCommands.setReasoning).not.toHaveBeenCalled();
+  // 输入过程中不回写，失焦后才提交有效值。
+  await type('6144');
+  expect(saveDefault).not.toHaveBeenCalled();
+  await blur();
   expect(saveDefault).toHaveBeenCalledExactlyOnceWith('sample-provider::main-model', { kind: 'budget', tokens: 6144 });
   expect(runtime.agentCommands.setReasoning).toHaveBeenCalledExactlyOnceWith('session-example', { kind: 'budget', tokens: 6144 });
   expect(input.value).toBe('6144');
