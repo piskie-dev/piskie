@@ -28,6 +28,7 @@ const { renderComposer, runtime, control, preview, rows } = vi.hoisted(() => ({
   runtime: {
     agentRuns: { refresh: vi.fn().mockResolvedValue(undefined), loadPreview: vi.fn().mockResolvedValue(null) },
     agentCommands: {
+      setSubagentReasoning: vi.fn(), setSubagentModel: vi.fn(),
       setApprovalMode: vi.fn(), setSubagentApprovalMode: vi.fn(),
       respondToApproval: vi.fn(), start: vi.fn(), inject: vi.fn(), injectSubagent: vi.fn(),
     },
@@ -435,5 +436,19 @@ describe('selected skill send boundaries', () => {
     expect(event.content).toContain('/workspace/sample.txt');
     await act(async () => { await actionsRef.current!.send(target, { text: '/sample-guide' }); });
     expect(command.mock.calls.at(-1)!.at(-1)).toMatchObject({ content: '/sample-guide', skills: undefined });
+  });
+});
+
+describe('Worker instance inference settings', () => {
+  it('writes concrete reasoning only to the Worker without touching model defaults', async () => {
+    const defaults = vi.spyOn(useInferenceStore.getState(), 'updateModelReasoningDefault');
+    runtime.agentCommands.setSubagentReasoning.mockResolvedValue({ ok: true });
+    await act(async () => { await workerSettingsRef.current!.onReasoningChange({ kind: 'effort', effort: 'high' }); });
+    expect(runtime.agentCommands.setSubagentReasoning).toHaveBeenCalledWith('agent-a', 'worker-a', { kind: 'effort', effort: 'high' });
+    expect(defaults).not.toHaveBeenCalled();
+    runtime.agentCommands.setSubagentModel.mockResolvedValue({ ok: false, error: 'Unavailable model' });
+    await act(async () => { await workerSettingsRef.current!.onModelChange('gone::model'); });
+    expect(runtime.agentCommands.setSubagentModel).toHaveBeenCalledWith('agent-a', 'worker-a', 'gone::model');
+    defaults.mockRestore();
   });
 });

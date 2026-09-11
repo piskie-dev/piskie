@@ -10,6 +10,9 @@ import type {
 import type { ATAEventEnvelope } from '../../ata/ata-event-envelope.js';
 import type { AgentRunHeader } from '../../../../shared/types/agent-control.js';
 import { AgentRunPaths } from '../../../agent-runs/agent-run-paths.js';
+import { resolveWorkerInference } from '../../worker-inference.js';
+import type { WorkerPreferencesDocument } from '../../../../shared/types/worker-preferences.js';
+import { fakeAgentInference } from '../../../testing/fake-agent-inference.js';
 import { SubagentModule } from '../subagent.module.js';
 import { taskBoardService } from '../../../agent-runs/task-board-service.js';
 
@@ -75,7 +78,7 @@ type TestableSubagentModule = {
     mainAgentId: string;
     post: ReturnType<typeof vi.fn>;
     emitStateChange: ReturnType<typeof vi.fn>;
-    getInference: () => { assertTarget: ReturnType<typeof vi.fn> };
+    getInference: () => ReturnType<typeof fakeAgentInference>;
   };
   subagents: Map<string, AgentEngine>;
   subagentMeta: Map<string, WatchdogMeta>;
@@ -92,7 +95,7 @@ function createModule() {
     mainAgentId: 'main-1',
     post,
     emitStateChange: vi.fn(),
-    getInference: () => ({ assertTarget: vi.fn() }),
+    getInference: () => fakeAgentInference(),
   };
   module.destroySubagentOrEscalate = vi.fn();
   return { module, post };
@@ -170,6 +173,78 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('SubagentModule resume boundaries', () => {
+  it('reads preferences for each creation, preserves earlier selections and skips task-board work for Explore', async () => {
+    const mainAgentId = `preferences-${Date.now()}`;
+    const headerStore = createHeaderStore(mainAgentId);
+    const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
+    const preferences: WorkerPreferencesDocument = { schemaVersion: 1, revision: 0, profiles: {} };
+    const inference = fakeAgentInference();
+    const host = { id: mainAgentId, mainAgentId, phase: 'running', spec: { name: 'director' },
+      currentModel: 'parent::model', reasoningOverride: { kind: 'effort', effort: 'high' }, approvalMode: 'auto',
+      getInference: () => inference, getConversationStore: () => headerStore.store,
+      appendConversationEntry: vi.fn(), emitStateChange: vi.fn(),
+    } as unknown as AgentHost;
+    module.init(host, { ...moduleConfig('preference-worker'), resolveWorkerInference: async (input) => resolveWorkerInference(input, preferences, inference) });
+    const before = runtimeMock.configs.length;
+    try {
+      const input: SubagentConfig = { type: 'explore', subject: 'Investigation', prompt: 'Inspect code' };
+      await module.createSubagent(input);
+      preferences.profiles.explore = { inference: { target: { providerId: 'custom', modelId: 'model' }, reasoning: { kind: 'effort', effort: 'low' } } };
+      await module.createSubagent(input);
+      expect(runtimeMock.configs[before]).toMatchObject({ options: { initialModel: 'parent::model', initialReasoning: { kind: 'effort', effort: 'high' } } });
+      expect(runtimeMock.configs[before + 1]).toMatchObject({ options: { initialModel: 'custom::model', initialReasoning: { kind: 'effort', effort: 'low' } } });
+      expect(taskBoardService.createCompactSnapshot).not.toHaveBeenCalled();
+    } finally { await module.onDestroy(); }
+  });
+
+  it('propagates preference read errors before task-board snapshots, IDs or Runtime creation', async () => {
+    const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
+    const allocateAgentId = vi.fn(() => 'never');
+    module.init({ id: 'parent', mainAgentId: 'parent', phase: 'running', spec: { name: 'director' },
+      currentModel: 'parent::model', reasoningOverride: { kind: 'disabled' },
+    } as unknown as AgentHost, { ...moduleConfig('invalid'), allocateAgentId,
+      resolveWorkerInference: async () => { throw new Error('Preferences could not be read'); },
+    });
+    const before = runtimeMock.configs.length;
+    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', taskIds: ['task'] })).rejects.toThrow('Preferences could not be read');
+    expect(allocateAgentId).not.toHaveBeenCalled();
+    expect(taskBoardService.createCompactSnapshot).not.toHaveBeenCalled();
+    expect(runtimeMock.configs).toHaveLength(before);
+  });
+
+  it('revalidates the selected target after asynchronous creation preparation', async () => {
+    const mainAgentId = `preference-wait-${Date.now()}`;
+    const headerStore = createHeaderStore(mainAgentId);
+    const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
+    let available = true;
+    const inference = fakeAgentInference({ assertTarget: () => { if (!available) throw new Error('Model became unavailable'); } });
+    const host = { id: mainAgentId, mainAgentId, phase: 'running', spec: { name: 'director' },
+      currentModel: 'parent::model', reasoningOverride: { kind: 'disabled' },
+      getInference: () => inference, getConversationStore: () => headerStore.store,
+    } as unknown as AgentHost;
+    module.init(host, { ...moduleConfig('preference-wait'), resolveWorkerInference: async (input) => resolveWorkerInference(input, { schemaVersion: 1, revision: 0, profiles: {} }, inference) });
+    vi.mocked(taskBoardService.createCompactSnapshot).mockImplementationOnce(async () => {
+      available = false;
+      return { taskSummary: '', items: [] };
+    });
+    const before = runtimeMock.configs.length;
+    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', taskIds: ['task'] })).rejects.toThrow('Model became unavailable');
+    expect(runtimeMock.configs).toHaveLength(before);
+    expect(headerStore.readHeader().childAgents).toEqual([]);
+  });
+
+  it('rejects invalid reasoning before mutating the child', () => {
+    const { module } = createModule();
+    const child = createChild({ setReasoningOverride: vi.fn() });
+    module.subagents.set('child-1', child);
+    for (const tokens of [0, -1, 1.5, NaN, Infinity]) {
+      expect(() => module.applyChildReasoning('child-1', { kind: 'budget', tokens })).toThrow('positive integer');
+    }
+    module.host.getInference = () => fakeAgentInference({ resolveReasoning: () => { throw new Error('Unsupported effort'); } });
+    expect(() => module.applyChildReasoning('child-1', { kind: 'effort', effort: 'max' })).toThrow('Unsupported effort');
+    expect(child.setReasoningOverride).not.toHaveBeenCalled();
+  });
+
   it('returns a created Worker only after its trace file exists', async () => {
     const mainAgentId = `main-trace-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const module = new SubagentModule() as unknown as SubagentModule & {

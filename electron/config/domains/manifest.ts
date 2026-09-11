@@ -17,6 +17,7 @@ import type {
 import { createMcpDomain } from '../../mcp/config/domain.js';
 import { createModelCatalogDomain } from './model-catalog.adapter.js';
 import { createWebSearchDomain } from './web-search.adapter.js';
+import { createWorkerPreferencesDomain } from './worker-preferences.adapter.js';
 import { createProxiesDomain } from './proxies.adapter.js';
 
 export interface ConfigDomainManifestContext {
@@ -53,6 +54,9 @@ export class ConfigDomainManifestError extends Error {
 
 /** The only production registration source for Config Domains. */
 export const CONFIG_DOMAIN_MANIFEST = {
+  'worker-preferences': managed((context) => createWorkerPreferencesDomain(
+    context.rootDirectory, context.inference, context.readDomain, context.integrations.workerPreferences,
+  )),
   'web-search': managed((context) => createWebSearchDomain(
     context.rootDirectory, context.integrations.webSearch, context.readDomain,
   )),

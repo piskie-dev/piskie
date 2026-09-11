@@ -1,3 +1,5 @@
+import type { ReasoningSelection } from '../../../shared/types/reasoning.js';
+import { isReasoningSelectionAllowed } from '../ai/reasoning-policy.js';
 import type { ModelTarget } from '../execution/contracts.js';
 import { findCompiledTarget } from '../execution/runtime-snapshot.js';
 import { CatalogQuery, resolveBoundModelDefinition } from '../catalog/query.js';
@@ -207,6 +209,28 @@ export class InferenceControlPlane {
         { gateway, target },
       );
     }
+  }
+
+  /** Check current or pending selections against compiled execution capabilities without publishing. */
+  async validateAiSelections(
+    selections: readonly { target: ModelTarget; reasoning: ReasoningSelection }[],
+    candidate?: { config?: InferenceConfig; catalog?: LocalCatalogDocument },
+  ): Promise<{ index: number; code: 'MODEL_UNAVAILABLE' | 'REASONING_UNSUPPORTED' }[]> {
+    if (!selections.length) return [];
+    const config = candidate?.config ?? await this.options.repository.read();
+    const catalog = candidate?.catalog
+      ? await this.catalogSource.loadCandidate(candidate.catalog)
+      : await this.loadCatalogSnapshot();
+    const snapshot = projectInferenceRuntime(config, catalog, this.options.drivers, this.now).snapshot;
+    const issues: { index: number; code: 'MODEL_UNAVAILABLE' | 'REASONING_UNSUPPORTED' }[] = [];
+    selections.forEach((selection, index) => {
+      const compiled = findCompiledTarget(snapshot, selection.target);
+      if (!compiled?.ai) issues.push({ index, code: 'MODEL_UNAVAILABLE' });
+      else if (!isReasoningSelectionAllowed(selection.reasoning, compiled.reasoning?.profile)) {
+        issues.push({ index, code: 'REASONING_UNSUPPORTED' });
+      }
+    });
+    return issues;
   }
 
   async filterSelections(candidate: InferenceSelections): Promise<InferenceSelections> {

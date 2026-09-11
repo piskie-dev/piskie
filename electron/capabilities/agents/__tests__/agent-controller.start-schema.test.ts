@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_OPERATIONS } from '../../../../shared/electron-contracts/agents.js';
 import { createAgentController } from '../agent-controller.js';
 
-const startOperation = createAgentController({} as never, {} as never).operations
+const startOperation = createAgentController({} as never, {} as never, () => []).operations
   .find(({ id }) => id === AGENT_OPERATIONS.start);
 
 if (!startOperation) throw new Error('agents.start operation missing');
