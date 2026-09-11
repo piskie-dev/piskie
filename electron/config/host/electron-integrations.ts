@@ -1,3 +1,5 @@
+import { specRegistry } from '../../agent/specs/index.js';
+import { listWorkerTypes } from '../../agent/specs/worker-catalog.js';
 import { app } from 'electron';
 import { resolveInitialAppLanguage } from '../../../shared/utils/app-language.js';
 import {
@@ -15,6 +17,7 @@ import type { ConfigDomainIntegrations } from '../domains/integrations.js';
 export function createElectronConfigDomainIntegrations(webSearch: ConfigDomainIntegrations['webSearch']): ConfigDomainIntegrations {
   return {
     webSearch,
+    workerPreferences: { listTypes: () => listWorkerTypes(specRegistry) },
     appSettings: {
       resolveInitialLanguage: () => resolveInitialAppLanguage(
         app.getPreferredSystemLanguages()[0] ?? app.getLocale(),

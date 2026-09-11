@@ -590,6 +590,7 @@ describe('all managed Config Domains', () => {
       'proxies',
       'task-definitions',
       'web-search',
+      'worker-preferences',
     ]);
 
     await applyPlan(host, 'app-settings', [{ op: 'replace', path: '/theme', value: 'dark' }], 0);

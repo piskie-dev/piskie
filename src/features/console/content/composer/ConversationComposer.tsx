@@ -45,6 +45,7 @@ import {
   resolveComposerMainAction,
   type ComposerPendingAction,
 } from './composerMainAction';
+import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
 import { ModelPicker } from './ModelPicker';
 import { useComposerSettings } from './useComposerSettings';
 import styles from './conversationComposer.module.css';
@@ -168,6 +169,7 @@ export interface ConversationComposerProps {
   /** 投递目标显示名（用于 placeholder） */
   readonly targetName: string;
   readonly model: string;
+  readonly reasoning?: ReasoningSelection;
   readonly modeId?: AgentModeId;
   readonly approvalMode: ApprovalMode;
   readonly agentSpec?: string;
@@ -188,6 +190,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     workerId,
     targetName,
     model,
+    reasoning,
     modeId,
     approvalMode,
     agentSpec,
@@ -336,6 +339,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
 
         <div className={styles.toolbar}>
           <ModelPicker
+            reasoning={reasoning}
             modelGroups={settings.modelGroups}
             model={model}
             onModelChange={settings.onModelChange}

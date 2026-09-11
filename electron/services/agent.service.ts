@@ -1,3 +1,5 @@
+import type { WorkerPreferencesDocument } from '../../shared/types/worker-preferences.js';
+import { resolveWorkerInference, type WorkerInferenceInput } from '../agent/worker-inference.js';
 import type { SearchPort } from '../../shared/types/web-search.js';
 /**
  * AgentService — Agent 调度服务
@@ -94,6 +96,11 @@ function injectChildTerminationNotice(
 }
 
 export class AgentService {
+  private resolveWorkerPreferences = async (input: WorkerInferenceInput) => {
+    if (!this.inferenceHost || !this.agentInference) throw new Error('AgentService not initialized');
+    const preferences = await this.inferenceHost.configHost.show<WorkerPreferencesDocument>('worker-preferences');
+    return resolveWorkerInference(input, preferences, this.agentInference);
+  };
   private activeRuntimes: Map<string, AgentRuntime> = new Map();
   private agentInference: AgentInferencePort | null = null;
   private inferenceHost: InferenceRuntimeHost | null = null;
@@ -426,6 +433,7 @@ export class AgentService {
           mcpPrewarmToken: launch.launchOptions?.mcpPrewarmToken,
           images: launch.launchOptions?.images,
           allocateAgentId: () => this.allocateAgentId(),
+          resolveWorkerInference: this.resolveWorkerPreferences,
           createRuntimeObserver: (runtimeId) =>
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
@@ -814,6 +822,7 @@ export class AgentService {
           initialApprovalMode: header.approvalMode,
           isResume: true,
           allocateAgentId: () => this.allocateAgentId(),
+          resolveWorkerInference: this.resolveWorkerPreferences,
           createRuntimeObserver: (runtimeId) =>
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,

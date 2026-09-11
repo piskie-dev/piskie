@@ -53,11 +53,13 @@ export const EdgeDock: React.FC<EdgeDockProps> = ({ stops, activePath, onGo }) =
       <nav
         className={styles.dock}
         data-open={open ? 'true' : 'false'}
+        aria-hidden={!open}
         aria-label={t('sharedUi.navigation.main')}
       >
         {stops.map((stop) => (
           <button
             key={stop.path}
+            tabIndex={open ? 0 : -1}
             type="button"
             className={styles.stopRow}
             data-on={stop.path === activePath ? 'true' : 'false'}

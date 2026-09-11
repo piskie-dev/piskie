@@ -290,6 +290,7 @@ export const ThreadView = memo<ThreadViewProps>(
             workerId={workerId}
             targetName={subject}
             model={request.model}
+            reasoning={worker?.reasoning}
             modeId={agent?.modeId}
             approvalMode={request.approvalMode}
             agentSpec={agent?.agentSpec}

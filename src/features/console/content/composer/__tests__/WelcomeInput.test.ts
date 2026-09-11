@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useInferenceStore } from '../../../../../store/inferenceStore';
+import { useToastStore } from '../../../../toasts';
 import { useUIStore } from '../../../../../store/uiStore';
 import type { HistoryRow, SessionRow } from '../../../data/sessionRow';
 import { rawText } from '../../../data/presentationText';
@@ -26,6 +27,7 @@ const { renderComposer, runtime, control, preview, rows } = vi.hoisted(() => ({
   runtime: {
     agentRuns: { refresh: vi.fn().mockResolvedValue(undefined), loadPreview: vi.fn().mockResolvedValue(null) },
     agentCommands: {
+      setSubagentReasoning: vi.fn(), setSubagentModel: vi.fn(),
       setApprovalMode: vi.fn(), setSubagentApprovalMode: vi.fn(),
       respondToApproval: vi.fn(), start: vi.fn(),
     },
@@ -367,5 +369,20 @@ describe('welcome composer lifecycle', () => {
     });
 
     expect(composer()).toMatchObject({ value: 'New draft', workspacePath: '/tmp/new-workspace' });
+  });
+});
+
+
+describe('Worker instance inference settings', () => {
+  it('writes concrete reasoning only to the Worker and surfaces rejected commands', async () => {
+    const defaults = vi.spyOn(useInferenceStore.getState(), 'updateModelReasoningDefault');
+    runtime.agentCommands.setSubagentReasoning.mockResolvedValue({ ok: true });
+    await act(async () => { await workerSettingsRef.current!.onReasoningChange({ kind: 'effort', effort: 'high' }); });
+    expect(runtime.agentCommands.setSubagentReasoning).toHaveBeenCalledWith('agent-a', 'worker-a', { kind: 'effort', effort: 'high' });
+    expect(defaults).not.toHaveBeenCalled();
+    runtime.agentCommands.setSubagentModel.mockResolvedValue({ ok: false, error: 'Unavailable model' });
+    await act(async () => { await workerSettingsRef.current!.onModelChange('gone::model'); });
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ tone: 'error', detail: 'Unavailable model' });
+    defaults.mockRestore();
   });
 });

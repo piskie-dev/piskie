@@ -28,6 +28,7 @@ import type {
   AgentModeId,
   TaskItem,
 } from '../../../../shared/types';
+import type { ReasoningSelection } from '../../../../shared/types/reasoning';
 import type { ContextUsage } from '../../../../shared/types/token';
 import type { AgentMcpView } from '../../../../shared/types/mcp';
 import { useDisplayAgentState } from '../../../renderer-runtime/hooks';
@@ -219,6 +220,7 @@ export interface WorkerVM {
   readonly interrupted: boolean;
   readonly canPause: boolean;
   readonly model: string;
+  readonly reasoning: ReasoningSelection;
   readonly approvalMode: ApprovalMode;
   readonly conversationLength: number;
   readonly contextUsage?: ContextUsage;
@@ -252,6 +254,7 @@ function projectWorker(
     interrupted: isInterrupted(child),
     canPause: canPause(child),
     model: child.currentModel,
+    reasoning: child.reasoningOverride,
     approvalMode: child.approvalMode,
     conversationLength: child.conversationLength,
     contextUsage: child.contextUsage,
