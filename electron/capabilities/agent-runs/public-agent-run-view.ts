@@ -30,6 +30,6 @@ export function agentControlChangedEvent(
   };
 }
 
-export function agentRunSnapshot(header: AgentRunHeader): AgentRunSnapshot {
+export function agentRunSnapshot(header: AgentRunHeader): Omit<AgentRunSnapshot, 'messages'> {
   return structuredClone(header);
 }

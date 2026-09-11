@@ -3,7 +3,7 @@ import {
   isTextAttachment,
   plainTextMayReferenceImage,
   supportedImageType,
-  uriListMayContainAttachment,
+  attachmentPathsFromUriList,
 } from '../model';
 import { composeAttachmentText } from '../submission';
 
@@ -22,10 +22,10 @@ describe('attachment policy', () => {
   });
 
   it('only intercepts URI lists that contain supported attachments', () => {
-    expect(uriListMayContainAttachment('file:///tmp/screen%20shot.png')).toBe(true);
-    expect(uriListMayContainAttachment('# copied files\nfile:///tmp/notes.txt')).toBe(true);
-    expect(uriListMayContainAttachment('file:///tmp/manual.pdf')).toBe(false);
-    expect(uriListMayContainAttachment('ordinary pasted text')).toBe(false);
+    expect(attachmentPathsFromUriList('file:///tmp/screen%20shot.png')).toEqual(['file:///tmp/screen%20shot.png']);
+    expect(attachmentPathsFromUriList('# copied files\nfile:///tmp/notes.txt')).toEqual(['file:///tmp/notes.txt']);
+    expect(attachmentPathsFromUriList('file:///tmp/manual.pdf')).toEqual([]);
+    expect(attachmentPathsFromUriList('ordinary pasted text')).toEqual([]);
   });
 
   it('keeps the Linux plain-text image-path fallback without intercepting ordinary text', () => {

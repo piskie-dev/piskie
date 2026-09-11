@@ -13,6 +13,19 @@ import { createElectronPiskieClient } from '../piskie-client.js';
 import type { ElectronPreloadClient } from '../preload-client.js';
 
 describe('createElectronPiskieClient', () => {
+  it('queries effective composer Skills for the requested workspace', async () => {
+    const options = [{ name: 'sample-guide', description: 'Sample guide', scope: 'project' }];
+    const request = vi.fn(async () => options);
+    const client = createElectronPiskieClient({
+      transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux',
+    });
+    await expect(client.capabilities.market.availableSkills('/sample/project')).resolves.toEqual(options);
+    expect(request).toHaveBeenLastCalledWith('capabilities.market.availableSkills', ['/sample/project']);
+    await client.capabilities.market.availableSkills();
+    expect(request).toHaveBeenLastCalledWith('capabilities.market.availableSkills', [undefined]);
+  });
+
   it('forwards an explicit official model catalog refresh', async () => {
     const request = vi.fn(async () => ({ updated: true }));
     const client = createElectronPiskieClient({
@@ -43,6 +56,18 @@ describe('createElectronPiskieClient', () => {
     expect(request.mock.calls).toEqual([
       [ACCOUNT_OPERATIONS.status, [], { timeoutMs: 60_000 }],
       [ACCOUNT_OPERATIONS.waitForSignIn, ['flow-1'], { timeoutMs: 0 }],
+    ]);
+  });
+
+  it('forwards explicit attachment sources and preview release without rereading clipboard data', async () => {
+    const request = vi.fn(async () => undefined);
+    const client = createElectronPiskieClient({ transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient, version: 'test', platform: 'linux' });
+    const sources = { kind: 'paths' as const, paths: ['/workspace/example.png'] };
+    await client.desktop.system.clipboardAttachments(sources);
+    await client.desktop.files.releasePreview('piskie-attachment://preview/example');
+    expect(request.mock.calls).toEqual([
+      [DESKTOP_OPERATIONS.clipboardAttachments, [sources]],
+      [DESKTOP_OPERATIONS.releasePreview, ['piskie-attachment://preview/example']],
     ]);
   });
 

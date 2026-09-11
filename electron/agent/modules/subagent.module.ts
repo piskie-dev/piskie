@@ -414,6 +414,12 @@ export class SubagentModule implements AgentModule {
     });
   }
 
+  cancelChildPlanApprovalCountdown(subagentId: string, callId: string): boolean {
+    return this.accessSubagent(subagentId, false, (subagent) =>
+      subagent.cancelPlanApprovalCountdown(callId)
+    );
+  }
+
   /** 响应子流程工具调用确认 */
   settleChildApproval(subagentId: string, decision: ToolApprovalDecision): boolean {
     return this.accessSubagent(subagentId, false, (subagent) =>
@@ -630,6 +636,7 @@ export class SubagentModule implements AgentModule {
         key: 'child_created',
         value: {
           id,
+          workspace: (subagent as InstanceType<typeof AgentRuntime>).getEffectiveWorkspace(),
           config: {
             subject: config.subject,
             taskIds: config.taskIds,
@@ -682,6 +689,7 @@ export class SubagentModule implements AgentModule {
       this.persistCreatedChild({
         id,
         config,
+        workspace: (subagent as InstanceType<typeof AgentRuntime>).getEffectiveWorkspace(),
         createdAt: nowMs,
       });
 

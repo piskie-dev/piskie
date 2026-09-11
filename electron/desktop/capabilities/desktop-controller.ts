@@ -38,11 +38,17 @@ export function createDesktopController(
     operation(DESKTOP_OPERATIONS.openAgentRunTrace, args([identifier]), (_context, [agentId]) => (
       application.openAgentRunTrace(agentId)
     )),
-    operation(DESKTOP_OPERATIONS.clipboardAttachments, args([]), (context) => (
-      application.clipboardAttachments(context.windowId)
+    operation(DESKTOP_OPERATIONS.clipboardAttachments, args([z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('paths'), paths: z.array(pathSchema).min(1).max(32) }).strict(),
+      z.object({ kind: z.literal('native'), files: z.array(z.object({
+        name: z.string().min(1).max(16_384), size: z.number().int().nonnegative(),
+      }).strict()).max(32), text: z.string().max(256 * 1024) }).strict(),
+    ])]), (context, [request]) => application.clipboardAttachments(context.windowId, request, context.signal)),
+    operation(DESKTOP_OPERATIONS.releasePreview, args([z.string().max(16_384)]), (context, [url]) => (
+      application.releasePreview(context.windowId, url)
     )),
     operation(DESKTOP_OPERATIONS.previewFile, args([pathSchema]), (context, [targetPath]) => (
-      application.previewFile(context.windowId, targetPath)
+      application.previewFile(context.windowId, targetPath, context.signal)
     )),
     operation(
       DESKTOP_OPERATIONS.selectFiles,

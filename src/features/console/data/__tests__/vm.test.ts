@@ -15,6 +15,7 @@ import {
   resolveConversationTarget,
   resolveConversationRequest,
   resolveRequest,
+  useAgentVM,
   useWorkerVM,
   type AgentVM,
   type WorkerVM,
@@ -95,9 +96,11 @@ describe('resolveRequest', () => {
     harness.controlStates = {
       main: {
         runMetrics: { rounds: 99, steps: 99 },
+        runConfig: { workspace: '/workspace/sample-main' },
         children: [{
           id: 'worker',
           subject: 'Worker',
+          workspace: '/workspace/sample-worker',
           type: 'local-worker',
           phase: 'waiting',
           currentModel: 'provider::model',
@@ -119,9 +122,48 @@ describe('resolveRequest', () => {
 
     expect(projected).toMatchObject({
       id: 'worker',
+      workspace: '/workspace/sample-worker',
       approvalMode: 'confirm',
       runMetrics: workerMetrics,
     });
+  });
+});
+
+describe('reasoning snapshots', () => {
+  it('projects each main and Worker value independently when the current target changes', () => {
+    const medium = { kind: 'effort', effort: 'medium' } as const;
+    const low = { kind: 'effort', effort: 'low' } as const;
+    const high = { kind: 'effort', effort: 'high' } as const;
+    const main = {
+      agentId: 'session-example', phase: 'waiting', currentModel: 'provider::model',
+      runConfig: { name: 'Example session' }, reasoningOverride: medium,
+      children: [{
+        id: 'worker-example', phase: 'waiting', currentModel: 'provider::model',
+        reasoningOverride: low,
+      }],
+    };
+    const other = { ...main, agentId: 'session-other', children: [] };
+    harness.controlStates = { 'session-example': main, 'session-other': other };
+    let projected: Array<AgentVM | WorkerVM | null> = [];
+    function Probe() {
+      projected = [useAgentVM('session-example'), useWorkerVM('session-example', 'worker-example'), useAgentVM('session-other')];
+      return null;
+    }
+    const selections = () => projected.map((target) => target?.reasoningOverride);
+
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([medium, low, medium]);
+
+    harness.controlStates['session-example'] = { ...main, reasoningOverride: high };
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([high, low, medium]);
+
+    harness.controlStates['session-example'] = {
+      ...main, reasoningOverride: high,
+      children: [{ ...main.children[0], reasoningOverride: medium }],
+    };
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([high, medium, medium]);
   });
 });
 

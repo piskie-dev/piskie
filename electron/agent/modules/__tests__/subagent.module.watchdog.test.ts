@@ -43,6 +43,7 @@ vi.mock('../../agent-runtime.js', () => ({
     }
 
     async start(): Promise<void> {}
+    getEffectiveWorkspace(): string { return '/sample/worker-workspace'; }
     async destroy(): Promise<void> {
       await runtimeMock.destroyGates.get(this.id);
     }
@@ -240,7 +241,7 @@ describe('SubagentModule resume boundaries', () => {
     expect(sibling.setReasoningOverride).not.toHaveBeenCalled();
   });
 
-  it('新 Worker 继承 Main 当前模式，创建完成后不随 Main 批量变化', async () => {
+  it('new Workers inherit the parent model, reasoning and approval at creation', async () => {
     const mainAgentId = `main-approval-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent: (
@@ -262,6 +263,7 @@ describe('SubagentModule resume boundaries', () => {
       phase: 'running',
       spec: { name: 'director' },
       currentModel: 'provider::model',
+      reasoningOverride: { kind: 'effort', effort: 'medium' },
       approvalMode: 'auto' as 'auto' | 'confirm',
       getMcpCapabilitySnapshot: () => parentMcpCapability,
       getConversationStore: () => headerStore.store,
@@ -285,10 +287,14 @@ describe('SubagentModule resume boundaries', () => {
       const firstConfig = runtimeMock.configs.at(-1) as {
         options: Record<string, unknown>;
       };
+      expect(firstConfig.options).toMatchObject({
+        initialModel: 'provider::model', initialReasoning: { kind: 'effort', effort: 'medium' },
+      });
       expect(firstConfig.options.parentMcpCapability).toBe(parentMcpCapability);
       expect(firstConfig.options).not.toHaveProperty('mcpSession');
 
       host.approvalMode = 'confirm';
+      Object.assign(host, { currentModel: 'provider::model-next', reasoningOverride: { kind: 'effort', effort: 'high' } });
       const secondId = await module.createSubagent(
         {
           type: 'local-worker',
@@ -302,6 +308,11 @@ describe('SubagentModule resume boundaries', () => {
       expect(firstId).toBe('worker-approval-1');
       expect(secondId).toBe('worker-approval-2');
       expect(module.getSubagents().get(secondId)?.approvalMode).toBe('confirm');
+      const secondConfig = runtimeMock.configs.at(-1) as { options: Record<string, unknown> };
+      expect(secondConfig.options).toMatchObject({
+        initialModel: 'provider::model-next', initialReasoning: { kind: 'effort', effort: 'high' },
+      });
+      expect(firstConfig.options.initialReasoning).toEqual({ kind: 'effort', effort: 'medium' });
       expect(first.approvalMode).toBe('auto');
     } finally {
       await module.onDestroy();

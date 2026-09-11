@@ -22,17 +22,24 @@ export class AgentRunApplication {
   ) {}
 
   list(): AgentRunSnapshot[] {
-    return this.dependencies.agent
-      .getConversationStore()
-      .scanHeaders()
+    const store = this.dependencies.agent.getConversationStore();
+    return store.scanHeaders()
       .sort((left, right) => right.lastActiveAt.localeCompare(left.lastActiveAt))
-      .map(agentRunSnapshot);
+      .map((header) => ({
+        ...agentRunSnapshot(header),
+        messages: store.readMessageState(header.agentId),
+      }));
   }
 
   state(agentId: string): AgentControlSnapshot | null {
     const state = this.dependencies.agent.getControlState(agentId)
       ?? this.dependencies.agent.buildHistoryPreview(agentId);
     return state ? agentControlSnapshot(state) : null;
+  }
+
+  markRead(agentId: string, throughIndex: number) {
+    this.requireAgentRun(agentId);
+    return this.dependencies.agent.getConversationStore().markRead(agentId, throughIndex);
   }
 
   async delete(agentId: string): Promise<void> {

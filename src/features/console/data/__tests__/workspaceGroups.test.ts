@@ -154,14 +154,13 @@ describe('resolveTaskDescription', () => {
     ).toBe('抓取小红书');
   });
 
-  it('无 description 时用 promptTemplate，超 100 字截断', () => {
-    const long = 'x'.repeat(150);
+  it('keeps the complete fallback title for hover while the row handles ellipsis', () => {
+    const long = 'Example title '.repeat(30);
     const text = resolveTaskDescription({
-      agentId: 'agent-1',
+      agentId: 'sample-main',
       runConfig: { promptTemplate: long },
     });
-    expect(text).toHaveLength(101);
-    expect(text.endsWith('…')).toBe(true);
+    expect(text).toBe(long.trim());
   });
 
   it('两者都空时退回运行名称', () => {

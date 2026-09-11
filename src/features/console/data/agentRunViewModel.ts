@@ -12,6 +12,11 @@ import {
 import { resolveStatus } from './status';
 import { messageText, rawText } from './presentationText';
 
+function isWorking(state: Pick<AgentControlSnapshot, 'phase' | 'interrupted' | 'pendingToolCall' | 'pendingQuestion'>): boolean {
+  return !state.interrupted && !state.pendingToolCall && !state.pendingQuestion
+    && (state.phase === 'thinking' || state.phase === 'executing');
+}
+
 /** Pure Renderer projections. Disk and live snapshots remain the only business sources. */
 export function projectActiveAgentRun(
   state: AgentControlSnapshot,
@@ -27,6 +32,7 @@ export function projectActiveAgentRun(
     status: resolveStatus(state),
     createdAt: state.createdAt,
     workerCount: state.children.length,
+    working: isWorking(state) || state.children.some(isWorking),
     model: state.currentModel,
     interrupted,
     activity: resolveActivitySummary({
@@ -54,6 +60,7 @@ export function projectPersistedAgentRun(
     taskDescription: resolveTaskDescription(snapshot),
     workspace: snapshot.runConfig.workspace || undefined,
     lastActiveAt: snapshot.lastActiveAt,
+    messages: snapshot.messages,
     running: active?.agentId === snapshot.agentId,
   };
 }

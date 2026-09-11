@@ -135,7 +135,9 @@ export class AgentModeCatalog {
     request: Extract<StartAgentRequest, { input: string }>,
   ): ResolvedAgentLaunch {
     const input = request.input.trim();
-    if (!input) throw new AgentModeCatalogError('invalid-input', 'Agent input cannot be empty');
+    if (!input && !request.skills?.length && !request.launchOptions?.images?.length) {
+      throw new AgentModeCatalogError('invalid-input', 'Agent input cannot be empty');
+    }
     const mode = this.requireDefinition(request.modeId);
     const agentSpec = this.requireSpec(mode.systemChatAgentSpec);
     if (!mode.isAvailableFor(agentSpec)) {
@@ -146,7 +148,10 @@ export class AgentModeCatalog {
     }
     return {
       runConfig: applyRequestOverrides(
-        createSystemChatRunConfig(input, request.workspace),
+        {
+          ...createSystemChatRunConfig(input, request.workspace),
+          ...(request.skills?.length ? { skills: [...request.skills] } : {}),
+        },
         request,
       ),
       agentSpec,

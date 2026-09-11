@@ -34,9 +34,11 @@ import {
 
 import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ContextUsage } from '../../../../../shared/types/token';
+import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
 import { useAttachmentDraft } from '../../attachments';
-import { composerDraftKey, useComposerDraft } from '../../data/composer-drafts';
-import { ImageThumbnail } from '../ImageThumbnail';
+import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
+import { composerDraftKey, submitComposerDraft, useComposerDraft, useComposerDraftVersion, useComposerSkills } from '../../data/composer-drafts';
+import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { Popover } from '../../chrome/Popover';
 import { Tooltip } from '../../chrome/Tooltip';
 import type { MessagePayload } from '../../data/actions';
@@ -47,6 +49,9 @@ import {
 } from './composerMainAction';
 import { ModelPicker } from './ModelPicker';
 import { useComposerSettings } from './useComposerSettings';
+import { SkillTags } from '../SkillTags';
+import { SkillPicker } from './SkillPicker';
+import { useSkillComposer } from './useSkillComposer';
 import styles from './conversationComposer.module.css';
 
 // ==================== 通用的药丸下拉（计划 / 审批共用） ====================
@@ -165,9 +170,11 @@ function useModeOptions(agentSpec: string | undefined, enabled: boolean): readon
 export interface ConversationComposerProps {
   readonly agentId: string;
   readonly workerId?: string;
+  readonly workspace?: string;
   /** 投递目标显示名（用于 placeholder） */
   readonly targetName: string;
   readonly model: string;
+  readonly reasoningOverride: ReasoningSelection;
   readonly modeId?: AgentModeId;
   readonly approvalMode: ApprovalMode;
   readonly agentSpec?: string;
@@ -186,8 +193,10 @@ export const ConversationComposer = memo<ConversationComposerProps>(
   ({
     agentId,
     workerId,
+    workspace,
     targetName,
     model,
+    reasoningOverride,
     modeId,
     approvalMode,
     agentSpec,
@@ -201,17 +210,26 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     onInterrupt,
   }) => {
     const { t } = useTranslation();
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const draftKey = composerDraftKey(agentId, workerId);
     // 文字与附件共享目标键，切模块/切任务回来仍在，也不会跨目标串稿。
     const [draft, setDraft] = useComposerDraft(draftKey);
+    const [skills, setSkills] = useComposerSkills(draftKey);
+    const version = useComposerDraftVersion(draftKey);
+    const skillComposer = useSkillComposer({
+      value: draft, onChange: setDraft, skills, onSkillsChange: setSkills, workspace,
+      draftIdentity: `${draftKey}:${version}`,
+      enabled: !workerId || workspace !== undefined,
+    });
+    const { anchorRef, textareaRef, options: skillOptions, textareaProps, onKeyDown: onSkillKeyDown } = skillComposer;
+    const submitting = useRef(false);
     const [pendingAction, setPendingAction] = useState<ComposerPendingAction>(null);
-    const attachments = useAttachmentDraft(draftKey);
+    const attachments = useAttachmentDraft(draftKey, setDraft);
+    const [submitError, setSubmitError] = useState<PresentationText>();
     const settings = useComposerSettings(agentId, workerId, model);
     const modeIds = useModeOptions(agentSpec, !workerId);
     const hasAttachments = attachments.hasAttachments;
     const mainAction = resolveComposerMainAction(
-      Boolean(draft.trim()) || hasAttachments,
+      Boolean(draft.trim()) || hasAttachments || skills.length > 0,
       canPause,
       stopping,
       pendingAction,
@@ -224,22 +242,25 @@ export const ConversationComposer = memo<ConversationComposerProps>(
       : t('sessionWorkbenchUi.composer.send');
 
     const submit = useCallback(async () => {
-      if (stopping || pendingAction !== null || (!draft.trim() && !attachments.hasAttachments)) return;
+      if (stopping || submitting.current || pendingAction !== null || (!draft.trim() && !attachments.hasAttachments && skills.length === 0)) return;
+      submitting.current = true;
+      setSubmitError(undefined);
       setPendingAction('send');
       try {
-        const ok = await onSubmit({
-          text: draft,
-          images: await attachments.imagePayloads(),
-          files: attachments.files.map(({ name, path }) => ({ name, path })),
-        });
-        if (ok) {
-          setDraft('');
-          attachments.clear();
-        }
+        const ok = await submitComposerDraft(draftKey, (snapshot, images, files) => onSubmit({
+          text: snapshot.text,
+          skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
+          images,
+          files: files.map(({ name, path }) => ({ name, path })),
+        }));
+        if (!ok) setSubmitError(messageText('sessionWorkbenchUi.attachmentFailure.delivery'));
+      } catch (error) {
+        setSubmitError(presentationFromError(error, messageText('sessionWorkbenchUi.attachmentFailure.delivery')));
       } finally {
+        submitting.current = false;
         setPendingAction(null);
       }
-    }, [attachments, draft, onSubmit, pendingAction, setDraft, stopping]);
+    }, [attachments, draft, draftKey, onSubmit, pendingAction, skills, stopping]);
 
     const interrupt = useCallback(async () => {
       if (stopping || !canPause || pendingAction !== null) return;
@@ -253,6 +274,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
 
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (onSkillKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           void submit();
@@ -262,10 +284,10 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
-          textareaRef.current?.blur();
+          event.currentTarget.blur();
         }
       },
-      [submit],
+      [onSkillKeyDown, submit],
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
@@ -281,13 +303,21 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     };
 
     return (
-      <div className={styles.composer}>
+      <div ref={anchorRef} className={styles.composer}>
+        <SkillPicker controller={skillComposer} />
+        <AttachmentError error={submitError} />
+        {skills.length > 0 && (
+          <div className={styles.attachments}>
+            <SkillTags skills={skills} options={skillOptions}
+              onRemove={(name) => setSkills(skills.filter((skill) => skill !== name))} />
+          </div>
+        )}
         {hasAttachments && (
           <div className={styles.attachments}>
             {attachments.images.map((image) => (
               <div key={image.id} className={styles.thumbWrap}>
-                <ImageThumbnail
-                  resource={{ kind: 'preview-url', url: image.previewUrl }}
+                <AttachmentThumbnail
+                  image={image}
                   alt={t('sessionWorkbenchUi.composer.imageAttachment')}
                   className={styles.thumb}
                   onPreview={onPreviewImage}
@@ -320,14 +350,16 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         )}
 
         {/* 点空白聚焦只包 textarea 区，**不包工具行** —— 包整壳会在点下拉时冒泡抢焦点、下拉即关 */}
-        <div className={styles.inputZone} onClick={() => textareaRef.current?.focus()}>
+        <div className={styles.inputZone} onClick={(event) => event.currentTarget.querySelector('textarea')?.focus()}>
           <textarea
             ref={textareaRef}
+            {...textareaProps}
+            aria-label={t('sessionWorkbenchUi.composer.instructionPlaceholder', { name: targetName })}
             className={styles.textarea}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
-            onPaste={attachments.handlePaste}
+            onPaste={(event) => { skillComposer.onPasteOrDrop(); attachments.handlePaste(event); }}
             placeholder={t('sessionWorkbenchUi.composer.instructionPlaceholder', { name: targetName })}
             rows={1}
             disabled={stopping}
@@ -338,6 +370,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           <ModelPicker
             modelGroups={settings.modelGroups}
             model={model}
+            reasoningOverride={reasoningOverride}
             onModelChange={settings.onModelChange}
             onReasoningChange={settings.onReasoningChange}
             disabled={controlsDisabled}

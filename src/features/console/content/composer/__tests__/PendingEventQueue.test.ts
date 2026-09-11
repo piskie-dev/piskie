@@ -41,6 +41,21 @@ describe('PendingEventQueue', () => {
     expect(markup).toContain('2 张图片');
   });
 
+  it('keeps selected skill names visible for skill-only and mixed queued messages', () => {
+    const events: PendingAgentEventView[] = [{
+      id: 'sample-skills', timestamp: 1, source: 'user', content: '', imageCount: 0,
+      skills: ['sample-guide', 'sample-table'],
+    }, {
+      id: 'sample-mixed', timestamp: 2, source: 'user', content: 'Example task', imageCount: 1,
+      skills: ['sample-reader'],
+    }];
+    const markup = renderToStaticMarkup(createElement(PendingEventQueue, { events }));
+    expect(markup).toContain('sample-guide, sample-table');
+    expect(markup).toContain('sample-reader · Example task');
+    expect(markup).toContain('1 张图片');
+    expect(markup).not.toContain('（空内容）');
+  });
+
   it('renders nothing when the Mailbox snapshot is empty', () => {
     expect(renderToStaticMarkup(createElement(PendingEventQueue, { events: [] }))).toBe('');
   });

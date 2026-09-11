@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { skillSelectionSchema } from './skill-selection.js';
 
 const agentInputSourceSchema = z.enum([
   'user',
@@ -60,4 +61,5 @@ export const agentInputRequestSchema = z.object({
     )
     .optional(),
   uiSubmission: uiSubmissionSchema.optional(),
+  skills: skillSelectionSchema.optional(),
 });

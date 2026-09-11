@@ -1,9 +1,9 @@
 /**
  * ModelPicker —— 会话输入器中的模型 + 思考程度选择器。
  *
- * 功能与 `components/shared/ModelReasoningControl` 一致（搜索 / 按 Provider 分组 /
- * 思考档位 / budget tokens / mandatory 锁提示），外壳用 `chrome/Popover`
- * （原生 popover，top layer + light-dismiss），会话输入器内不引 AntD 控件。
+ * 展示当前会话保存的思考值，模型目录提供模型与可选档位。
+ * 支持搜索 / 按 Provider 分组 / budget tokens / mandatory 锁提示，
+ * 外壳用 `chrome/Popover`（原生 popover，top layer + light-dismiss）。
  */
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +17,6 @@ import {
   getSelectableReasoningOptions,
   reasoningOptionKey,
   reasoningSelectionLabel,
-  resolveSelectableReasoning,
 } from '../../../../utils/reasoning-options';
 import { Popover } from '../../chrome/Popover';
 import styles from './conversationComposer.module.css';
@@ -25,6 +24,7 @@ import styles from './conversationComposer.module.css';
 export interface ModelPickerProps {
   readonly modelGroups: ModelOptGroup[];
   readonly model: string;
+  readonly reasoningOverride: ReasoningSelection;
   readonly onModelChange: (next: string) => Promise<void>;
   readonly onReasoningChange: (selection?: ReasoningSelection) => Promise<void>;
   readonly disabled?: boolean;
@@ -36,11 +36,10 @@ interface FlatModel {
   readonly provider: string;
   readonly searchText: string;
   readonly definition: InferenceModelDefinition;
-  readonly defaultReasoning?: ReasoningSelection;
 }
 
 export const ModelPicker = memo<ModelPickerProps>(
-  ({ modelGroups, model, onModelChange, onReasoningChange, disabled }) => {
+  ({ modelGroups, model, reasoningOverride, onModelChange, onReasoningChange, disabled }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -56,7 +55,6 @@ export const ModelPicker = memo<ModelPickerProps>(
             provider: group.label,
             searchText: `${option.label} ${group.label} ${option.value}`.toLocaleLowerCase(),
             definition: option.definition,
-            defaultReasoning: option.defaultReasoning,
           })),
         ),
       [modelGroups],
@@ -82,21 +80,15 @@ export const ModelPicker = memo<ModelPickerProps>(
     }, [flatModels, query]);
 
     const profile = selectedModel?.definition.reasoning;
-    const requestedReasoning = selectedModel?.defaultReasoning ?? profile?.defaultSelection;
-    const effectiveReasoning = profile
-      ? resolveSelectableReasoning(profile, requestedReasoning)
-      : undefined;
-    const reasoningOptions = useMemo(
-      () => (!profile || profile.mode === 'none' ? [] : getSelectableReasoningOptions(profile)),
-      [profile],
-    );
-
-    // 目录默认档不在可选集里时自动纠正
-    useEffect(() => {
-      if (!requestedReasoning || !effectiveReasoning) return;
-      if (reasoningOptionKey(requestedReasoning) === reasoningOptionKey(effectiveReasoning)) return;
-      void onReasoningChange(effectiveReasoning);
-    }, [effectiveReasoning, onReasoningChange, requestedReasoning]);
+    const reasoningOptions = useMemo(() => {
+      if (!profile || profile.mode === 'none') return [];
+      const options = getSelectableReasoningOptions(profile);
+      const currentIndex = options.findIndex((option) => reasoningOptionKey(option) === reasoningOptionKey(reasoningOverride));
+      // 保留当前预算数值，以及普通可选档位中隐藏的默认或关闭值。
+      if (currentIndex < 0) options.unshift(reasoningOverride);
+      else options[currentIndex] = reasoningOverride;
+      return options;
+    }, [profile, reasoningOverride]);
 
     // 打开时把选中项滚到列表中间（popover 展示后才有布局，等一帧）
     useEffect(() => {
@@ -116,7 +108,7 @@ export const ModelPicker = memo<ModelPickerProps>(
     const modelLabel = selectedModel?.label || model.split('::').at(-1) || t('sessionWorkbenchUi.composer.chooseModel');
     const reasoningLabel = profile?.mode === 'none'
       ? t('reasoning.none')
-      : reasoningSelectionLabel(effectiveReasoning, true, t);
+      : reasoningSelectionLabel(reasoningOverride, true, t);
 
     return (
       <Popover
@@ -196,9 +188,7 @@ export const ModelPicker = memo<ModelPickerProps>(
               <>
                 <div className={styles.reasoningChips}>
                   {reasoningOptions.map((option) => {
-                    const selected =
-                      effectiveReasoning !== undefined &&
-                      reasoningOptionKey(effectiveReasoning) === reasoningOptionKey(option);
+                    const selected = reasoningOptionKey(reasoningOverride) === reasoningOptionKey(option);
                     return (
                       <button
                         key={reasoningOptionKey(option)}
@@ -212,7 +202,7 @@ export const ModelPicker = memo<ModelPickerProps>(
                     );
                   })}
                 </div>
-                {effectiveReasoning?.kind === 'budget' && (
+                {reasoningOverride.kind === 'budget' && (
                   <div className={styles.budgetRow}>
                     <input
                       type="number"
@@ -220,7 +210,7 @@ export const ModelPicker = memo<ModelPickerProps>(
                       min={profile.minBudgetTokens ?? 1}
                       max={profile.maxBudgetTokens}
                       step={1024}
-                      value={effectiveReasoning.tokens}
+                      value={reasoningOverride.tokens}
                       onChange={(event) => {
                         const tokens = Number(event.target.value);
                         if (Number.isFinite(tokens) && tokens > 0) {

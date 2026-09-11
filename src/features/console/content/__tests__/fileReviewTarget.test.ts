@@ -3,11 +3,12 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { reviewTargetForPath } from '../fileReviewTarget';
 
 const preview = vi.fn();
+const releasePreview = vi.fn().mockResolvedValue(undefined);
 
 vi.stubGlobal('window', {
   piskie: {
     desktop: {
-      files: { preview },
+      files: { preview, releasePreview },
     },
   },
 });
@@ -47,6 +48,9 @@ describe('reviewTargetForPath', () => {
     });
 
     await expect(reviewTargetForPath('/workspace/image.png', onPreviewImage)).resolves.toBeNull();
-    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image');
+    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image', undefined, undefined, expect.any(Function));
+    expect(releasePreview).not.toHaveBeenCalled();
+    onPreviewImage.mock.calls[0]![3]();
+    expect(releasePreview).toHaveBeenCalledWith('piskie-attachment://preview/image');
   });
 });

@@ -47,6 +47,7 @@ interface FilePreviewEntry {
   readonly windowId: number;
   readonly filePath: string;
   readonly mediaType: string;
+  readonly held: boolean;
 }
 
 export class WindowRegistry implements DesktopPresentationPort {
@@ -273,21 +274,26 @@ export class WindowRegistry implements DesktopPresentationPort {
     return result.canceled ? undefined : result.filePaths[0];
   }
 
-  createFilePreviewUrl(windowId: number, filePath: string, mediaType: string): string {
+  createFilePreviewUrl(windowId: number, filePath: string, mediaType: string, held = false): string {
     this.requireSession(windowId);
-    const ownedTokens = [...this.filePreviews]
-      .filter(([, entry]) => entry.windowId === windowId)
-      .map(([token]) => token);
-    for (const token of ownedTokens.slice(
-      0,
-      ownedTokens.length - MAX_FILE_PREVIEWS_PER_WINDOW + 1
-    )) {
-      this.filePreviews.delete(token);
+    if (!held) {
+      const ownedTokens = [...this.filePreviews]
+        .filter(([, entry]) => entry.windowId === windowId && !entry.held)
+        .map(([token]) => token);
+      for (const token of ownedTokens.slice(0, Math.max(0, ownedTokens.length - MAX_FILE_PREVIEWS_PER_WINDOW + 1))) {
+        this.filePreviews.delete(token);
+      }
     }
-
     const token = createUuid();
-    this.filePreviews.set(token, { windowId, filePath, mediaType });
+    this.filePreviews.set(token, { windowId, filePath, mediaType, held });
     return `${ATTACHMENT_PREVIEW_SCHEME}://${ATTACHMENT_PREVIEW_HOST}/${token}`;
+  }
+
+  releaseFilePreview(windowId: number, url: string): void {
+    const target = new URL(url);
+    if (target.protocol !== `${ATTACHMENT_PREVIEW_SCHEME}:` || target.hostname !== ATTACHMENT_PREVIEW_HOST) return;
+    const token = target.pathname.slice(1);
+    if (this.filePreviews.get(token)?.windowId === windowId) this.filePreviews.delete(token);
   }
 
   async chooseSavePath(
@@ -594,6 +600,7 @@ export class WindowRegistry implements DesktopPresentationPort {
     try {
       const source = await net.fetch(pathToFileURL(entry.filePath).toString(), {
         method: request.method,
+        signal: request.signal,
         headers: request.headers.has('range')
           ? { Range: request.headers.get('range') ?? '' }
           : undefined,

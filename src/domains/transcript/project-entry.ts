@@ -179,6 +179,9 @@ function buildUserNode(
     text,
     images,
     files,
+    ...(entry.role === 'user' && entry.metadata?.skills?.length ? { skills: entry.metadata.skills } : {}),
+    ...(entry.role === 'user' && entry.metadata?.skillLoadErrors?.length
+      ? { skillLoadErrors: entry.metadata.skillLoadErrors } : {}),
     tone: userTone(origin),
     interaction,
     defaultExpanded: false,

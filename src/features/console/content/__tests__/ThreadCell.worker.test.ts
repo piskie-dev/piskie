@@ -22,6 +22,8 @@ let root: Root;
 
 beforeAll(async () => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
+  // JSDOM has no CSS animation engine; synchronization is verified in Chrome.
+  dom.window.Element.prototype.getAnimations = () => [];
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);

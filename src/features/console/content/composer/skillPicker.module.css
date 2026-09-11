@@ -1,0 +1,105 @@
+.panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 6px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  background: var(--cyber-surface);
+  color: var(--cyber-text);
+  box-shadow: var(--shadow-card-active);
+  overflow: hidden;
+}
+
+.panel:popover-open {
+  display: flex;
+  flex-direction: column;
+}
+
+.heading {
+  flex: none;
+  padding: 6px 10px 8px;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.list {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 32px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.option[aria-selected='true'] {
+  background: var(--surface-2);
+}
+
+.icon,
+.scope {
+  flex: none;
+  color: var(--cyber-text-muted);
+}
+
+.name {
+  flex: 0 1 auto;
+  max-inline-size: 55%;
+  min-inline-size: 0;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.description {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  color: var(--cyber-text-muted);
+}
+
+.name,
+.description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope {
+  margin-inline-start: auto;
+  font-size: 10.5px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 32px;
+  padding: 10px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+}
+
+.status button {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  font: inherit;
+  cursor: pointer;
+}

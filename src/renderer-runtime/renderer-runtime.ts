@@ -1,4 +1,6 @@
 import type { PiskieDesktopApi } from '@shared/electron-contracts/api';
+import { clearAgentComposerDrafts, clearAllComposerDrafts } from '../features/console/data/composer-drafts';
+import { clearFilePreviews } from '../features/console/content/file-preview';
 import type { AgentLiveContentDelta } from '@shared/electron-contracts/agents';
 import type { AgentControlChangedEvent } from '@shared/electron-contracts/agent-runs';
 import {
@@ -70,7 +72,7 @@ export function createRuntime(
   } = {},
 ): RendererRuntime {
   const agentControl = createAgentControlStore();
-  const agentRuns = resources.agentRuns ?? createAgentRunRepository(api.agentRuns);
+  const agentRuns = resources.agentRuns ?? createAgentRunRepository(api.agentRuns, clearAgentComposerDrafts);
   const agentCommands = createAgentCommands(api.agents, agentControl, agentRuns);
   const contextInspector = createContextInspectorResource(api.agents);
   const transcript = createTranscriptStore(api.agents);
@@ -129,6 +131,7 @@ export function createRuntime(
           }));
           disposers.push(api.agents.observeConversation((event) => {
             transcript.applyConversation(event);
+            agentRuns.applyConversation(event);
           }));
           disposers.push(api.agents.observeLiveContent((event) => {
             if (liveBuffer) liveBuffer.push(event);
@@ -162,6 +165,8 @@ export function createRuntime(
           transcript.close();
           taskDefinitions.close();
           agentRuns.close();
+          clearAllComposerDrafts();
+          clearFilePreviews();
           try {
             await screenFeeds.close();
           } catch (closeError) {
@@ -202,6 +207,8 @@ export function createRuntime(
         transcript.close();
         taskDefinitions.close();
         agentRuns.close();
+        clearAllComposerDrafts();
+        clearFilePreviews();
         try {
           await screenFeeds.close();
         } finally {

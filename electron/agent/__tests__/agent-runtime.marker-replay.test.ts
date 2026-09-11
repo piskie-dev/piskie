@@ -30,18 +30,23 @@ import type { ReasoningSelection } from '../../../shared/types/reasoning.js';
 import type { AgentInferencePort } from '../../inference/application/agent-inference-port.js';
 import { fakeAgentInference } from '../../testing/fake-agent-inference.js';
 
+class ReasoningRequestRuntime extends AgentRuntime {
+  requestForTest() { return this.callAI('Sample instructions', [], []); }
+}
+
 function buildRuntime(extra: {
   initialModel?: string;
+  initialReasoning?: ReasoningSelection;
   inference?: AgentInferencePort;
   validateReasoningSelection?: (model: string, sel: unknown) => boolean;
   conversationStore?: unknown;
-} = {}): AgentRuntime {
+} = {}): ReasoningRequestRuntime {
   const spec = {
     name: 'director',
     role: 'director',
     modules: [],
   } as unknown as AgentSpec;
-  return new AgentRuntime({
+  return new ReasoningRequestRuntime({
     spec,
     inference: extra.inference ?? fakeAgentInference(),
     pilotPorts: undefined,
@@ -55,6 +60,7 @@ function buildRuntime(extra: {
     options: {
       mainAgentId: 'test-agent',
       initialModel: extra.initialModel ?? 'provider-1::model-1',
+      initialReasoning: extra.initialReasoning,
       runConfig: { name: 'marker', description: '', promptTemplate: '' },
     } as never,
   });
@@ -148,6 +154,55 @@ describe('marker 回放（环境强制覆盖机制已删除）', () => {
     expect(flowA.reasoningOverride).toEqual({ kind: 'effort', effort: 'high' });
     expect(flowB.reasoningOverride).toEqual({ kind: 'effort', effort: 'medium' });
     expect(buildRuntime({ inference }).reasoningOverride).toEqual({ kind: 'effort', effort: 'high' });
+  });
+
+  it('applies changes to future requests while existing runtimes and in-flight requests retain their snapshots', async () => {
+    const medium = { kind: 'effort', effort: 'medium' } as const;
+    const high = { kind: 'effort', effort: 'high' } as const;
+    const low = { kind: 'effort', effort: 'low' } as const;
+    let configured: ReasoningSelection = medium;
+    let release!: () => void;
+    const inFlight = new Promise<void>((resolve) => { release = resolve; });
+    const base = fakeAgentInference();
+    const invoke = vi.fn(base.invoke).mockImplementationOnce(async (request, options) => {
+      await inFlight;
+      return base.invoke(request, options);
+    });
+    const inference = fakeAgentInference({
+      invoke,
+      resolveReasoning: (_target, override) => ({
+        selection: override ?? configured, source: override ? 'agent' : 'model', nativeParameters: {},
+      }),
+    });
+    const parent = buildRuntime({ inference });
+    const other = buildRuntime({ inference });
+    const child = buildRuntime({ inference, initialReasoning: parent.reasoningOverride });
+    const sibling = buildRuntime({ inference, initialReasoning: parent.reasoningOverride });
+    const pending = parent.requestForTest();
+
+    configured = high;
+    parent.setReasoningOverride(high);
+    expect(invoke.mock.calls[0]![0].reasoningOverride).toEqual(medium);
+    release();
+    await pending;
+    await parent.requestForTest();
+    expect(invoke.mock.calls[1]![0].reasoningOverride).toEqual(high);
+    expect([other, child, sibling].map((runtime) => runtime.getControlState().reasoningOverride)).toEqual([medium, medium, medium]);
+    const newMain = buildRuntime({ inference });
+    const newChild = buildRuntime({ inference, initialReasoning: other.reasoningOverride });
+    expect(newMain.reasoningOverride).toEqual(high);
+    expect(newChild.reasoningOverride).toEqual(medium);
+
+    configured = low;
+    child.setReasoningOverride(low);
+    const laterMain = buildRuntime({ inference });
+    const laterChild = buildRuntime({ inference, initialReasoning: parent.reasoningOverride });
+    for (const runtime of [parent, other, child, sibling, newMain, newChild, laterMain, laterChild]) {
+      await runtime.requestForTest();
+    }
+    expect(invoke.mock.calls.slice(2).map(([request]) => request.reasoningOverride)).toEqual([
+      high, medium, low, medium, high, medium, low, high,
+    ]);
   });
 
   it('恢复时忽略历史 reasoning marker，并从最新模型配置建立明确快照', async () => {

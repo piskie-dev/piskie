@@ -13,10 +13,13 @@ import type {
   CompactionMessagePage,
 } from '../types/context.js';
 
+import type { AgentRunMessageState } from '../agent-run-messages.js';
+
 export const AGENT_RUN_OPERATIONS = Object.freeze({
   list: 'agent-runs.list',
   state: 'agent-runs.state',
   delete: 'agent-runs.delete',
+  markRead: 'agent-runs.markRead',
   readPlan: 'agent-runs.plan.read',
   listCompactions: 'agent-runs.compaction.list',
   originalCompactionMessages: 'agent-runs.compaction.originalMessages',
@@ -39,6 +42,7 @@ type AgentChildSnapshot = Omit<ChildSnapshot, 'config'> & {
 export type AgentRunSnapshot = Omit<AgentRunHeader, 'runConfig' | 'childAgents'> & {
   runConfig: AgentRunConfigSnapshot;
   childAgents: AgentChildSnapshot[];
+  messages: AgentRunMessageState;
 };
 
 export type AgentControlSnapshot = Omit<AgentControlState, 'runConfig'> & {
@@ -54,6 +58,7 @@ interface AgentRunsClient {
   list(): Promise<AgentRunSnapshot[]>;
   state(agentId: string): Promise<AgentControlSnapshot | null>;
   delete(agentId: string): Promise<void>;
+  markRead(agentId: string, throughIndex: number): Promise<AgentRunMessageState>;
   readPlan(agentId: string): Promise<{
     planId: string;
     taskSummary: string;

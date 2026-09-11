@@ -5,6 +5,7 @@
  * 同一 TaskDefinition 启动多次会得到不同 agentId，因此始终显示为多行。
  */
 
+import type { AgentRunMessageState } from '@shared/agent-run-messages';
 import { phaseOrder, type HistoryRow, type SessionRow } from './sessionRow';
 
 export interface ThreadRow {
@@ -15,6 +16,7 @@ export interface ThreadRow {
   readonly workspace?: string;
   /** 排序用；live 行没有历史条目时退回 `createdAt` */
   readonly lastActiveAt: string;
+  readonly messages?: AgentRunMessageState;
   /** 有值即在跑。合并后这是"运行中"唯一的结构性体现 */
   readonly live?: SessionRow;
   /** 历史源行；恢复会话需要原样回传 */
@@ -68,6 +70,7 @@ export function buildThreadRows(input: {
         workspace: existing.workspace ?? row.workspace,
         lastActiveAt:
           timeOf(row.lastActiveAt) > timeOf(existing.lastActiveAt) ? row.lastActiveAt : existing.lastActiveAt,
+        messages: row.messages,
         history: row,
       });
       continue;
@@ -79,6 +82,7 @@ export function buildThreadRows(input: {
       label: row.taskDescription,
       workspace: row.workspace,
       lastActiveAt: row.lastActiveAt,
+      messages: row.messages,
       history: row,
     });
   }

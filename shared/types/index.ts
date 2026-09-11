@@ -407,6 +407,8 @@ export interface AgentRunConfig {
   description: string;
   category?: string;
   promptTemplate: string;
+  /** Skill selections belonging to the initial chat input. */
+  skills?: string[];
   systemPrompt?: string;
   workspace?: string;
   bindings?: AgentRunBindings;
@@ -633,6 +635,8 @@ export interface AgentInputEvent {
   source: AgentInputSource;
   /** 事件内容（用户消息或结构化数据） */
   content: string | Record<string, unknown>;
+  /** 本条用户消息显式选择的技能名称。 */
+  skills?: string[];
   /** 可选的优先级提示（AI 参考，不强制） */
   priority?: 'high' | 'normal' | 'low';
   /** 可选的元数据 */

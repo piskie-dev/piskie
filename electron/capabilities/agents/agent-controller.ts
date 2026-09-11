@@ -4,6 +4,7 @@ import {
   AGENT_TOPICS,
 } from '../../../shared/electron-contracts/agents.js';
 import { agentInputRequestSchema } from '../../../shared/schemas/agent-input.js';
+import { skillSelectionSchema } from '../../../shared/schemas/skill-selection.js';
 import type {
   ConversationAppendEvent,
   AgentInputEvent,
@@ -52,6 +53,7 @@ const startRequestSchema = z.union([
   z.object({
     ...startCommonFields,
     input: z.string().max(1_000_000),
+    skills: skillSelectionSchema.optional(),
     modeId: z.enum(['normal', 'plan', 'browser-skill']),
   }).strict(),
 ]);
@@ -206,6 +208,15 @@ export function createAgentController(
       ([agentId, subagentId, mode]) => {
         if (!agent.setSubagentApprovalMode(agentId, subagentId, mode)) {
           notFound('Agent or subagent was not found');
+        }
+      },
+    ),
+    operation(
+      AGENT_OPERATIONS.cancelPlanApprovalCountdown,
+      args([identifier, identifier.optional(), identifier]),
+      ([agentId, subagentId, callId]) => {
+        if (!agent.cancelPlanApprovalCountdown(agentId, subagentId ?? null, callId)) {
+          notFound('Agent or pending plan approval was not found');
         }
       },
     ),

@@ -189,6 +189,9 @@ export function createCapabilityMarketController(
     operation(CAPABILITY_OPERATIONS.previewMarket, args([identifier.optional()]), ([workspace]) => (
       application.previewMarket(workspace)
     )),
+    operation(CAPABILITY_OPERATIONS.availableSkills, args([identifier.optional()]), ([workspace]) => (
+      application.availableSkills(workspace)
+    )),
   ];
 
   const changes: TopicDefinition = {

@@ -76,6 +76,7 @@ import { AgentMailbox, EventBatchApplyError } from './agent-mailbox.js';
 import { agentIncidentStore } from '../observability/incidents/agent-incident-store.js';
 import { AgentConversationContext } from './context/index.js';
 import { loadAgentInstructions } from './context/agent-instructions.js';
+import { loadSelectedSkills } from './context/selected-skills.js';
 import { app } from 'electron';
 import type { CatalogSnapshot, FinalToolFace } from '../tools/catalog.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
@@ -108,6 +109,7 @@ function projectPendingEvent(event: AgentInputEvent): PendingAgentEventView {
     source: event.source,
     content: typeof event.content === 'string' ? event.content : structuredClone(event.content),
     priority: event.priority,
+    ...(event.skills?.length ? { skills: [...event.skills] } : {}),
     imageCount: event.images?.length ?? 0,
   };
 }
@@ -217,17 +219,23 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
 
   // emitStateChange 不覆写：基类实现带 disposed 守卫（世代唯一性）。
 
-  addUserMessage(input: AgentUserInput): void {
-    if (!input.images?.length) {
-      this.context.addUserMessage(input.text, input.subtype);
-      return;
+  addUserMessage(input: AgentUserInput): void | Promise<void> {
+    let content: string | ContentBlock[] = input.text;
+    if (input.images?.length) {
+      content = input.images.map((image) => ({
+        type: 'image',
+        source: { type: 'base64', media_type: image.media_type, data: image.data },
+      }));
+      if (input.text) content.push({ type: 'text', text: input.text });
     }
-
-    const content: ContentBlock[] = input.images.map((image) => ({
-      type: 'image',
-      source: { type: 'base64', media_type: image.media_type, data: image.data },
-    }));
-    if (input.text) content.push({ type: 'text', text: input.text });
+    if (input.skills?.length) {
+      return loadSelectedSkills(this.getSkillCatalog(), input.skills, {
+        workspace: this.getEffectiveWorkspace(),
+        defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
+      }).then((selection) => {
+        this.context.addUserMessage(content, input.subtype, selection);
+      });
+    }
     this.context.addUserMessage(content, input.subtype);
   }
 
@@ -329,6 +337,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
             phase: childState.phase,
             interrupted: childState.interrupted,
             type: (child as AgentRuntime).spec.name,
+            workspace: (child as AgentRuntime).getEffectiveWorkspace(),
             subject: childConfig?.subject || '',
             taskIds: childConfig?.taskIds || [],
             browserReady: childBrowserMod?.getBrowserReady() ?? false,
@@ -427,8 +436,12 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
    * 只由 engine 的 applyEventBatch 调用，由该入口统一包装错误并附上本批 event ids；
    * 应用失败即冲程 fatal——内容正确性由生产边界保证，不做逐事件隔离。
    */
-  protected applyEvents(events: AgentInputEvent[]): void {
-    for (const event of events) {
+  protected applyEvents(events: AgentInputEvent[]): void | Promise<void> {
+    for (const [index, event] of events.entries()) {
+      if (event.source === 'user' && !event.uiSubmission && event.skills?.length) {
+        return Promise.resolve(this.defaultProcessEvent(event))
+          .then(() => this.applyEvents(events.slice(index + 1)));
+      }
       // 配对判断前置于模块循环——配对是协议规则，不是 default 兜底；
       // 模块按 content 形状识别、不查 event.source，不能依赖"恰好没有模块认领"
       if (event.source === 'user' && this.tryPairPendingContinuation(event)) {
@@ -939,6 +952,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         childSnapshots.push({
           id: childRuntime.id || '',
           config: ((child as AgentRuntime).getSubagentConfig?.() || {}) as SubagentConfig,
+          workspace: (child as AgentRuntime).getEffectiveWorkspace(),
           createdAt: childRuntime.createdAt?.getTime?.() || Date.now(),
         });
       }
@@ -1041,7 +1055,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     return [...new Set(this._spec.tools?.customTools ?? [])].filter((name) => !excluded.has(name));
   }
 
-  private getEffectiveWorkspace(): string {
+  getEffectiveWorkspace(): string {
     return this.options.runConfig?.workspace
       ?? (this.options.workspace as string | undefined)
       ?? pathsService.getDefaultWorkspaceDir();
@@ -1157,10 +1171,10 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   // 默认事件处理
   // ============================================================
 
-  private defaultProcessEvent(event: AgentInputEvent): void {
-    // 空内容守卫收窄：正文与 images 都为空才忽略——私聊纯图片是合法输入
+  private defaultProcessEvent(event: AgentInputEvent): void | Promise<void> {
+    const skills = event.source === 'user' && !event.uiSubmission ? event.skills : undefined;
     const hasImages = (event.images?.length ?? 0) > 0;
-    if (!event.content && !hasImages) return;
+    if (!event.content && !hasImages && !skills?.length) return;
 
     // 系统事件（postSystemEvent factory）：
     // start 是纯触发器（初始上下文已由 role.onStart 注入，不重复落痕）；
@@ -1187,7 +1201,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         ? contentStr
         : `<agent_input source="${event.source}"${event.priority === 'high' ? ' priority="high"' : ''} ts="${ts}">\n${neutralizeClosing('agent_input', contentStr)}\n</agent_input>`;
 
-    this.addUserMessage({ text: messageText, images: event.images, subtype });
+    return this.addUserMessage({ text: messageText, images: event.images, skills, subtype });
   }
 
   // ============================================================
@@ -1204,6 +1218,16 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     }
     const replayFrom = lastSummaryIdx >= 0 ? lastSummaryIdx : 0;
     const toReplay = entries.slice(replayFrom);
+    const summary = entries[lastSummaryIdx];
+    if (summary?.t === 'summary' && summary.pendingEntries?.length) {
+      const messageIds = new Set(summary.pendingEntries.flatMap((entry) => 'messageId' in entry ? [entry.messageId] : []));
+      const toolUseIds = new Set(summary.pendingEntries.flatMap((entry) => 'toolUseId' in entry ? [entry.toolUseId] : []));
+      const pending = entries.slice(0, lastSummaryIdx).filter((entry) =>
+        (entry.t === 'msg' && messageIds.has(entry.id)) ||
+        (entry.t === 'tool' && toolUseIds.has(entry.toolUseId))
+      );
+      toReplay.splice(1, 0, ...pending);
+    }
 
     // 回放内容来自磁盘，挂起 flush 避免写回；结束后全部标记为已持久化
     this.context.beginReplay();
@@ -1232,10 +1256,15 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
             entry.content
           );
           if (entry.role === 'user') {
-            this.context.addUserMessage(content, entry.subtype);
+            this.context.addUserMessage(content, entry.subtype, {
+              id: entry.id, timestamp: entry.ts,
+              metadata: entry.metadata, instructions: entry.instructions,
+            });
           } else {
             this.context.addAssistantMessage(
-              typeof content === 'string' ? [{ type: 'text', text: content }] : content
+              typeof content === 'string' ? [{ type: 'text', text: content }] : content,
+              undefined,
+              { id: entry.id, timestamp: entry.ts },
             );
           }
           break;
@@ -1332,6 +1361,12 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     const mod = this.getModule('subagent') as
       { applyChildApprovalMode(id: string, mode: ApprovalMode): boolean } | undefined;
     return mod?.applyChildApprovalMode(subagentId, mode) ?? false;
+  }
+
+  cancelSubagentPlanApprovalCountdown(subagentId: string, callId: string): boolean {
+    const mod = this.getModule('subagent') as
+      { cancelChildPlanApprovalCountdown(id: string, callId: string): boolean } | undefined;
+    return mod?.cancelChildPlanApprovalCountdown(subagentId, callId) ?? false;
   }
 
   respondToSubagentApproval(subagentId: string, decision: ToolApprovalDecision): boolean {

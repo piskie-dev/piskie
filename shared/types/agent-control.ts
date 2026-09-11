@@ -24,6 +24,7 @@ import type { ReasoningSelection } from './reasoning.js';
 import type { ToolArtifact } from './tool-artifact.js';
 import type { ImageRefBlock } from './image-resource.js';
 import type { AgentMcpView } from './mcp.js';
+import type { AgentRunMessageState } from '../agent-run-messages.js';
 
 /** Canonical address for a top-level AgentRun or one of its Workers. */
 export interface AgentTarget {
@@ -76,6 +77,7 @@ export interface PendingAgentEventView {
   readonly source: AgentInputSource;
   readonly content: string | Record<string, unknown>;
   readonly priority?: 'high' | 'normal' | 'low';
+  readonly skills?: string[];
   /** 仅暴露数量，控制状态不携带图片 base64。 */
   readonly imageCount: number;
 }
@@ -178,6 +180,8 @@ export interface ChildControlState extends AgentActivityState {
   phase: AgentPhase;
   interrupted?: boolean;
   type: string;
+  /** Worker runtime 的实际工作区。 */
+  workspace?: string;
   /** Parent UI 使用的 Assignment 简短标题 */
   subject: string;
   /** 创建期 Assignment 引用的细任务 ID；仅用于从 Main 权威看板派生 Worker UI。 */
@@ -226,6 +230,7 @@ export interface AgentRunHeader {
 
 export interface ChildSnapshot {
   id: string;
+  workspace?: string;
   config: SubagentConfig;
   createdAt: number;
 }
@@ -292,9 +297,17 @@ interface MsgEntryBase {
   content: string | PersistedMessageBlock[];
 }
 
+export interface UserMessageMetadata {
+  skills?: string[];
+  skillLoadErrors?: Array<{ name: string; error: string }>;
+}
+
 export interface UserMsgEntry extends MsgEntryBase {
   role: 'user';
   subtype: MessageSubtype;
+  metadata?: UserMessageMetadata;
+  /** Complete teaching attached to this input; projected into model content on demand. */
+  instructions?: string;
 }
 
 export interface AssistantMsgEntry extends MsgEntryBase {
@@ -321,6 +334,8 @@ export interface SummaryEntry {
   t: 'summary';
   ts: number;
   summary: ContextSummary;
+  /** Previously persisted inputs that this compaction left unprocessed. */
+  pendingEntries?: Array<{ messageId: string } | { toolUseId: string }>;
 }
 
 export interface MarkerEntry {
@@ -343,6 +358,8 @@ export interface ConversationAppendEvent {
   agentId: string;
   index: number;
   entry: ConversationEntry;
+  /** Present only for a newly persisted, user-visible main conversation message. */
+  messages?: AgentRunMessageState;
   /** Runtime-only correlation for replacing the matching live response. */
   requestId?: ConversationAppendMetadata['requestId'];
 }

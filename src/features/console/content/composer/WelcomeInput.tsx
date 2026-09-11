@@ -1,13 +1,15 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatModelReference, useInferenceStore } from '../../../../store/inferenceStore';
 import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
+import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 import {
-  getComposerDraftVersion,
+  submitComposerDraft,
   useComposerDraft,
   useComposerDraftSettings,
   useComposerDraftStore,
   useComposerDraftVersion,
+  useComposerSkills,
   WELCOME_DRAFT_KEY,
 } from '../../data/composer-drafts';
 import { useMcpPrewarm } from '../../data/useMcpPrewarm';
@@ -26,12 +28,14 @@ export const WelcomeInput: React.FC<{
 }> = ({ sending, onStart, onPreviewImage }) => {
   const { t } = useTranslation();
   const [draft, setDraft] = useComposerDraft(WELCOME_DRAFT_KEY);
+  const [skills, setSkills] = useComposerSkills(WELCOME_DRAFT_KEY);
   const [settings, patchSettings] = useComposerDraftSettings(WELCOME_DRAFT_KEY);
   const { modeId, approvalMode, model, workspace, environmentIds } = settings;
   const version = useComposerDraftVersion(WELCOME_DRAFT_KEY);
-  const resetDraft = useComposerDraftStore((state) => state.resetDraft);
   const selectApprovalMode = useComposerDraftStore((state) => state.selectApprovalMode);
-  const attachments = useAttachmentDraft(WELCOME_DRAFT_KEY);
+  const attachments = useAttachmentDraft(WELCOME_DRAFT_KEY, setDraft);
+  const [preparing, setPreparing] = useState(false);
+  const [submitError, setSubmitError] = useState<PresentationText>();
   const submitting = useRef(false);
 
   const inferenceSelections = useInferenceStore((store) => store.selections);
@@ -60,37 +64,48 @@ export const WelcomeInput: React.FC<{
   }, [patchSettings]);
 
   const submit = useCallback(async () => {
-    if (submitting.current || (!draft.trim() && !attachments.hasAttachments)) return;
+    if (sending || submitting.current || (!draft.trim() && !attachments.hasAttachments && skills.length === 0)) return;
     submitting.current = true;
+    setPreparing(true);
+    setSubmitError(undefined);
     try {
-      const text = composeAttachmentText(draft, attachments.files, attachments.images.length > 0);
-      const images = await attachments.imagePayloads();
-      const mcpPrewarmToken = prewarm.claim();
-      const outcome = await onStart(text, {
-        ...settings,
-        model: resolvedModel,
-        images,
-        mcpPrewarmToken,
+      const ok = await submitComposerDraft(WELCOME_DRAFT_KEY, async (snapshot, images, files) => {
+        const text = composeAttachmentText(snapshot.text, files, Boolean(images?.length));
+        const mcpPrewarmToken = prewarm.claim();
+        let started = false;
+        try {
+          const outcome = await onStart(text, {
+            ...settings, model: resolvedModel, images,
+            skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
+            mcpPrewarmToken,
+          });
+          started = outcome.kind === 'started';
+          return started;
+        } finally { prewarm.settle(mcpPrewarmToken, started); }
       });
-      prewarm.settle(mcpPrewarmToken, outcome.kind === 'started');
-      if (outcome.kind === 'started' && getComposerDraftVersion(WELCOME_DRAFT_KEY) === version) {
-        resetDraft(WELCOME_DRAFT_KEY);
-      }
+      if (!ok) setSubmitError(messageText('sessionWorkbenchUi.attachmentFailure.delivery'));
+    } catch (error) {
+      setSubmitError(presentationFromError(error, messageText('sessionWorkbenchUi.attachmentFailure.delivery')));
     } finally {
       submitting.current = false;
+      setPreparing(false);
     }
-  }, [attachments, draft, onStart, prewarm, resolvedModel, resetDraft, settings, version]);
+  }, [attachments, draft, onStart, prewarm, resolvedModel, sending, settings, skills]);
 
   return (
     <WelcomeComposer
       value={draft}
       onChange={setDraft}
+      skills={skills}
+      onSkillsChange={setSkills}
+      draftIdentity={`${WELCOME_DRAFT_KEY}:${version}`}
       onSubmit={submit}
       onPaste={attachments.handlePaste}
       placeholder={modeId === 'browser-skill'
         ? t('sessionWorkbenchUi.shell.describeWebsiteSkill')
         : t('sessionWorkbenchUi.shell.describeTask')}
-      sending={sending}
+      sending={sending || preparing}
+      error={submitError}
       images={attachments.images}
       files={attachments.files}
       onRemoveAttachment={attachments.remove}

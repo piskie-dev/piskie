@@ -47,6 +47,7 @@ export interface SkillTeachingDoc {
   found: boolean
   content: string
   classification?: 'standard' | 'disabled' | 'unknown'
+  error?: string
 }
 
 /** Select the visible source before rendering its teaching and resource paths. */
@@ -75,10 +76,14 @@ export async function renderSkillTeachingDoc(
   }
 
   const module = port.getLoadedSkillModule(skillName)
-  const [rawDocs, files] = await Promise.all([
+  const [loadedDocs, files] = await Promise.all([
     loadDocs(port, skillName),
     listSkillFiles(port, skillName),
   ])
+  if (loadedDocs.error !== undefined) {
+    return { found: false, content: '', classification, error: loadedDocs.error }
+  }
+  const rawDocs = loadedDocs.content
   const functions = module
     ? Object.entries(module.functions).map(([name, fn]) => ({
         name,
@@ -157,8 +162,8 @@ export async function renderSkillTeachingFromDir(skillDir: string): Promise<Skil
   let raw: string
   try {
     raw = await fs.readFile(path.join(skillDir, 'SKILL.md'), 'utf8')
-  } catch {
-    return { found: false, content: '' }
+  } catch (error) {
+    return { found: false, content: '', error: error instanceof Error ? error.message : String(error) }
   }
   const docs = stripPromptOmitSections(stripFrontmatterBody(raw)).trim()
   if (!docs) return { found: false, content: '' }
@@ -194,11 +199,14 @@ function renderFileSection(files: string[]): string {
   ].join('\n')
 }
 
-async function loadDocs(port: SkillTeachingPort, skillName: string): Promise<string> {
+async function loadDocs(
+  port: SkillTeachingPort,
+  skillName: string,
+): Promise<{ content: string; error?: string }> {
   try {
-    return (await port.getSkillDocs(skillName)).trim()
-  } catch {
-    return ''
+    return { content: (await port.getSkillDocs(skillName)).trim() }
+  } catch (error) {
+    return { content: '', error: error instanceof Error ? error.message : String(error) }
   }
 }
 

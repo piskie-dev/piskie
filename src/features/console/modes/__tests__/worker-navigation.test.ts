@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { projectConversationNodes } from '@/domains/transcript/project-entry';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
 import type { StatusKey } from '../../data/status';
+import type { ConversationComposerProps } from '../../content/composer/ConversationComposer';
 import { ThreadMode } from '../thread/ThreadMode';
 import { DockMode } from '../dock/DockMode';
 
@@ -16,17 +17,22 @@ vi.mock('../../data/vm', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../data/vm')>(),
   useAgentVM: (agentId: string) => ({
     agentId, title: 'Example session', phase: 'waiting', status: 'waiting', workers: state.workers,
-    pendingEvents: [], runMetrics: {},
+    pendingEvents: [], runMetrics: {}, workspace: '/workspace/example-main',
+    reasoningOverride: { kind: 'effort', effort: 'high' },
   }),
   useWorkerVM: (_agentId: string, workerId?: string) => {
     const worker = state.workers.find((item) => item.id === workerId);
-    return worker ? { ...worker, phase: 'thinking', taskIds: [], pendingEvents: [], runMetrics: {} } : null;
+    return worker ? {
+      ...worker, phase: 'thinking', taskIds: [], pendingEvents: [], runMetrics: {}, workspace: '/workspace/example-worker',
+      reasoningOverride: { kind: 'effort', effort: 'low' },
+    } : null;
   },
 }));
 vi.mock('../../data/useTranscript', () => ({
   useTranscript: (targetId: string) => ({ nodes: targetId === 'session-example' ? state.nodes : [], loaded: true }),
 }));
 vi.mock('../../data/actions', () => ({ useConsoleActions: () => ({}) }));
+vi.mock('../../data/useMessageReadReceipt', () => ({ useMessageReadReceipt: () => ({}) }));
 vi.mock('../../data/useImageNodes', () => ({ useImageNodes: () => [] }));
 vi.mock('../../data/useKeyboard', () => ({ useGlobalBinding: () => undefined }));
 vi.mock('../../content/useActionScope', () => ({ useActionScope: () => ({}) }));
@@ -43,7 +49,10 @@ vi.mock('../../content/Transcript', () => ({
   ),
 }));
 vi.mock('../../content/composer/ConversationComposer', () => ({
-  ConversationComposer: ({ workerId }: { workerId?: string }) => createElement('div', { 'data-composer-target': workerId ?? 'main' }),
+  ConversationComposer: ({ workerId, workspace, reasoningOverride }: ConversationComposerProps) => createElement('div', {
+    'data-composer-target': workerId ?? 'main', 'data-workspace': workspace,
+    'data-reasoning': JSON.stringify(reasoningOverride),
+  }),
 }));
 vi.mock('../thread/RightPanel', () => ({ RightPanel: () => null }));
 vi.mock('../thread/useEmbeddedBrowserState', () => ({ useEmbeddedBrowserState: () => ({ open: false }) }));
@@ -61,6 +70,7 @@ let container: HTMLDivElement;
 let root: Root;
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
+  dom.window.Element.prototype.getAnimations = () => [];
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);
@@ -102,12 +112,15 @@ describe.each(['thread', 'dock'] as const)('%s worker navigation', (mode) => {
   it('updates the row from Worker status and opens the matching tab and conversation', async () => {
     await render(mode);
     expect(row()?.dataset.live).toBe('true');
+    expect(container.querySelector<HTMLElement>('[data-composer-target="main"]')?.dataset.workspace).toBe('/workspace/example-main');
+    expect(container.querySelector<HTMLElement>('[data-composer-target="main"]')?.dataset.reasoning).toBe(JSON.stringify({ kind: 'effort', effort: 'high' }));
     state.workers = state.workers.map((worker) => ({ ...worker, status: 'waiting' }));
     await render(mode);
     expect(row()?.dataset.live).toBe('false');
     await act(async () => row()?.click());
     expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Inspect the sample');
-    expect(container.querySelector('[data-composer-target="worker-example"]')).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[data-composer-target="worker-example"]')?.dataset.workspace).toBe('/workspace/example-worker');
+    expect(container.querySelector<HTMLElement>('[data-composer-target="worker-example"]')?.dataset.reasoning).toBe(JSON.stringify({ kind: 'effort', effort: 'low' }));
 
     if (mode === 'dock') {
       await act(async () => row()?.click());

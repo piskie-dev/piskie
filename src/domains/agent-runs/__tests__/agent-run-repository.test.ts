@@ -18,6 +18,7 @@ function run(agentId: string): AgentRunSnapshot {
     lastActiveAt: '2026-08-19T00:00:00.000Z',
     currentModel: 'provider/model',
     childAgents: [],
+    messages: { latestMessage: null, latestAssistantIndex: -1, readThroughIndex: -1 },
   } as unknown as AgentRunSnapshot;
 }
 
@@ -43,6 +44,16 @@ function client(overrides: Partial<AgentRunClient> = {}): AgentRunClient {
 }
 
 describe('AgentRunRepository', () => {
+  it('releases target resources only after a successful permanent deletion', async () => {
+    const released = vi.fn();
+    const remove = vi.fn().mockRejectedValueOnce(new Error('not deleted')).mockResolvedValueOnce(undefined);
+    const repository = createAgentRunRepository(client({ delete: remove }), released);
+    await expect(repository.delete('example-session')).rejects.toThrow('not deleted');
+    expect(released).not.toHaveBeenCalled();
+    await repository.delete('example-session');
+    expect(released).toHaveBeenCalledExactlyOnceWith('example-session');
+  });
+
   it('fences a late preview response from a previously selected run', async () => {
     let resolveFirst!: (value: AgentControlSnapshot | null) => void;
     let resolveSecond!: (value: AgentControlSnapshot | null) => void;
@@ -88,6 +99,30 @@ describe('AgentRunRepository', () => {
       error: null,
     });
     expect(repository.listState.getState().runs).toEqual([run('remaining')]);
+  });
+
+  it('preserves newer appended messages across an older read acknowledgement and list response', async () => {
+    const base = run('sample-main');
+    base.messages = { latestMessage: { index: 2, timestamp: 2000 }, latestAssistantIndex: 2, readThroughIndex: -1 };
+    let finishList!: (runs: AgentRunSnapshot[]) => void;
+    let finishRead!: (messages: AgentRunSnapshot['messages']) => void;
+    const list = vi.fn().mockResolvedValueOnce([base]).mockImplementationOnce(() => new Promise((resolve) => { finishList = resolve; }));
+    const repository = createAgentRunRepository(client({ list, markRead: () => new Promise((resolve) => { finishRead = resolve; }) }));
+    await repository.refresh();
+    const listing = repository.refresh();
+    const reading = repository.markRead('sample-main', 2);
+    repository.applyConversation({
+      agentId: 'sample-main', index: 3,
+      entry: { t: 'msg', role: 'assistant', id: 'sample-reply', ts: 3000, content: 'Example reply' },
+      messages: { latestMessage: { index: 3, timestamp: 3000 }, latestAssistantIndex: 3, readThroughIndex: -1 },
+    });
+    finishRead({ ...base.messages, readThroughIndex: 2 });
+    await reading;
+    finishList([base]);
+    await listing;
+    expect(repository.listState.getState().runs[0]!.messages).toEqual({
+      latestMessage: { index: 3, timestamp: 3000 }, latestAssistantIndex: 3, readThroughIndex: 2,
+    });
   });
 
   it('keeps list and preview request state independent', async () => {

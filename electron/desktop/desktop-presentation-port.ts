@@ -49,7 +49,8 @@ export interface DesktopPresentationPort {
 
   chooseBackgroundImage(windowId: number): Promise<string | undefined>;
 
-  createFilePreviewUrl(windowId: number, filePath: string, mediaType: string): string;
+  createFilePreviewUrl(windowId: number, filePath: string, mediaType: string, held?: boolean): string;
+  releaseFilePreview(windowId: number, url: string): void;
 
   chooseSavePath(
     windowId: number,

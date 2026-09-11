@@ -126,6 +126,8 @@ interface TranscriptNodeBase {
 export interface UserNode extends TranscriptNodeBase {
   readonly kind: 'user';
   readonly origin: 'user' | 'assignment' | 'parent';
+  readonly skills?: readonly string[];
+  readonly skillLoadErrors?: readonly { readonly name: string; readonly error: string }[];
   readonly text?: string;
   readonly images?: readonly CellMedia[];
   readonly files?: readonly TranscriptFileRef[];

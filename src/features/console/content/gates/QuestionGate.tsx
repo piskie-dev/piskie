@@ -120,19 +120,19 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
   const submit = useCallback(
     async (override?: readonly string[]) => {
       const final = override ?? answers;
-      if (!isComplete(final) || disabled) return;
-      onDecide({
+      if (!isComplete(final) || disabled || attachments.submitting) return;
+      const ok = await attachments.withImages(async (images, files) => onDecide({
         kind: 'answer',
         callId: id,
         answer: composeAttachmentText(
           serializeAskUserAnswers(items as AIQuestionItem[], final as string[]),
-          attachments.files,
-          attachments.images.length > 0,
+          files,
+          Boolean(images?.length),
         ),
         answers: [...final],
-        images: await attachments.imagePayloads(),
-      });
-      attachments.clear();
+        images,
+      }));
+      if (ok) attachments.clear();
     },
     [answers, attachments, disabled, id, items, onDecide],
   );
@@ -162,13 +162,14 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
             onPickSubmit={single ? (answer) => void submit([answer]) : undefined}
             onEnterSubmit={() => void submit()}
             inlineSubmit={single ? { enabled: allAnswered, onSubmit: () => void submit() } : undefined}
-            onPaste={attachments.handlePaste}
+            onPaste={(event) => attachments.handlePaste(event, (custom) => updateDraft(index, { ...(drafts[index] ?? EMPTY_DRAFT), custom }))}
           />
         ))}
       </div>
 
       <GateAttachments
         images={attachments.images}
+        error={attachments.error}
         files={attachments.files}
         onRemove={attachments.remove}
         onPreviewImage={onPreviewImage}

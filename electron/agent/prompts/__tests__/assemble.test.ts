@@ -78,9 +78,9 @@ describe('assemble L0-L5 组装规则', () => {
     const auto = assemble(directorIdentity, directorCtx({ modeId: 'plan', approvalMode: 'auto' }));
     expect(auto).toBe(confirm);
     expect(confirm).toContain('## 执行模式：计划');
-    // L3 只承载模式语义与澄清判据；工具用法字面量归 plan description。
+    // L3 只承载模式语义；澄清判据归 L0 通用歧义处理，工具用法字面量归 plan description。
     expect(confirm).toContain('制定计划提交用户审批');
-    expect(confirm).toContain('**澄清判据**');
+    expect(confirm).not.toContain('**澄清判据**');
     expect(confirm).not.toMatch(/confirm|auto|其余工具调用自动执行/);
     expect(confirm).not.toContain('plan(action: "create")');
   });
@@ -101,7 +101,7 @@ describe('assemble L0-L5 组装规则', () => {
     expect(prompt).toContain('范围已经明确时可跳过全站侦察');
     expect(prompt).toContain('范围确定后先提交验收计划供用户确认');
     expect(prompt).not.toContain('## 执行模式：Browser Skill + 确认');
-    expect(prompt).not.toContain('直接执行任务，不需要事先制定计划');
+    expect(prompt).not.toContain('本来就在用户要求之内的可逆动作');
     expect(prompt).toContain('## Browser Skill 构建编排');
     expect(prompt).toContain('不能路由成替用户完成一次原始网站业务');
     expect(prompt).toContain('创建 site-scout 做有界的网站能力与风险侦察');
@@ -173,7 +173,10 @@ describe('assemble L0-L5 组装规则', () => {
       })
     );
 
-    expect(normal).toContain('直接执行任务，不需要事先制定计划');
+    expect(normal).not.toContain('直接执行任务，不需要事先制定计划');
+    expect(normal).toContain('本来就在用户要求之内的可逆动作，需要工具就直接调用');
+    expect(normal).toContain('只有会造成破坏的操作，或者真正要用户自己拿主意的范围变化，才停下来确认');
+    expect(normal).toContain('做完以后可以提议接下来还能做什么');
     expect(normal).not.toContain('本次要固化的能力范围与验收场景');
     expect(plan).toContain('制定计划提交用户审批');
     expect(plan).not.toContain('本次要固化的能力范围与验收场景');
@@ -208,7 +211,12 @@ describe('assemble L0-L5 组装规则', () => {
     expect(prompt).toContain('用户询问进度或出现执行异常迹象时，优先查看已有汇报和执行记录');
     expect(prompt).toContain('整合各项结果，将未满足的用户要求交给相应负责人继续完成');
     expect(prompt).toContain('全部要求满足后才报告整体完成');
-    expect(prompt).toContain('用户发来新要求时，按任务处理方式直接处理或委派');
+    expect(prompt).toContain('照用户实际说的去做，别把自己猜到的言外之意当成任务；用户说的范围就是交付范围');
+    expect(prompt).toContain('碰到歧义，像一位细心的同事那样处理');
+    expect(prompt).toContain('觉得任务本身有问题，用一两句话说出顾虑，然后照做');
+    expect(prompt).toContain('明显超出用户要求范围的动作和改动，不要做');
+    expect(prompt).not.toContain('用户发来新要求时，按任务处理方式直接处理或委派');
+    expect(prompt).not.toContain('问答归问答，任务归任务');
     expect(prompt).not.toContain('| 写入/修改/执行 | 创建子流程来完成 |');
     expect(prompt).not.toContain('将新任务纳入全局 Task Board');
     expect(prompt).not.toContain('正确示例：');

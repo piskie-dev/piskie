@@ -27,6 +27,7 @@ import { StatusBadge } from '../../chrome/StatusBadge';
 import { statusOf } from '../../chrome/statusOf';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import { useTranscript } from '../../data/useTranscript';
+import { useMessageReadReceipt } from '../../data/useMessageReadReceipt';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
   projectWorkerTasks,
@@ -105,6 +106,7 @@ export const DockPanel = memo<DockPanelProps>(
       active,
     });
 
+    const readReceipt = useMessageReadReceipt(active && !workerId ? agentId : undefined);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const status = worker?.status ?? agent?.status;
     const request = resolveConversationTarget(agent, worker, workerId);
@@ -142,6 +144,7 @@ export const DockPanel = memo<DockPanelProps>(
         setNotice(result.ok
           ? null
           : result.error ?? messageText('sessionWorkbenchUi.action.operationFailed'));
+        return result.ok;
       },
       [actions, target],
     );
@@ -271,7 +274,7 @@ export const DockPanel = memo<DockPanelProps>(
             <AIRequestStatus request={request.request} variant={worker ? 'worker' : 'main'} />
             <McpRuntimeCard
               view={request.mcp}
-              workspace={agent?.workspace}
+              workspace={request.workspace}
               variant={worker ? 'worker' : 'main'}
             />
           </>
@@ -282,7 +285,7 @@ export const DockPanel = memo<DockPanelProps>(
               request={gate}
               // 停止中 / 等待中锁门
               disabled={gateDisabled}
-              onDecide={(decision) => void decide(decision)}
+              onDecide={decide}
               onViewDiff={viewDiff}
               onPreviewImage={onPreviewImage}
             />
@@ -296,8 +299,10 @@ export const DockPanel = memo<DockPanelProps>(
               <ConversationComposer
                 agentId={agentId}
                 workerId={workerId}
+                workspace={request.workspace}
                 targetName={subject}
                 model={request.model}
+                reasoningOverride={request.reasoningOverride}
                 modeId={agent?.modeId}
                 approvalMode={request.approvalMode}
                 agentSpec={agent?.agentSpec}
@@ -324,6 +329,7 @@ export const DockPanel = memo<DockPanelProps>(
           key={workerId ?? agentId}
           memoryKey={workerId ?? agentId}
           nodes={transcript.nodes}
+          {...readReceipt}
           renderNode={renderNode}
           hasEarlier={transcript.hasEarlier}
           onLoadEarlier={transcript.loadEarlier}

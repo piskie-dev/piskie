@@ -223,6 +223,7 @@ export abstract class AgentEngine {
     string,
     {
       pending: PendingToolCall;
+      autoApprovalCancelled?: boolean;
       resolve: (d: ToolApprovalDecision) => void;
     }
   >();
@@ -345,7 +346,8 @@ export abstract class AgentEngine {
     if (events.length === 0) return; // ensurePump 守卫后仍可能空批：守卫检查与微任务启动之间 interrupt 可丢弃队列
 
     // 抛异常即冲程 fatal：内容正确性在生产边界保证
-    this.applyEventBatch(events);
+    const applied = this.applyEventBatch(events);
+    if (applied) await applied;
 
     const config = this.getTurnConfig();
     await this.runTurn(signal, config);
@@ -356,15 +358,16 @@ export abstract class AgentEngine {
    * applyEvents 的唯一调用面（runPump 与 runTurn 共用）：
    * 任何一处应用失败，异常都携带本批 event ids（takeEvents 已单点 trace 本批）。
    */
-  protected applyEventBatch(events: AgentInputEvent[]): void {
+  protected applyEventBatch(events: AgentInputEvent[]): void | Promise<void> {
     if (events.length === 0) return;
+    const failed = (cause: unknown): never => {
+      throw new EventBatchApplyError(events.map((event) => event.id), cause);
+    };
     try {
-      this.applyEvents(events);
+      const applied = this.applyEvents(events);
+      if (applied) return applied.catch(failed);
     } catch (cause) {
-      throw new EventBatchApplyError(
-        events.map((e) => e.id),
-        cause
-      );
+      failed(cause);
     }
   }
 
@@ -440,7 +443,7 @@ export abstract class AgentEngine {
    * 应用一批事件到上下文（AgentRuntime 实现模块分发）。
    * 只由 applyEventBatch 调用（错误包装收口）；实现不得自行 drain Mailbox。
    */
-  protected abstract applyEvents(events: AgentInputEvent[]): void;
+  protected abstract applyEvents(events: AgentInputEvent[]): void | Promise<void>;
 
   /** 冲程 turn 配置（AgentRuntime 从 role.configureLoop 获取；每冲程 lazy 求值） */
   protected getTurnConfig(): TurnConfig {
@@ -934,11 +937,23 @@ export abstract class AgentEngine {
     }
   }
 
+  /** 取消只属于这份待审批计划；状态刷新和模式切换均不会恢复其计时。 */
+  public cancelPlanApprovalCountdown(callId: string): boolean {
+    const item = this.pendingApprovals.get(callId);
+    if (!item || item.pending.toolName !== 'plan' || item.pending.params.action !== 'create') {
+      return false;
+    }
+    item.autoApprovalCancelled = true;
+    this.refreshPendingApprovals();
+    return true;
+  }
+
   /** 只为当前可审批的计划计时，排队中的下一份计划获得完整的 60 秒。 */
   private refreshPendingApprovals(): void {
     const first = this.pendingApprovals.values().next().value;
     const plan = this.approvalMode === 'auto' && !this._interrupted && !this.destroyPromise
       && first?.pending.toolName === 'plan' && first.pending.params.action === 'create'
+      && !first.autoApprovalCancelled
       ? first : undefined;
 
     if (!plan || this.planAutoApproval?.callId !== plan.pending.id) {
@@ -1294,7 +1309,9 @@ export abstract class AgentEngine {
       signal.throwIfAborted();
 
       // AI/tool 执行期间到达的新事件在每个 AI 边界统一吸收（唯一消费入口）
-      this.applyEventBatch(this.takeEvents());
+      const applied = this.applyEventBatch(this.takeEvents());
+      if (applied) await applied;
+      signal.throwIfAborted();
 
       // 已作答的工具续跑（MCP elicitation）在模型边界前消费：
       // 答案喂回在途请求 → 最终 tool_result 或下一轮挂起

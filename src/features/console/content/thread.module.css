@@ -107,6 +107,9 @@
 }
 
 .bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   max-inline-size: 78%;
   padding: 10px 14px;
   border-radius: 18px;
@@ -119,6 +122,12 @@
   user-select: text;
 }
 
+
+.skillErrors {
+  color: var(--thread-removed);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 
 .userMedia {
   display: flex;

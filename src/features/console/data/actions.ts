@@ -36,6 +36,7 @@ const OK: ActionResult = { ok: true };
 
 export interface MessagePayload {
   readonly text: string;
+  readonly skills?: readonly string[];
   readonly images?: readonly { data: string; media_type: string }[];
   readonly files?: readonly { name: string; path: string }[];
   /** 提交旁路：仅 QuestionGate 作答携带，普通 composer 不传 */
@@ -65,6 +66,7 @@ function buildEvent(payload: MessagePayload): AgentInputEvent {
         ? payload.images.map(({ data, media_type }) => ({ data, media_type }))
         : undefined,
     uiSubmission: payload.uiSubmission,
+    skills: payload.skills?.length ? [...payload.skills] : undefined,
   };
 }
 
@@ -79,6 +81,7 @@ export interface ConsoleActions {
   readonly openTrace: (agentId: string) => Promise<ActionResult>;
   readonly deleteHistory: (agentId: string) => Promise<ActionResult>;
   readonly loadHistory: (agentId: string) => Promise<ActionResult>;
+  readonly markRead: (agentId: string, throughIndex: number) => Promise<ActionResult>;
   /** 把在跑的工具调用转入后台 */
   readonly promoteToBackground: (callId: string) => Promise<ActionResult>;
 }
@@ -104,8 +107,25 @@ export function useConsoleActions(): ConsoleActions {
     }
   }, [agentCommands]);
 
+  const pause = useCallback(
+    async (target: ActionTarget): Promise<ActionResult> => {
+      const result = target.workerId
+        ? await agentCommands.interruptSubagent(target.agentId, target.workerId)
+        : await agentCommands.interrupt(target.agentId);
+      return result.ok ? OK : { ok: false, error: rawText(result.error) };
+    },
+    [agentCommands],
+  );
+
   const decide = useCallback(
     async (target: ActionTarget, decision: GateDecision): Promise<ActionResult> => {
+      if (decision.kind === 'reject-plan') return pause(target);
+      if (decision.kind === 'cancel-plan-countdown') {
+        const result = await agentCommands.cancelPlanApprovalCountdown(
+          target.agentId, target.workerId, decision.callId,
+        );
+        return result.ok ? OK : { ok: false, error: rawText(result.error) };
+      }
       // 提问门的"决定"就是一条普通用户消息（答案不携带特殊身份）；
       // 原始答案数组走 uiSubmission 旁路，不进模型正文
       if (decision.kind === 'answer') {
@@ -137,17 +157,7 @@ export function useConsoleActions(): ConsoleActions {
       );
       return result.ok ? OK : { ok: false, error: rawText(result.error) };
     },
-    [agentCommands, send],
-  );
-
-  const pause = useCallback(
-    async (target: ActionTarget): Promise<ActionResult> => {
-      const result = target.workerId
-        ? await agentCommands.interruptSubagent(target.agentId, target.workerId)
-        : await agentCommands.interrupt(target.agentId);
-      return result.ok ? OK : { ok: false, error: rawText(result.error) };
-    },
-    [agentCommands],
+    [agentCommands, pause, send],
   );
 
   const stop = useCallback(
@@ -224,6 +234,15 @@ export function useConsoleActions(): ConsoleActions {
     }
   }, [agentCommands]);
 
+  const markRead = useCallback(async (agentId: string, throughIndex: number): Promise<ActionResult> => {
+    try {
+      await agentRuns.markRead(agentId, throughIndex);
+      return OK;
+    } catch (error) {
+      return { ok: false, error: presentationFromError(error, messageText('sessionWorkbenchUi.action.operationFailed')) };
+    }
+  }, [agentRuns]);
+
   const loadHistory = useCallback(
     async (agentId: string): Promise<ActionResult> => {
       const snapshot = await agentRuns.loadPreview(agentId);
@@ -236,9 +255,9 @@ export function useConsoleActions(): ConsoleActions {
 
   return useMemo(
     () => ({
-      send, decide, pause, stop, openWorkspace, openTrace, deleteHistory, loadHistory,
+      send, decide, pause, stop, openWorkspace, openTrace, deleteHistory, loadHistory, markRead,
       promoteToBackground,
     }),
-    [decide, deleteHistory, loadHistory, openTrace, openWorkspace, pause, promoteToBackground, send, stop],
+    [decide, deleteHistory, loadHistory, markRead, openTrace, openWorkspace, pause, promoteToBackground, send, stop],
   );
 }

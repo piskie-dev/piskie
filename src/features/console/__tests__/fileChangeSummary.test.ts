@@ -15,6 +15,7 @@ vi.mock('../data/vm', async (importOriginal) => ({
   useWorkerVM: (_agentId: string | undefined, workerId?: string) => workerId ? worker : null,
 }));
 vi.mock('../data/actions', () => ({ useConsoleActions: () => ({}) }));
+vi.mock('../data/useMessageReadReceipt', () => ({ useMessageReadReceipt: () => ({}) }));
 vi.mock('../data/useTranscript', () => ({
   useTranscript: (agentId: string) => ({
     nodes: nodesByAgent.get(agentId) ?? [],
@@ -41,6 +42,7 @@ let main: AgentVM = {
   canPause: false,
   canStop: true,
   model: 'provider::model',
+  reasoningOverride: { kind: 'provider-default' },
   approvalMode: 'auto',
   modeId: 'normal',
   createdAt: '2026-01-01T00:00:00.000Z',

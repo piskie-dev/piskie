@@ -10,6 +10,7 @@
  * - 历史：按 `lastActiveAt` 倒序（后端去重后已排好，前端不再排）
  */
 
+import type { AgentRunMessageState } from '@shared/agent-run-messages';
 import type { AgentPhase } from '../../../../shared/types/agent-control';
 import type { ActivitySummary } from './useActivitySummary';
 import type { StatusKey } from './status';
@@ -36,6 +37,7 @@ export interface SessionRow {
   readonly status: StatusKey;
   readonly createdAt: string;
   readonly workerCount: number;
+  readonly working?: boolean;
   readonly model: string;
   readonly interrupted: boolean;
   /**
@@ -52,10 +54,11 @@ export interface HistoryRow {
   readonly title: string;
   readonly description?: string;
   readonly agentSpec: string;
-  /** 用户任务描述：description → promptTemplate 截断 → run name */
+  /** 用户任务描述：description → promptTemplate → run name */
   readonly taskDescription: string;
   readonly workspace?: string;
   readonly lastActiveAt: string;
+  readonly messages?: AgentRunMessageState;
   /** 该历史会话当前是否已加载（在跑） */
   readonly running: boolean;
 }
@@ -63,7 +66,7 @@ export interface HistoryRow {
 /**
  * 历史行的文案：用户任务描述优先。
  * 快速聊天的 `description` 是用户原话；任务定义启动也保存完整运行快照。
- * 描述为空时使用 promptTemplate 截断兜底，最后退回运行名称。
+ * 描述为空时使用 promptTemplate兜底，最后退回运行名称。
  */
 export function resolveTaskDescription(header: {
   agentId: string;
@@ -73,7 +76,7 @@ export function resolveTaskDescription(header: {
   if (description) return description;
 
   const template = header.runConfig.promptTemplate?.trim();
-  if (template) return template.length > 100 ? `${template.slice(0, 100)}…` : template;
+  if (template) return template;
 
   return header.runConfig.name?.trim() || header.agentId;
 }

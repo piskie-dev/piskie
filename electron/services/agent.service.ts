@@ -275,6 +275,7 @@ export class AgentService {
           change.entry
         ),
         ...(change.requestId && { requestId: change.requestId }),
+        ...(change.messages && { messages: change.messages }),
       });
     });
   }
@@ -1073,6 +1074,18 @@ export class AgentService {
       return false;
     }
     return runtime.setSubagentApprovalMode(subagentId, mode);
+  }
+
+  cancelPlanApprovalCountdown(
+    agentId: string,
+    subagentId: string | null,
+    callId: string
+  ): boolean {
+    const runtime = this.activeRuntimes.get(agentId);
+    if (!runtime) return false;
+    return subagentId
+      ? runtime.cancelSubagentPlanApprovalCountdown(subagentId, callId)
+      : runtime.cancelPlanApprovalCountdown(callId);
   }
 
   async respondToApproval(

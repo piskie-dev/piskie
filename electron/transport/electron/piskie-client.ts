@@ -122,6 +122,9 @@ export function createElectronPiskieClient(options: {
         respond: (agentId, subagentId, decision) => (
           request(AGENT_OPERATIONS.respondToApproval, agentId, subagentId, decision)
         ),
+        cancelPlanCountdown: (agentId, subagentId, callId) => (
+          request(AGENT_OPERATIONS.cancelPlanApprovalCountdown, agentId, subagentId, callId)
+        ),
       },
       images: {
         approve: (agentId, nodeId) => request(AGENT_OPERATIONS.approveImages, agentId, nodeId),
@@ -162,6 +165,7 @@ export function createElectronPiskieClient(options: {
       list: () => request(AGENT_RUN_OPERATIONS.list),
       state: (agentId) => request(AGENT_RUN_OPERATIONS.state, agentId),
       delete: (agentId) => request(AGENT_RUN_OPERATIONS.delete, agentId),
+      markRead: (agentId, throughIndex) => request(AGENT_RUN_OPERATIONS.markRead, agentId, throughIndex),
       readPlan: (agentId) => request(AGENT_RUN_OPERATIONS.readPlan, agentId),
       listCompactions: (agentId) => request(AGENT_RUN_OPERATIONS.listCompactions, agentId),
       originalCompactionMessages: (input) => request(
@@ -240,6 +244,7 @@ export function createElectronPiskieClient(options: {
         removeSource: (sourceId) => request(CAPABILITY_OPERATIONS.removeMarketSource, sourceId),
         projects: () => request(CAPABILITY_OPERATIONS.marketProjects),
         preview: (workspace) => request(CAPABILITY_OPERATIONS.previewMarket, workspace),
+        availableSkills: (workspace) => request(CAPABILITY_OPERATIONS.availableSkills, workspace),
         observeChanges: (listener) => observe(CAPABILITY_TOPICS.marketChanges, listener),
       },
     },
@@ -367,11 +372,12 @@ export function createElectronPiskieClient(options: {
           DESKTOP_OPERATIONS.openAgentRunTrace,
           agentId,
         ),
-        clipboardAttachments: () => request(DESKTOP_OPERATIONS.clipboardAttachments),
+        clipboardAttachments: (input) => request(DESKTOP_OPERATIONS.clipboardAttachments, input),
         observeNetwork: (listener) => observe(DESKTOP_TOPICS.network, listener),
       },
       files: {
         preview: (path) => request(DESKTOP_OPERATIONS.previewFile, path),
+        releasePreview: (url) => request(DESKTOP_OPERATIONS.releasePreview, url),
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),
       },
       theme: {

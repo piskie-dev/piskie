@@ -174,17 +174,6 @@
   fill: currentColor !important;
 }
 
-/* 小地图样式 */
-.react-flow__minimap {
-  background: var(--cyber-surface) !important;
-  border: 1px solid var(--cyber-border) !important;
-  border-radius: 8px !important;
-}
-
-.react-flow__minimap-mask {
-  fill: rgba(0, 0, 0, 0.7) !important;
-}
-
 /* 边连线样式：参考电路板的灰白轨道 + 单段流水高光 */
 .react-flow__edge-path {
   stroke: rgba(255, 255, 255, 0.26);

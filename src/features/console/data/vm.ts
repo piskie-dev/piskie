@@ -29,6 +29,7 @@ import type {
   TaskItem,
 } from '../../../../shared/types';
 import type { ContextUsage } from '../../../../shared/types/token';
+import type { ReasoningSelection } from '../../../../shared/types/reasoning';
 import type { AgentMcpView } from '../../../../shared/types/mcp';
 import { useDisplayAgentState } from '../../../renderer-runtime/hooks';
 import { useIncidentStore } from '../../../store/incidentStore';
@@ -106,6 +107,7 @@ export interface AgentVM {
   readonly canPause: boolean;
   readonly canStop: boolean;
   readonly model: string;
+  readonly reasoningOverride: ReasoningSelection;
   readonly approvalMode: ApprovalMode;
   readonly modeId: AgentModeId;
   readonly agentSpec?: string;
@@ -164,6 +166,7 @@ function projectAgent(
     canPause: canPause(state),
     canStop: canStop(state),
     model: state.currentModel,
+    reasoningOverride: state.reasoningOverride,
     approvalMode: state.approvalMode,
     modeId: state.modeId,
     agentSpec: state.agentSpec,
@@ -212,6 +215,7 @@ export function useAgentVM(agentId: string | null | undefined): AgentVM | null {
 export interface WorkerVM {
   readonly id: string;
   readonly mainAgentId: string;
+  readonly workspace?: string;
   readonly subject: string;
   readonly type: string;
   readonly phase: AgentPhase;
@@ -219,6 +223,7 @@ export interface WorkerVM {
   readonly interrupted: boolean;
   readonly canPause: boolean;
   readonly model: string;
+  readonly reasoningOverride: ReasoningSelection;
   readonly approvalMode: ApprovalMode;
   readonly conversationLength: number;
   readonly contextUsage?: ContextUsage;
@@ -245,6 +250,7 @@ function projectWorker(
   return {
     id: child.id,
     mainAgentId,
+    workspace: child.workspace,
     subject: child.subject,
     type: child.type,
     phase: child.phase,
@@ -252,6 +258,7 @@ function projectWorker(
     interrupted: isInterrupted(child),
     canPause: canPause(child),
     model: child.currentModel,
+    reasoningOverride: child.reasoningOverride,
     approvalMode: child.approvalMode,
     conversationLength: child.conversationLength,
     contextUsage: child.contextUsage,

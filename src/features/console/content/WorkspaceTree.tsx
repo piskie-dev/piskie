@@ -2,17 +2,7 @@
  * WorkspaceTree —— 左栏会话树，dock 与 thread 共用。
  *
  * 两级：**工作区 → thread**。一个 thread = 一个 AgentRun，在跑的与历史的在**同一列表**里，
- * "在跑"只是行上的一个状态点 + 提亮，不是独立分区（理由见 `data/threadRows.ts`）。
- *
- * 行的两种语义必须能一眼分辨（硬要求：恢复 ≠ 新建）：
- *
- * | | 在跑 | 历史 |
- * |---|---|---|
- * | 前置 | 状态点 | 同宽空位（不留则文字错位） |
- * | 文字 | 常规色 | 弱化色 |
- * | 右侧 | worker 数（>0 才出） | 无 |
- * | 点击 | 选中该会话 | 恢复该记录（后端懒恢复） |
- * | `···` | 工作区 / 追踪 / 暂停 / 停止 | 打开 / 追踪 / 删除 |
+ * 活动、未读与最新消息时间使用同一套行布局。
  *
  * **worker 不进左栏**——它短命、数量不定，改由主屏 agent tab 承载。
  * 分组与排序全在 `data/workspaceGroups` + `data/threadRows`（纯函数 + 单测），本组件只渲染。
@@ -24,12 +14,14 @@
 
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, FolderOpen, History, Pause, Plus, Square, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, FolderOpen, History, Pause, Plus, Square, Trash2 } from 'lucide-react';
+import { hasUnreadMessages } from '@shared/agent-run-messages';
 
 import { useUIStore } from '../../../store/uiStore';
 
-import { MenuButton } from '../chrome/MenuButton';
-import { StatusBadge } from '../chrome/StatusBadge';
+import { MenuButton, type MenuItemDescriptor } from '../chrome/MenuButton';
+import { OrbIndicator } from './OrbIndicator';
+import { MessageTime } from './MessageTime';
 import { Tooltip } from '../chrome/Tooltip';
 import {
   buildHistoryMenu,
@@ -55,7 +47,7 @@ const HISTORY_MENU_ICON = {
   delete: <Trash2 size={12} />,
 } as const;
 
-export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete';
+export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead';
 
 export interface WorkspaceTreeProps {
   readonly groups: readonly WorkspaceGroup[];
@@ -86,11 +78,12 @@ const Row = memo<{
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [selected, reveal]);
   const live = row.live;
+  const unread = hasUnreadMessages(row.messages);
   const activity = live
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
     : undefined;
 
-  const items = live
+  const items: MenuItemDescriptor[] = live
     ? buildSessionMenu(menuSourceOf(row.agentId)).map((item) => ({
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'workspace' ? 'openWorkspace' : item.key === 'trace' ? 'viewTrace' : item.key}`),
@@ -103,28 +96,36 @@ const Row = memo<{
         icon: HISTORY_MENU_ICON[item.key],
       }));
 
+  if (unread) items.push({ key: 'markRead', label: t('sessionWorkbenchUi.sessionMenu.markRead'), icon: <Check size={12} /> });
+
   return (
     <div
       ref={ref}
       className={styles.row}
+      data-agent-id={row.agentId}
+      aria-label={[row.label, unread ? t('sessionWorkbenchUi.sidebar.unread') : '', live?.working ? t('sessionWorkbenchUi.agentActivity.working') : ''].filter(Boolean).join(', ')}
       data-live={live ? 'true' : undefined}
       data-selected={selected ? 'true' : undefined}
       role="button"
       tabIndex={0}
       onClick={() => onSelect(row)}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onSelect(row);
         }
       }}
-      title={activity ?? row.label}
+      title={row.label}
     >
-      {live ? <StatusBadge status={live.status} dotOnly /> : <span className={styles.dotSlot} />}
+      <span className={styles.dotSlot} data-unread={unread || undefined} aria-hidden />
 
-      <span className={styles.rowLabel}>{row.label}</span>
+      <span className={styles.rowLabel} title={row.label}>{row.label}</span>
 
-      {live && live.workerCount > 0 && <span className={styles.rowMeta}>{live.workerCount}</span>}
+      <span className={styles.activitySlot} title={activity}>
+        {live?.working && <OrbIndicator size={14} variant="expanding" />}
+      </span>
+      <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
 
       <span className={styles.rowMenu}>
         <MenuButton

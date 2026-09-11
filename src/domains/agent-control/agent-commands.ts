@@ -55,6 +55,11 @@ export interface AgentCommands {
     subagentId: string | undefined,
     decision: ToolApprovalDecision,
   ): Promise<AgentCommandResult>;
+  cancelPlanApprovalCountdown(
+    agentId: string,
+    subagentId: string | undefined,
+    callId: string,
+  ): Promise<AgentCommandResult>;
   setMode(agentId: string, mode: AgentModeId): Promise<AgentCommandResult>;
   promoteToBackground(callId: string): Promise<AgentCommandResult<boolean>>;
 }
@@ -118,6 +123,9 @@ export function createAgentCommands(
     },
     respondToApproval(agentId, subagentId, decision) {
       return executeVoid(() => agents.approval.respond(agentId, subagentId, decision));
+    },
+    cancelPlanApprovalCountdown(agentId, subagentId, callId) {
+      return executeVoid(() => agents.approval.cancelPlanCountdown(agentId, subagentId, callId));
     },
     setMode(agentId, mode) {
       return executeVoid(() => agents.setMode(agentId, mode));

@@ -238,7 +238,8 @@
 /* ── 会话 / 历史行 ── */
 
 .row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) 14px 30px 20px;
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
@@ -303,40 +304,50 @@
   white-space: nowrap;
 }
 
-.rowMeta {
-  flex: 0 0 auto;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+.activitySlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.rowTime {
+  inline-size: 30px;
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
   color: var(--cyber-text-muted);
+  text-align: end;
+  white-space: nowrap;
 }
 
 .rowMenu {
-  flex: 0 0 auto;
+  inline-size: 20px;
+  min-inline-size: 0;
   opacity: 0;
   transition: opacity 150ms ease;
 }
 
 .row:hover .rowMenu,
+.row:focus-within .rowMenu,
 .row[data-selected='true'] .rowMenu {
   opacity: 1;
 }
 
-/* 非在跑的行：状态点位置留同宽空位，否则两种行的文字起点会错开 6+6px */
 .dotSlot {
-  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   inline-size: 6px;
   block-size: 6px;
 }
 
-/* 历史行的语义与在跑不同：这是"恢复"，不是"新建"（必须区分的两个动作）。
-   合并成单一列表后，区分手段只剩「有没有状态点」+「文字色」这两样，不再靠分区。 */
-.row:not([data-live='true']) .rowLabel {
-  color: var(--cyber-text-muted);
-}
-
-.row:not([data-live='true']):hover .rowLabel,
-.row:not([data-live='true'])[data-selected='true'] .rowLabel {
-  color: var(--cyber-text);
+.dotSlot[data-unread='true']::before {
+  content: '';
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--cyber-text);
 }
 
 /* ── 收起态（52px）──

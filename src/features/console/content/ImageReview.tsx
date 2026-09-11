@@ -190,7 +190,7 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
     target: ImageNodePublicState['target'];
   }>();
 
-  const attachments = useAttachmentDraft();
+  const attachments = useAttachmentDraft(undefined, setInstruction);
   const noticeText = notice
     ? resolvePresentationText(notice, (key, values) => t(key, values))
     : null;
@@ -305,18 +305,18 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
     if ((!instruction.trim() && !attachments.hasAttachments) || selectedIds.length === 0 || sending) return;
     setSending(true);
     try {
-      const succeeded = await runAction(async () => {
+      const succeeded = await attachments.withImages(async (payloads, files) => {
         await window.piskie.agents.images.regenerate({
           agentId: runtimeId,
           nodeId,
           imageIds: [...selectedIds],
           instruction: composeAttachmentText(
             instruction,
-            attachments.files,
-            attachments.images.length > 0,
+            files,
+            Boolean(payloads?.length),
           ),
           target: selectedTarget,
-          images: await attachments.imagePayloads(),
+          images: payloads,
         });
       });
       if (succeeded) {
@@ -409,6 +409,7 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
         {editable && (
           <GateAttachments
             images={attachments.images}
+            error={attachments.error}
             files={attachments.files}
             onRemove={attachments.remove}
             onPreviewImage={onPreviewImage}

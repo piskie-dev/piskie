@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react';
+import { acquireFilePreview, releaseFilePreview } from './file-preview';
 
-/** Resolves a disk image to an opaque streamed URL while retaining the previous frame during refresh. */
+/** Each displayed disk preview owns its token until replacement or unmount. */
 export function useImagePreviewUrl(sourcePath: string | undefined, version: number): string | null {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
   useEffect(() => {
+    setPreviewUrl(null);
     if (!sourcePath) return;
     let stale = false;
-    void window.piskie.desktop.files.preview(sourcePath)
+    let owned: string | undefined;
+    const release = releaseFilePreview;
+    void acquireFilePreview(sourcePath)
       .then((preview) => {
-        if (!stale) setPreviewUrl(preview.kind === 'image' ? preview.url : null);
+        if (preview.kind !== 'image') return;
+        if (stale) release(preview.url);
+        else { owned = preview.url; setPreviewUrl(preview.url); }
       })
-      .catch(() => {
-        if (!stale) setPreviewUrl(null);
-      });
-    return () => {
-      stale = true;
-    };
+      .catch(() => { if (!stale) setPreviewUrl(null); });
+    return () => { stale = true; if (owned) release(owned); };
   }, [sourcePath, version]);
-
   return sourcePath ? previewUrl : null;
 }

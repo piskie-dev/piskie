@@ -134,7 +134,7 @@ class PumpTestEngine extends AgentEngine {
   settleToolMetric(callId: string): void { this.recordToolSettled(callId); }
   get metrics() { return this.getActivityState().runMetrics; }
   fireSystemEvent(): void { this.postSystemEvent('start'); }
-  absorbAtAIBoundary(): void { this.applyEventBatch(this.takeEvents()); }
+  absorbAtAIBoundary(): void | Promise<void> { return this.applyEventBatch(this.takeEvents()); }
 }
 
 function post(engine: PumpTestEngine, id: string): boolean {
@@ -707,7 +707,7 @@ describe('统一取消域', () => {
     engine.approvalMode = 'confirm';
     engine.turnImpl = async (signal) => {
       await engine.handleApprovalRequest(pendingCall, signal);
-      engine.absorbAtAIBoundary();
+      await engine.absorbAtAIBoundary();
       return { terminalReason: 'completed' };
     };
 
@@ -738,7 +738,7 @@ describe('统一取消域', () => {
       if (firstTurn) {
         firstTurn = false;
         post(engine, 'E1');            // AI/tool 执行中到达父流程事件
-        engine.absorbAtAIBoundary();   // 模拟 runTurn 的 AI 边界吸收
+        await engine.absorbAtAIBoundary();   // 模拟 runTurn 的 AI 边界吸收
         return { terminalReason: 'completed' };
       }
       return {};
@@ -886,6 +886,124 @@ describe('plan approval countdown', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await result;
     expect(settled).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a cancelled plan pending across refreshes and gives the next plan a full interval', async () => {
+    const settled = vi.fn();
+    const first = engine.handleApprovalRequest(plan()).then(settled);
+    const nextSettled = vi.fn();
+    const second = engine.handleApprovalRequest(plan('plan-b')).then(nextSettled);
+    await vi.advanceTimersByTimeAsync(14_000);
+    const published = engine.visibleApproval;
+    const stateChanged = vi.fn();
+    engine.setStateProbe(stateChanged);
+
+    expect(engine.cancelPlanApprovalCountdown('plan-a')).toBe(true);
+    expect(stateChanged).toHaveBeenCalled();
+    expect(engine.visibleApproval?.autoApproveAt).toBeUndefined();
+    expect(published?.autoApproveAt).toBeDefined();
+    expect(engine.approvalMode).toBe('auto');
+    expect(engine.interrupted).toBe(false);
+    expect(engine.pendingApprovalCount).toBe(2);
+    expect(engine.cancelPlanApprovalCountdown('plan-a')).toBe(true);
+    engine.emitStateChange();
+    engine.setApprovalMode('auto');
+    engine.setApprovalMode('confirm');
+    engine.setApprovalMode('auto');
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(engine.visibleApproval?.autoApproveAt).toBeUndefined();
+    expect(settled).not.toHaveBeenCalled();
+    expect(nextSettled).not.toHaveBeenCalled();
+
+    engine.respondToApproval({ callId: 'plan-a', decision: 'allow' });
+    await first;
+    expect(settled).toHaveBeenCalledExactlyOnceWith({ callId: 'plan-a', decision: 'allow' });
+    expect(engine.visibleApproval).toMatchObject({ id: 'plan-b', autoApproveAt: Date.now() + 60_000 });
+    expect(engine.cancelPlanApprovalCountdown('plan-a')).toBe(false);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(nextSettled).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await second;
+    expect(nextSettled).toHaveBeenCalledExactlyOnceWith({ callId: 'plan-b', decision: 'allow' });
+  });
+
+  it('preserves deny with feedback and images after cancellation', async () => {
+    const first = engine.handleApprovalRequest(plan());
+    engine.cancelPlanApprovalCountdown('plan-a');
+    const images = [{ data: 'c2FtcGxl', media_type: 'image/png' }];
+    const decision = { callId: 'plan-a', decision: 'deny' as const, feedback: 'Revise the sample step', images };
+    expect(engine.respondToApproval(decision)).toBe(true);
+    await expect(first).resolves.toEqual(decision);
+    await flushMicrotasks();
+    expect(engine.appliedBatches.flat()).toContainEqual(expect.objectContaining({
+      source: 'user', priority: 'high', content: decision.feedback, images,
+    }));
+    expect(engine.interrupted).toBe(false);
+    expect(engine.pendingApprovalCount).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const repeated = engine.handleApprovalRequest(plan());
+    expect(engine.visibleApproval?.autoApproveAt).toBe(Date.now() + 60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(repeated).resolves.toMatchObject({ decision: 'allow' });
+  });
+
+  it('rejects cancellation for missing, settled, or non-plan approvals', async () => {
+    expect(engine.cancelPlanApprovalCountdown('missing-call')).toBe(false);
+    const first = engine.handleApprovalRequest(plan());
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(first).resolves.toMatchObject({ decision: 'allow' });
+    expect(engine.cancelPlanApprovalCountdown('plan-a')).toBe(false);
+    for (const pending of [
+      { ...plan('tool-a'), toolName: 'shell', params: {} },
+      { ...plan('plan-update'), params: { action: 'update' } },
+    ]) {
+      const result = engine.handleApprovalRequest(pending);
+      expect(engine.cancelPlanApprovalCountdown(pending.id)).toBe(false);
+      expect(engine.pendingApprovalCount).toBe(1);
+      engine.respondToApproval({ callId: pending.id, decision: 'deny' });
+      await result;
+    }
+  });
+
+  it('interrupts plan review and children without executing, then accepts new input in place', async () => {
+    const executePlan = vi.fn();
+    engine.turnImpl = async (signal) => {
+      await engine.handleApprovalRequest(plan(), signal);
+      signal.throwIfAborted();
+      executePlan();
+      return {};
+    };
+    const child = new PumpTestEngine();
+    child.approvalMode = 'auto';
+    engine.childEngines = [child];
+    const childApproval = child.handleApprovalRequest(plan('child-plan'));
+    post(engine, 'start');
+    await flushMicrotasks();
+    post(engine, 'queued-before-rejection');
+    const signal = engine.abortSignal;
+    engine.cancelPlanApprovalCountdown('plan-a');
+
+    await engine.instantInterrupt();
+    await expect(childApproval).resolves.toMatchObject({ decision: 'deny' });
+    expect(engine.pendingApprovalCount).toBe(0);
+    expect(child.pendingApprovalCount).toBe(0);
+    expect(engine.interrupted).toBe(true);
+    expect(child.interrupted).toBe(true);
+    expect(engine.isPumping).toBe(false);
+    expect(signal?.aborted).toBe(true);
+    expect(engine.flushContext).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(executePlan).not.toHaveBeenCalled();
+    expect(engine.turnRuns).toBe(1);
+
+    engine.turnImpl = undefined;
+    expect(post(engine, 'resume')).toBe(true);
+    await flushMicrotasks();
+    expect(engine.interrupted).toBe(false);
+    expect(engine.turnRuns).toBe(2);
+    expect(engine.appliedBatches.flat().map(({ id }) => id)).toEqual(['start', 'resume']);
+    await child.destroy();
   });
 
   it.each(['allow', 'deny'] as const)('cancels the timer after a manual %s', async (decision) => {

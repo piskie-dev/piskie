@@ -1,4 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
+import { mergeMessageState, type AgentRunMessageState } from '@shared/agent-run-messages';
+import type { ConversationAppendEvent } from '@shared/types/agent-control';
 
 import type {
   AgentControlSnapshot,
@@ -45,6 +47,8 @@ export interface AgentRunRepository {
   readonly listState: StoreApi<AgentRunListSnapshot>;
   readonly previewState: StoreApi<AgentRunPreviewSnapshot>;
   refresh(): Promise<void>;
+  applyConversation(event: ConversationAppendEvent): void;
+  markRead(agentId: string, throughIndex: number): Promise<void>;
   loadPreview(agentId: string): Promise<AgentControlSnapshot | null>;
   clearPreview(agentId?: string): void;
   delete(agentId: string): Promise<void>;
@@ -65,7 +69,7 @@ const INITIAL_PREVIEW: AgentRunPreviewSnapshot = Object.freeze({
   error: null,
 });
 
-export function createAgentRunRepository(client: AgentRunClient): AgentRunRepository {
+export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (agentId: string) => void): AgentRunRepository {
   const listState = createStore<AgentRunListSnapshot>(() => INITIAL_LIST);
   const previewState = createStore<AgentRunPreviewSnapshot>(() => INITIAL_PREVIEW);
   let listRequest = 0;
@@ -86,7 +90,10 @@ export function createAgentRunRepository(client: AgentRunClient): AgentRunReposi
       if (!accepting || request !== listRequest) return;
       listState.setState({
         phase: 'ready',
-        runs,
+        runs: runs.map((run) => {
+          const previous = listState.getState().runs.find((item) => item.agentId === run.agentId);
+          return { ...run, messages: mergeMessageState(previous?.messages, run.messages) };
+        }),
         error: null,
         revision: current.revision + 1,
       }, true);
@@ -94,11 +101,24 @@ export function createAgentRunRepository(client: AgentRunClient): AgentRunReposi
       if (!accepting || request !== listRequest) return;
       listState.setState({
         phase: 'failed',
-        runs: current.runs,
+        runs: listState.getState().runs,
         error: error instanceof Error ? error.message : String(error),
         revision: current.revision,
       }, true);
     }
+  };
+
+  const applyMessages = (agentId: string, messages: AgentRunMessageState): void => {
+    if (!accepting) return;
+    const current = listState.getState();
+    if (!current.runs.some((run) => run.agentId === agentId)) {
+      void refresh();
+      return;
+    }
+    listState.setState({
+      runs: current.runs.map((run) => run.agentId === agentId
+        ? { ...run, messages: mergeMessageState(run.messages, messages) } : run),
+    });
   };
 
   const clearPreview = (agentId?: string): void => {
@@ -112,6 +132,13 @@ export function createAgentRunRepository(client: AgentRunClient): AgentRunReposi
     listState,
     previewState,
     refresh,
+    applyConversation(event) {
+      if (event.messages) applyMessages(event.agentId, event.messages);
+    },
+    async markRead(agentId, throughIndex) {
+      if (!accepting) return;
+      applyMessages(agentId, await client.markRead(agentId, throughIndex));
+    },
     async loadPreview(agentId) {
       if (!accepting) return null;
       const request = ++previewRequest;
@@ -151,6 +178,7 @@ export function createAgentRunRepository(client: AgentRunClient): AgentRunReposi
     async delete(agentId) {
       if (!accepting) throw new Error('AgentRunRepository is closed');
       await client.delete(agentId);
+      onDeleted?.(agentId);
       clearPreview(agentId);
       await refresh();
     },

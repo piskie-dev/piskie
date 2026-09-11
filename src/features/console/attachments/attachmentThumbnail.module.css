@@ -1,0 +1,4 @@
+.item { display: inline-flex; flex-direction: column; gap: 4px; max-width: 180px; }
+.placeholder { display: inline-flex; align-items: center; justify-content: center; border: 0; color: inherit; background: transparent; }
+.caption, .error { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.error { color: var(--status-error); }

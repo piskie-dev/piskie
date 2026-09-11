@@ -59,14 +59,48 @@
   pointer-events: none;
 }
 
+.autoApprovalGroup {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
 .autoApprovalCountdown {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding-inline: 8px;
   color: var(--approval-auto);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.cancelCountdown {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cancelCountdown:hover:not(:disabled) {
+  color: var(--cyber-text);
+  text-decoration: underline;
+}
+
+.cancelCountdown:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.manualApproval {
+  padding-inline: 8px;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
 }
 
 /* 等待指示灯：waiting 色脉冲小灯，门在场即亮 */

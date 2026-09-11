@@ -1,9 +1,21 @@
-export interface AttachmentImage {
+import type { PresentationText } from '../../../i18n/presentationText';
+
+export interface ImageCaptureTask {
+  readonly controller: AbortController;
+  readonly done: Promise<void>;
+}
+
+interface ImageIdentity {
   readonly id: string;
   readonly name: string;
-  readonly mediaType: string;
-  readonly previewUrl: string;
 }
+
+export type ReadyAttachmentImage = ImageIdentity & { readonly status: 'ready'; readonly blob: Blob };
+
+export type AttachmentImage =
+  | ReadyAttachmentImage
+  | (ImageIdentity & { readonly status: 'capturing'; readonly capture: ImageCaptureTask })
+  | (ImageIdentity & { readonly status: 'error'; readonly error: PresentationText });
 
 export interface AttachmentFile {
   readonly id: string;
@@ -65,9 +77,8 @@ export function isTextAttachment(name: string, declaredType?: string): boolean {
     || TEXT_EXTENSIONS.has(extensionOf(name));
 }
 
-export function uriListMayContainAttachment(raw: string): boolean {
-  return raw.split(/\r?\n/).some((line) => {
-    const value = line.trim();
+export function attachmentPathsFromUriList(raw: string): string[] {
+  return raw.split(/\r?\n/).map((line) => line.trim()).filter((value) => {
     if (!value || value.startsWith('#')) return false;
     try {
       const url = new URL(value);

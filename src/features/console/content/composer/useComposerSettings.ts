@@ -49,9 +49,8 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
       if (!model || !selection) return;
       const updated = await updateModelReasoningDefault(model, selection);
       if (!updated) return;
-      // 清掉 agent 级 override，回落到刚更新的模型默认值
-      if (workerId) await agentCommands.setSubagentReasoning(agentId, workerId, undefined);
-      else await agentCommands.setReasoning(agentId, undefined);
+      if (workerId) await agentCommands.setSubagentReasoning(agentId, workerId, selection);
+      else await agentCommands.setReasoning(agentId, selection);
     },
     [agentCommands, agentId, model, updateModelReasoningDefault, workerId],
   );

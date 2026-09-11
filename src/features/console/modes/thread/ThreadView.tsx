@@ -37,6 +37,7 @@ import { Transcript } from '../../content/Transcript';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { useTranscript } from '../../data/useTranscript';
+import { useMessageReadReceipt } from '../../data/useMessageReadReceipt';
 import { isActive, type Fidelity } from '../../data/visibility';
 import { activityChips, type ActivityChips } from '../../data/activity';
 import {
@@ -96,6 +97,7 @@ export const ThreadView = memo<ThreadViewProps>(
       active,
     });
 
+    const readReceipt = useMessageReadReceipt(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const tasks = worker
@@ -137,6 +139,7 @@ export const ThreadView = memo<ThreadViewProps>(
         setNotice(result.ok
           ? null
           : result.error ?? messageText('sessionWorkbenchUi.action.operationFailed'));
+        return result.ok;
       },
       [actions, target],
     );
@@ -229,6 +232,7 @@ export const ThreadView = memo<ThreadViewProps>(
               key={workerId ?? agentId}
               memoryKey={workerId ?? agentId}
               nodes={transcript.nodes}
+              {...readReceipt}
               renderNode={renderNode}
               hasEarlier={transcript.hasEarlier}
               onLoadEarlier={transcript.loadEarlier}
@@ -251,7 +255,7 @@ export const ThreadView = memo<ThreadViewProps>(
         <AIRequestStatus request={request.request} variant={worker ? 'worker' : 'main'} />
         <McpRuntimeCard
           view={request.mcp}
-          workspace={agent?.workspace}
+          workspace={request.workspace}
           variant={worker ? 'worker' : 'main'}
         />
 
@@ -280,7 +284,7 @@ export const ThreadView = memo<ThreadViewProps>(
           <Gate
             request={gate}
             disabled={worker ? worker.phase === 'waiting' : request.phase === 'stopping'}
-            onDecide={(decision) => void decide(decision)}
+            onDecide={decide}
             onViewDiff={viewDiff}
             onPreviewImage={onPreviewImage}
           />
@@ -288,8 +292,10 @@ export const ThreadView = memo<ThreadViewProps>(
           <ConversationComposer
             agentId={agentId}
             workerId={workerId}
+            workspace={request.workspace}
             targetName={subject}
             model={request.model}
+            reasoningOverride={request.reasoningOverride}
             modeId={agent?.modeId}
             approvalMode={request.approvalMode}
             agentSpec={agent?.agentSpec}

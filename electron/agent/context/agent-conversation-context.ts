@@ -39,6 +39,17 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function projectMessage(message: EnhancedMessage): Message {
+  const { role, subtype, instructions } = message;
+  let content = message.content;
+  if (instructions) {
+    content = typeof content === 'string'
+      ? [content, instructions].filter(Boolean).join('\n\n')
+      : [...content, { type: 'text', text: instructions }];
+  }
+  return { role, content, subtype };
+}
+
 /**
  * 一条消息对 token 数的**严格上界**。
  *
@@ -264,7 +275,11 @@ export class AgentConversationContext {
     };
     if (msg.role === 'user') {
       if (!msg.subtype) throw new Error('User message is missing its canonical subtype');
-      return { ...base, role: 'user', subtype: msg.subtype };
+      return {
+        ...base, role: 'user', subtype: msg.subtype,
+        ...(msg.metadata ? { metadata: msg.metadata } : {}),
+        ...(msg.instructions ? { instructions: msg.instructions } : {}),
+      };
     }
     return { ...base, role: 'assistant' };
   }
@@ -291,8 +306,12 @@ export class AgentConversationContext {
   }
 
   /** 接受已经排好顺序的用户内容；这里不重排 block，也不合并相邻消息。 */
-  addUserMessage(content: string | ContentBlock[], subtype: MessageSubtype = 'user_input'): void {
-    this.recordMessage({ role: 'user', content, subtype });
+  addUserMessage(
+    content: string | ContentBlock[],
+    subtype: MessageSubtype = 'user_input',
+    details: Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'metadata' | 'instructions'>> = {},
+  ): void {
+    this.recordMessage({ role: 'user', content, subtype }, details);
   }
 
   /** 恢复通知必须先落盘，持久化失败时不能暴露为内存事实。 */
@@ -317,10 +336,11 @@ export class AgentConversationContext {
 
   addAssistantMessage(
     content: string | ContentBlock[],
-    request?: string | Pick<AIRequestInfo, 'requestId' | 'usage'>
+    request?: string | Pick<AIRequestInfo, 'requestId' | 'usage'>,
+    details: Partial<Pick<EnhancedMessage, 'id' | 'timestamp'>> = {},
   ): void {
     const message: Message = { role: 'assistant', content };
-    const enhanced = this.createMessageRecord(message);
+    const enhanced = this.createMessageRecord(message, details);
     const requestId = typeof request === 'string' ? request : request?.requestId;
     if (requestId) this.assistantRequests.set(enhanced, requestId);
     const inputTokens = typeof request === 'string' ? undefined : request?.usage.inputTokens;
@@ -525,7 +545,7 @@ export class AgentConversationContext {
   private recordMessage(
     message: Message,
     metadata: Pick<EnhancedMessage, 'toolResultOk'> &
-      Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'persisted'>> = {}
+      Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'persisted' | 'metadata' | 'instructions'>> = {}
   ): EnhancedMessage {
     const enhanced = this.createMessageRecord(message, metadata);
     this.appendMessageRecord(enhanced);
@@ -535,7 +555,7 @@ export class AgentConversationContext {
   private createMessageRecord(
     message: Message,
     metadata: Pick<EnhancedMessage, 'toolResultOk'> &
-      Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'persisted'>> = {}
+      Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'persisted' | 'metadata' | 'instructions'>> = {}
   ): EnhancedMessage {
     return {
       ...message,
@@ -547,7 +567,7 @@ export class AgentConversationContext {
 
   private appendMessageRecord(enhanced: EnhancedMessage): void {
     this.context.fullMessages.push(enhanced);
-    this.appendedTokenUpperBound += messageTokenUpperBound(enhanced);
+    this.appendedTokenUpperBound += messageTokenUpperBound(projectMessage(enhanced));
   }
 
   /** 捕获本次请求实际覆盖的最后一条消息；后续追加事实不会被误提交。 */
@@ -820,6 +840,14 @@ export class AgentConversationContext {
           t: 'summary',
           ts: compactionTimestamp,
           summary: result.summary,
+          pendingEntries: pendingMessages.map((message) => {
+            const toolResult = message.role === 'user' && Array.isArray(message.content)
+              ? message.content.find((block) => block.type === 'tool_result')
+              : undefined;
+            return toolResult?.tool_use_id
+              ? { toolUseId: toolResult.tool_use_id }
+              : { messageId: message.id };
+          }),
         });
 
         appLog.info({
@@ -904,12 +932,7 @@ export class AgentConversationContext {
   }
 
   private stripRuntimeMessageFields(source: EnhancedMessage[]): Message[] {
-    const projected: Message[] = [];
-    for (const message of source) {
-      const { role, content, subtype } = message;
-      projected.push({ role, content, subtype });
-    }
-    return projected;
+    return source.map(projectMessage);
   }
 
   /** Resume 只恢复最后一个摘要，后续消息继续按 JSONL 顺序重放。 */

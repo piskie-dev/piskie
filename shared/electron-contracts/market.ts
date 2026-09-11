@@ -1,3 +1,4 @@
+import type { ComposerSkillOption } from '../types/skill.js';
 import type {
   AgentMcpView,
   McpAddWithOnboardingResult,
@@ -53,6 +54,7 @@ export const CAPABILITY_OPERATIONS = Object.freeze({
   removeMarketSource: 'capabilities.market.removeSource',
   marketProjects: 'capabilities.market.projects',
   previewMarket: 'capabilities.market.preview',
+  availableSkills: 'capabilities.market.availableSkills',
 } as const);
 
 export const CAPABILITY_TOPICS = Object.freeze({
@@ -112,6 +114,7 @@ interface MarketClient {
   removeSource(sourceId: string): Promise<void>;
   projects(): Promise<MarketProjectOption[]>;
   preview(workspace?: string): Promise<EffectiveCapabilityPreview>;
+  availableSkills(workspace?: string): Promise<ComposerSkillOption[]>;
   observeChanges(listener: (event: MarketChangeEvent) => void): () => void;
 }
 

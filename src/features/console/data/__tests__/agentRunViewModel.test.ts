@@ -44,6 +44,7 @@ describe('AgentRun Renderer projection', () => {
       workspace: '/persisted-workspace',
       lastActiveAt: '2026-08-19T01:00:00.000Z',
       running: true,
+      messages: persisted.messages,
     });
     expect(projectPersistedAgentRun(persisted, controlSnapshot({ agentId: 'other' })).running)
       .toBe(false);
@@ -66,6 +67,7 @@ function runSnapshot(): AgentRunSnapshot {
     lastActiveAt: '2026-08-19T01:00:00.000Z',
     currentModel: 'provider::model',
     childAgents: [],
+    messages: { latestMessage: null, latestAssistantIndex: -1, readThroughIndex: -1 },
   };
 }
 

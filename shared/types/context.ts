@@ -4,6 +4,7 @@
 
 import type { Message, MessageSubtype, AIStopReason } from './index.js';
 import type { ReasoningSelection } from './reasoning.js';
+import type { UserMessageMetadata } from './agent-control.js';
 
 // ============================================================
 // 增强消息类型
@@ -53,6 +54,8 @@ export interface EnhancedMessage extends Message {
   persisted?: boolean;
   /** Persisted only for user-role tool_result messages. */
   toolResultOk?: boolean;
+  metadata?: UserMessageMetadata;
+  instructions?: string;
 }
 
 /**

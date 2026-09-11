@@ -26,7 +26,7 @@ function summaryOf(
   showSource: boolean,
   translate: (key: string, values?: Record<string, string | number>) => string,
 ): string {
-  const content = formatContent(event.content);
+  const content = [event.skills?.join(', '), formatContent(event.content)].filter(Boolean).join(' · ');
   const displayContent = content || (event.imageCount > 0
     ? translate('sessionWorkbenchUi.queuedEvent.imageAttachment')
     : translate('sessionWorkbenchUi.queuedEvent.empty'));
