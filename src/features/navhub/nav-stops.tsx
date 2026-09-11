@@ -7,6 +7,7 @@
 
 import type { FC, SVGProps } from 'react';
 import {
+  Bot,
   Chrome,
   MessageSquareText,
   MessagesSquare,
@@ -26,6 +27,7 @@ export const NAV_STOPS: readonly NavStopSpec[] = [
   { path: '/market', titleKey: 'nav.market', Icon: Puzzle },
   { path: '/browser', titleKey: 'nav.environmentGallery', Icon: Chrome },
   { path: '/messaging', titleKey: 'nav.messagingDock', Icon: MessagesSquare },
+  { path: '/agents', titleKey: 'nav.agentManagement', Icon: Bot },
   { path: '/preferences', titleKey: 'nav.preferenceDeck', Icon: SlidersHorizontal },
 ];
 

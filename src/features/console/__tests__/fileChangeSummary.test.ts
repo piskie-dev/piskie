@@ -78,6 +78,7 @@ let worker: WorkerVM = {
   mainAgentId: main.agentId,
   subject: 'Example worker',
   type: 'local-worker',
+  reasoning: { kind: 'disabled' },
   taskIds: [],
   browserReady: false,
 };

@@ -1,3 +1,4 @@
+import { assertWorkerInference, assertWorkerReasoningInput, type WorkerInferenceResolver } from '../worker-inference.js';
 import type { SearchPort } from '../../../shared/types/web-search.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 /**
@@ -44,6 +45,7 @@ import {
 import { isATAEventEnvelope } from '../ata/ata-event-envelope.js';
 
 interface SubagentModuleConfig {
+  resolveWorkerInference?: WorkerInferenceResolver;
   runConfig?: AgentRunConfig;
   allocateAgentId?: () => string;
   createRuntimeObserver?: AgentRuntimeObserverFactory;
@@ -107,6 +109,7 @@ export class SubagentModule implements AgentModule {
   private host!: AgentHost;
 
   // 运行时依赖（从 config 注入）
+  private resolveWorkerInference?: WorkerInferenceResolver;
   private runConfig?: AgentRunConfig;
   private allocateAgentId?: () => string;
   private createRuntimeObserver?: AgentRuntimeObserverFactory;
@@ -140,6 +143,7 @@ export class SubagentModule implements AgentModule {
     Object.assign(this, {
       host,
       runConfig: settings?.runConfig,
+      resolveWorkerInference: settings?.resolveWorkerInference,
       allocateAgentId: settings?.allocateAgentId,
       createRuntimeObserver: settings?.createRuntimeObserver,
       inference: settings?.inference,
@@ -403,7 +407,9 @@ export class SubagentModule implements AgentModule {
     selection?: import('../../../shared/types/reasoning.js').ReasoningSelection
   ): boolean {
     return this.updateSubagent(subagentId, (subagent) => {
-      subagent.setReasoningOverride(selection);
+      assertWorkerReasoningInput(selection);
+      const resolved = this.host.getInference().resolveReasoning(subagent.currentTarget, selection).selection;
+      subagent.setReasoningOverride(resolved);
     });
   }
 
@@ -538,6 +544,11 @@ export class SubagentModule implements AgentModule {
       delete input.advancedSettings;
       createSubagentSchema(specRegistry.getWorkersForParent(this.host.spec.name), environmentIds)
         .parse(input);
+      const parent = structuredClone({ type: spec.name, parentModel: this.host.currentModel, parentReasoning: this.host.reasoningOverride });
+      const initialInference = this.resolveWorkerInference
+        ? await this.resolveWorkerInference(parent)
+        : { model: parent.parentModel, reasoning: parent.parentReasoning };
+      if (this.isParentStopping()) return '';
       if (config.browserEnvironmentId && !browserEnvironmentRuntime.getEnvironment(config.browserEnvironmentId)) {
         throw new Error(`绑定的浏览器环境不存在或已被删除: ${config.browserEnvironmentId}`);
       }
@@ -591,6 +602,7 @@ export class SubagentModule implements AgentModule {
         },
       };
 
+      if (this.resolveWorkerInference) assertWorkerInference(spec.name, initialInference, this.host.getInference());
       subagent = new AgentRuntime({
         id,
         spec,
@@ -603,8 +615,8 @@ export class SubagentModule implements AgentModule {
           runConfig: this.runConfig,
           subagentConfig: config,
           browserBinding,
-          initialModel: this.host.currentModel,
-          initialReasoning: this.host.reasoningOverride,
+          initialModel: initialInference.model,
+          initialReasoning: initialInference.reasoning,
           initialApprovalMode: this.host.approvalMode,
           parentMcpCapability: this.host.getMcpCapabilitySnapshot?.(),
           workspace: this.runConfig?.workspace,

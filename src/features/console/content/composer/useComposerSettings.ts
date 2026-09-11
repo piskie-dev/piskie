@@ -5,6 +5,8 @@
  */
 
 import { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { pushToast } from '../../../toasts';
 
 import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
@@ -27,6 +29,10 @@ export interface ComposerSettings {
 
 export function useComposerSettings(agentId: string, workerId: string | undefined, model: string): ComposerSettings {
   const { agentCommands } = useRendererRuntime();
+  const { t } = useTranslation();
+  const reportFailure = useCallback((result: { ok: boolean; error?: string }) => {
+    if (!result.ok) pushToast({ id: `instance-settings:${agentId}:${workerId ?? "main"}`, tone: "error", title: t("agentManagement.instanceUpdateFailed"), detail: result.error });
+  }, [agentId, t, workerId]);
   const inferenceConfig = useInferenceStore((store) => store.config);
   const aiModels = useInferenceStore((store) => store.models.ai);
   const availableAiTargets = useInferenceStore((store) => store.availableTargets.ai);
@@ -38,22 +44,25 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
 
   const onModelChange = useCallback(
     async (next: string) => {
-      if (workerId) await agentCommands.setSubagentModel(agentId, workerId, next);
+      if (workerId) reportFailure(await agentCommands.setSubagentModel(agentId, workerId, next));
       else await agentCommands.setModel(agentId, next);
     },
-    [agentCommands, agentId, workerId],
+    [agentCommands, agentId, reportFailure, workerId],
   );
 
   const onReasoningChange = useCallback(
     async (selection?: ReasoningSelection) => {
       if (!model || !selection) return;
+      if (workerId) {
+        reportFailure(await agentCommands.setSubagentReasoning(agentId, workerId, selection));
+        return;
+      }
       const updated = await updateModelReasoningDefault(model, selection);
       if (!updated) return;
       // 清掉 agent 级 override，回落到刚更新的模型默认值
-      if (workerId) await agentCommands.setSubagentReasoning(agentId, workerId, undefined);
-      else await agentCommands.setReasoning(agentId, undefined);
+      await agentCommands.setReasoning(agentId, undefined);
     },
-    [agentCommands, agentId, model, updateModelReasoningDefault, workerId],
+    [agentCommands, agentId, model, reportFailure, updateModelReasoningDefault, workerId],
   );
 
   const onModeChange = useCallback(

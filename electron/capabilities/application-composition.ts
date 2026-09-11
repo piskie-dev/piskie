@@ -1,3 +1,4 @@
+import { listWorkerTypes } from '../agent/specs/worker-catalog.js';
 import { createWebSearchController } from './web-search/web-search-controller.js';
 import { safeStorage } from 'electron';
 import { specRegistry } from '../agent/specs/index.js';
@@ -92,6 +93,7 @@ export function createApplicationComposition(options: {
   const agent = createAgentController(
     capabilities.agent,
     modeCatalog,
+    () => listWorkerTypes(specRegistry),
   );
   const taskDefinitions = createTaskDefinitionController(taskDefinitionApplication);
   const agentRuns = createAgentRunController(agentRunApplication);
