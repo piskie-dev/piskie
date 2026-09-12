@@ -24,17 +24,27 @@ import styles from '../studio.module.css';
 const PURPOSE_MAX = 200;
 
 const FALLBACK_ZONES = [
-  'America/Mexico_City', 'America/Bogota', 'America/Lima', 'America/Santiago',
-  'America/Argentina/Buenos_Aires', 'America/Sao_Paulo', 'America/New_York',
-  'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-  'Europe/London', 'Europe/Madrid', 'Asia/Shanghai', 'Asia/Tokyo',
+  'America/Mexico_City',
+  'America/Bogota',
+  'America/Lima',
+  'America/Santiago',
+  'America/Argentina/Buenos_Aires',
+  'America/Sao_Paulo',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Madrid',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
 ];
 
 function zoneOptions(): string[] {
   try {
-    const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.(
-      'timeZone',
-    );
+    const supported = (
+      Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
+    ).supportedValuesOf?.('timeZone');
     if (supported && supported.length > 0) return supported;
   } catch {
     /* 老运行时回退精选 */
@@ -43,9 +53,31 @@ function zoneOptions(): string[] {
 }
 
 const LOCALE_CODES = [
-  'es-MX', 'es-AR', 'es-CL', 'es-CO', 'es-PE', 'es-ES', 'pt-BR', 'pt-PT',
-  'en-US', 'en-GB', 'en-CA', 'zh-CN', 'zh-TW', 'zh-HK', 'ja-JP', 'ko-KR',
-  'fr-FR', 'de-DE', 'it-IT', 'ru-RU', 'tr-TR', 'vi-VN', 'th-TH', 'id-ID', 'ar-SA',
+  'es-MX',
+  'es-AR',
+  'es-CL',
+  'es-CO',
+  'es-PE',
+  'es-ES',
+  'pt-BR',
+  'pt-PT',
+  'en-US',
+  'en-GB',
+  'en-CA',
+  'zh-CN',
+  'zh-TW',
+  'zh-HK',
+  'ja-JP',
+  'ko-KR',
+  'fr-FR',
+  'de-DE',
+  'it-IT',
+  'ru-RU',
+  'tr-TR',
+  'vi-VN',
+  'th-TH',
+  'id-ID',
+  'ar-SA',
 ];
 
 type KernelOS = 'macos' | 'windows' | 'linux';
@@ -71,21 +103,45 @@ function forgeUA(target: KernelOS | '', kernelBuild: string): string | null {
   return `Mozilla/5.0 (${signature}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
 }
 
-function uaOsMismatch(ua: string, target: KernelOS | ''): { claimed: string; expected: string } | null {
+function uaOsMismatch(
+  ua: string,
+  target: KernelOS | ''
+): { claimed: string; expected: string } | null {
   if (!ua) return null;
   const expected =
-    target === 'windows' ? 'Windows' : target === 'macos' ? 'Mac' : target === 'linux' ? 'Linux'
-      : /Windows/.test(hostOsSignature()) ? 'Windows' : /Macintosh/.test(hostOsSignature()) ? 'Mac' : 'Linux';
-  const claimed = /Windows/i.test(ua) ? 'Windows' : /Macintosh|Mac OS X/i.test(ua) ? 'Mac' : /Linux|X11/i.test(ua) ? 'Linux' : '';
+    target === 'windows'
+      ? 'Windows'
+      : target === 'macos'
+        ? 'Mac'
+        : target === 'linux'
+          ? 'Linux'
+          : /Windows/.test(hostOsSignature())
+            ? 'Windows'
+            : /Macintosh/.test(hostOsSignature())
+              ? 'Mac'
+              : 'Linux';
+  const claimed = /Windows/i.test(ua)
+    ? 'Windows'
+    : /Macintosh|Mac OS X/i.test(ua)
+      ? 'Mac'
+      : /Linux|X11/i.test(ua)
+        ? 'Linux'
+        : '';
   return claimed && claimed !== expected ? { claimed, expected } : null;
 }
 
-interface ForgeDraft {
+export interface ForgeDraft {
   name: string;
   purpose: string;
   proxyMode: 'none' | 'existing' | 'new';
   proxyId: string;
-  newProxy: { protocol: ProxyProtocol; host: string; port: string; username: string; password: string };
+  newProxy: {
+    protocol: ProxyProtocol;
+    host: string;
+    port: string;
+    username: string;
+    password: string;
+  };
   tzMode: 'ip' | 'real' | 'custom';
   tzValue: string;
   geoMode: 'ip' | 'custom' | 'off';
@@ -112,7 +168,10 @@ function draftFrom(env: BrowserEnvironment | null): ForgeDraft {
     geoMode: policy?.geolocation.mode ?? 'ip',
     geoLat: policy?.geolocation.mode === 'custom' ? String(policy.geolocation.latitude) : '',
     geoLng: policy?.geolocation.mode === 'custom' ? String(policy.geolocation.longitude) : '',
-    geoAcc: policy?.geolocation.mode === 'custom' && policy.geolocation.accuracy != null ? String(policy.geolocation.accuracy) : '1000',
+    geoAcc:
+      policy?.geolocation.mode === 'custom' && policy.geolocation.accuracy != null
+        ? String(policy.geolocation.accuracy)
+        : '1000',
     langMode: policy?.language.mode ?? 'ip',
     langValue: policy?.language.mode === 'custom' ? policy.language.value : '',
     userAgent: policy?.userAgent ?? '',
@@ -149,25 +208,21 @@ interface ForgeSheetProps {
   onSaved(): void;
 }
 
-export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuild, onClose, onSaved }) => {
-  const { t, i18n } = useTranslation();
+export const ForgeSheet: React.FC<ForgeSheetProps> = ({
+  env,
+  proxies,
+  kernelBuild,
+  onClose,
+  onSaved,
+}) => {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<ForgeDraft>(() => draftFrom(env));
   const [saving, setSaving] = useState(false);
   const [fault, setFault] = useState<PresentationText | null>(null);
-  const zones = useMemo(() => zoneOptions(), []);
-  const languageNames = useMemo(() => {
-    try {
-      return new Intl.DisplayNames([i18n.resolvedLanguage ?? i18n.language], { type: 'language' });
-    } catch {
-      return null;
-    }
-  }, [i18n.language, i18n.resolvedLanguage]);
 
   const patch = (part: Partial<ForgeDraft>) => setDraft((prev) => ({ ...prev, ...part }));
-  const uaWarn = uaOsMismatch(draft.userAgent, draft.platform);
-  const present = (value: PresentationText): string => (
-    resolvePresentationText(value, (key, values) => t(key, values ?? {}))
-  );
+  const present = (value: PresentationText): string =>
+    resolvePresentationText(value, (key, values) => t(key, values ?? {}));
 
   const generateUA = () => {
     if (!kernelBuild) {
@@ -242,7 +297,10 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuil
       const policyDraft: BrowserIdentityPolicy = {
         ...(env?.identityPolicy.extra ? { extra: env.identityPolicy.extra } : {}),
         ...(draft.platform ? { platform: draft.platform } : {}),
-        timezone: draft.tzMode === 'custom' ? { mode: 'custom', value: draft.tzValue } : { mode: draft.tzMode },
+        timezone:
+          draft.tzMode === 'custom'
+            ? { mode: 'custom', value: draft.tzValue }
+            : { mode: draft.tzMode },
         geolocation:
           draft.geoMode === 'custom'
             ? {
@@ -252,7 +310,8 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuil
                 ...(draft.geoAcc ? { accuracy: Number(draft.geoAcc) } : {}),
               }
             : { mode: draft.geoMode },
-        language: draft.langMode === 'custom' ? { mode: 'custom', value: draft.langValue } : { mode: 'ip' },
+        language:
+          draft.langMode === 'custom' ? { mode: 'custom', value: draft.langValue } : { mode: 'ip' },
         ...(draft.userAgent ? { userAgent: draft.userAgent } : {}),
         ...(draft.cores ? { hardwareConcurrency: Number(draft.cores) } : {}),
       };
@@ -271,9 +330,11 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuil
       }
       onSaved();
     } catch (error) {
-      setFault(error instanceof Error
-        ? rawText(error.message)
-        : messageText('environmentUi.forge.saveFailed'));
+      setFault(
+        error instanceof Error
+          ? rawText(error.message)
+          : messageText('environmentUi.forge.saveFailed')
+      );
     } finally {
       setSaving(false);
     }
@@ -286,7 +347,10 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuil
       onClose={onClose}
       foot={
         <>
-          <span style={{ marginInlineEnd: 'auto', alignSelf: 'center' }} className={styles.fieldWarn}>
+          <span
+            style={{ marginInlineEnd: 'auto', alignSelf: 'center' }}
+            className={styles.fieldWarn}
+          >
             {fault ? present(fault) : null}
           </span>
           <ActPill tone="hush" onClick={onClose}>
@@ -298,301 +362,368 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({ env, proxies, kernelBuil
         </>
       }
     >
-      <div className={styles.formCap}>{t('environmentUi.forge.basicsSection')}</div>
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.environmentName')}</b>
-        </label>
-        <input
-          className={styles.textInput}
-          value={draft.name}
-          placeholder={t('environmentUi.forge.environmentNamePlaceholder')}
-          onChange={(event) => patch({ name: event.target.value })}
-        />
-      </div>
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.purpose')}</b>
-          {' · '}{t('environmentUi.forge.purposeForAi')}
-        </label>
-        <textarea
-          className={styles.textArea}
-          rows={3}
-          maxLength={PURPOSE_MAX}
-          value={draft.purpose}
-          placeholder={t('environmentUi.forge.purposePlaceholder')}
-          onChange={(event) => patch({ purpose: event.target.value })}
-        />
-        <div className={styles.fieldHint}>
-          {t('environmentUi.forge.purposeHint', { count: PURPOSE_MAX })}
-        </div>
-      </div>
-
-      <div className={styles.formCap}>{t('environmentUi.forge.networkSection')}</div>
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.proxy')}</b>
-        </label>
-        <Seg
-          value={draft.proxyMode}
-          options={[
-            ['none', t('environmentUi.forge.proxyDirect')],
-            ['existing', t('environmentUi.forge.proxyExisting')],
-            ['new', t('environmentUi.forge.proxyNew')],
-          ]}
-          onChange={(next) => patch({ proxyMode: next as ForgeDraft['proxyMode'] })}
-        />
-        {draft.proxyMode === 'existing' && (
-          <div style={{ marginBlockStart: 10 }}>
-            <select
-              className={styles.selectBox}
-              value={draft.proxyId}
-              onChange={(event) => patch({ proxyId: event.target.value })}
-            >
-              <option value="">{t('environmentUi.forge.selectProxy')}</option>
-              {proxies.map((proxy) => (
-                <option key={proxy.id} value={proxy.id}>
-                  {proxy.name} · {proxy.protocol}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {draft.proxyMode === 'new' && (
-          <div style={{ marginBlockStart: 10, display: 'grid', gap: 10 }}>
-            <select
-              className={styles.selectBox}
-              value={draft.newProxy.protocol}
-              onChange={(event) =>
-                patch({ newProxy: { ...draft.newProxy, protocol: event.target.value as ProxyProtocol } })
-              }
-            >
-              <option value="http">HTTP</option>
-              <option value="https">HTTPS</option>
-              <option value="socks5">SOCKS5</option>
-            </select>
-            <div className={styles.hostPort}>
-              <input
-                className={styles.textInput}
-                placeholder={t('environmentUi.forge.hostPlaceholder')}
-                value={draft.newProxy.host}
-                onChange={(event) => patch({ newProxy: { ...draft.newProxy, host: event.target.value } })}
-              />
-              <input
-                className={styles.textInput}
-                placeholder={t('environmentUi.forge.portPlaceholder')}
-                inputMode="numeric"
-                value={draft.newProxy.port}
-                onChange={(event) =>
-                  patch({ newProxy: { ...draft.newProxy, port: event.target.value.replace(/\D/g, '') } })
-                }
-              />
-            </div>
-            <div className={styles.rowSplit}>
-              <input
-                className={styles.textInput}
-                placeholder={t('environmentUi.forge.usernamePlaceholder')}
-                autoComplete="off"
-                value={draft.newProxy.username}
-                onChange={(event) => patch({ newProxy: { ...draft.newProxy, username: event.target.value } })}
-              />
-              <input
-                className={styles.textInput}
-                placeholder={t('environmentUi.forge.passwordPlaceholder')}
-                type="password"
-                autoComplete="new-password"
-                value={draft.newProxy.password}
-                onChange={(event) => patch({ newProxy: { ...draft.newProxy, password: event.target.value } })}
-              />
-            </div>
-            <div className={styles.fieldHint}>{t('environmentUi.forge.newProxyHint')}</div>
-          </div>
-        )}
-      </div>
-
-      <div className={styles.formCap}>{t('environmentUi.forge.identitySection')}</div>
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.timezone')}</b>
-        </label>
-        <Seg
-          value={draft.tzMode}
-          options={[
-            ['ip', t('environmentUi.forge.basedOnIp')],
-            ['real', t('environmentUi.forge.useLocal')],
-            ['custom', t('environmentUi.forge.custom')],
-          ]}
-          onChange={(next) => patch({ tzMode: next as ForgeDraft['tzMode'] })}
-        />
-        {draft.tzMode === 'custom' && (
-          <div style={{ marginBlockStart: 10 }}>
-            <input
-              className={styles.textInput}
-              list="st-zones"
-              placeholder={t('environmentUi.forge.timezonePlaceholder')}
-              value={draft.tzValue}
-              onChange={(event) => patch({ tzValue: event.target.value })}
-            />
-            <datalist id="st-zones">
-              {zones.map((zone) => (
-                <option key={zone} value={zone} />
-              ))}
-            </datalist>
-          </div>
-        )}
-        {draft.tzMode === 'real' && draft.proxyMode !== 'none' && (
-          <div className={styles.fieldWarn}>
-            {t('environmentUi.forge.localTimezoneProxyWarning')}
-          </div>
-        )}
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.geolocation')}</b>
-        </label>
-        <Seg
-          value={draft.geoMode}
-          options={[
-            ['ip', t('environmentUi.forge.basedOnIp')],
-            ['custom', t('environmentUi.forge.custom')],
-            ['off', t('environmentUi.forge.deny')],
-          ]}
-          onChange={(next) => patch({ geoMode: next as ForgeDraft['geoMode'] })}
-        />
-        {draft.geoMode === 'off' && (
-          <div className={styles.fieldHint}>
-            {t('environmentUi.forge.geolocationDeniedHint')}
-          </div>
-        )}
-        {draft.geoMode === 'custom' && (
-          <div className={styles.rowTriple} style={{ marginBlockStart: 10 }}>
-            <input
-              className={styles.textInput}
-              placeholder={t('environmentUi.forge.latitudePlaceholder')}
-              value={draft.geoLat}
-              onChange={(event) => patch({ geoLat: event.target.value })}
-            />
-            <input
-              className={styles.textInput}
-              placeholder={t('environmentUi.forge.longitudePlaceholder')}
-              value={draft.geoLng}
-              onChange={(event) => patch({ geoLng: event.target.value })}
-            />
-            <input
-              className={styles.textInput}
-              placeholder={t('environmentUi.forge.accuracyPlaceholder')}
-              inputMode="numeric"
-              value={draft.geoAcc}
-              onChange={(event) => patch({ geoAcc: event.target.value.replace(/\D/g, '') })}
-            />
-          </div>
-        )}
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.language')}</b>
-        </label>
-        <Seg
-          value={draft.langMode}
-          options={[
-            ['ip', t('environmentUi.forge.basedOnIp')],
-            ['custom', t('environmentUi.forge.custom')],
-          ]}
-          onChange={(next) => patch({ langMode: next as ForgeDraft['langMode'] })}
-        />
-        {draft.langMode === 'custom' && (
-          <div style={{ marginBlockStart: 10 }}>
-            <select
-              className={styles.selectBox}
-              value={draft.langValue}
-              onChange={(event) => patch({ langValue: event.target.value })}
-            >
-              <option value="">{t('environmentUi.forge.selectLanguage')}</option>
-              {LOCALE_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {languageNames?.of(code) ?? code} · {code}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>User-Agent</b>
-        </label>
-        <div className={styles.inputAffix}>
-          <input
-            className={styles.textInput}
-            placeholder={t('environmentUi.forge.userAgentPlaceholder')}
-            value={draft.userAgent}
-            onChange={(event) => patch({ userAgent: event.target.value })}
-          />
-          <span className={styles.affixOps}>
-            <button
-              type="button"
-              className={styles.affixBtn}
-              title={t('environmentUi.forge.copyUa')}
-              onClick={() => void copyUA()}
-            >
-              {t('environmentUi.forge.copyAction')}
-            </button>
-            <button
-              type="button"
-              className={styles.affixBtn}
-              title={t('environmentUi.forge.generateUa')}
-              onClick={generateUA}
-            >
-              {t('environmentUi.forge.generateAction')}
-            </button>
-          </span>
-        </div>
-        {uaWarn ? (
-          <div className={styles.fieldWarn}>
-            {t('environmentUi.forge.uaMismatch', uaWarn)}
-          </div>
-        ) : (
-          <div className={styles.fieldHint}>
-            {t('environmentUi.forge.uaHint')}
-          </div>
-        )}
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.fieldLabel}>
-          <b>{t('environmentUi.forge.platformAndCores')}</b>
-        </label>
-        <div className={styles.rowSplit}>
-          <select
-            className={styles.selectBox}
-            value={draft.platform}
-            onChange={(event) => patch({ platform: event.target.value as ForgeDraft['platform'] })}
-          >
-            <option value="">{t('environmentUi.forge.followHostPlatform')}</option>
-            <option value="windows">Windows</option>
-            <option value="macos">macOS</option>
-            <option value="linux">Linux</option>
-          </select>
-          <select
-            className={styles.selectBox}
-            value={draft.cores}
-            onChange={(event) => patch({ cores: event.target.value })}
-          >
-            <option value="">{t('environmentUi.forge.kernelDefault')}</option>
-            {[2, 4, 6, 8, 10, 12, 16].map((n) => (
-              <option key={n} value={String(n)}>
-                {t('environmentUi.forge.coreCount', { count: n })}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.fieldHint}>
-          {t('environmentUi.forge.advancedIdentityHint')}
-        </div>
-      </div>
+      <ForgeFields
+        draft={draft}
+        patch={patch}
+        proxies={proxies}
+        onCopyUA={() => void copyUA()}
+        onGenerateUA={generateUA}
+      />
     </SheetShell>
   );
 };
+
+export type ForgeSection = 'basics' | 'network' | 'location' | 'device';
+
+/** The live editor and introductions share the exact controls; effects stay in ForgeSheet. */
+export function ForgeFields({
+  draft,
+  patch,
+  proxies,
+  onCopyUA,
+  onGenerateUA,
+  sections = ['basics', 'network', 'location', 'device'],
+}: {
+  readonly draft: ForgeDraft;
+  readonly patch: (part: Partial<ForgeDraft>) => void;
+  readonly proxies: readonly ProxyProfile[];
+  readonly onCopyUA: () => void;
+  readonly onGenerateUA: () => void;
+  readonly sections?: readonly ForgeSection[];
+}) {
+  const { t, i18n } = useTranslation();
+  const zones = useMemo(() => zoneOptions(), []);
+  const languageNames = useMemo(() => {
+    try {
+      return new Intl.DisplayNames([i18n.resolvedLanguage ?? i18n.language], { type: 'language' });
+    } catch {
+      return null;
+    }
+  }, [i18n.language, i18n.resolvedLanguage]);
+  const uaWarn = uaOsMismatch(draft.userAgent, draft.platform);
+  return (
+    <>
+      {sections.includes('basics') && (
+        <>
+          <div className={styles.formCap}>{t('environmentUi.forge.basicsSection')}</div>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.environmentName')}</b>
+            </label>
+            <input
+              className={styles.textInput}
+              value={draft.name}
+              placeholder={t('environmentUi.forge.environmentNamePlaceholder')}
+              onChange={(event) => patch({ name: event.target.value })}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.purpose')}</b>
+              {' · '}
+              {t('environmentUi.forge.purposeForAi')}
+            </label>
+            <textarea
+              className={styles.textArea}
+              rows={3}
+              maxLength={PURPOSE_MAX}
+              value={draft.purpose}
+              placeholder={t('environmentUi.forge.purposePlaceholder')}
+              onChange={(event) => patch({ purpose: event.target.value })}
+            />
+            <div className={styles.fieldHint}>
+              {t('environmentUi.forge.purposeHint', { count: PURPOSE_MAX })}
+            </div>
+          </div>
+        </>
+      )}
+      {sections.includes('network') && (
+        <>
+          <div className={styles.formCap}>{t('environmentUi.forge.networkSection')}</div>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.proxy')}</b>
+            </label>
+            <Seg
+              value={draft.proxyMode}
+              options={[
+                ['none', t('environmentUi.forge.proxyDirect')],
+                ['existing', t('environmentUi.forge.proxyExisting')],
+                ['new', t('environmentUi.forge.proxyNew')],
+              ]}
+              onChange={(next) => patch({ proxyMode: next as ForgeDraft['proxyMode'] })}
+            />
+            {draft.proxyMode === 'existing' && (
+              <div style={{ marginBlockStart: 10 }}>
+                <select
+                  className={styles.selectBox}
+                  value={draft.proxyId}
+                  onChange={(event) => patch({ proxyId: event.target.value })}
+                >
+                  <option value="">{t('environmentUi.forge.selectProxy')}</option>
+                  {proxies.map((proxy) => (
+                    <option key={proxy.id} value={proxy.id}>
+                      {proxy.name} · {proxy.protocol}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {draft.proxyMode === 'new' && (
+              <div style={{ marginBlockStart: 10, display: 'grid', gap: 10 }}>
+                <select
+                  className={styles.selectBox}
+                  value={draft.newProxy.protocol}
+                  onChange={(event) =>
+                    patch({
+                      newProxy: {
+                        ...draft.newProxy,
+                        protocol: event.target.value as ProxyProtocol,
+                      },
+                    })
+                  }
+                >
+                  <option value="http">HTTP</option>
+                  <option value="https">HTTPS</option>
+                  <option value="socks5">SOCKS5</option>
+                </select>
+                <div className={styles.hostPort}>
+                  <input
+                    className={styles.textInput}
+                    placeholder={t('environmentUi.forge.hostPlaceholder')}
+                    value={draft.newProxy.host}
+                    onChange={(event) =>
+                      patch({ newProxy: { ...draft.newProxy, host: event.target.value } })
+                    }
+                  />
+                  <input
+                    className={styles.textInput}
+                    placeholder={t('environmentUi.forge.portPlaceholder')}
+                    inputMode="numeric"
+                    value={draft.newProxy.port}
+                    onChange={(event) =>
+                      patch({
+                        newProxy: {
+                          ...draft.newProxy,
+                          port: event.target.value.replace(/\D/g, ''),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className={styles.rowSplit}>
+                  <input
+                    className={styles.textInput}
+                    placeholder={t('environmentUi.forge.usernamePlaceholder')}
+                    autoComplete="off"
+                    value={draft.newProxy.username}
+                    onChange={(event) =>
+                      patch({ newProxy: { ...draft.newProxy, username: event.target.value } })
+                    }
+                  />
+                  <input
+                    className={styles.textInput}
+                    placeholder={t('environmentUi.forge.passwordPlaceholder')}
+                    type="password"
+                    autoComplete="new-password"
+                    value={draft.newProxy.password}
+                    onChange={(event) =>
+                      patch({ newProxy: { ...draft.newProxy, password: event.target.value } })
+                    }
+                  />
+                </div>
+                <div className={styles.fieldHint}>{t('environmentUi.forge.newProxyHint')}</div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {sections.includes('location') && (
+        <>
+          <div className={styles.formCap}>{t('environmentUi.forge.identitySection')}</div>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.timezone')}</b>
+            </label>
+            <Seg
+              value={draft.tzMode}
+              options={[
+                ['ip', t('environmentUi.forge.basedOnIp')],
+                ['real', t('environmentUi.forge.useLocal')],
+                ['custom', t('environmentUi.forge.custom')],
+              ]}
+              onChange={(next) => patch({ tzMode: next as ForgeDraft['tzMode'] })}
+            />
+            {draft.tzMode === 'custom' && (
+              <div style={{ marginBlockStart: 10 }}>
+                <input
+                  className={styles.textInput}
+                  list="st-zones"
+                  placeholder={t('environmentUi.forge.timezonePlaceholder')}
+                  value={draft.tzValue}
+                  onChange={(event) => patch({ tzValue: event.target.value })}
+                />
+                <datalist id="st-zones">
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone} />
+                  ))}
+                </datalist>
+              </div>
+            )}
+            {draft.tzMode === 'real' && draft.proxyMode !== 'none' && (
+              <div className={styles.fieldWarn}>
+                {t('environmentUi.forge.localTimezoneProxyWarning')}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.geolocation')}</b>
+            </label>
+            <Seg
+              value={draft.geoMode}
+              options={[
+                ['ip', t('environmentUi.forge.basedOnIp')],
+                ['custom', t('environmentUi.forge.custom')],
+                ['off', t('environmentUi.forge.deny')],
+              ]}
+              onChange={(next) => patch({ geoMode: next as ForgeDraft['geoMode'] })}
+            />
+            {draft.geoMode === 'off' && (
+              <div className={styles.fieldHint}>
+                {t('environmentUi.forge.geolocationDeniedHint')}
+              </div>
+            )}
+            {draft.geoMode === 'custom' && (
+              <div className={styles.rowTriple} style={{ marginBlockStart: 10 }}>
+                <input
+                  className={styles.textInput}
+                  placeholder={t('environmentUi.forge.latitudePlaceholder')}
+                  value={draft.geoLat}
+                  onChange={(event) => patch({ geoLat: event.target.value })}
+                />
+                <input
+                  className={styles.textInput}
+                  placeholder={t('environmentUi.forge.longitudePlaceholder')}
+                  value={draft.geoLng}
+                  onChange={(event) => patch({ geoLng: event.target.value })}
+                />
+                <input
+                  className={styles.textInput}
+                  placeholder={t('environmentUi.forge.accuracyPlaceholder')}
+                  inputMode="numeric"
+                  value={draft.geoAcc}
+                  onChange={(event) => patch({ geoAcc: event.target.value.replace(/\D/g, '') })}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.language')}</b>
+            </label>
+            <Seg
+              value={draft.langMode}
+              options={[
+                ['ip', t('environmentUi.forge.basedOnIp')],
+                ['custom', t('environmentUi.forge.custom')],
+              ]}
+              onChange={(next) => patch({ langMode: next as ForgeDraft['langMode'] })}
+            />
+            {draft.langMode === 'custom' && (
+              <div style={{ marginBlockStart: 10 }}>
+                <select
+                  className={styles.selectBox}
+                  value={draft.langValue}
+                  onChange={(event) => patch({ langValue: event.target.value })}
+                >
+                  <option value="">{t('environmentUi.forge.selectLanguage')}</option>
+                  {LOCALE_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {languageNames?.of(code) ?? code} · {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {sections.includes('device') && (
+        <>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>User-Agent</b>
+            </label>
+            <div className={styles.inputAffix}>
+              <input
+                className={styles.textInput}
+                placeholder={t('environmentUi.forge.userAgentPlaceholder')}
+                value={draft.userAgent}
+                onChange={(event) => patch({ userAgent: event.target.value })}
+              />
+              <span className={styles.affixOps}>
+                <button
+                  type="button"
+                  className={styles.affixBtn}
+                  title={t('environmentUi.forge.copyUa')}
+                  onClick={onCopyUA}
+                >
+                  {t('environmentUi.forge.copyAction')}
+                </button>
+                <button
+                  type="button"
+                  className={styles.affixBtn}
+                  title={t('environmentUi.forge.generateUa')}
+                  onClick={onGenerateUA}
+                >
+                  {t('environmentUi.forge.generateAction')}
+                </button>
+              </span>
+            </div>
+            {uaWarn ? (
+              <div className={styles.fieldWarn}>{t('environmentUi.forge.uaMismatch', uaWarn)}</div>
+            ) : (
+              <div className={styles.fieldHint}>{t('environmentUi.forge.uaHint')}</div>
+            )}
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>
+              <b>{t('environmentUi.forge.platformAndCores')}</b>
+            </label>
+            <div className={styles.rowSplit}>
+              <select
+                className={styles.selectBox}
+                value={draft.platform}
+                onChange={(event) =>
+                  patch({ platform: event.target.value as ForgeDraft['platform'] })
+                }
+              >
+                <option value="">{t('environmentUi.forge.followHostPlatform')}</option>
+                <option value="windows">Windows</option>
+                <option value="macos">macOS</option>
+                <option value="linux">Linux</option>
+              </select>
+              <select
+                className={styles.selectBox}
+                value={draft.cores}
+                onChange={(event) => patch({ cores: event.target.value })}
+              >
+                <option value="">{t('environmentUi.forge.kernelDefault')}</option>
+                {[2, 4, 6, 8, 10, 12, 16].map((n) => (
+                  <option key={n} value={String(n)}>
+                    {t('environmentUi.forge.coreCount', { count: n })}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.fieldHint}>{t('environmentUi.forge.advancedIdentityHint')}</div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

@@ -342,10 +342,7 @@ export function AgentManagementView(props: AgentManagementViewProps) {
       </main>
       <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} title={t('agentManagement.help')}>
         <div className={styles.help}>
-          <p>{t('agentManagement.helpTypes')}</p>
-          <p>{t('agentManagement.inheritNote')}</p>
-          <p>{t('agentManagement.helpInstances')}</p>
-          <p>{t('agentManagement.helpSave')}</p>
+          <AgentManagementHelp />
           <button className={styles.button} onClick={() => setHelpOpen(false)}>
             {t('common.close')}
           </button>
@@ -353,4 +350,14 @@ export function AgentManagementView(props: AgentManagementViewProps) {
       </Dialog>
     </div>
   );
+}
+
+export function AgentManagementHelp({ scopeOnly = false }: { scopeOnly?: boolean }) {
+  const { t } = useTranslation();
+  return <>
+    {!scopeOnly && <p>{t('agentManagement.helpTypes')}</p>}
+    {!scopeOnly && <p>{t('agentManagement.inheritNote')}</p>}
+    <p>{t('agentManagement.helpInstances')}</p>
+    <p>{t('agentManagement.helpSave')}</p>
+  </>;
 }

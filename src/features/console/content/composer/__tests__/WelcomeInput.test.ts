@@ -44,10 +44,12 @@ vi.mock('../WelcomeComposer', () => ({
   },
 }));
 vi.mock('../../../../../renderer-runtime/hooks', () => ({
+  useAgentRunList: (select: (state: { phase: string; runs: unknown[] }) => unknown) => select({ phase: 'ready', runs: [] }),
   useRendererRuntime: () => runtime,
   useAgentControl: (select: (state: typeof control) => unknown) => select(control),
   useAgentRunPreview: (select: (state: typeof preview) => unknown) => select(preview),
 }));
+vi.mock('../../../../guides/WelcomeGuide', () => ({ WelcomeGuide: () => null }));
 vi.mock('../../../data/session', () => ({
   useSessionRows: () => rows.sessions,
   useHistoryRows: () => rows.history,

@@ -1,0 +1,589 @@
+/* Business modules supply their skins and controls; these rules only frame the shots. */
+.stage.stage {
+  height: min(500px, calc(90svh - 142px));
+  pointer-events: none;
+}
+.stage > div:last-child,
+.planStage > div:last-child {
+  z-index: 50;
+}
+.stage.stage *:not(.browserCreation *),
+.stage.stage *:not(.browserCreation *)::before,
+.stage.stage *:not(.browserCreation *)::after {
+  letter-spacing: 0;
+}
+.shot {
+  height: calc(100% - 37px);
+  overflow: hidden;
+}
+.settings,
+.market,
+.messaging,
+.templates {
+  height: 100%;
+  min-width: 0;
+}
+.settings {
+  color: var(--pd-ink);
+  display: grid;
+  place-items: center;
+  padding: 12px 20px;
+}
+.settings [data-demo-focus] {
+  border-color: var(--pd-beam);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pd-beam) 18%, transparent);
+}
+.forge {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 510px);
+  max-height: 100%;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 8px;
+  background: var(--pd-slate);
+  overflow: hidden;
+}
+.forge > div:first-child {
+  padding: 12px 16px;
+}
+.forge > div:nth-child(2) {
+  overflow: visible;
+  padding: 12px 16px;
+  gap: 10px;
+}
+.forge > div:last-child {
+  font-size: 11px;
+}
+.forge > div:nth-child(2) > section {
+  gap: 8px;
+  padding-block-start: 8px;
+}
+.forge > div:nth-child(2) > section:first-child {
+  padding-block-start: 0;
+}
+.vendorForge {
+  width: min(100%, 650px);
+}
+.vendorForge > div:nth-child(2) {
+  flex-wrap: wrap;
+}
+.vendorForge > div:last-child {
+  padding: 10px 16px 14px;
+  gap: 8px;
+  overflow: visible;
+}
+.vendorForge > div:last-child > div {
+  margin-block-start: 0;
+}
+.vendorForge > div:last-child > div > div {
+  padding: 5px 4px;
+  gap: 3px;
+  border-radius: 8px;
+}
+.vendorForge > div:last-child > div > div > span:first-child {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.vendorForge > div:last-child > div > div > span:last-child {
+  font-size: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.field {
+  min-width: 0;
+}
+.field label {
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+.field > span {
+  min-height: 29px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+.value {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.placeholder {
+  color: var(--pd-mut);
+  font-size: 11px;
+}
+.suggestions {
+  z-index: 3;
+  max-height: none;
+}
+.modelId {
+  display: block;
+  font-size: 10px;
+  color: var(--pd-mut);
+}
+.provider {
+  width: 100%;
+  max-width: 680px;
+  height: 100%;
+}
+.provider > div:first-child {
+  padding: 10px 12px;
+  gap: 8px;
+}
+.provider > div:nth-child(2) {
+  padding: 12px;
+  gap: 10px;
+  overflow: visible;
+}
+.provider section {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.provider section .field + .field {
+  margin-top: 8px;
+}
+.provider section > div:first-child {
+  margin-bottom: 6px;
+}
+.provider section > div:last-child {
+  flex-wrap: wrap;
+}
+.provider section > div:last-child > span {
+  overflow-wrap: anywhere;
+}
+.receipt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--status-running);
+  font-size: 11px;
+}
+.inlineOptions {
+  margin-top: 4px;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 6px;
+  background: var(--pd-pop);
+}
+.imageResult {
+  position: static;
+  margin-top: 14px;
+}
+.imageResult img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  background: var(--pd-well);
+  border-radius: 6px;
+}
+.market {
+  padding: 18px 24px;
+  color: var(--cyber-text);
+  background: var(--cyber-bg);
+}
+.marketBody {
+  padding-top: 15px;
+  display: grid;
+  gap: 16px;
+}
+.market nav {
+  flex-wrap: wrap;
+}
+.market h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.market h3 {
+  font-size: 12px;
+}
+.market > div:first-child {
+  margin-bottom: 14px;
+}
+.market :is(input, textarea) {
+  font-size: 12px;
+}
+.market textarea {
+  min-height: 62px;
+}
+.installSheet.installSheet {
+  width: min(100%, 600px);
+  margin: auto;
+  padding: 0;
+  gap: 6px;
+  overflow: visible;
+  max-block-size: none;
+}
+.installSheet > p {
+  margin: 8px 0;
+}
+.installSheet > div {
+  margin-top: 10px;
+}
+.installSheet > div:nth-last-child(2) {
+  gap: 0;
+}
+.installSheet > footer {
+  margin-top: 10px;
+  padding-block: 8px;
+}
+.installSheet > header p,
+.installSheet > p,
+.installSheet > div {
+  font-size: 11px;
+}
+.installSheet strong {
+  font-size: 12px;
+}
+.loadoutCrop {
+  margin: 30px auto;
+  width: min(420px, 100%);
+}
+.browser.browser {
+  padding: 14px 20px;
+  height: 100%;
+  background: var(--st-stage);
+}
+.browser.browserCreation {
+  padding: 0;
+}
+.envSheet {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  container-type: size;
+}
+.envSheet > aside {
+  /* Fit the original 460px panel as a whole, preserving business control dimensions. */
+  --forge-scale: min(1, calc(100cqw / 460px), calc(100cqh / 463px));
+  zoom: var(--forge-scale);
+  inline-size: 460px;
+  block-size: calc(100cqh / var(--forge-scale));
+  inset-block-end: auto;
+  animation: none;
+}
+.envSheet > aside > div {
+  /* The demo clock scrolls the real form while its header and actions stay fixed. */
+  overflow-y: hidden;
+  overflow-anchor: none;
+  scroll-behavior: auto;
+}
+.monitor {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: var(--st-pane);
+}
+.monitor > div:first-child {
+  position: static;
+  display: block;
+  padding: 40px 25px;
+  max-width: none;
+}
+.monitor > div:nth-child(2) {
+  inset: auto 16px 20px;
+}
+.monitor > .receipt {
+  padding: 15px 25px;
+}
+.welcomeShot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px 10px;
+}
+.composer {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.composerText {
+  min-height: 68px;
+  overflow-wrap: anywhere;
+}
+.composer svg {
+  flex-shrink: 0;
+}
+.composer [data-guide-target='mode'] {
+  position: relative;
+}
+.composer [data-guide-target='mode'] > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.composer [data-guide-target='mode'] > span:last-child:not(:first-child) {
+  position: absolute;
+}
+.browserPicker {
+  position: absolute;
+  bottom: 54px;
+  right: 8px;
+  min-width: 200px;
+  max-width: 100%;
+  background: var(--cyber-elevated);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-active);
+}
+.browserPicker > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.messaging {
+  display: flex;
+  flex-direction: column;
+  color: var(--imd-ink, var(--cyber-text));
+  padding: 8px 16px;
+}
+.messaging > header {
+  padding: 10px 12px;
+  gap: 10px;
+}
+.messaging > div {
+  padding: 12px;
+  gap: 10px;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+.messaging section {
+  border-radius: 8px;
+  padding: 10px;
+}
+.messaging section > div {
+  flex-wrap: wrap;
+}
+.messaging input {
+  font-size: 12px;
+}
+.messaging > footer {
+  margin-top: auto;
+  padding: 10px 12px;
+}
+.templates {
+  padding: 14px 20px;
+  display: grid;
+  place-items: center;
+}
+.launcherCrop {
+  width: min(580px, 100%);
+  display: grid;
+  grid-template-columns: max-content minmax(0, 340px);
+  align-items: start;
+  gap: 10px;
+}
+.templateReuse,
+.templateRunFrame {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+}
+.templateHint {
+  margin: 0;
+  color: var(--cyber-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+.templateRun {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--cyber-surface);
+  overflow: hidden;
+}
+.templateTranscript {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+.launcherPanel {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--cyber-elevated);
+  box-shadow: var(--shadow-card-active);
+}
+@media (max-width: 640px) {
+  .launcherCrop {
+    grid-template-columns: minmax(0, 340px);
+  }
+}
+.templateSheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--cyber-surface);
+  overflow: hidden;
+}
+.templateSheet > header {
+  padding: 12px 16px;
+}
+.templateSheet h2 {
+  font-size: 15px;
+}
+.templateSheet > div {
+  grid-template-columns: minmax(0, 1fr) 180px;
+  min-height: 0;
+  flex: 1;
+}
+.templateSheet > div > div:first-child {
+  padding: 14px 16px;
+}
+.templateSheet > div > div:first-child > div {
+  font-size: 13px;
+  line-height: 1.8;
+  height: auto;
+  min-height: 0;
+}
+.templateSheet > div > div:first-child > div:first-of-type {
+  font-size: 19px;
+  margin-bottom: 16px;
+}
+.templateSheet > div > div:last-child {
+  padding: 6px;
+  overflow: hidden;
+  gap: 2px;
+}
+.templateSheet > div > div:last-child > div:not(:first-child) > div {
+  padding: 2px 6px;
+  gap: 1px;
+}
+.templateSheet > div > div:last-child > div:not(:first-child) > div > span:first-child {
+  font-size: 10px;
+  line-height: 1.3;
+}
+.templateSheet > div > div:last-child > div:not(:first-child) > div > span:last-child {
+  font-size: 11px;
+  line-height: 1.3;
+}
+.templateSheet > footer > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.templateSheet > footer {
+  padding: 10px 16px;
+}
+.planStage.planStage {
+  height: min(500px, calc(90svh - 142px));
+  pointer-events: none;
+}
+.planCard {
+  margin-top: 12px;
+}
+.planCard ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.planGate {
+  margin-top: auto;
+}
+.planStage.planStage *,
+.planStage.planStage *::before {
+  letter-spacing: 0;
+}
+.composerModel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (max-width: 560px) {
+  .stage.stage {
+    height: min(515px, calc(90svh - 142px));
+  }
+  .settings {
+    padding: 10px;
+  }
+  .settings [data-demo-target] {
+    white-space: normal;
+  }
+  .vendorForge > div:last-child > div {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .vendorForge > div:last-child > div:last-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .vendorForge > div:last-child > div > div {
+    padding: 5px 3px;
+  }
+  .forge > div:nth-child(2) {
+    padding: 10px 12px;
+  }
+  .forge > div:last-child {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .provider > div:first-child {
+    flex-wrap: wrap;
+  }
+  .provider > div:nth-child(2) {
+    padding: 8px 2px;
+  }
+  .market {
+    padding: 14px 12px;
+  }
+  .installSheet > div {
+    margin-top: 6px;
+  }
+  .installSheet > div:nth-last-child(2) > div {
+    padding-block: 7px;
+  }
+  .installSheet > footer {
+    padding-block: 4px;
+  }
+  .browser.browser {
+    padding: 10px;
+  }
+  .monitor > div:first-child {
+    padding: 30px 16px;
+  }
+  .monitor > div:nth-child(2) {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .welcomeShot {
+    padding: 8px 0;
+  }
+  .composerText {
+    font-size: 13px;
+  }
+  .messaging {
+    padding: 8px;
+  }
+  .messaging > div {
+    padding: 10px 4px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .messaging section {
+    padding: 8px;
+  }
+  .messaging > footer {
+    flex-wrap: wrap;
+  }
+  .messaging > footer > span:first-child {
+    width: 100%;
+    flex-basis: 100%;
+  }
+  .templates {
+    padding: 10px;
+  }
+  .templateSheet > div {
+    grid-template-columns: minmax(0, 1fr) 125px;
+  }
+  .templateSheet > div > div:first-child {
+    padding: 10px;
+  }
+  .templateSheet > div > div:first-child > div:first-of-type {
+    font-size: 16px;
+  }
+}

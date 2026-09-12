@@ -20,6 +20,7 @@ import { useRendererRuntime } from '../../renderer-runtime/hooks';
 import { useMessagingStore } from '../../store/messagingStore';
 import { DossierPane, type DossierFocus } from './DossierPane';
 import { RosterPane } from './RosterPane';
+import { AutoGuide } from '../guides/AutoGuide';
 import styles from './dossier.module.css';
 
 export const ImDossierPage: React.FC = () => {
@@ -29,6 +30,9 @@ export const ImDossierPage: React.FC = () => {
   const clearError = useMessagingStore((s) => s.clearError);
   const fetchConnectorDescriptors = useMessagingStore((s) => s.fetchConnectorDescriptors);
   const fetchConnections = useMessagingStore((s) => s.fetchConnections);
+  const connections = useMessagingStore((s) => s.connections);
+  const connectorsReady = useMessagingStore((s) => !s.isLoadingConnectors && s.connectorDescriptors.length > 0);
+  const [connectionsReady, setConnectionsReady] = useState(false);
   const fetchSenderAuthorizationRequests = useMessagingStore((s) => s.fetchSenderAuthorizationRequests);
 
   const [focus, setFocus] = useState<DossierFocus | null>(null);
@@ -60,10 +64,14 @@ export const ImDossierPage: React.FC = () => {
   };
 
   useEffect(() => {
+    let alive = true;
     void fetchConnectorDescriptors();
-    void fetchConnections();
+    void fetchConnections().then(() => {
+      if (alive) setConnectionsReady(!useMessagingStore.getState().error);
+    });
     void fetchSenderAuthorizationRequests();
     void runtime.taskDefinitions.refresh();
+    return () => { alive = false; };
   }, [
     fetchConnectorDescriptors,
     fetchConnections,
@@ -86,6 +94,7 @@ export const ImDossierPage: React.FC = () => {
 
   return (
     <div className={styles.stage}>
+      <AutoGuide id="messaging" ready={connectionsReady && connectorsReady && !error} eligible={connections.length === 0} blocked={focus !== null} onAction={() => setFocus({ kind: 'draft' })} />
       {(error || flash) && (
         <div className={styles.stripDock}>
           {error && (

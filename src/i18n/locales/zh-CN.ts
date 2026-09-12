@@ -1,6 +1,8 @@
 /**
  * 中文翻译
  */
+import guideContent from './guides.zh-CN';
+
 export default {
   agentManagement: {
     modelPicker: {
@@ -83,6 +85,42 @@ export default {
     "instanceUpdateFailed": "实例设置修改失败",
 
 },
+  guides: {
+    ...guideContent,
+    library: '使用指南',
+    understood: '我知道了',
+    tryIt: '去试试',
+    unread: '未读',
+    read: '已了解',
+    plan: {
+      title: '先看计划，再开始执行',
+      category: '会话 · 计划模式',
+      accessibleSummary: '选择计划模式后提交任务，Piskie 会先生成计划。你可以输入修改建议，或批准执行。批准计划不会改变操作审批设置。',
+      scene: {
+        workspace: 'piskie-docs',
+        model: 'Claude Sonnet',
+        taskName: '整理项目文档',
+        task: '整理项目文档，先给出调整方案。',
+        planTitle: '文档整理计划',
+        inspect: '检查现有文档与链接',
+        reorganize: '按主题重新整理文档目录',
+        preserveStructure: '保留目录结构，完善现有文档',
+        quickStart: '补充快速开始，检查引用路径',
+        confirmDetail: '确认后开始修改文件。',
+        revisedDetail: '保留现有目录，仅更新文档内容。',
+        feedback: '保留现有目录结构',
+        revising: '正在调整计划…',
+        updated: '计划已更新',
+        analyzed: '已完成分析',
+        revised: '已调整',
+        waiting: '等待确认',
+        approved: '计划已批准',
+        running: '执行中',
+        readFile: '读取文件',
+        file: 'docs/getting-started.md',
+      },
+    },
+  },
   // 通用
   common: {
     cancel: '取消',

@@ -19,6 +19,7 @@ import { ProxyDepot } from './sheets/ProxyDepot';
 import { ActPill } from './glyphs/ActPill';
 import { GlowDot } from './glyphs/GlowDot';
 import { ThinkOrb } from './glyphs/ThinkOrb';
+import { AutoGuide } from '../guides/AutoGuide';
 import {
   messageText,
   resolvePresentationText,
@@ -133,6 +134,7 @@ const EnvStudio: React.FC = () => {
 
   return (
     <div className={styles.studio}>
+      <AutoGuide id="browser" ready={!fleet.loading && !fleet.fault} eligible={fleet.envs.length === 0} blocked={sheet !== null} onAction={() => handleForge(null)} />
       <div className={styles.grain} aria-hidden="true" />
       <div className={styles.deck}>
         <header className={styles.topbar}>
