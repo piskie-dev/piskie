@@ -1,13 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AI_MODEL_CATALOG } from '../../../shared/ai-model-catalog/index.js';
+import { BUNDLED_MODEL_CATALOG } from '../../../shared/ai-model-catalog/bundled.js';
 import { configFileWriter } from '../../config/core/atomic-file-writer.js';
-import { inferenceCatalogVersion, projectInferenceCatalog } from './projection.js';
+import { catalogDocumentSchema, type CatalogDocument } from './contracts.js';
 
 export interface BundledCatalogPaths {
   baseFile: string;
   overlayFile: string;
 }
+
+/** Manifest of the signed website publication bundled with this build. */
+export const bundledCatalogManifest = BUNDLED_MODEL_CATALOG.manifest;
 
 export function bundledCatalogPaths(rootDirectory: string): BundledCatalogPaths {
   return {
@@ -16,8 +19,16 @@ export function bundledCatalogPaths(rootDirectory: string): BundledCatalogPaths 
   };
 }
 
-export function bundledInferenceCatalog() {
-  return projectInferenceCatalog(AI_MODEL_CATALOG, 'bundled');
+/** The bundled publication with its provenance marked as shipped rather than downloaded. */
+export function bundledInferenceCatalog(): CatalogDocument {
+  const document = catalogDocumentSchema.parse(BUNDLED_MODEL_CATALOG.document);
+  return {
+    version: document.version,
+    models: document.models.map((model) => ({
+      ...model,
+      source: { ...model.source, kind: 'bundled' as const },
+    })),
+  };
 }
 
 export async function ensureBundledInferenceCatalog(rootDirectory: string): Promise<BundledCatalogPaths> {
@@ -28,7 +39,7 @@ export async function ensureBundledInferenceCatalog(rootDirectory: string): Prom
   } catch {
     currentVersion = undefined;
   }
-  if (currentVersion !== inferenceCatalogVersion(AI_MODEL_CATALOG)) {
+  if (currentVersion !== bundledCatalogManifest.version) {
     await configFileWriter.replace(paths.baseFile, `${JSON.stringify(bundledInferenceCatalog(), null, 2)}\n`);
   }
   return paths;

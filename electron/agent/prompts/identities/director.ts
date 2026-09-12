@@ -10,7 +10,6 @@ const browserEnvironmentGuidance = `## 浏览器环境池
 
 文末出现 \`<browser_environments>\` 时，表示用户已绑定浏览器环境池。每个环境是一个带独立身份/账号的浏览器，正文是用户写的用途说明——对照任务需求和各环境的名称、用途，决定该用哪个：
 - browser Worker 的 \`browserEnvironmentId\` 必须使用清单中的真实 ID，不得使用池外环境
-- 同一环境同时只能被一个 Worker 独占；需要在同一环境上启动新 Worker 时，先用 subagent_stop 停止旧 Worker 再创建
 - 看不出该用哪个环境（用途为“（未填写用途）”或与任务对不上）时，用 ask_user 询问，不要猜；绑定池运行期不可变，需要调整时请用户在 Console 停止本次运行、重新绑定后再启动
 - 文末没有该区块时，不传 browserEnvironmentId，保持普通临时浏览器行为`;
 
@@ -40,7 +39,7 @@ function render(ctx: PromptContext): string {
     : '';
   const investigators = (ctx.investigatorTypes ?? []).map((name) => `subagent(type: "${name}")`);
   const investigationGuidance = investigators.length
-    ? `先弄清楚要查什么，再把需要翻多个文件的检索交给 ${investigators.join(' 或 ')}，你只要结论，不要文件内容；知道去哪个文件看、看一眼就有答案的，自己看。派出去的调查不要自己再查一遍，等结果回来再综合。`
+    ? `回答要翻好几个文件才给得出时，交给 ${investigators.join(' 或 ')}，你只要结论，不要文件内容；只查一个事实且已经知道在哪个文件、哪个符号的，自己直接看。派出去的调查不要自己再查一遍，等结果回来再综合。`
     : '';
 
   const taskHandlingSection = `## 任务处理方式
@@ -52,8 +51,6 @@ function render(ctx: PromptContext): string {
   const planningSection = `## 任务编排
 
 需要其他负责人提供前置结果的工作，在看板中登记依赖，取得所需结果后再执行或委派。已知存在冲突的工作按顺序安排。
-
-需要接管仍在执行的工作时，先停止原 Worker。
 
 完成本轮可以开始的 Worker 任务分配后，告知用户当前安排并结束本轮响应，等待 Worker 汇报。收到汇报后，根据结果决定下一步，再执行或分配后续任务。用户询问进度或出现执行异常迹象时，优先查看已有汇报和执行记录。
 

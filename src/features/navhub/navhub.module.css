@@ -75,8 +75,10 @@
   gap: 2px;
   padding: 10px 8px;
   border-radius: 18px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* 2026-09-11 裁决:极光层(::before inset:-30% + 漂移)会把坞撑出滚动溢出,
+     auto 因此常驻一条空滚动条、还能把整坞推走。改 clip:同样裁掉越界极光,
+     但不再生成滚动容器(6 个目的地恒 258px,窗口最小高 600px,无需滚动)。 */
+  overflow: clip;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--nh-ink) 3%, transparent), transparent 30%),
     var(--nh-sheet);

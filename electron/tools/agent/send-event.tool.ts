@@ -34,7 +34,7 @@ const sendEventSchema = z.object({
   message: z.string().min(1)
     .describe('完整、自包含的事件正文'),
   summary: z.string().optional()
-    .describe('一句话摘要（可选）'),
+    .describe('一句话摘要（可选），概括核心结果，不只写“任务完成”'),
   targetId: z.string().optional()
     .describe('接收消息的完整 Worker ID'),
 });
@@ -48,10 +48,10 @@ export const sendEventOptionsSchema = z.strictObject({
 
 const EVENT_GUIDANCE: Record<(typeof EVENT_TYPES)[number], string> = {
   "message": "普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。",
-  "completed": "当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径和验证结论。",
+  "completed": "当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径、验证结论和未完成项。",
   "failed": "当前 Assignment 无法完成；message 写明原因、原始错误、已完成部分和未完成项。",
   "user_stopped": "用户明确停止当前 Assignment。",
-  "need_user_action": "登录、验证码、授权确认或用户选择等只有用户能解除的阻断；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。"
+  "need_user_action": "登录、验证码、授权确认或用户选择等只有用户能解除的阻断，不报告 failed；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。"
 };
 
 function terminalEvents(events: readonly (typeof EVENT_TYPES)[number][]): string[] {

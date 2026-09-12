@@ -22,7 +22,6 @@ import type { TranscriptNode } from '@/domains/transcript/nodes';
 import { useStickToBottom } from './useStickToBottom';
 import { readScrollMemory, saveScrollMemory } from './scrollMemory';
 import { AgentActivityRow } from './AgentActivityRow';
-import { observeLatestMessage } from './observeLatestMessage';
 import styles from './Transcript.module.css';
 
 /** 尾部这么多条不做 defer */
@@ -47,8 +46,6 @@ export interface TranscriptProps {
   readonly onLoadEarlier?: () => void;
   readonly emptyText?: string;
   readonly activeStartedAt?: number;
-  readonly latestMessageIndex?: number;
-  readonly onLatestMessageVisible?: (index: number) => void;
   /**
    * 是否提供"回到底部"浮钮（thread 用；依 Codex 截图它**只在上翻时出现**）。
    * 放在这里而不是外层：滚动状态由本组件持有，外层拿不到，
@@ -71,8 +68,6 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
       onLoadEarlier,
       emptyText,
       activeStartedAt,
-      latestMessageIndex,
-      onLatestMessageVisible,
       scrollAffordance,
       memoryKey,
     },
@@ -138,15 +133,6 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
       };
     }, []);
 
-    useEffect(() => {
-      const viewport = scrollRef.current;
-      if (!viewport || latestMessageIndex === undefined || !onLatestMessageVisible) return;
-      const matches = viewport.querySelectorAll<HTMLElement>(`[data-message-index="${latestMessageIndex}"]`);
-      const message = matches[matches.length - 1];
-      if (!message) return;
-      return observeLatestMessage(viewport, message, () => onLatestMessageVisible(latestMessageIndex));
-    }, [latestMessageIndex, nodes, onLatestMessageVisible]);
-
     const deferBefore = Math.max(0, nodes.length - NEAR_VIEWPORT_COUNT);
 
     return (
@@ -169,8 +155,6 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
                 className={styles.cell}
                 data-deferred={index < deferBefore ? 'true' : undefined}
                 data-node-id={node.id}
-                data-message-index={(node.kind === 'assistant' && !node.live)
-                  || (node.kind === 'user' && node.origin === 'user') ? node.sourceIndex : undefined}
               >
                 {renderNode(node)}
               </div>

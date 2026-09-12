@@ -1,4 +1,4 @@
-import { assertWorkerInference, assertWorkerReasoningInput, type WorkerInferenceResolver } from '../worker-inference.js';
+import { assertWorkerReasoningInput, inheritedWorkerInference, reconcileWorkerInference, type WorkerInferenceResolver } from '../worker-inference.js';
 import type { SearchPort } from '../../../shared/types/web-search.js';
 import { appLog } from '@electron/observability/logging/app-log.js';
 /**
@@ -551,9 +551,10 @@ export class SubagentModule implements AgentModule {
       createSubagentSchema(specRegistry.getWorkersForParent(this.host.spec.name), environmentIds)
         .parse(input);
       const parent = structuredClone({ type: spec.name, parentModel: this.host.currentModel, parentReasoning: this.host.reasoningOverride });
-      const initialInference = this.resolveWorkerInference
+      const inherited = inheritedWorkerInference(parent);
+      let initialInference = this.resolveWorkerInference
         ? await this.resolveWorkerInference(parent)
-        : { model: parent.parentModel, reasoning: parent.parentReasoning };
+        : inherited;
       if (this.isParentStopping()) return '';
       if (config.browserEnvironmentId && !browserEnvironmentRuntime.getEnvironment(config.browserEnvironmentId)) {
         throw new Error(`绑定的浏览器环境不存在或已被删除: ${config.browserEnvironmentId}`);
@@ -608,7 +609,10 @@ export class SubagentModule implements AgentModule {
         },
       };
 
-      if (this.resolveWorkerInference) assertWorkerInference(spec.name, initialInference, this.host.getInference());
+      // 异步准备期间模型可能已失效：仍可用则保留原选择，否则回退到父 Agent。
+      if (this.resolveWorkerInference) {
+        initialInference = reconcileWorkerInference(spec.name, initialInference, inherited, this.host.getInference());
+      }
       subagent = new AgentRuntime({
         id,
         spec,

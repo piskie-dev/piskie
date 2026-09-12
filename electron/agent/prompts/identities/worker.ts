@@ -3,7 +3,7 @@
  * 一句话身份 + 执行纪律。领域方法论随技能走（注入在 L4 技能文档）：
  * - 快照流执行方法/浏览器重试战术 → browser/SKILL.md 保留区块
  * - 网站业务组合方法 → 对应网站 SKILL.md（经 skill_call 调用）
- * 重试原则/诚实性协议/completed 契约在 L2 workerProtocol；会话值在 L5 <context>。
+ * 重试原则/诚实性协议在 L2 workerProtocol；事件契约在 send_event description；会话值在 L5 <context>。
  */
 
 import type { Identity } from '../assemble.js';

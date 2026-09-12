@@ -1,7 +1,4 @@
-import type {
-  ConfigValidationIssue,
-  ConfigValidationReport,
-} from '../../../shared/types/config.js';
+import type { ConfigValidationIssue } from '../../../shared/types/config.js';
 import type { WorkerPreferencesDocument } from '../../../shared/types/worker-preferences.js';
 import type { InferenceControlPlane } from '../../inference/control/control-plane.js';
 
@@ -28,26 +25,6 @@ export async function validateWorkerInference(
           : `Worker ${reference.type} has unsupported reasoning for ${target}.`,
     };
   });
-}
-
-/** Existing broken references remain visible but do not block unrelated repairs. */
-export async function validateWorkerReferenceImpact(
-  inference: InferenceControlPlane,
-  document: WorkerPreferencesDocument,
-  candidate: NonNullable<Parameters<InferenceControlPlane['validateAiSelections']>[1]>
-): Promise<ConfigValidationReport> {
-  const [before, after] = await Promise.all([
-    validateWorkerInference(inference, document),
-    validateWorkerInference(inference, document, candidate),
-  ]);
-  const existing = new Set(before.map((issue) => issue.details?.type));
-  const issues = after.map(
-    (issue): ConfigValidationIssue => ({
-      ...issue,
-      severity: existing.has(issue.details?.type) ? 'warning' : 'error',
-    })
-  );
-  return { valid: issues.every((issue) => issue.severity === 'warning'), issues };
 }
 
 export function escapePointer(value: string): string {

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "revision": 1789140075749,
+  "version": "catalog-v1:2026-09-11:35e8a089b00fc7c7",
+  "generatedAt": "2026-09-11T15:21:14.364Z",
+  "minClientVersion": "0.1.0",
+  "sha256": "1bc0df31f804c1611b2286921fb7a939f0765081f0c8972eac63fe832d8d39f5",
+  "keyId": "catalog-b2b28580532850ff",
+  "catalogPath": "/api/v1/model-catalog/1bc0df31f804c1611b2286921fb7a939f0765081f0c8972eac63fe832d8d39f5.json",
+  "signature": "Qu2QgnFnVwLVLte4+3LXbzaifi4SPTK1Z194yJLSRXsMUm1jv0bteUWrwPiPwStZswTLXhD6U5UIyn5VCSSzCQ=="
+}

@@ -10,7 +10,7 @@ const fields = {
     .refine((ids) => new Set(ids).size === ids.length, 'taskIds 不能包含重复 ID')
     .describe('将本次交给同一 Worker 的全部任务 ID 一并填写。'),
   skills: z.array(nonempty).describe('需要加载的 Skill 名称列表（可选），取自 <available_skills> 或 tool_search 返回结果'),
-  browserEnvironmentId: nonempty.describe('浏览器 Worker 且绑定了浏览器环境池时必填；必须是池中的真实环境 ID（清单见文末 <browser_environments>）'),
+  browserEnvironmentId: nonempty.describe('浏览器 Worker 且绑定了浏览器环境池时必填；必须是池中的真实环境 ID（清单见文末 <browser_environments>）。一个环境同时只能给一个 Worker，被占用时先 subagent_stop 旧 Worker，否则创建会失败'),
 };
 
 export const subagentSchema = z.strictObject({
@@ -45,9 +45,7 @@ export function createSubagentSchema(
     always.has(name) || branchList.some((branch) => name in branch.shape)
   )));
   visibleFields.type = types.length
-    ? z.enum(types.map((type) => type.name)).describe(
-      ['必须使用以下精确值，不得自行改名：', ...types.map((type) => `- ${type.name}：${type.description}`)].join('\n'),
-    )
+    ? z.enum(types.map((type) => type.name)).describe('Worker 类型；各类型的用途和工具见工具描述里的清单。')
     : fields.type;
   if (visibleFields.browserEnvironmentId) {
     visibleFields.browserEnvironmentId = z.enum(browserEnvironmentIds).optional()

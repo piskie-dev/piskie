@@ -218,7 +218,8 @@ describe('Browser Skill 最终模型工具面', () => {
     const build = buildTool.input_schema;
     const status = definition(browserSkillDirectorSpec, 'browser_skill_status').input_schema;
     const publish = definition(browserSkillDirectorSpec, 'browser_skill_publish').input_schema;
-    const subagent = definition(browserSkillDirectorSpec, 'subagent').input_schema;
+    const subagentTool = definition(browserSkillDirectorSpec, 'subagent');
+    const subagent = subagentTool.input_schema;
     const skillCall = definition(localWorkerSpec, 'skill_call').input_schema;
 
     expect(Object.keys(build.properties ?? {}).sort()).toEqual(['skillName', 'sourceDir']);
@@ -232,10 +233,11 @@ describe('Browser Skill 最终模型工具面', () => {
       'local-worker',
       'site-scout',
     ]);
-    const subagentTypeDescription = (subagent.properties?.type as { description?: string }).description;
-    expect(subagentTypeDescription).toContain('site-scout：有界侦察网站能力');
-    expect(subagentTypeDescription).toContain('browser-skill-builder：深入探索目标流程，设计并编写完整业务工具');
-    expect(subagentTypeDescription).toContain('browser-skill-verifier：在独立上下文验证');
+    // 类型清单渲染在工具正文里，type 参数只保留指向它的说明。
+    expect((subagent.properties?.type as { description?: string }).description).toContain('见工具描述');
+    expect(subagentTool.description).toContain('site-scout：有界侦察网站能力');
+    expect(subagentTool.description).toContain('browser-skill-builder：深入探索目标流程，设计并编写完整业务工具');
+    expect(subagentTool.description).toContain('browser-skill-verifier：在独立上下文验证');
     expect(buildTool.description).toContain('具有完整业务意义的公开函数');
     expect(buildTool.description).toContain('只供唯一下一步使用的中间函数');
     expect(buildTool.description).not.toContain('每新增或修改一个业务函数后');

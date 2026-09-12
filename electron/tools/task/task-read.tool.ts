@@ -11,7 +11,7 @@ import { TaskBoardError, taskBoardService } from '../../agent-runs/task-board-se
 import type { TaskBoardData, TaskItem } from '../../../shared/types/index.js';
 
 // TaskBoardService enforces the pre-write read requirement.
-const DESCRIPTION = '读取当前执行范围的 Task Board。在修改已有看板前调用。';
+const DESCRIPTION = '读取当前执行范围的 Task Board。';
 
 const taskReadSchema = z.object({});
 type TaskReadParams = z.infer<typeof taskReadSchema>;

@@ -40,7 +40,16 @@ describe('subagent resolved creation contract', () => {
       required: ['type', 'subject', 'prompt'], additionalProperties: false,
     });
     expect(schema.properties.prompt).toMatchObject({ description: '交给 Worker 的任务或问题' });
+    expect(schema.properties.type.description).toContain('见工具描述');
+    expect(schema.properties.type.description).not.toContain('调查本地材料');
     expect(snapshot().definitions()[0].input_schema.properties).not.toHaveProperty('browserEnvironmentId');
+  });
+
+  it('lists Worker types in the description body, before the handoff and the task-board split', () => {
+    const description = snapshot().definitions()[0].description;
+    expect(description).toContain('可用的 Worker 类型：\n- explore：调查本地材料\n- local-worker：本地执行');
+    expect(description.indexOf('可用的 Worker 类型')).toBeLessThan(description.indexOf('刚走进房间的聪明同事'));
+    expect(description.indexOf('刚走进房间的聪明同事')).toBeLessThan(description.indexOf('先在 Task Board 登记任务'));
   });
 
   it('describes the handoff once and the task-board split only for task-board types', () => {
@@ -55,6 +64,7 @@ describe('subagent resolved creation contract', () => {
   it('keeps a well-formed schema when no Worker type is available', () => {
     const empty = snapshot([], []);
     expect(empty.definitions()[0].input_schema.properties).toHaveProperty('type');
+    expect(empty.definitions()[0].description).not.toContain('可用的 Worker 类型');
     expect(parse(empty.resolve('subagent')!.contract.schema, question)).toMatchObject({ ok: false });
   });
 
