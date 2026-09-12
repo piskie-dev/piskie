@@ -92,19 +92,3 @@ export function profileForReasoningTransport(
       return toggleProfile(true, transportPreset);
   }
 }
-
-export function normalizeReasoningProfile(profile: ReasoningProfile): ReasoningProfile {
-  if (profile.mode !== 'effort'
-    || (profile.transportPreset !== 'openai-effort'
-      && profile.transportPreset !== 'openai-reasoning-object')) {
-    return profile;
-  }
-  const nonEffortOptions = profile.options.filter((option) => option.kind !== 'effort');
-  return {
-    ...profile,
-    options: [
-      ...nonEffortOptions,
-      ...OPENAI_EFFORTS.map((effort) => ({ kind: 'effort' as const, effort })),
-    ],
-  };
-}

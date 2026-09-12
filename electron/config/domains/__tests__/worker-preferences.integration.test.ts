@@ -146,16 +146,17 @@ describe('Worker preferences through the Node ConfigHost', () => {
     expect((await host.show<WorkerPreferencesDocument>('worker-preferences')).profiles).toEqual({ 'browser-worker': preference });
   });
 
-  it('protects referenced targets and checks dependency revisions before committing', async () => {
+  it('leaves inference and catalog changes undiagnosed and decoupled while preferences still track their dependencies', async () => {
     const { host, plan, save } = await fixture();
     await save();
+    // 创建时会回退到父 Agent，配置层不再反查 Worker 偏好。
     for (const patch of [
       [{ op: 'replace' as const, path: '/providers/primary/enabled', value: false }],
       [{ op: 'remove' as const, path: '/providers/primary/models/chat' }],
     ]) {
-      const blocked = await host.createPatchPlan<ConfigPlan>('inference', patch);
-      expect(blocked.validation.issues).toContainEqual(expect.objectContaining({ code: 'WORKER_MODEL_UNAVAILABLE', severity: 'error' }));
-      expect(blocked.impacts).toContainEqual(expect.objectContaining({ code: 'WORKER_MODEL_UNAVAILABLE', severity: 'high' }));
+      const stranding = await host.createPatchPlan<ConfigPlan>('inference', patch);
+      expect(stranding.validation.valid).toBe(true);
+      expect([...stranding.validation.issues, ...stranding.impacts].filter((issue) => issue.code.startsWith('WORKER_'))).toEqual([]);
     }
     const catalogEntry: Omit<ReturnType<typeof testModel>, 'source'> & { source?: unknown } = { ...testModel() };
     delete catalogEntry.source;
@@ -165,13 +166,18 @@ describe('Worker preferences through the Node ConfigHost', () => {
       reasoning: { mode: 'fixed', options: [{ kind: 'enabled' }], defaultSelection: { kind: 'enabled' },
         mandatory: true, transportPreset: 'deepseek-thinking', replayPolicy: 'none' },
     } }]);
-    expect(capabilityChange.validation.issues).toContainEqual(expect.objectContaining({ code: 'WORKER_REASONING_UNSUPPORTED' }));
-    const pending = await plan([{ op: 'add', path: '/profiles/browser-worker', value: preference }]);
+    expect(capabilityChange.validation.valid).toBe(true);
+    expect([...capabilityChange.validation.issues, ...capabilityChange.impacts].filter((issue) => issue.code.startsWith('WORKER_'))).toEqual([]);
+    // 改 Worker 偏好不再让 inference 的待提交 plan 失效。
     const rename = await host.createPatchPlan<ConfigPlan>('inference', [{ op: 'replace', path: '/providers/primary/displayName', value: 'Renamed' }]);
-    expect(rename.validation.valid).toBe(true);
+    await save('browser-worker', preference, 1);
+    const revalidated = await host.validate<ConfigPlan>(rename.id);
+    expect(revalidated.validation.issues).not.toContainEqual(expect.objectContaining({ code: 'CONFIG_DEPENDENCY_REVISION_CHANGED' }));
+    // 反过来，Worker 偏好仍依赖 inference 的版本。
+    const pending = await plan([{ op: 'add', path: '/profiles/explore/displayName', value: 'Pending' }]);
     await host.apply(rename.id, 0);
     const stale = await host.validate<ConfigPlan>(pending.id);
     expect(stale.validation.issues).toContainEqual(expect.objectContaining({ code: 'CONFIG_DEPENDENCY_REVISION_CHANGED' }));
-    await expect(host.apply(pending.id, 1)).rejects.toThrow();
+    await expect(host.apply(pending.id, 2)).rejects.toThrow();
   });
 });

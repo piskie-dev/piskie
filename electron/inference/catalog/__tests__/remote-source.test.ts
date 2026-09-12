@@ -204,4 +204,13 @@ describe('RemoteCatalogSource', () => {
     expect(await source.refresh()).toMatchObject({ state: 'error', error: 'untrusted', source: 'bundled' });
     expect(fetch).toHaveBeenCalledOnce();
   });
+
+  it('does not download a publication identical to the bundled snapshot', async () => {
+    const release = publication(1);
+    const { source, fetch, rootDirectory } = await fixture({ bundledSha256: release.manifest.sha256 });
+    expect(await source.refresh()).toMatchObject({ state: 'current', source: 'bundled', version: 'bundled-example' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(await source.load()).toBeUndefined();
+    await expect(fs.access(path.join(rootDirectory, 'catalog/remote/current.json'))).rejects.toThrow();
+  });
 });

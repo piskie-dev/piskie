@@ -233,6 +233,34 @@ describe('SubagentModule resume boundaries', () => {
     expect(headerStore.readHeader().childAgents).toEqual([]);
   });
 
+  it('falls back to the parent when the preferred model becomes unavailable during creation preparation', async () => {
+    const mainAgentId = `preference-fallback-${Date.now()}`;
+    const headerStore = createHeaderStore(mainAgentId);
+    const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
+    let available = true;
+    const inference = fakeAgentInference({ assertTarget: ({ providerId }) => {
+      if (!available && providerId === 'custom') throw new Error('Preferred model removed');
+    } });
+    const preferences: WorkerPreferencesDocument = { schemaVersion: 1, revision: 0, profiles: {
+      'local-worker': { inference: { target: { providerId: 'custom', modelId: 'model' }, reasoning: { kind: 'effort', effort: 'low' } } },
+    } };
+    const host = { id: mainAgentId, mainAgentId, phase: 'running', spec: { name: 'director' },
+      currentModel: 'parent::model', reasoningOverride: { kind: 'effort', effort: 'high' }, approvalMode: 'auto',
+      getInference: () => inference, getConversationStore: () => headerStore.store,
+      appendConversationEntry: vi.fn(), emitStateChange: vi.fn(),
+    } as unknown as AgentHost;
+    module.init(host, { ...moduleConfig('preference-fallback'), resolveWorkerInference: async (input) => resolveWorkerInference(input, preferences, inference) });
+    vi.mocked(taskBoardService.createCompactSnapshot).mockImplementationOnce(async () => {
+      available = false;
+      return { taskSummary: '', items: [] };
+    });
+    const before = runtimeMock.configs.length;
+    try {
+      await module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', taskIds: ['task'] });
+      expect(runtimeMock.configs[before]).toMatchObject({ options: { initialModel: 'parent::model', initialReasoning: { kind: 'effort', effort: 'high' } } });
+    } finally { await module.onDestroy(); }
+  });
+
   it('rejects invalid reasoning before mutating the child', () => {
     const { module } = createModule();
     const child = createChild({ setReasoningOverride: vi.fn() });

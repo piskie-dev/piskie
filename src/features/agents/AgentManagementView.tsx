@@ -69,6 +69,9 @@ export function AgentManagementView(props: AgentManagementViewProps) {
   const problem = draftProblem(value, groups);
   const savedProblem = savedProfile?.inference && draftProblem(fromProfile(savedProfile), groups);
   const inferenceChanged = !sameValue(value, fromProfile(savedProfile));
+  // 已保存的模型不可用时新实例按继承创建；模型设置未被改动前，界面展示这一实际生效状态。
+  const degraded =
+    savedProblem === 'modelUnavailable' && !inferenceChanged && !props.modelError;
   const canSave = Boolean(
     draft &&
       !draft.conflict &&
@@ -123,8 +126,9 @@ export function AgentManagementView(props: AgentManagementViewProps) {
               const pending = drafts[item.type];
               const missing = removedTypes.includes(item.type);
               const invalid =
-                document?.profiles[item.type]?.inference &&
-                draftProblem(fromProfile(document.profiles[item.type]), groups);
+                !props.modelError && document?.profiles[item.type]?.inference
+                  ? draftProblem(fromProfile(document.profiles[item.type]), groups)
+                  : undefined;
               return (
                 <button
                   key={item.type}
@@ -146,7 +150,11 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                         : missing
                           ? t('agentManagement.removed')
                           : invalid
-                            ? t('agentManagement.invalid')
+                            ? t(
+                                invalid === 'modelUnavailable'
+                                  ? 'agentManagement.degraded'
+                                  : 'agentManagement.invalid'
+                              )
                             : document?.profiles[item.type]?.inference
                               ? t('agentManagement.fixed')
                               : t('agentManagement.inherit')}
@@ -272,13 +280,14 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                     groups={groups}
                     saving={!!saving}
                     edit={edit}
+                    degraded={degraded}
                     modelError={props.modelError}
                     onConfigureModels={props.onConfigureModels}
                     onRefresh={props.onRefresh}
                   />
                 </>
               )}
-              {savedProblem && !removed && !props.modelError && (
+              {savedProblem && !degraded && !removed && !props.modelError && (
                 <div className={styles.warning} role="status">
                   <AlertTriangle size={16} />
                   <div>

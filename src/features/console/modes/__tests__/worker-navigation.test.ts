@@ -32,7 +32,7 @@ vi.mock('../../data/useTranscript', () => ({
   useTranscript: (targetId: string) => ({ nodes: targetId === 'session-example' ? state.nodes : [], loaded: true }),
 }));
 vi.mock('../../data/actions', () => ({ useConsoleActions: () => ({}) }));
-vi.mock('../../data/useMessageReadReceipt', () => ({ useMessageReadReceipt: () => ({}) }));
+vi.mock('../../data/useMarkSessionRead', () => ({ useMarkSessionRead: () => undefined }));
 vi.mock('../../data/useImageNodes', () => ({ useImageNodes: () => [] }));
 vi.mock('../../data/useKeyboard', () => ({ useGlobalBinding: () => undefined }));
 vi.mock('../../content/useActionScope', () => ({ useActionScope: () => ({}) }));

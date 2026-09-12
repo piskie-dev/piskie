@@ -106,7 +106,7 @@ describe('renderSkillInventory', () => {
     const { text } = renderSkillInventory([skill({ name: 'one' })]);
     expect(text).toContain('亲自使用时先 load_skill');
     expect(text).toContain('委派时将技能名填入 Worker 的 skills');
-    expect(text).toContain('未匹配到技能时，根据任务所需能力选择合适的 Worker');
+    expect(text).not.toContain('未匹配到技能时');
     expect(text).toContain('tool_search');
   });
 });

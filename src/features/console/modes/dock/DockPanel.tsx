@@ -27,7 +27,7 @@ import { StatusBadge } from '../../chrome/StatusBadge';
 import { statusOf } from '../../chrome/statusOf';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import { useTranscript } from '../../data/useTranscript';
-import { useMessageReadReceipt } from '../../data/useMessageReadReceipt';
+import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
   projectWorkerTasks,
@@ -106,7 +106,7 @@ export const DockPanel = memo<DockPanelProps>(
       active,
     });
 
-    const readReceipt = useMessageReadReceipt(active && !workerId ? agentId : undefined);
+    useMarkSessionRead(active && !workerId ? agentId : undefined);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const status = worker?.status ?? agent?.status;
     const request = resolveConversationTarget(agent, worker, workerId);
@@ -329,7 +329,6 @@ export const DockPanel = memo<DockPanelProps>(
           key={workerId ?? agentId}
           memoryKey={workerId ?? agentId}
           nodes={transcript.nodes}
-          {...readReceipt}
           renderNode={renderNode}
           hasEarlier={transcript.hasEarlier}
           onLoadEarlier={transcript.loadEarlier}

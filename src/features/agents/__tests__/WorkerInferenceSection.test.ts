@@ -7,12 +7,12 @@ import type { ModelOptGroup } from '../../../store/inferenceStore';
 import { WorkerInferenceSection } from '../WorkerInferenceSection';
 import '../../../i18n';
 
-function renderReasoning(
+function modelGroup(
   options: ReasoningSelection[],
   selected: ReasoningSelection,
   mode: ReasoningProfile['mode'] = 'effort'
-) {
-  const group: ModelOptGroup = {
+): ModelOptGroup {
+  return {
     label: 'Provider',
     options: [
       {
@@ -43,6 +43,14 @@ function renderReasoning(
       },
     ],
   };
+}
+
+function renderReasoning(
+  options: ReasoningSelection[],
+  selected: ReasoningSelection,
+  mode: ReasoningProfile['mode'] = 'effort'
+) {
+  const group = modelGroup(options, selected, mode);
   const edit = vi.fn();
   const markup = renderToStaticMarkup(
     React.createElement(WorkerInferenceSection, {
@@ -101,5 +109,53 @@ describe('Agent reasoning matches model settings', () => {
     );
     expect(view.buttons).toEqual(['预算 2K']);
     expect(view.budget).toBe('8192');
+  });
+});
+
+describe('Stranded saved model', () => {
+  const group = modelGroup([{ kind: 'effort', effort: 'low' }], { kind: 'effort', effort: 'low' });
+  const render = (degraded: boolean) =>
+    renderToStaticMarkup(
+      React.createElement(WorkerInferenceSection, {
+        groups: [group],
+        value: {
+          mode: 'fixed',
+          target: { providerId: 'gone', modelId: 'old' },
+          reasoning: { kind: 'effort', effort: 'low' },
+        },
+        degraded,
+        saving: false,
+        edit: vi.fn(),
+        modelError: null,
+        onConfigureModels: vi.fn(),
+        onRefresh: vi.fn(),
+      })
+    );
+  const pressed = (markup: string) => {
+    const dom = new JSDOM(markup);
+    try {
+      const section = [...dom.window.document.querySelectorAll('section')].find(
+        (el) => el.querySelector('h3')?.textContent === '模型来源'
+      )!;
+      return [...section.querySelectorAll('button[aria-pressed="true"]')].map(
+        (el) => el.querySelector('strong')?.textContent
+      );
+    } finally {
+      dom.window.close();
+    }
+  };
+  it('shows the effective inheritance with the saved target kept for reselection', () => {
+    const markup = render(true);
+    expect(pressed(markup)).toEqual(['继承父 Agent']);
+    expect(markup).toContain('gone / old');
+    expect(markup).toContain('重新选择模型');
+    expect(markup).not.toContain('此模型当前不可用');
+    expect(markup).not.toContain('<h3>模型</h3>');
+    expect(markup).not.toContain('<h3>思考设置</h3>');
+  });
+  it('still edits the saved target as a fixed model once the draft changes', () => {
+    const markup = render(false);
+    expect(pressed(markup)).toEqual(['指定模型']);
+    expect(markup).toContain('此模型当前不可用');
   });
 });

@@ -37,7 +37,7 @@ import { Transcript } from '../../content/Transcript';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { useTranscript } from '../../data/useTranscript';
-import { useMessageReadReceipt } from '../../data/useMessageReadReceipt';
+import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import { activityChips, type ActivityChips } from '../../data/activity';
 import {
@@ -97,7 +97,7 @@ export const ThreadView = memo<ThreadViewProps>(
       active,
     });
 
-    const readReceipt = useMessageReadReceipt(active && !workerId ? agentId : undefined);
+    useMarkSessionRead(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const tasks = worker
@@ -232,7 +232,6 @@ export const ThreadView = memo<ThreadViewProps>(
               key={workerId ?? agentId}
               memoryKey={workerId ?? agentId}
               nodes={transcript.nodes}
-              {...readReceipt}
               renderNode={renderNode}
               hasEarlier={transcript.hasEarlier}
               onLoadEarlier={transcript.loadEarlier}

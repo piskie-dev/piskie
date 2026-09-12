@@ -87,7 +87,7 @@ describe('TaskTool complete-list protocol', () => {
     expect(tool.def.scope).toBe('shared');
     expect(taskReadTool.def.scope).toBe('main');
     expect(taskReadTool.def.description).toBe(
-      '读取当前执行范围的 Task Board。在修改已有看板前调用。',
+      '读取当前执行范围的 Task Board。',
     );
     expect(schema).not.toHaveProperty('additionalProperties');
     expect(Object.keys(schema.properties)).toEqual(['taskSummary', 'items']);

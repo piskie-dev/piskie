@@ -31,7 +31,7 @@ vi.mock('@/components/content-links', () => ({
   ContentLinkUrlScope: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('../../data/useTranscript', () => ({ useTranscript: () => ({ nodes: [], loaded: true }) }));
-vi.mock('../../data/useMessageReadReceipt', () => ({ useMessageReadReceipt: () => ({}) }));
+vi.mock('../../data/useMarkSessionRead', () => ({ useMarkSessionRead: () => undefined }));
 vi.mock('../../content/useActionScope', () => ({ useActionScope: () => ({}) }));
 vi.mock('../../content/Transcript', () => ({ Transcript: () => null }));
 vi.mock('../../content/ThreadCell', () => ({ ThreadCell: () => null }));

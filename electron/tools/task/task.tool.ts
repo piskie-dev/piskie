@@ -22,7 +22,7 @@ const MAIN_DESCRIPTION = `维护当前执行范围的 Task Board。需要记录�
 
 用户提出后续执行要求时，根据最新要求和 task_read 结果重新确定当前全部未完成任务，并将其完整提交到 items。`;
 
-const WORKER_DESCRIPTION = `维护你负责的 Task Board 项。任务范围、状态、依赖或责任人变化时直接提交；计划尚未获批时不能写入。
+const WORKER_DESCRIPTION = `维护你负责的 Task Board 项。任务范围、状态、依赖或责任人变化时直接提交。
 
 初始 <task_board> 中 assigned_here=true 的任务可由你认领；认领时把 owner 设为你自己的 agent_id。assigned_here=true 并被你认领的任务，以及由你新建并负责的任务，属于你；无权修改或使用其他 task。
 

@@ -18,6 +18,7 @@ const preview = vi.fn(async (sourcePath: string) => ({
   mediaType: 'image/png',
   size: 1,
 }));
+const releasePreview = vi.fn(async (_url: string) => undefined);
 
 let root: Root;
 let container: HTMLDivElement;
@@ -36,9 +37,10 @@ beforeEach(async () => {
   expose('Node', dom.window.Node);
   expose('IS_REACT_ACT_ENVIRONMENT', true);
   preview.mockClear();
+  releasePreview.mockClear();
   Object.defineProperty(window, 'piskie', {
     configurable: true,
-    value: { desktop: { files: { preview }, system: { platform: 'linux' } } },
+    value: { desktop: { files: { preview, releasePreview }, system: { platform: 'linux' } } },
   });
   ({ ThreadCell } = await import('../ThreadCell'));
   container = document.createElement('div');
@@ -47,6 +49,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
+  // 每个已展示的缩略图卸载时都要归还主进程的预览令牌。
+  const shown = [...new Set((await Promise.all(preview.mock.results.map((result) => result.value))).map((value) => value.url))];
+  expect(releasePreview.mock.calls.map(([url]) => url).sort()).toEqual(shown.sort());
   dom.window.close();
 });
 

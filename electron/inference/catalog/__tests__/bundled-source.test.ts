@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  bundledCatalogManifest,
   bundledInferenceCatalog,
   ensureBundledInferenceCatalog,
 } from '../bundled-source.js';
@@ -16,14 +17,14 @@ afterEach(async () => {
 });
 
 describe('bundled inference catalog', () => {
-  it('rewrites a stale base snapshot when unified provider content changes', async () => {
+  it('rewrites a stale base snapshot when the bundled publication changes', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'piskie-bundled-catalog-'));
     directories.push(root);
     const catalogDirectory = path.join(root, 'catalog');
     const baseFile = path.join(catalogDirectory, 'models.json');
     await fs.mkdir(catalogDirectory, { recursive: true });
     await fs.writeFile(baseFile, JSON.stringify({
-      version: 'piskie-inference-v2:version-without-content-hash',
+      version: 'catalog-v1:2026-01-01:0000000000000000',
       models: [],
     }));
 
@@ -33,20 +34,16 @@ describe('bundled inference catalog', () => {
       models: unknown[];
     };
 
-    expect(stored.version).toBe(bundledInferenceCatalog().version);
-    expect(stored.version).toMatch(/^piskie-inference-v3:.+:[a-f0-9]{16}$/);
+    expect(stored.version).toBe(bundledCatalogManifest.version);
     expect(stored.models.length).toBeGreaterThan(0);
   });
 
-  it('projects known OpenAI models with the five user-facing effort levels', () => {
-    const model = bundledInferenceCatalog().models.find((entry) => entry.id === 'openai/gpt-5.4-mini');
+  it('ships the published document with bundled provenance', () => {
+    const catalog = bundledInferenceCatalog();
 
-    expect(model?.reasoning?.options.filter((option) => option.kind === 'effort')).toEqual([
-      { kind: 'effort', effort: 'low' },
-      { kind: 'effort', effort: 'medium' },
-      { kind: 'effort', effort: 'high' },
-      { kind: 'effort', effort: 'xhigh' },
-      { kind: 'effort', effort: 'max' },
-    ]);
+    expect(catalog.version).toBe(bundledCatalogManifest.version);
+    expect(catalog.models.length).toBeGreaterThan(0);
+    expect(new Set(catalog.models.map((model) => model.source.kind))).toEqual(new Set(['bundled']));
+    expect(catalog.models.every((model) => model.source.version.length > 0)).toBe(true);
   });
 });
