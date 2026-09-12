@@ -36,9 +36,10 @@ interface ConsoleRouteState {
 export interface HeaderActionHandlers {
   readonly onReveal: (target: AgentTarget) => void;
   readonly onNewChat: () => void;
+  readonly onNewTemplate: () => void;
 }
 
-export function useHeaderAction({ onReveal, onNewChat }: HeaderActionHandlers): void {
+export function useHeaderAction({ onReveal, onNewChat, onNewTemplate }: HeaderActionHandlers): void {
   const location = useLocation();
   const navigate = useNavigate();
   const runtime = useRendererRuntime();
@@ -58,9 +59,10 @@ export function useHeaderAction({ onReveal, onNewChat }: HeaderActionHandlers): 
           : null;
 
     if (action.kind === 'newChat') onNewChat();
+    else if (action.kind === 'newTemplate') onNewTemplate();
     else if (target) onReveal(target);
 
     // 消费掉 route state，避免返回时重放
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, navigate, onNewChat, onReveal, runtime]);
+  }, [location.pathname, location.state, navigate, onNewChat, onNewTemplate, onReveal, runtime]);
 }

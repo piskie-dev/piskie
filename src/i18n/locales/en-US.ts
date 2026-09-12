@@ -1,6 +1,8 @@
 /**
  * English translations
  */
+import guideContent from './guides.en-US';
+
 export default {
   agentManagement: {
     modelPicker: {
@@ -83,6 +85,42 @@ export default {
     "instanceUpdateFailed": "Unable to update instance settings",
 
 },
+  guides: {
+    ...guideContent,
+    library: 'User Guide',
+    understood: 'Got it',
+    tryIt: 'Try it',
+    unread: 'Unread',
+    read: 'Viewed',
+    plan: {
+      title: 'Review the plan before running',
+      category: 'Conversation · Plan mode',
+      accessibleSummary: 'Select Plan mode and submit a task. Piskie prepares a plan first. Suggest changes or approve the plan to continue. Approving a plan does not change tool approval settings.',
+      scene: {
+        workspace: 'piskie-docs',
+        model: 'Claude Sonnet',
+        taskName: 'Organize project docs',
+        task: 'Organize the project docs. Propose a plan first.',
+        planTitle: 'Documentation plan',
+        inspect: 'Review existing docs and links',
+        reorganize: 'Reorganize the docs into topic folders',
+        preserveStructure: 'Keep the folders and improve existing docs',
+        quickStart: 'Add a quick start and check link paths',
+        confirmDetail: 'File changes begin after approval.',
+        revisedDetail: 'Keep existing folders. Update content only.',
+        feedback: 'Keep the existing folder structure',
+        revising: 'Updating the plan…',
+        updated: 'Plan updated',
+        analyzed: 'Analysis complete',
+        revised: 'Revised',
+        waiting: 'Awaiting approval',
+        approved: 'Plan approved',
+        running: 'Running',
+        readFile: 'Read file',
+        file: 'docs/getting-started.md',
+      },
+    },
+  },
   // Common
   common: {
     cancel: 'Cancel',

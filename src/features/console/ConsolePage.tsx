@@ -58,6 +58,7 @@ const ConsoleShellView: React.FC = () => {
   const devMode = useDevelopmentFeatures();
   const runtime = useRendererRuntime();
   const taskDefinitions = useTaskDefinitionRepository((store) => store.definitions);
+  const taskDefinitionsReady = useTaskDefinitionRepository((store) => store.phase === 'ready');
   const taskDefinitionError = useTaskDefinitionRepository((store) => store.error);
 
   useEffect(() => {
@@ -161,6 +162,7 @@ const ConsoleShellView: React.FC = () => {
     onReveal: shell.reveal,
     // 顶栏与左栏共用新建入口：重置草稿并打开输入页
     onNewChat: shell.newSession,
+    onNewTemplate: useCallback(() => setTaskEditor({ kind: 'create' }), []),
   });
 
   // Esc 的第三级由模式各自注册（`useGlobalBinding`），壳只挂监听与 ⌘\
@@ -219,13 +221,14 @@ const ConsoleShellView: React.FC = () => {
   const renderTaskLauncher = useCallback((trigger: React.ReactNode) => (
     <TaskDefinitionLauncher
       definitions={taskDefinitions}
+      definitionsReady={taskDefinitionsReady}
       onStart={(definition) => void launch(definition)}
       onCreate={() => setTaskEditor({ kind: 'create' })}
       onEdit={(definition) => setTaskEditor({ kind: 'edit', definition })}
       onDelete={(definitionId) => void deleteTaskDefinition(definitionId)}
       trigger={trigger}
     />
-  ), [deleteTaskDefinition, launch, taskDefinitions]);
+  ), [deleteTaskDefinition, launch, taskDefinitions, taskDefinitionsReady]);
 
   const topRailActions = hasActiveSession
     ? <ModeSwitch mode={shell.mode} onChange={shell.setMode} />

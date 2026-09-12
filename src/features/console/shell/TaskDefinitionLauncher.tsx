@@ -8,16 +8,20 @@
  * 是两个不同动作，必须在视觉上区分。这里的行一律带「启动」语义的图标与措辞。
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, Play, Plus, Trash2 } from 'lucide-react';
 
 import type { TaskDefinitionSnapshot } from '../../../../shared/electron-contracts/task-definitions';
 import { Popover } from '../chrome/Popover';
+import { FeatureGuideDialog } from '../../guides/FeatureGuideDialog';
+import { useFeatureGuide } from '../../guides/useFeatureGuide';
+import { useGuideStore } from '../../guides/guideStore';
 import styles from './taskDefinitionLauncher.module.css';
 
 export interface TaskDefinitionLauncherProps {
   readonly definitions: readonly TaskDefinitionSnapshot[];
+  readonly definitionsReady?: boolean;
   readonly onStart: (definition: TaskDefinitionSnapshot) => void;
   readonly onCreate: () => void;
   readonly onEdit?: (definition: TaskDefinitionSnapshot) => void;
@@ -28,10 +32,14 @@ export interface TaskDefinitionLauncherProps {
 }
 
 export const TaskDefinitionLauncher = memo<TaskDefinitionLauncherProps>(
-  ({ definitions, onStart, onCreate, onEdit, onDelete, trigger, filter }) => {
+  ({ definitions, definitionsReady = false, onStart, onCreate, onEdit, onDelete, trigger, filter }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const close = useCallback(() => setOpen(false), []);
+    const guide = useFeatureGuide('templates');
+    useEffect(() => {
+      if (definitionsReady && definitions.length > 0) useGuideStore.getState().dismiss('templates');
+    }, [definitionsReady, definitions.length]);
 
     const visible = useMemo(() => {
       const needle = filter?.trim().toLowerCase();
@@ -53,13 +61,18 @@ export const TaskDefinitionLauncher = memo<TaskDefinitionLauncherProps>(
     );
 
     return (
+      <>
+      {guide.open && <FeatureGuideDialog id="templates" open onClose={() => { guide.close(); setOpen(true); }} onComplete={() => { guide.complete(); setOpen(true); }} onAction={() => { setOpen(false); onCreate(); }} />}
       <Popover
         open={open}
         onClose={close}
         placement="inline-end"
         triggerClassName={styles.triggerWrap}
         trigger={
-          <span className={styles.triggerWrap} onClick={() => setOpen((value) => !value)}>
+          <span className={styles.triggerWrap} onClick={() => {
+            if (!open && definitionsReady && definitions.length === 0 && !filter?.trim() && guide.showAutomatically()) return;
+            setOpen((value) => !value);
+          }}>
             {trigger}
           </span>
         }
@@ -138,6 +151,7 @@ export const TaskDefinitionLauncher = memo<TaskDefinitionLauncherProps>(
           </button>
         </div>
       </Popover>
+      </>
     );
   },
 );

@@ -14,6 +14,8 @@ import { useMcpPrewarm } from '../../data/useMcpPrewarm';
 import type { QuickChatOptions, StartOutcome } from '../../shell/useAgentStart';
 import { McpRuntimeCard } from '../McpRuntimeCard';
 import { WelcomeComposer } from './WelcomeComposer';
+import { useAgentRunList } from '../../../../renderer-runtime/hooks';
+import { WelcomeGuide } from '../../../guides/WelcomeGuide';
 
 /**
  * 空态的输入器：还没有会话，投递即"新建并启动"。
@@ -35,6 +37,8 @@ export const WelcomeInput: React.FC<{
   const submitting = useRef(false);
 
   const inferenceSelections = useInferenceStore((store) => store.selections);
+  const historyReady = useAgentRunList((state) => state.phase === 'ready');
+  const hasHistory = useAgentRunList((state) => state.runs.length > 0);
   const mcpPrewarmEnabled = modeId !== 'browser-skill';
   const prewarmRequest = useMemo(
     () => (mcpPrewarmEnabled ? { workspace, specName: 'system-chat' } : null),
@@ -82,6 +86,12 @@ export const WelcomeInput: React.FC<{
   }, [attachments, draft, onStart, prewarm, resolvedModel, resetDraft, settings, version]);
 
   return (
+    <>
+    <WelcomeGuide
+      historyReady={historyReady}
+      hasHistory={hasHistory}
+      blocked={sending || Boolean(draft.trim()) || attachments.hasAttachments || Boolean(workspace) || environmentIds.length > 0}
+    />
     <WelcomeComposer
       value={draft}
       onChange={setDraft}
@@ -123,5 +133,6 @@ export const WelcomeInput: React.FC<{
         />
       )}
     />
+    </>
   );
 };
