@@ -193,19 +193,23 @@ describe('assemble L0-L5 组装规则', () => {
     expect(withExplore).not.toContain('看一眼就有答案');
   });
 
-  it('顶层先查清事实再委派关联任务，分配后等待汇报', () => {
+  it('顶层信息够就动手，委派关联任务后等待汇报并转达结果', () => {
     const prompt = assemble(
       directorIdentity,
       directorCtx({ modeId: 'normal', approvalMode: 'confirm', investigatorTypes: ['explore'] })
     );
 
     expect(prompt).toContain('像一位带队办事、对最终交付负责的人：你可以自己完成任务，也可以交给聪明、能独当一面的同事');
-    expect(prompt).toContain('需要分工时，先查清影响目标和分工的关键事实');
-    expect(prompt).toContain('再把多个关联任务一并交给一个 Worker，由它自己拿主意');
+    expect(prompt).toContain('信息够动手了就动手');
+    expect(prompt).not.toContain('先查清影响目标和分工的关键事实');
+    expect(prompt).toContain('值得分出去的是能并行的独立工作，或者你只要结论、不要过程的活');
+    expect(prompt).toContain('分的时候把关联任务一并交给一个 Worker，由它自己拿主意');
+    expect(prompt).toContain('交出去的活，它的汇报用户看不到，把要紧的转达给用户');
     expect(prompt).toContain('派出去的调查不要自己再查一遍，等结果回来再综合');
     expect(prompt).toContain('由它自己拿主意，办妥后交回完整结果');
     expect(prompt).toContain('需要其他负责人提供前置结果的工作，在看板中登记依赖，取得所需结果后再执行或委派');
-    expect(prompt).toContain('已知存在冲突的工作按顺序安排');
+    expect(prompt).toContain('有冲突的工作按顺序安排');
+    expect(prompt).not.toContain('已知存在冲突');
     expect(prompt).toContain('相互无依赖且互不冲突的工具调用在同一响应里并行发出');
     expect(prompt).toContain('有依赖或冲突时顺序执行');
     expect(prompt).not.toContain('需要接管仍在执行的工作时，先停止原 Worker');

@@ -13,6 +13,7 @@ vi.mock('../../../../renderer-runtime/hooks', () => ({
 
 import {
   resolveConversationTarget,
+  projectWorkerTasks,
   resolveConversationRequest,
   resolveRequest,
   useAgentVM,
@@ -107,7 +108,7 @@ describe('resolveRequest', () => {
           approvalMode: 'confirm',
           conversationLength: 0,
           runMetrics: workerMetrics,
-          taskIds: [],
+
           browserReady: false,
         }],
       },
@@ -164,6 +165,24 @@ describe('reasoning snapshots', () => {
     };
     renderToStaticMarkup(createElement(Probe));
     expect(selections()).toEqual([high, medium, medium]);
+  });
+});
+
+describe('Worker task projection', () => {
+  it('shows Main’s latest owner matches, including completed and newly recorded work', () => {
+    const make = (id: string, owner: string | null, status: 'pending' | 'completed' = 'pending') => ({
+      id, owner, status, subject: 'Sample task', description: 'Sample scope', dependsOn: [],
+    });
+    const board = { taskSummary: 'Sample board', items: [
+      make('main-work', 'main-a'), make('unassigned', null), make('other-work', 'worker-b'),
+      make('open', 'worker-a'), make('done', 'worker-a', 'completed'),
+    ] };
+    expect(projectWorkerTasks(board, 'worker-a')).toEqual(board.items.slice(3));
+    expect(projectWorkerTasks(undefined, 'worker-a')).toEqual([]);
+    expect(projectWorkerTasks(board, 'worker-missing')).toEqual([]);
+    const updated = { ...board, items: [make('open', 'worker-b'), make('new-work', 'worker-a')] };
+    expect(projectWorkerTasks(updated, 'worker-a')).toEqual([updated.items[1]]);
+    expect(board.items).toHaveLength(5);
   });
 });
 

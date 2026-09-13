@@ -10,6 +10,7 @@ vi.mock('../../../agent-runs/task-board-service.js', () => ({
 
 import type { AgentHost } from '../../agent-host.js';
 import { PlanModule } from '../plan.module.js';
+import { taskBoardService } from '../../../agent-runs/task-board-service.js';
 
 function setup(defaultModeId: string) {
   const emitStateChange = vi.fn();
@@ -22,6 +23,20 @@ function setup(defaultModeId: string) {
 }
 
 describe('PlanModule mode restoration', () => {
+  it('restores the complete persisted board before startup finishes', async () => {
+    const board = {
+      schemaVersion: 1 as const, taskSummary: 'Sample board',
+      items: [
+        { id: 'done', subject: 'Delivered sample', description: 'Verified result.', owner: 'worker-stopped', status: 'completed' as const, dependsOn: [] },
+        { id: 'next', subject: 'Next sample', description: 'Complete the follow-up.', owner: 'main-1', status: 'in_progress' as const, dependsOn: ['done'] },
+      ],
+    };
+    vi.mocked(taskBoardService.readTaskBoard).mockResolvedValueOnce(board);
+    const { module, emitStateChange } = setup('normal');
+    await module.onStart();
+    expect(module.getTaskBoard()).toEqual({ taskSummary: board.taskSummary, items: board.items });
+    expect(emitStateChange).toHaveBeenCalled();
+  });
   it('falls back to normal when the session starts directly in plan mode', () => {
     const { module } = setup('plan');
 

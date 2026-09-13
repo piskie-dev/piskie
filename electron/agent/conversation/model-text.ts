@@ -4,11 +4,13 @@ import type { ImageRef, ToolResult } from '../../tools/types.js';
 export type BackgroundDoneEvent = Readonly<{
   kind: 'background_task_done';
   taskId: string;
-  outputFile: string;
   status: 'ok' | 'failed' | 'killed';
   summary: string;
   tail: string;
-}>;
+} & (
+  | { outputTruncated: false }
+  | { outputTruncated: true; outputFile: string }
+)>;
 
 const PLATFORM_TAG = /<(\/?)(error|persisted-output|task-notification|system-reminder)(?=[\s>])/gi;
 
@@ -84,16 +86,18 @@ export function renderAnswer(
 
 export function renderNotification(event: BackgroundDoneEvent): string {
   const taskId = neutralize(event.taskId);
-  const outputFile = neutralize(event.outputFile);
   const summary = neutralize(event.summary);
   const tail = neutralize(event.tail);
+  const output = event.outputTruncated
+    ? `输出已截断，仅显示最后 16 KB：\n${tail}`
+    : tail ? `完整输出：\n${tail}` : '无输出。';
   return [
     '<task-notification>',
     `<task-id>${taskId}</task-id>`,
-    `<output-file>${outputFile}</output-file>`,
+    ...(event.outputTruncated ? [`<output-file>${neutralize(event.outputFile)}</output-file>`] : []),
     `<status>${event.status}</status>`,
     `<summary>${summary}</summary>`,
-    `<tail>${tail}</tail>`,
+    `<output>${output}</output>`,
     '</task-notification>',
   ].join('\n');
 }

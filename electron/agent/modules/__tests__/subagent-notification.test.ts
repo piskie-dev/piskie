@@ -138,12 +138,6 @@ describe('subagent notification normalization', () => {
     module.createSubagentNotificationHandler('child-2')({
       type: 'failed',
       error: '模型报告失败',
-      data: {
-        storage: 'inline',
-        type: 'failed',
-        data: { type: 'failed', message: '模型报告失败' },
-        originalSize: 6,
-      },
     });
 
     const envelope = addUserMessage.mock.calls[0]?.[0]?.text as string;

@@ -56,7 +56,7 @@ function finalDefinitions(spec: AgentSpec) {
     ? {
         mode: browser ? 'browser' as const : 'local' as const,
         subject: spec.name,
-        taskIds: ['task-1'],
+
         prompt: 'test assignment',
         skills: browser ? ['browser'] : [],
       }

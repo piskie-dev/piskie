@@ -18,7 +18,6 @@ import type { AgentRuntimeObserver, AgentRuntimeObserverFactory } from '../obser
 import type { ImageApplicationPort } from '../../inference/application/image-application-port.js';
 import type { ModelTarget } from '../../inference/execution/contracts.js';
 import type {
-  TaskItem,
   SubagentConfig,
   SubagentNotification,
   AgentInputEvent,
@@ -30,7 +29,6 @@ import type {
 } from '../../../shared/types/index.js';
 import { STALLED_CONFIG } from '../../../shared/constants/index.js';
 import { createSubagentSchema } from '../../tools/agent/subagent-contract.js';
-import { taskBoardService } from '../../agent-runs/task-board-service.js';
 import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { neutralizeClosing } from '../prompts/context.js';
 import { RuntimeTraceWriter } from '../tracing/runtime-trace-writer.js';
@@ -39,10 +37,8 @@ import { specRegistry } from '../specs/index.js';
 import { resolveBrowserBinding, type ResolvedBrowserBinding } from './browser-binding.js';
 import {
   normalizeSubagentNotification,
-  renderATASubagentEventBody,
   renderSubagentEventOpeningTag,
 } from '../ata/ata-event-protocol.js';
-import { isATAEventEnvelope } from '../ata/ata-event-envelope.js';
 
 interface SubagentModuleConfig {
   resolveWorkerInference?: WorkerInferenceResolver;
@@ -188,12 +184,13 @@ export class SubagentModule implements AgentModule {
     builder
       .setSubagents({
         create: (config: SubagentConfig) => this.createSubagent(config),
+        createdIds: () => this.host.getConversationStore().readCreatedWorkerIds(this.host.mainAgentId),
         destroy: (id: string) => this.destroySubagent(id),
         traceFilePath: (id: string) => this.getSubagentTraceFilePath(id),
       })
       .setEvents({
         allowedTargets: () => Array.from(this.subagents.keys()),
-        send: (id: string, event: Record<string, unknown>) => this.sendEventToSubagent(id, event),
+        send: (id: string, message: string) => this.sendEventToSubagent(id, message),
         notifyParent: () => false,
       });
   }
@@ -210,15 +207,9 @@ export class SubagentModule implements AgentModule {
         notificationType === 'failed' ||
         notificationType === 'user_stopped';
 
-      // 子流程事件信封：三种载荷统一为 <subagent_event id type>
-      const notificationData = notification.data as Record<string, unknown> | undefined;
-      const envelopeBody = isATAEventEnvelope(notificationData)
-        ? renderATASubagentEventBody(notificationData)
-        : notification.text;
-
       const ts = new Date(event.timestamp).toISOString();
       const openingTag = renderSubagentEventOpeningTag(subagentId, ts, notification);
-      const contextMessage = `${openingTag}\n${neutralizeClosing('subagent_event', envelopeBody)}\n</subagent_event>`;
+      const contextMessage = `${openingTag}\n${neutralizeClosing('subagent_event', notification.text)}\n</subagent_event>`;
       this.host.addUserMessage({ text: contextMessage, subtype: 'subagent_notification' });
 
       // 终态生命周期：上下文已落地后按 spec 策略处置
@@ -272,7 +263,6 @@ export class SubagentModule implements AgentModule {
       Array.from(this.subagents.entries()).map(async ([subagentId, subagent]: [string, any]) => {
         const startedAt = Date.now();
         await subagent.destroy?.();
-        await this.releaseSubagentTasks(subagentId, false);
 
         const elapsedMs = Date.now() - startedAt;
         if (elapsedMs >= 1000) {
@@ -478,12 +468,6 @@ export class SubagentModule implements AgentModule {
     }
   }
 
-  private publishTaskBoard(board: { taskSummary: string; items: TaskItem[] }): void {
-    const planModule = this.host.getModule('plan') as
-      { setTaskBoard(value: { taskSummary: string; items: TaskItem[] }): void } | undefined;
-    planModule?.setTaskBoard({ taskSummary: board.taskSummary, items: board.items });
-  }
-
   private updatePersistedChildren(update: (children: ChildSnapshot[]) => ChildSnapshot[]): void {
     const store = this.host.getConversationStore();
     const header = store.readHeader(this.host.mainAgentId);
@@ -559,10 +543,6 @@ export class SubagentModule implements AgentModule {
       if (config.browserEnvironmentId && !browserEnvironmentRuntime.getEnvironment(config.browserEnvironmentId)) {
         throw new Error(`绑定的浏览器环境不存在或已被删除: ${config.browserEnvironmentId}`);
       }
-      const taskBoardSnapshot = spec.assignment === 'task-board'
-        ? await taskBoardService.createCompactSnapshot(this.host.mainAgentId, config.taskIds!)
-        : undefined;
-
       if (!this.allocateAgentId) throw new Error('Agent ID allocator is unavailable');
       id = this.allocateAgentId();
       const browserBinding = spec.modules.includes('browser')
@@ -634,9 +614,6 @@ export class SubagentModule implements AgentModule {
           imageApplication: this.imageApplication,
           search: this.search,
           imageTarget: this.imageTarget,
-          assignmentTaskBoardSnapshot: taskBoardSnapshot,
-          onTaskBoardChange: (board: { taskSummary: string; items: TaskItem[] }) =>
-            this.publishTaskBoard(board),
           createRuntimeObserver: this.createRuntimeObserver,
           onNotification: (notification: SubagentNotification) =>
             this.createSubagentNotificationHandler(id)(notification),
@@ -655,7 +632,6 @@ export class SubagentModule implements AgentModule {
           workspace: (subagent as InstanceType<typeof AgentRuntime>).getEffectiveWorkspace(),
           config: {
             subject: config.subject,
-            taskIds: config.taskIds,
             type: config.type,
             skills: config.skills,
           },
@@ -806,7 +782,6 @@ export class SubagentModule implements AgentModule {
   ): Promise<void> {
     const subagent = this.subagents.get(resolvedId)!;
     await (subagent as any).destroy?.();
-    await this.releaseSubagentTasks(resolvedId, publish);
 
     if (!this.preserveChildHeaderForParentRecovery) {
       this.persistStoppedChild(resolvedId);
@@ -833,22 +808,6 @@ export class SubagentModule implements AgentModule {
   /** Service/UI 精确停止单个子流程的入口；资源释放仍归子 runtime.destroy。 */
   async stopSubagentById(subagentId: string, stopReason = 'external_stop'): Promise<void> {
     await this.destroySubagent(subagentId, stopReason);
-  }
-
-  private async releaseSubagentTasks(subagentId: string, publish: boolean): Promise<void> {
-    const child = this.subagents.get(subagentId) as (AgentEngine & Pick<AgentHost, 'spec'>) | undefined;
-    if (child?.spec.assignment !== 'task-board') return;
-    try {
-      const board = await taskBoardService.releaseOwnerTasks(this.host.id, subagentId);
-      if (publish && board) this.publishTaskBoard(board);
-    } catch (error) {
-      appLog.warn({
-        event: 'agent.subagent_tasks.release.degraded',
-        message: 'Subagent task release degraded',
-        context: { scope: 'agent.subagent_tasks', subagentId },
-        error,
-      });
-    }
   }
 
   /**
@@ -1052,7 +1011,7 @@ export class SubagentModule implements AgentModule {
     return Array.from(this.subagents.keys()).find((id) => id.endsWith(`-${idOrSeq}`));
   }
 
-  private sendEventToSubagent(subagentId: string, content: Record<string, unknown>): boolean {
+  private sendEventToSubagent(subagentId: string, content: string): boolean {
     const resolvedId = this.resolveSubagentId(subagentId);
     const subagent = resolvedId ? this.subagents.get(resolvedId) : undefined;
     if (!subagent || !resolvedId) {

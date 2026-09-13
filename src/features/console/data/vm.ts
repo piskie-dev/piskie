@@ -234,7 +234,6 @@ export interface WorkerVM {
   readonly request?: RequestVM;
   readonly pendingToolCall?: PendingToolCall;
   readonly pendingEvents: readonly PendingAgentEventView[];
-  readonly taskIds: readonly string[];
   /** 能力位：决定辅助面板出哪些槽（屏幕） */
   readonly browserId?: string;
   readonly browserReady: boolean;
@@ -269,7 +268,6 @@ function projectWorker(
     request: resolveConversationRequest(child.aiRequestState, incident),
     pendingToolCall: child.pendingToolCall,
     pendingEvents: child.pendingEvents,
-    taskIds: child.taskIds,
     browserId: child.browserId,
     browserReady: child.browserReady,
     imageNodeIds: (child.imageNodes ?? []).map((node) => node.id),
@@ -319,9 +317,7 @@ export function resolveConversationTarget(
 /** Worker 任务投影：始终从 Parent 权威看板派生，不从 worker 自身取 */
 export function projectWorkerTasks(
   taskBoard: AgentVM['taskBoard'],
-  taskIds: readonly string[],
+  workerId: string,
 ): readonly TaskItem[] {
-  if (!taskBoard || taskIds.length === 0) return [];
-  const wanted = new Set(taskIds);
-  return taskBoard.items.filter((item) => wanted.has(item.id));
+  return taskBoard?.items.filter((item) => item.owner === workerId) ?? [];
 }

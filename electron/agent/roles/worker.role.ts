@@ -13,7 +13,6 @@ import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
 import { pathsService } from '../../services/paths.service.js';
 import type {
   AgentRunConfig,
-  AssignmentTaskBoardSnapshot,
   SubagentNotification,
 } from '../../../shared/types/index.js';
 import { renderAssignmentInitialMessage } from '../assignment-message.js';
@@ -85,11 +84,9 @@ export class WorkerRole implements AgentRole {
 
     // 添加初始任务到上下文（resume 时已由 replay 重建，跳过）
     if (!options.isResume) {
-      const snapshot = options.assignmentTaskBoardSnapshot as
-        AssignmentTaskBoardSnapshot | undefined;
       // [提示词锚点] SubagentTool 的 prompt 参数说明依赖此处只注入 Assignment，不继承 Parent 对话。
       host.addUserMessage({
-        text: renderAssignmentInitialMessage(subConfig, snapshot),
+        text: renderAssignmentInitialMessage(subConfig),
         subtype: 'assignment',
       });
     }
@@ -143,16 +140,6 @@ export class WorkerRole implements AgentRole {
     // worker 的可见集 = 出生时被授予并注入教学文档的技能（tool_search 互斥基准）
     builder.setSkillInventory(this.skillInventory);
     builder
-      .setAssignmentSnapshot(
-        options.assignmentTaskBoardSnapshot as AssignmentTaskBoardSnapshot | undefined
-      )
-      .setTaskBoard({
-        set: (board) => {
-          if (!board) return;
-          const callback = options.onTaskBoardChange as ((value: typeof board) => void) | undefined;
-          callback?.(board);
-        },
-      })
       .setEvents({
         allowedTargets: () => [options.mainAgentId],
         send: () => false,

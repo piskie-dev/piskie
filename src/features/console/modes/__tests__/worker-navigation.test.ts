@@ -23,7 +23,7 @@ vi.mock('../../data/vm', async (importOriginal) => ({
   useWorkerVM: (_agentId: string, workerId?: string) => {
     const worker = state.workers.find((item) => item.id === workerId);
     return worker ? {
-      ...worker, phase: 'thinking', taskIds: [], pendingEvents: [], runMetrics: {}, workspace: '/workspace/example-worker',
+      ...worker, phase: 'thinking', pendingEvents: [], runMetrics: {}, workspace: '/workspace/example-worker',
       reasoningOverride: { kind: 'effort', effort: 'low' },
     } : null;
   },

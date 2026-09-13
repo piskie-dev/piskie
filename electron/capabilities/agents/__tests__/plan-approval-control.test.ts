@@ -56,7 +56,7 @@ beforeEach(async () => {
       runConfig: { name: 'Sample task', description: '', promptTemplate: '', workspace: directory },
       workspace: directory,
       ...(role === 'worker' ? { subagentConfig: {
-        type: 'local-worker', subject: 'Sample task', prompt: 'Sample task', skills: [], taskIds: [],
+        type: 'local-worker', subject: 'Sample task', prompt: 'Sample task', skills: [],
       } } : {}),
     },
   });

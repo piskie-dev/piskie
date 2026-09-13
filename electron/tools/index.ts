@@ -11,7 +11,6 @@ import { AgentRunTool } from './agent/agent-run.tool.js';
 import { PlanTool } from './plan/plan.tool.js';
 import { AskUserTool } from './plan/ask-user.tool.js';
 import { TaskTool } from './task/task.tool.js';
-import { TaskReadTool } from './task/task-read.tool.js';
 import { GenerateImageTool } from './image/generate-image.tool.js';
 import { SkillCallTool } from './skill/skill-call.tool.js';
 import { LoadSkillTool } from './skill/load-skill.tool.js';
@@ -38,7 +37,6 @@ const builtinTools = (
   new AgentRunTool(),
   new PlanTool(),
   new TaskTool(),
-  new TaskReadTool(),
   new WebSearchTool(),
   new AskUserTool(),
   new SkillCallTool(),

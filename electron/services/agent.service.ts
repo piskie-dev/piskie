@@ -89,7 +89,7 @@ function injectChildTerminationNotice(
     .join('\n');
   runtime.addDurableUserMessage(
     `会话已恢复。以下 Worker 已停止，原 ID 已失效，请勿发送消息：\n${notice}\n\n` +
-      '未完成任务已退回 Task Board 未分配区；如需继续，请创建新 Worker。',
+      '如需继续，请创建新 Worker。',
     'system_event',
     messageId
   );
@@ -799,10 +799,8 @@ export class AgentService {
 
     const entries = this.conversationStore.read(mainAgentId, agentId);
 
-    // Worker runtimes are never restored. Re-open their unfinished obligations
-    // before PlanModule rebuilds its disposable UI projection.
     const { taskBoardService } = await import('../agent-runs/task-board-service.js');
-    await taskBoardService.releaseStaleWorkerTasks(mainAgentId);
+    const taskBoard = await taskBoardService.readTaskBoard(mainAgentId);
 
     const runConfig = header.runConfig;
     let runtime!: AgentRuntime;
@@ -838,6 +836,12 @@ export class AgentService {
       // 合法 pending ask 保持未配对（incoming 用户消息完成它），有修复写入则 flush
       runtime.repairConversationTail();
       injectChildTerminationNotice(runtime, header, entries);
+      if (taskBoard) {
+        runtime.addDurableUserMessage(
+          `当前 Task Board：${JSON.stringify({ taskSummary: taskBoard.taskSummary, items: taskBoard.items })}`,
+          'system_event'
+        );
+      }
 
       // 激活事务：resume 失败保留既有历史（档案不是本次事务的产物），
       // 故不传 rollbackArtifacts；autoStart=false 时环境准备仍完整执行（工具链/技能文档/

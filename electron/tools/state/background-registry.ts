@@ -9,6 +9,7 @@ import type {
   BackgroundJob,
 } from '../types.js';
 import type { AgentInputRequest } from '../../../shared/types/index.js';
+import type { BackgroundDoneEvent } from '../../agent/conversation/model-text.js';
 
 type Offer = {
   callId: string;
@@ -129,18 +130,21 @@ export class BackgroundRegistry implements BackgroundHostFactory {
     this.leases.delete(lease.id);
     this.options.onChange?.();
 
+    const task = lease.job.description ? `后台任务「${lease.job.description}」` : '后台任务';
     const summary = outcome.status === 'ok'
-      ? `后台任务完成，用时 ${outcome.durationMs}ms。`
+      ? `${task}完成，用时 ${outcome.durationMs}ms。`
       : outcome.status === 'killed'
-        ? `后台任务已终止，用时 ${outcome.durationMs}ms。`
-        : `后台任务失败${outcome.exitCode === undefined ? '' : `（exit ${outcome.exitCode}）`}，用时 ${outcome.durationMs}ms。`;
-    const content = {
+        ? `${task}已终止，用时 ${outcome.durationMs}ms。`
+        : `${task}失败${outcome.exitCode === undefined ? '' : `（exit ${outcome.exitCode}）`}，用时 ${outcome.durationMs}ms。`;
+    const content: BackgroundDoneEvent = {
       kind: 'background_task_done',
       taskId: lease.id,
-      outputFile: lease.job.outFile,
       status: outcome.status,
       summary,
       tail: outcome.tail,
+      ...(outcome.outputTruncated
+        ? { outputTruncated: true, outputFile: lease.job.outFile }
+        : { outputTruncated: false }),
     };
     let delivered = false;
     try {

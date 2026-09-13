@@ -32,12 +32,12 @@ function notificationEvaluation(): string {
 | type | 含义 | 你的处理 |
 |------|------|----------|
 | message | Worker 协作消息 | 非终态通知；需要补充执行信息、解决协调请求或调整要求时才回复。 |
-| completed | Assignment 已完成 | 核对结果与 Task Board，继续后续工作或汇总 |
+| completed | Assignment 已完成 | 按汇报更新 Task Board，继续后续工作或汇总 |
 | user_stopped | 用户停止 | 等待新指示 |
 | failed | Assignment 未能完成 | 根据事件中的事实决定重派、接管或向用户报告；只有错误明确属于临时问题且重试仍有价值时才重派，部分完成的从已完成部分接着做 |
 | need_user_action | 只有用户能解除的阻断 | 立即用 ask_user 告知所需操作并询问是否完成；用户确认后，告知原 Worker 用户已完成操作 |
 
-completed 通知应自包含关键结果、产出路径和未完成项。摘要足以决策时无需读取落盘原文；信息不足时明确指出缺少的事实。Worker 尚未汇报时不要预测或代写它的结果。`;
+completed 的正文是判断后续的依据；缺少影响判断的信息时，向对应 Worker 索取。Worker 尚未汇报时不要预测或代写它的结果。`;
 }
 
 /**
@@ -69,9 +69,7 @@ export function workerProtocol(ctx?: PromptContext): string {
 
 ## 执行原则
 
-\`<assignment>\` 是本次多任务工作包的执行标准，初始 \`<task_board>\` 是创建时快照。根据 prompt
-执行，并用 task 工具维护自己负责的完整细任务清单；task 工具结果和后续事件中的新事实优先于旧
-快照。终态 send_event 前先收口任务状态和后续项，结果写入 send_event，不写入 TaskItem。
+\`<assignment>\` 是本次多任务工作包的执行标准。根据 prompt 执行，并维护自己负责的完整细任务清单；后续事件中的新事实优先。终态 send_event 前先收口任务状态和后续项，结果写入 send_event。
 
 ## 错误重试原则
 
@@ -92,7 +90,7 @@ export function workerProtocol(ctx?: PromptContext): string {
 - 新增任务加入任务清单，保留尚未完成的任务，按依赖关系和明确的先后要求依次完成；修改或取消任务时，更新对应项和执行安排。补充事实用于推进对应任务。
 - 收到 director 转达的“用户已完成操作”消息时，先验证阻断条件确已解除，再从原检查点继续
 - 正在执行关键操作（如表单提交）时，可以先完成当前步骤再处理
-- 用户修改任务范围时：按修改后的范围完成任务，在 completed 的 summary 中说明修改情况
+- 用户修改任务范围时：按修改后的范围完成任务，在 completed 的 message 中说明范围变化及完成情况。
 
 ## 通知 director
 

@@ -303,19 +303,20 @@ function systemNoticeOverride(text: string): NoticeMessagePresentation | undefin
   const notification = text.match(/^<task-notification>\n?([\s\S]*?)\n?<\/task-notification>$/);
   if (notification) {
     const body = notification[1] ?? '';
-    const fields = body.match(/^<task-id>([\s\S]*?)<\/task-id>\n<output-file>([\s\S]*?)<\/output-file>\n<status>([\s\S]*?)<\/status>\n<summary>([\s\S]*?)<\/summary>\n<tail>([\s\S]*)<\/tail>$/);
+    // 历史通知使用 tail 且始终带路径；新通知由采集结果决定是否附路径。
+    const fields = body.match(/^<task-id>([\s\S]*?)<\/task-id>\n(?:<output-file>([\s\S]*?)<\/output-file>\n)?<status>([\s\S]*?)<\/status>\n<summary>([\s\S]*?)<\/summary>\n<(output|tail)>([\s\S]*)<\/\5>$/);
     if (!fields) return presentNotice({ source: 'task_notification', text: body });
     const detailFile = fields[2]?.trim();
     const status = fields[3]?.trim();
     const summary = fields[4]?.trim();
-    const tail = fields[5]?.trim();
+    const output = fields[5] === 'tail' ? fields[6]?.trim() : fields[6];
     const titleKey = status === 'ok' ? 'transcript.systemEvent.backgroundCompleted'
       : status === 'failed' ? 'transcript.systemEvent.backgroundFailed'
         : status === 'killed' ? 'transcript.systemEvent.backgroundStopped'
           : 'transcript.systemEvent.backgroundTask';
     return presentNotice({
       source: 'task_notification',
-      text: [summary, tail].filter(Boolean).join('\n\n'),
+      text: [summary, output].filter(Boolean).join('\n\n'),
       summary,
       detailFile,
       style: {

@@ -50,7 +50,7 @@ export interface AgentSpec {
   /** 角色：决定 Agent 的行为策略（director/worker） */
   role: RoleType;
   /** Worker input contract, compiled from its declaration. */
-  assignment?: 'question' | 'task-board';
+  assignment?: 'question' | 'work-package';
   /** 工具集配置 */
   tools: ToolSetConfig;
   /** 模块列表（按名称引用，从 modules/index.ts 工厂创建） */

@@ -99,7 +99,7 @@ describe('AgentSpec registration invariants', () => {
       role: 'worker',
     }))).not.toThrow();
     expect(registry.getWorkersForParent('special-director')).toEqual([
-      { name: 'protected-worker', assignment: 'task-board', browser: false, skills: false, description: '执行受保护的专业任务' },
+      { name: 'protected-worker', assignment: 'work-package', browser: false, skills: false, description: '执行受保护的专业任务' },
     ]);
     expect(registry.getWorkersForParent('director')).toEqual([]);
   });

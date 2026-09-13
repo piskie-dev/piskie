@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentInputRequest } from '../../../../shared/types/index.js';
 import type { BackgroundJob } from '../../types.js';
 import { BackgroundRegistry } from '../background-registry.js';
 
@@ -9,14 +10,14 @@ type Exit = Awaited<ReturnType<BackgroundJob['exited']>>;
 
 class FakeJob implements BackgroundJob {
   readonly kill = vi.fn(async () => {
-    this.finish({ status: 'killed', durationMs: 1, tail: '' });
+    this.finish({ status: 'killed', durationMs: 1, tail: '', outputTruncated: false });
   });
 
   private readonly completion: Promise<Exit>;
   private resolve!: (outcome: Exit) => void;
   private reject!: (error: unknown) => void;
 
-  constructor(readonly outFile: string) {
+  constructor(readonly outFile: string, readonly description?: string) {
     this.completion = new Promise<Exit>((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
@@ -51,7 +52,7 @@ describe('BackgroundRegistry', () => {
     const post = vi.fn(() => true);
     const registry = new BackgroundRegistry();
     const host = registry.forCall('call-1', post);
-    const job = new FakeJob(path.join(tempDir, '12345678.log'));
+    const job = new FakeJob(path.join(tempDir, '12345678.log'), 'Sample check');
 
     const offer = host.offer(job);
     expect(registry.promote('call-1')).toBe(true);
@@ -63,7 +64,7 @@ describe('BackgroundRegistry', () => {
     expect(registry.activeTaskIds()).toEqual(['12345678']);
     expect(registry.promote('call-1')).toBe(false);
 
-    job.finish({ status: 'ok', exitCode: 0, durationMs: 12, tail: 'done' });
+    job.finish({ status: 'ok', exitCode: 0, durationMs: 12, tail: 'done', outputTruncated: false });
     await vi.waitFor(() => expect(post).toHaveBeenCalledOnce());
     expect(post).toHaveBeenCalledWith({
       source: 'system',
@@ -71,10 +72,10 @@ describe('BackgroundRegistry', () => {
       content: {
         kind: 'background_task_done',
         taskId: '12345678',
-        outputFile: job.outFile,
         status: 'ok',
-        summary: '后台任务完成，用时 12ms。',
+        summary: '后台任务「Sample check」完成，用时 12ms。',
         tail: 'done',
+        outputTruncated: false,
       },
     });
     expect(registry.hasActiveJobs()).toBe(false);
@@ -93,21 +94,54 @@ describe('BackgroundRegistry', () => {
     expect(registry.hasActiveJobs()).toBe(false);
   });
 
-  it('persists a completion record when Mailbox ingress rejects the event', async () => {
+  it.each([false, true])('persists output completeness (%s) when Mailbox ingress rejects the event', async (outputTruncated) => {
     const warning = vi.fn();
     const registry = new BackgroundRegistry({ onWarning: warning });
     const host = registry.forCall('call-3', () => false);
     const job = new FakeJob(path.join(tempDir, 'abcdefgh.log'));
     const handle = host.adopt(job, 'declared');
 
-    job.finish({ status: 'failed', exitCode: 2, durationMs: 8, tail: 'bad' });
+    job.finish({ status: 'failed', exitCode: 2, durationMs: 8, tail: 'bad', outputTruncated });
     const recordPath = path.join(tempDir, `${handle.id}.done.json`);
     await vi.waitFor(async () => {
-      await expect(fs.readFile(recordPath, 'utf8')).resolves.toContain('background_task_done');
+      const record = JSON.parse(await fs.readFile(recordPath, 'utf8'));
+      expect(record).toEqual({
+        kind: 'background_task_done',
+        taskId: handle.id,
+        status: 'failed',
+        summary: '后台任务失败（exit 2），用时 8ms。',
+        tail: 'bad',
+        outputTruncated,
+        ...(outputTruncated ? { outputFile: job.outFile } : {}),
+      });
     });
     expect(warning).toHaveBeenCalledWith(
       expect.stringContaining(`persisted to ${recordPath}`),
     );
+  });
+
+  it('keeps descriptions paired with task ids when silent jobs finish out of order', async () => {
+    const registry = new BackgroundRegistry();
+    const events: AgentInputRequest[] = [];
+    const post = (event: AgentInputRequest): boolean => { events.push(event); return true; };
+    const first = new FakeJob(path.join(tempDir, 'sample-first.log'), 'First sample check');
+    const second = new FakeJob(path.join(tempDir, 'sample-second.log'), 'Second sample check');
+    const firstHandle = registry.forCall('first-call', post).adopt(first, 'declared');
+    const secondHandle = registry.forCall('second-call', post).adopt(second, 'declared');
+
+    second.finish({ status: 'killed', durationMs: 3, tail: '', outputTruncated: false });
+    first.finish({ status: 'ok', exitCode: 0, durationMs: 4, tail: '', outputTruncated: false });
+    await vi.waitFor(() => expect(events).toHaveLength(2));
+    expect(events.map((event) => event.content)).toEqual([
+      {
+        kind: 'background_task_done', taskId: secondHandle.id, status: 'killed',
+        summary: '后台任务「Second sample check」已终止，用时 3ms。', tail: '', outputTruncated: false,
+      },
+      {
+        kind: 'background_task_done', taskId: firstHandle.id, status: 'ok',
+        summary: '后台任务「First sample check」完成，用时 4ms。', tail: '', outputTruncated: false,
+      },
+    ]);
   });
 
   it('cleans rejected completion promises without leaving a live lease', async () => {

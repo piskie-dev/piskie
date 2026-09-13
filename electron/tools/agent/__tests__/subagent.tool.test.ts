@@ -6,9 +6,9 @@ import type { SubagentTypeDescriptor, ToolContext } from '../../types.js';
 
 const types: SubagentTypeDescriptor[] = [
   { name: 'explore', description: '调查本地材料', assignment: 'question', browser: false, skills: false },
-  { name: 'local-worker', description: '本地执行', assignment: 'task-board', browser: false, skills: true },
-  { name: 'browser-worker', description: '网站执行', assignment: 'task-board', browser: true, skills: true },
-  { name: 'site-scout', description: '侦察网站', assignment: 'task-board', browser: true, skills: false },
+  { name: 'local-worker', description: '本地执行', assignment: 'work-package', browser: false, skills: true },
+  { name: 'browser-worker', description: '网站执行', assignment: 'work-package', browser: true, skills: true },
+  { name: 'site-scout', description: '侦察网站', assignment: 'work-package', browser: true, skills: false },
 ];
 
 function snapshot(environments: string[] = [], subagentTypes: SubagentTypeDescriptor[] = types) {
@@ -22,7 +22,7 @@ function snapshot(environments: string[] = [], subagentTypes: SubagentTypeDescri
 }
 
 const question = { type: 'explore', subject: '查明保存入口', prompt: '阅读 /workspace/sample 中的配置保存链路，返回路径与行号。' };
-const assignment = { ...question, type: 'local-worker', taskIds: ['task-a'] };
+const assignment = { ...question, type: 'local-worker' };
 
 function validate(raw: unknown, environments: string[] = []) {
   return parse(snapshot(environments).resolve('subagent')!.contract.schema, raw);
@@ -54,8 +54,8 @@ describe('subagent resolved creation contract', () => {
 
   it('describes the handoff once and the task-board split only for task-board types', () => {
     const description = snapshot().definitions()[0].description;
-    expect(description).toContain('刚走进房间的聪明同事');
-    expect(description).toContain('local-worker、browser-worker、site-scout：先在 Task Board 登记任务');
+    expect(description).toContain('把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断；prompt 是它拿到的全部材料。');
+    expect(description).toContain('local-worker、browser-worker、site-scout：先在 Task Board 登记任务。任务内容以 prompt 为准。');
     expect(description).not.toMatch(/explore 接收|自包含|action=stop/);
     expect(snapshot([], types.filter((type) => type.assignment === 'question')).definitions()[0].description)
       .not.toContain('Task Board');
@@ -87,9 +87,9 @@ describe('subagent resolved creation contract', () => {
     expect(validate({ ...question, ...extra }).ok).toBe(false);
   });
 
-  it('requires a nonempty unique task list for execution Workers', () => {
+  it('accepts a work package with the declared optional skills', () => {
     expect(validate(assignment).ok).toBe(true);
-    for (const taskIds of [undefined, [], ['task-a', 'task-a']]) {
+    for (const taskIds of [[], ['task-a'], ['task-a', 'task-a']]) {
       expect(validate({ ...assignment, taskIds }).ok).toBe(false);
     }
     expect(validate({ ...assignment, skills: ['sample-skill'] }).ok).toBe(true);
@@ -118,10 +118,10 @@ describe('subagent resolved creation contract', () => {
     expect(result.text).toContain('无需轮询');
   });
 
-  it('returns creation failures from the resource and task owners', async () => {
+  it('returns creation failures from the resource owner', async () => {
     const result = await new SubagentTool().execute(assignment, {
-      subagents: { create: vi.fn().mockRejectedValue(new Error('Missing task-a')), traceFilePath: vi.fn() },
+      subagents: { create: vi.fn().mockRejectedValue(new Error('Browser resource unavailable')), traceFilePath: vi.fn() },
     } as unknown as ToolContext);
-    expect(result).toMatchObject({ ok: false, text: expect.stringContaining('Missing task-a') });
+    expect(result).toMatchObject({ ok: false, text: expect.stringContaining('Browser resource unavailable') });
   });
 });

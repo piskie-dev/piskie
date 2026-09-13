@@ -100,9 +100,9 @@ export const ThreadView = memo<ThreadViewProps>(
     useMarkSessionRead(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
-    const tasks = worker
-      ? projectWorkerTasks(agent?.taskBoard, worker.taskIds)
-      : (agent?.taskBoard?.items ?? []);
+    const tasks = useMemo(() => workerId
+      ? projectWorkerTasks(agent?.taskBoard, workerId)
+      : (agent?.taskBoard?.items ?? []), [agent?.taskBoard, workerId]);
 
     const gate = useMemo(
       () =>
@@ -192,15 +192,14 @@ export const ThreadView = memo<ThreadViewProps>(
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
 
     /**
-     * 按任务精确归属目前只对"单任务 worker"成立：
-     * 它整条流水的活动就是那个任务的活动，是事实不是推断。
+     * main 看板仅记录一个由当前 Worker 负责的任务时，展示该 Worker 的活动量。
      * 主流水任务与多任务 worker 没有明确的工具调用任务标记，因此不做推断。
      */
     const taskChips = useMemo<ReadonlyMap<string, ActivityChips> | undefined>(() => {
-      const only = worker?.taskIds.length === 1 ? worker.taskIds[0] : undefined;
+      const only = worker && tasks.length === 1 ? tasks[0]?.id : undefined;
       if (!only) return undefined;
       return new Map([[only, chips]]);
-    }, [chips, worker]);
+    }, [chips, tasks, worker]);
 
     if (!request) return null;
 

@@ -230,7 +230,6 @@ export interface WorkerNode extends TranscriptNodeBase {
   readonly workerType: string;
   readonly subject: string;
   readonly mode: string;
-  readonly taskIds: readonly string[];
 }
 
 /** 子流程事件 / 回合收尾提醒等系统提示 */

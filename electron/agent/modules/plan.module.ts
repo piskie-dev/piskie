@@ -29,8 +29,11 @@ export class PlanModule implements AgentModule {
     if (config.mainAgentId) {
       this.mainAgentId = config.mainAgentId as string;
     }
-    // 从磁盘恢复计划指针与 Task Board 投影。
-    void this.restoreFromDisk();
+  }
+
+  async onStart(): Promise<void> {
+    // 模型开始执行前，从磁盘恢复计划指针与 Task Board 投影。
+    await this.restoreFromDisk();
   }
 
   private async restoreFromDisk(): Promise<void> {

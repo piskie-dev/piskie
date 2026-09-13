@@ -335,8 +335,6 @@ export interface SubagentConfig {
   type: string;
   /** 整个 Assignment 的简短显示标题 */
   subject: string;
-  /** 本次 Assignment 包含的细任务 ID */
-  taskIds?: string[];
   /** 整个多任务工作包的完整、自包含执行标准 */
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
@@ -732,19 +730,6 @@ export interface TaskBoardData {
   taskSummary: string;
   /** 全部细任务的扁平唯一集合 */
   items: TaskItem[];
-}
-
-/** Worker 创建时写入初始对话的一次性紧凑看板快照。 */
-export interface AssignmentTaskBoardSnapshot {
-  taskSummary: string;
-  items: Array<{
-    id: string;
-    subject: string;
-    status: TaskItemStatus;
-    owner: string | null;
-    dependsOn: string[];
-    assignedHere: boolean;
-  }>;
 }
 
 /**

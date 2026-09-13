@@ -22,20 +22,9 @@ function makeOptions(): RuntimeOptions {
     subagentConfig: {
       type: 'local-worker',
       subject: 'PARENT_ONLY_ASSIGNMENT_SUBJECT',
-      taskIds: ['task-a'],
+
       prompt: 'UNIQUE_ASSIGNMENT_PROMPT',
       skills: [],
-    },
-    assignmentTaskBoardSnapshot: {
-      taskSummary: 'Board',
-      items: [{
-        id: 'task-a',
-        subject: 'Task A',
-        status: 'pending',
-        owner: null,
-        dependsOn: [],
-        assignedHere: true,
-      }],
     },
   } as RuntimeOptions;
 }
@@ -77,7 +66,7 @@ describe('WorkerRole Assignment context', () => {
     expect(addUserMessage).toHaveBeenCalledTimes(1);
     const [input] = addUserMessage.mock.calls[0];
     expect(input.subtype).toBe('assignment');
-    expect(input.text).toContain('UNIQUE_ASSIGNMENT_PROMPT');
+    expect(input.text).toBe('<assignment>\n  <prompt>\nUNIQUE_ASSIGNMENT_PROMPT\n  </prompt>\n</assignment>');
     expect(input.text).not.toContain('PARENT_ONLY_ASSIGNMENT_SUBJECT');
   });
 

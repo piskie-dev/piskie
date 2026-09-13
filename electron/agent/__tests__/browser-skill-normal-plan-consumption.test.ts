@@ -129,7 +129,7 @@ describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
       const assignment = {
         type: 'browser-worker' as const,
         subject: '在 Example Site 搜索',
-        taskIds: ['task-1'],
+
         prompt: '使用已安装网站 Skill 搜索 red shoes，并返回 optionIds。',
         skills: [SKILL],
       };

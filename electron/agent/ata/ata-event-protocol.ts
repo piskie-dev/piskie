@@ -7,7 +7,6 @@ import {
   pickSubagentEventText,
   type SubagentEventType,
 } from '@shared/subagent-events.js';
-import type { ATAEventEnvelope } from './ata-event-envelope.js';
 
 export type { SubagentEventType } from '@shared/subagent-events.js';
 
@@ -39,38 +38,6 @@ export function normalizeSubagentNotification(
     ...(input.data !== undefined && { data: input.data }),
     ...(failure && { failure }),
   };
-}
-
-export function notificationFromATAEventEnvelope(
-  envelope: ATAEventEnvelope,
-): SubagentNotification {
-  const inlineData = envelope.storage === 'inline' ? envelope.data : undefined;
-  const summary = envelope.storage === 'file' ? envelope.summary : undefined;
-  const shortText = inlineData?.summary || summary || inlineData?.message || '';
-  const fullText = inlineData?.message || summary || inlineData?.summary || '';
-  const data = envelope as unknown as Record<string, unknown>;
-
-  switch (envelope.type) {
-    case 'message':
-      return { type: 'message', message: fullText || '消息', data };
-    case 'completed':
-      return { type: 'completed', message: fullText || '任务已完成', data };
-    case 'user_stopped':
-      return { type: 'user_stopped', reason: shortText || '用户主动停止', data };
-    case 'failed':
-      return { type: 'failed', error: fullText || 'AI 未提供失败原因', data };
-    case 'need_user_action':
-      return { type: 'need_user_action', message: fullText || '需要用户完成操作', data };
-    default:
-      throw new Error(`不支持的 send_event 类型: ${envelope.type}`);
-  }
-}
-
-export function renderATASubagentEventBody(envelope: ATAEventEnvelope): string {
-  if (envelope.storage === 'file') {
-    return `<summary>${envelope.summary || envelope.type}</summary>\n<detail path="${escapeAttribute(envelope.filePath)}"/>（完整内容可用 read 读取）`;
-  }
-  return envelope.data.message;
 }
 
 export function subagentEventMetadata(

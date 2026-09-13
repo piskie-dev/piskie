@@ -41,12 +41,11 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await fs.rm(fixture.root, { recursive: true, force: true });
+  await fs.rm('/tmp/sample-explore-app/agent-runs/parent-a', { recursive: true, force: true });
 });
 
-describe('Explore through the existing Worker runtime', () => {
-  it.each(['normal', 'plan'] as const)('creates from %s without a task board, reads evidence and accepts a follow-up', async (modeId) => {
-    const boardSnapshot = vi.spyOn(taskBoardService, 'createCompactSnapshot');
-    const releaseTasks = vi.spyOn(taskBoardService, 'releaseOwnerTasks');
+describe('Assignments through the existing Worker runtime', () => {
+  it.each([['normal', 'explore'], ['plan', 'explore'], ['normal', 'local-worker']] as const)('creates from %s as %s without a task board, reads evidence and accepts a follow-up', async (modeId, type) => {
     const source = path.join(fixture.root, 'settings.ts');
     await fs.writeFile(source, 'export const saveTarget = "settings.json";\n');
     const store = new ConversationStore(fixture.root);
@@ -95,12 +94,12 @@ describe('Explore through the existing Worker runtime', () => {
     } });
     const coordinator = new ToolCoordinator({ contexts });
     const snapshot = getStandaloneToolCatalog().snapshot({
-      scope: 'main', agentType: 'main', customTools: ['subagent', 'send_event'], exposedSkillFunctions: [],
+      scope: 'main', agentType: 'main', customTools: ['subagent', 'send_event', 'task'], exposedSkillFunctions: [],
       excluded: new Set(), domains: new Set(['local']), subagentTypes: specRegistry.getWorkersForParent('director'),
     });
     try {
       const created = await coordinator.run({ modelName: 'subagent', callId: 'create-a', rawParams: {
-        type: 'explore', subject: '查明保存目标', prompt: `阅读 ${source}，查明保存目标并给出文件与行号。`,
+        type, subject: '查明保存目标', prompt: `阅读 ${source}，查明保存目标并给出文件与行号。`,
       } }, snapshot);
       expect(created).toMatchObject({ result: { ok: true } });
       await vi.waitFor(() => expect(notifications).toHaveLength(1));
@@ -110,12 +109,17 @@ describe('Explore through the existing Worker runtime', () => {
       expect(JSON.stringify(requests[1].messages)).toContain('export const saveTarget');
       expect(JSON.stringify(requests[0].messages)).not.toContain('PARENT_PRIVATE_CONTEXT');
       expect(JSON.stringify(requests[0].messages)).not.toContain('<task_board');
-      expect(requests[0].tools?.map((tool) => tool.name).sort()).toEqual(['glob', 'grep', 'ls', 'read', 'send_event']);
-      expect(requests[0].systemPrompt).toContain('区分源码直接证明的事实');
-      expect(requests[0].systemPrompt).not.toMatch(/task 工具|need_user_action|<temp_dir>|shell=|## 技能与工具文档/);
-      expect(fixture.createMcpSession).toHaveBeenCalledWith(expect.objectContaining({ selection: [], parentCapability }));
+      expect(requests[0].tools?.map((tool) => tool.name)).not.toContain('task');
+      if (type === 'explore') {
+        expect(requests[0].tools?.map((tool) => tool.name).sort()).toEqual(['glob', 'grep', 'ls', 'read', 'send_event']);
+        expect(requests[0].systemPrompt).toContain('区分源码直接证明的事实');
+        expect(fixture.createMcpSession).toHaveBeenCalledWith(expect.objectContaining({ selection: [], parentCapability }));
+      } else {
+        expect(requests[0].systemPrompt).toContain('根据 prompt 执行，并维护自己负责的完整细任务清单；后续事件中的新事实优先。');
+        expect(requests[0].systemPrompt).toContain('终态 send_event 前先收口任务状态和后续项，结果写入 send_event。');
+      }
       expect(store.readHeader('parent-a')?.childAgents[0].config).toEqual({
-        type: 'explore', subject: '查明保存目标', prompt: `阅读 ${source}，查明保存目标并给出文件与行号。`,
+        type, subject: '查明保存目标', prompt: `阅读 ${source}，查明保存目标并给出文件与行号。`,
       });
       const worker = module.getSubagents().get('worker-a') as AgentRuntime;
       await vi.waitFor(() => expect(worker.isPumping).toBe(false));
@@ -127,8 +131,13 @@ describe('Explore through the existing Worker runtime', () => {
       expect(notifications[1]).toMatchObject({ content: { type: 'completed', text: expect.stringContaining('尚未执行验证') } });
       await module.stopSubagentById('worker-a');
       expect(store.readHeader('parent-a')?.childAgents).toEqual([]);
-      expect(boardSnapshot).not.toHaveBeenCalled();
-      expect(releaseTasks).not.toHaveBeenCalled();
+      expect(ports.subagents?.createdIds()).toEqual(['worker-a']);
+      if (modeId === 'normal') {
+        const items = [{ id: 'sample-delivery', subject: 'Sample delivery', description: 'Read and verified the sample evidence.', owner: 'worker-a', status: 'completed', dependsOn: [] }];
+        const updated = await coordinator.run({ modelName: 'task', callId: 'record-delivery', rawParams: { taskSummary: 'Sample board', items } }, snapshot);
+        expect(updated).toMatchObject({ result: { ok: true } });
+        expect((await taskBoardService.readTaskBoard('parent-a'))?.items).toEqual(items);
+      }
       expect(await fs.readFile(source, 'utf8')).toBe('export const saveTarget = "settings.json";\n');
     } finally {
       await module.onDestroy();

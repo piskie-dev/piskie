@@ -184,8 +184,6 @@ export interface ChildControlState extends AgentActivityState {
   workspace?: string;
   /** Parent UI 使用的 Assignment 简短标题 */
   subject: string;
-  /** 创建期 Assignment 引用的细任务 ID；仅用于从 Main 权威看板派生 Worker UI。 */
-  taskIds: string[];
   browserReady: boolean;
   currentModel: string;
   approvalMode: ApprovalMode;

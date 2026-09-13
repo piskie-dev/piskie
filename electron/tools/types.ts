@@ -6,7 +6,6 @@ import type { SearchCapabilities, SearchPort } from '../../shared/types/web-sear
 import type {
   ApprovalMode,
   AgentRunConfig,
-  AssignmentTaskBoardSnapshot,
   AgentInputRequest,
   AgentModeId,
   SubagentNotification,
@@ -94,12 +93,14 @@ export interface OutputSpoolPort {
 
 export interface BackgroundJob {
   readonly outFile: string;
+  readonly description?: string;
   kill(): Promise<void>;
   exited(): Promise<{
     status: 'ok' | 'failed' | 'killed';
     exitCode?: number;
     durationMs: number;
     tail: string;
+    outputTruncated: boolean;
   }>;
 }
 
@@ -134,20 +135,22 @@ export interface PlanPort {
 export type SubagentTypeDescriptor = Readonly<{
   name: string;
   description: string;
-  assignment: 'question' | 'task-board';
+  assignment: 'question' | 'work-package';
   browser: boolean;
   skills: boolean;
 }>;
 
 export interface SubagentPort {
   create(config: SubagentConfig): Promise<string>;
+  /** Persisted creation records for this Main, including stopped Workers. */
+  createdIds(): readonly string[];
   destroy(id: string): Promise<void>;
   traceFilePath(id: string): string | undefined;
 }
 
 export interface EventPort {
   allowedTargets(): readonly string[];
-  send(targetId: string, event: Record<string, unknown>): boolean;
+  send(targetId: string, message: string): boolean;
   notifyParent(event: SubagentNotification): boolean;
 }
 
@@ -182,7 +185,6 @@ export interface ToolContext {
   readonly runConfig: Readonly<AgentRunConfig>;
   readonly subagentConfig?: Readonly<SubagentConfig>;
   readonly resourceIds: ToolResourceIds;
-  readonly assignmentSnapshot?: Readonly<AssignmentTaskBoardSnapshot>;
   /** 注入时刻的 <available_skills> manifest 快照（tool_search 互斥基准；仅授予 tool_search） */
   readonly skillInventory?: Readonly<SkillInventorySnapshot>;
   /** deferred MCP 工具的清单与装载（仅授予 tool_search） */

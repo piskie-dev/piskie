@@ -94,7 +94,7 @@ describe('DirectorRole 中断快照', () => {
       config: {
         type: 'browser-worker' as const,
         subject: '继续构建 Skill',
-        taskIds: ['build-skill'],
+
       },
       createdAt: 1_786_000_000_000,
     };

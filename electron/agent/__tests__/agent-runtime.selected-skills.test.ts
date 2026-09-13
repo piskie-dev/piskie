@@ -98,7 +98,7 @@ function harness(options: {
       workspace: options.runtimeWorkspace,
       images: options.images,
       ...(role === 'worker' ? { subagentConfig: {
-        type: 'local-worker', skills: [], subject: 'Sample assignment', taskIds: [], prompt: 'Sample assignment',
+        type: 'local-worker', skills: [], subject: 'Sample assignment', prompt: 'Sample assignment',
       } } : {}),
     },
   });

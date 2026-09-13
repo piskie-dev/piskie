@@ -346,10 +346,6 @@ function buildWorkerNode(
   outcome: ToolOutcome,
 ): WorkerNode {
   const subject = typeof params.subject === 'string' ? params.subject : '';
-  const taskIds = Array.isArray(params.taskIds)
-    ? params.taskIds.filter((id): id is string => typeof id === 'string')
-    : [];
-
   const title = resolveToolTitle({ tool: 'subagent', params });
   return {
     kind: 'worker',
@@ -363,7 +359,6 @@ function buildWorkerNode(
     workerType: typeof params.type === 'string' ? params.type : '',
     subject,
     mode: typeof params.mode === 'string' ? params.mode : '',
-    taskIds,
     tone: staticTone('worker'),
     interaction: 'expand',
     defaultExpanded: false,

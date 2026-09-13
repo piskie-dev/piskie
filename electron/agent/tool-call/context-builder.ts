@@ -5,7 +5,6 @@ import type { CatalogEntry, CatalogSnapshot } from '../../tools/catalog.js';
 import { OutputSpool } from '../../tools/state/output-spool.js';
 import { LedgerFileGuard, ReadLedger } from '../../tools/state/read-ledger.js';
 import type {
-  AssignmentTaskBoardSnapshot,
   AgentInputRequest,
   AgentRunConfig,
   SubagentConfig,
@@ -46,7 +45,6 @@ export type ToolActivationContext = Readonly<{
   runConfig: Readonly<AgentRunConfig>;
   subagentConfig?: Readonly<SubagentConfig>;
   resourceIds: ToolResourceIds;
-  assignmentSnapshot?: Readonly<AssignmentTaskBoardSnapshot>;
   skillInventory?: Readonly<SkillInventorySnapshot>;
   currentModel(): string;
   workspace: WorkspaceContext;
@@ -119,7 +117,6 @@ export class ToolCallContextFactory {
       runConfig: activation.runConfig,
       subagentConfig: activation.subagentConfig,
       resourceIds: activation.resourceIds,
-      assignmentSnapshot: activation.assignmentSnapshot,
       skillInventory: entry.modelName === 'tool_search' ? activation.skillInventory : undefined,
       deferredTools:
         entry.modelName === 'tool_search' && snapshot
@@ -127,10 +124,10 @@ export class ToolCallContextFactory {
           : undefined,
       currentModel: activation.currentModel(),
       modes: activation.modes,
-      taskBoard: ['task', 'task_read'].includes(entry.modelName) ? activation.taskBoard : undefined,
+      taskBoard: entry.modelName === 'task' ? activation.taskBoard : undefined,
       plan: entry.modelName === 'plan' ? activation.plan : undefined,
       subagents: entry.tool.def.scope === 'main' ? activation.subagents : undefined,
-      events: entry.modelName === 'send_event' ? activation.events : undefined,
+      events: ['send_event', 'task'].includes(entry.modelName) ? activation.events : undefined,
       search: entry.modelName === 'web_search' ? activation.search : undefined,
       imageOps: entry.modelName === 'generate_image' ? activation.imageOps : undefined,
       browser: domain === 'browser' ? activation.browser : undefined,

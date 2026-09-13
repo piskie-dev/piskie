@@ -8,355 +8,130 @@ vi.mock('electron', async () => {
   return { app: { getPath: () => root, getAppPath: () => root } };
 });
 
-import { TaskReadTool } from '../task-read.tool.js';
 import { TaskTool } from '../task.tool.js';
 import { parse, toApiSchema } from '../../params.js';
-import { toToolResult, type ToolContext } from '../../types.js';
+import type { ToolContext } from '../../types.js';
+import { getStandaloneToolCatalog } from '../../index.js';
+import { ToolCallContextFactory } from '../../../agent/tool-call/context-builder.js';
+import { ToolCoordinator } from '../../coordinator.js';
+import { taskBoardService } from '../../../agent-runs/task-board-service.js';
 import type { TaskItem } from '../../../../shared/types/index.js';
 
 function item(id: string, owner: string | null, overrides: Partial<TaskItem> = {}): TaskItem {
   return {
-    id,
-    subject: `完成 ${id}`,
-    description: `实现 ${id} 并验证。`,
-    status: 'pending',
-    owner,
-    dependsOn: [],
-    ...overrides,
+    id, subject: `Deliver ${id}`, description: `Implement and verify ${id}.`,
+    status: 'pending', owner, dependsOn: [], ...overrides,
   };
 }
 
-function mainContext(mainAgentId: string, overrides: Record<string, unknown> = {}) {
+function mainContext(mainAgentId: string, options: { active?: string[]; created?: string[]; mode?: 'normal' | 'plan' } = {}) {
   const setTaskBoard = vi.fn();
-  const getMode = (overrides.getMode as (() => 'normal' | 'plan') | undefined) ?? (() => 'normal');
-  const activeWorkerIds = (overrides.activeWorkerIds as readonly string[] | undefined) ?? [];
   return {
-    agentType: 'main',
-    agentSpec: 'director',
-    agentId: mainAgentId,
-    mainAgentId,
-    runConfig: { name: 'Run', description: '', promptTemplate: '' },
-    modes: { modeId: getMode, approvalMode: () => 'auto' },
-    events: { allowedTargets: () => activeWorkerIds },
-    taskBoard: { set: setTaskBoard },
-    contextManager: {} as never,
-    setTaskBoard,
+    agentType: 'main', agentSpec: 'director', agentId: mainAgentId, mainAgentId,
+    runConfig: { name: 'Sample run', description: '', promptTemplate: '' },
+    modes: { modeId: () => options.mode ?? 'normal', approvalMode: () => 'auto' },
+    events: { allowedTargets: () => options.active ?? [] },
+    subagents: { createdIds: () => options.created ?? options.active ?? [] },
+    taskBoard: { set: setTaskBoard }, setTaskBoard,
   } as unknown as ToolContext & { setTaskBoard: ReturnType<typeof vi.fn> };
 }
 
-function workerContext(mainAgentId: string, workerId: string, snapshotOwner: string | null = null) {
-  const setTaskBoard = vi.fn();
-  return {
-    agentType: 'worker',
-    agentSpec: 'local-worker',
-    agentId: workerId,
-    mainAgentId,
-    runConfig: { name: 'Run', description: '', promptTemplate: '' },
-    modes: { modeId: () => 'normal', approvalMode: () => 'auto' },
-    subagentConfig: {
-      type: 'local-worker',
-      subject: '后端工作包',
-      taskIds: ['task-a'],
-      prompt: '完成 task-a。',
-      skills: [],
-    },
-    assignmentSnapshot: {
-      taskSummary: '测试看板',
-      items: [{
-        id: 'task-a', subject: '完成 task-a', status: 'pending', owner: snapshotOwner,
-        dependsOn: [], assignedHere: true,
-      }],
-    },
-    taskBoard: { set: setTaskBoard },
-    contextManager: {} as never,
-    setTaskBoard,
-  } as unknown as ToolContext & { setTaskBoard: ReturnType<typeof vi.fn> };
-}
-
-describe('TaskTool complete-list protocol', () => {
-  it('Main 看见 task_read 和完整 task，Worker 只看见 owner 范围 task', () => {
+describe('Main task complete-list contract', () => {
+  it('preserves the approved description and all field descriptions', () => {
     const tool = new TaskTool();
-    const taskReadTool = new TaskReadTool();
-    const mainDescription = typeof tool.def.description === 'function'
-      ? tool.def.description('main')
-      : tool.def.description;
-    const workerDescription = typeof tool.def.description === 'function'
-      ? tool.def.description('worker')
-      : tool.def.description;
+    expect(tool.def.scope).toBe('main');
+    expect(tool.def.description).toBe(`维护当前执行范围的 Task Board。需要记录或协调任务范围、状态、依赖和责任人时调用；计划尚未获批时不能写入。
+
+由你执行的任务使用自己的 agent_id。待委派且尚无 Worker 负责的任务使用 owner=null、status=pending。owner 只能使用系统已经提供的真实 Agent ID。
+
+用户提出后续执行要求时，根据最新要求重新确定当前全部未完成任务，并将其完整提交到 items。`);
     const schema = toApiSchema(tool.def.schema);
-    expect(tool.def.scope).toBe('shared');
-    expect(taskReadTool.def.scope).toBe('main');
-    expect(taskReadTool.def.description).toBe(
-      '读取当前执行范围的 Task Board。',
-    );
-    expect(schema).not.toHaveProperty('additionalProperties');
     expect(Object.keys(schema.properties)).toEqual(['taskSummary', 'items']);
     expect(schema.required).toEqual(['items']);
-    expect(JSON.stringify(schema)).not.toMatch(/action|itemId|removeItemIds|generation|baseRevision/);
-    expect(mainDescription).toContain('维护当前执行范围的 Task Board');
-    expect(mainDescription).toContain('修改已有看板前先调用 task_read 获取最新任务状态');
-    expect(mainDescription).toContain(
-      '用户提出后续执行要求时，根据最新要求和 task_read 结果重新确定当前全部未完成任务，并将其完整提交到 items',
-    );
-    expect(mainDescription).not.toContain('获取最新完整列表');
-    expect(mainDescription).toContain('需要记录或协调任务范围、状态、依赖和责任人时调用');
-    expect(mainDescription).not.toContain('单一步骤和纯问答不使用');
-    expect(mainDescription).not.toContain('改变执行范围');
-    expect(mainDescription).not.toContain('现有任务未提交表示删除');
-    expect(mainDescription).toContain('task_read');
-    expect(mainDescription).toContain('owner=null、status=pending');
-    expect(mainDescription).toContain('之后由 Worker 自行认领');
-    expect(mainDescription).toContain('真实 Agent ID');
-    expect(mainDescription).not.toContain('看板在读取后发生变化时');
-    expect(mainDescription).not.toContain('只能原样保留');
-    expect(workerDescription).toContain('变化时直接提交');
-    expect(workerDescription).not.toContain('task_read');
-    expect(workerDescription).toContain('认领时把 owner 设为你自己的 agent_id');
-    expect(workerDescription).toContain('assigned_here=true 并被你认领的任务');
-    expect(workerDescription).toContain('无权修改或使用其他 task');
-    expect(workerDescription).toContain('当前属于你的任务未提交表示删除；其他任务由系统保留');
-    expect(workerDescription).toContain('新增任务必须使用看板中尚未出现的 ID');
-    expect(JSON.stringify(schema)).not.toContain('现有 ID 未提交表示删除');
-    expect(JSON.stringify(schema)).not.toContain('<session_config>');
-    expect(mainDescription).not.toContain('send_event');
-    expect(workerDescription).not.toContain('send_event');
-  });
-
-  it('zod 在 Coordinator 边界移除旧 action 和任意额外字段', () => {
-    const parsed = parse(new TaskTool().def.schema, {
-      action: 'read',
-      items: [],
+    expect(schema.properties.taskSummary.description).toBe('首次建立看板或切换到独立顶层目标时提供的全局标题');
+    expect(schema.properties.items.description).toBe('需要写入的任务数组；同一 ID 表示修改，新 ID 表示新增；提交范围和未提交任务的处理遵循工具说明');
+    const fields = (schema.properties.items.items as { properties: Record<string, { description: string }>; required: string[] });
+    expect(fields.required).toEqual(['id', 'subject', 'description', 'status', 'owner', 'dependsOn']);
+    expect(Object.fromEntries(Object.entries(fields.properties).map(([key, field]) => [key, field.description]))).toEqual({
+      id: '看板内稳定且唯一的逻辑任务 ID', subject: '短而具体的任务名称',
+      description: '单项目标、预期产出、完成标准与必要交接事实',
+      status: '工作义务的当前进度；同一 owner 同时最多一个任务为 in_progress',
+      owner: '当前责任 Agent ID；自身使用自己的 agent_id，null 表示未分配',
+      dependsOn: '前置任务的稳定 ID；无依赖时提交空数组，删除被依赖项前先更新引用',
     });
-    expect(parsed).toEqual({ ok: true, value: { items: [] } });
   });
 
-  it('Main 首次完整同步并更新 UI 权威投影', async () => {
+  it('exposes and resolves task only in the main catalog scope', () => {
+    const catalog = getStandaloneToolCatalog();
+    const main = catalog.snapshot({ scope: 'main', agentType: 'main', customTools: ['task'], exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
+    const worker = catalog.snapshot({ scope: 'subagent', agentType: 'worker', customTools: ['task', 'send_event'], exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
+    expect(main.definitions().map((tool) => tool.name)).toEqual(['task']);
+    expect(worker.definitions().map((tool) => tool.name)).toEqual(['send_event']);
+    expect(worker.resolve('task')).toBeUndefined();
+    expect(catalog.configurationDefinitions().map((tool) => tool.name)).not.toContain('task_read');
+  });
+
+  it('retains parameter normalization at the coordinator boundary', () => {
+    expect(parse(new TaskTool().def.schema, { action: 'read', items: [] }))
+      .toEqual({ ok: true, value: { items: [] } });
+  });
+
+  it('directly creates, updates and removes items while publishing the full UI state', async () => {
+    const context = mainContext('main-direct');
     const tool = new TaskTool();
-    const context = mainContext('main-main');
-    const result = await tool.execute({
-      taskSummary: '测试看板',
-      items: [item('task-a', null), item('task-main', 'main-main')],
-    }, context);
-
-    expect(result.ok).toBe(true);
-    expect(context.setTaskBoard).toHaveBeenCalledWith(expect.objectContaining({
-      taskSummary: '测试看板',
-      items: expect.arrayContaining([expect.objectContaining({ id: 'task-a' })]),
-    }));
+    const first = await tool.execute({ taskSummary: 'Sample board', items: [item('old', null)] }, context);
+    expect(first.ok).toBe(true);
+    const items = [item('done', 'main-direct', { status: 'completed' }), item('next', null, { dependsOn: ['done'] })];
+    const result = await tool.execute({ items }, context);
+    expect(result).toMatchObject({ ok: true, data: { taskSummary: 'Sample board', items, progress: { total: 2, completed: 1, inProgress: 0, pending: 1 } } });
+    expect(result.text).toBe('Task Board 已同步：1/2 completed，0 in_progress，1 pending');
+    expect(context.setTaskBoard).toHaveBeenLastCalledWith({ taskSummary: 'Sample board', items });
   });
 
-  it('Worker 变更后 Main 必须通过 task_read 获取完整事实才能全局替换', async () => {
-    const taskTool = new TaskTool();
-    await taskTool.execute({
-      taskSummary: '旧目标',
-      items: [item('task-a', 'worker-a'), item('old-main', 'main-read-before-replace')],
-    }, mainContext('main-read-before-replace', { activeWorkerIds: ['worker-a'] }));
-    await taskTool.execute({
-      items: [item('task-a', 'worker-a', { status: 'completed', subject: 'Worker 已完成' })],
-    }, workerContext('main-read-before-replace', 'worker-a', 'worker-a'));
-
-    const staleContext = mainContext('main-read-before-replace');
-    const stale = await taskTool.execute({
-      taskSummary: '新目标',
-      items: [item('new-task', 'main-read-before-replace')],
-    }, staleContext);
-    expect(stale.ok).toBe(false);
-    expect(stale.text).toContain('请重新调用 task_read 后重试');
-    expect(stale.text).not.toContain('完整列表');
-    expect(stale.data).toEqual({ code: 'read_required' });
-    expect(staleContext.setTaskBoard).toHaveBeenCalledWith(expect.objectContaining({
-      items: expect.arrayContaining([expect.objectContaining({ subject: 'Worker 已完成' })]),
-    }));
-
-    const readContext = mainContext('main-read-before-replace');
-    const read = await new TaskReadTool().execute({}, readContext);
-    expect(read.ok).toBe(true);
-    expect((read.data as { items: TaskItem[] }).items.map((entry) => entry.id)).toEqual([
-      'task-a', 'old-main',
-    ]);
-
-    const replaced = await taskTool.execute({
-      taskSummary: '新目标',
-      items: [item('new-task', 'main-read-before-replace')],
-    }, mainContext('main-read-before-replace'));
-    expect(replaced.ok).toBe(true);
-    expect((replaced.data as { items: TaskItem[] }).items.map((entry) => entry.id)).toEqual(['new-task']);
+  it('uses the actual per-call ports for owner validation and the unchanged conditional Worker notice', async () => {
+    const context = mainContext('main-notice', { active: ['worker-a'] });
+    const factory = new ToolCallContextFactory({ signal: () => new AbortController().signal, activation: {
+      ...context, resourceIds: {}, currentModel: () => 'provider::model',
+      workspace: { dir: '/workspace/sample', tempDir: '/tmp/sample' }, post: () => true,
+    } });
+    const coordinator = new ToolCoordinator({ contexts: factory });
+    const snapshot = getStandaloneToolCatalog().snapshot({ scope: 'main', agentType: 'main', customTools: ['task'], exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']) });
+    await coordinator.run({ modelName: 'task', callId: 'create-board', rawParams: {
+      taskSummary: 'Sample board', items: [item('worker-task', 'worker-a', { status: 'in_progress' })],
+    } }, snapshot);
+    const result = await coordinator.run({ modelName: 'task', callId: 'update-board', rawParams: {
+      items: [item('worker-task', 'worker-a', { status: 'completed' })],
+    } }, snapshot);
+    expect(result).toMatchObject({ result: { ok: true, text: 'Task Board 已同步：1/1 completed，0 in_progress，0 pending\n\n若本次变更包含 Worker 继续执行所需的新信息，且尚未告知对应 Worker，则向其发送更新。\n\n受影响 Worker：\n- worker-a（任务：worker-task）' } });
   });
 
-  it('Main 修改 Worker 未完成任务时返回条件式通知目标', async () => {
-    const tool = new TaskTool();
-    await tool.execute({
-      taskSummary: '协调看板',
-      items: [item('worker-task', 'worker-a', { status: 'in_progress' })],
-    }, mainContext('main-worker-notice', { activeWorkerIds: ['worker-a'] }));
-
-    const result = await tool.execute({
-      items: [item('worker-task', 'worker-a', { status: 'completed', subject: 'Main 已调整' })],
-    }, mainContext('main-worker-notice', { activeWorkerIds: ['worker-a'] }));
-    expect(result.ok).toBe(true);
-    expect(result.text).toContain('若本次变更包含 Worker 继续执行所需的新信息，且尚未告知对应 Worker');
-    expect(result.text).toContain('- worker-a（任务：worker-task）');
-    expect(result.text).not.toContain('同步最新要求，或关闭 Worker');
-    expect((result.data as { affectedWorkers: unknown }).affectedWorkers).toEqual([
-      { workerId: 'worker-a', taskIds: ['worker-task'] },
-    ]);
-  });
-
-  it('task_read 是无参数只读工具，额外键在边界剥离且 plan 模式也可读取', async () => {
-    const tool = new TaskReadTool();
-    expect(parse(tool.def.schema, { unexpected: true })).toEqual({ ok: true, value: {} });
-
-    const missing = await tool.execute({}, mainContext('main-task-read', { getMode: () => 'plan' }));
-    expect(missing.ok).toBe(true);
-    expect(missing.data).toEqual({ taskBoard: null });
-  });
-
-  it('task_read 向模型完整返回未完成任务并压缩已完成任务', async () => {
-    const mainAgentId = 'main-model-visible-read';
-    const unfinished = item('unfinished-task', 'worker-active', {
-      subject: '处理未完成事项',
-      description: '保留完整范围、产出和验收信息。',
-      status: 'in_progress',
-      dependsOn: [],
-    });
-    const completed = item('completed-task', 'worker-done', {
-      subject: '处理已完成事项',
-      description: '这段已完成详情不应进入模型可见结果。',
-      status: 'completed',
-      dependsOn: [],
-    });
-    await new TaskTool().execute({
-      taskSummary: '模型可见读取测试',
-      items: [unfinished, completed],
-    }, mainContext(mainAgentId, { activeWorkerIds: ['worker-active', 'worker-done'] }));
-
-    const output = await new TaskReadTool().execute({}, mainContext(mainAgentId));
-    const modelResult = toToolResult(output);
-
-    expect(modelResult.text).not.toContain('Task Board 已读取：');
-    expect(modelResult.text).toContain('taskSummary："模型可见读取测试"');
-    expect(modelResult.text).toContain(`当前未完成任务：${JSON.stringify([unfinished])}`);
-    expect(modelResult.text).toContain(
-      '已完成任务：[{"id":"completed-task","subject":"处理已完成事项"}]',
-    );
-    expect(modelResult.text).not.toContain('这段已完成详情不应进入模型可见结果');
-    expect(modelResult.text).not.toContain('"owner":"worker-done"');
-    expect(modelResult.text).not.toContain('"status":"completed"');
-    expect((output.data as { items: TaskItem[] }).items).toEqual([unfinished, completed]);
-  });
-
-  it('Worker 根据创建快照认领任务，多传的 taskSummary 被忽略且结果只返回相关任务', async () => {
-    const tool = new TaskTool();
-    await tool.execute({
-      taskSummary: '测试看板',
-      items: [item('task-a', null), item('other', 'worker-b')],
-    }, mainContext('main-worker', { activeWorkerIds: ['worker-b'] }));
-
-    const result = await tool.execute({
-      taskSummary: 'Worker 不应覆盖的标题',
-      items: [item('task-a', 'worker-a', { status: 'in_progress' })],
-    }, workerContext('main-worker', 'worker-a'));
-    expect(result.ok).toBe(true);
-    expect((result.data as { taskSummary: string }).taskSummary).toBe('测试看板');
-    expect((result.data as { items: TaskItem[] }).items.map((entry) => entry.id)).toEqual(['task-a']);
-  });
-
-  it('owner 冲突返回最新看板事实', async () => {
-    const tool = new TaskTool();
-    await tool.execute({
-      taskSummary: '冲突看板',
-      items: [item('task-a', 'worker-a'), item('unrelated', 'worker-c')],
-    }, mainContext('main-conflict', { activeWorkerIds: ['worker-a', 'worker-c'] }));
-
-    const conflictContext = workerContext('main-conflict', 'worker-b', null);
-    const conflict = await tool.execute({
-      items: [item('task-a', 'worker-b')],
-    }, conflictContext);
-    expect(conflict.ok).toBe(false);
-    expect(conflict.text).toContain('owner 冲突');
-    expect((conflict.data as { taskBoard: { items: TaskItem[] } }).taskBoard.items[0]?.owner).toBe('worker-a');
-    expect((conflict.data as { taskBoard: { items: TaskItem[] } }).taskBoard.items).toHaveLength(1);
-    expect(conflictContext.setTaskBoard).toHaveBeenCalledWith(expect.objectContaining({
-      items: [
-        expect.objectContaining({ id: 'task-a', owner: 'worker-a' }),
-        expect.objectContaining({ id: 'unrelated', owner: 'worker-c' }),
-      ],
-    }));
-  });
-
-  it('Worker 不能认领未指派给自己的 unassigned 任务', async () => {
-    const tool = new TaskTool();
-    await tool.execute({
-      taskSummary: '未分配看板',
-      items: [item('task-a', null), item('unassigned-task', null)],
-    }, mainContext('main-unassigned-conflict'));
-
-    const conflict = await tool.execute({
-      items: [item('unassigned-task', 'worker-a')],
-    }, workerContext('main-unassigned-conflict', 'worker-a'));
-
-    expect(conflict.ok).toBe(false);
-    expect(conflict.text).toContain('当前未分配，但未指派给 worker-a');
-    expect(conflict.text).toContain('无权认领、修改或使用该 task');
-    expect((conflict.data as { taskBoard: { items: TaskItem[] } }).taskBoard.items)
-      .toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: 'task-a', owner: null }),
-        expect.objectContaining({ id: 'unassigned-task', owner: null }),
-      ]));
-  });
-
-  it('Worker 返回本次新建并转交的任务最新事实', async () => {
-    const tool = new TaskTool();
-    await tool.execute({
-      taskSummary: '转交看板',
-      items: [item('task-a', null)],
-    }, mainContext('main-transfer-result'));
-    const context = workerContext('main-transfer-result', 'worker-a');
-
-    await tool.execute({
-      items: [item('task-a', 'worker-a', { status: 'in_progress' })],
-    }, context);
-    const result = await tool.execute({
-      items: [
-        item('task-a', 'main-transfer-result', { status: 'pending' }),
-        item('worker-a-follow-up', 'main-transfer-result', { dependsOn: ['task-a'] }),
-      ],
-    }, context);
-
-    expect(result.ok).toBe(true);
-    expect((result.data as { items: TaskItem[] }).items.map((entry) => entry.id)).toEqual([
-      'task-a', 'worker-a-follow-up',
-    ]);
-  });
-
-  it('plan 模式代码级拒绝写入', async () => {
+  it('accepts the first owner record after a Worker has stopped', async () => {
     const result = await new TaskTool().execute({
-      taskSummary: '不应写入', items: [item('a', null)],
-    }, mainContext('main-plan', { getMode: () => 'plan' }));
-    expect(result.ok).toBe(false);
-    expect(result.text).toContain('计划尚未获批');
+      taskSummary: 'Sample delivery', items: [item('delivered', 'worker-ended', { status: 'completed' })],
+    }, mainContext('main-late-owner', { created: ['worker-ended'], active: [] }));
+    expect(result).toMatchObject({ ok: true, data: { items: [item('delivered', 'worker-ended', { status: 'completed' })] } });
   });
 
-  it('Main 拒绝虚构 owner 和未分配的 in_progress，但接受真实活跃 Worker', async () => {
+  it('returns the complete current board when a submitted new owner is unknown', async () => {
+    const context = mainContext('main-owner');
     const tool = new TaskTool();
-    const fake = await tool.execute({
-      taskSummary: '虚构 owner',
-      items: [item('fake', 'pending-controls-worker')],
-    }, mainContext('main-fake-owner'));
-    expect(fake.ok).toBe(false);
-    expect(fake.text).toContain('owner 不是当前 Main 或正在运行的 Worker');
+    const items = [item('first', null), item('second', 'main-owner')];
+    await tool.execute({ taskSummary: 'Sample board', items }, context);
+    const result = await tool.execute({ items: [item('new', 'worker-unknown')] }, context);
+    expect(result).toMatchObject({ ok: false, data: { code: 'invalid', taskBoard: { items } } });
+    expect(result.text).toContain('owner 不是当前 Main 或正在运行的 Worker');
+    expect(context.setTaskBoard).toHaveBeenLastCalledWith({ taskSummary: 'Sample board', items });
+  });
 
-    const unassigned = await tool.execute({
-      taskSummary: '未分配执行中',
-      items: [item('invalid-progress', null, { status: 'in_progress' })],
-    }, mainContext('main-invalid-progress'));
-    expect(unassigned.ok).toBe(false);
-    expect(unassigned.text).toContain('owner=null、status=pending');
+  it('keeps plan approval as a code-level write boundary', async () => {
+    const result = await new TaskTool().execute({ taskSummary: 'Sample board', items: [item('a', null)] }, mainContext('main-plan', { mode: 'plan' }));
+    expect(result).toMatchObject({ ok: false, text: '计划尚未获批——先用 plan(create) 提交计划正文审批；获批后再建立 Task Board' });
+    expect(await taskBoardService.readTaskBoard('main-plan')).toBeNull();
+  });
 
-    const active = await tool.execute({
-      taskSummary: '真实 Worker',
-      items: [item('assigned', 'worker-real')],
-    }, mainContext('main-real-owner', { activeWorkerIds: ['worker-real'] }));
-    expect(active.ok).toBe(true);
+  it('retains the unassigned in-progress constraint', async () => {
+    const result = await new TaskTool().execute({ taskSummary: 'Sample board', items: [item('a', null, { status: 'in_progress' })] }, mainContext('main-unassigned'));
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain('owner=null、status=pending');
   });
 });

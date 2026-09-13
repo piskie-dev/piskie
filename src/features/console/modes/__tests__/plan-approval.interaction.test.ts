@@ -55,7 +55,6 @@ interface TargetView {
   readonly title: string;
   readonly subject: string;
   readonly type: string;
-  readonly taskIds: string[];
   readonly workers: never[];
   readonly pendingToolCall?: PendingToolCall;
 }
@@ -71,7 +70,7 @@ const plan = (agentId: string): PendingToolCall => ({
 });
 const view = (agentId: string): TargetView => ({
   phase: 'executing', title: 'Sample task', subject: 'Sample task', type: 'local-worker',
-  taskIds: [], workers: [], pendingToolCall: plan(agentId),
+  workers: [], pendingToolCall: plan(agentId),
 });
 const button = (text: string) => [...container.querySelectorAll('button')].find((item) => item.textContent?.includes(text))!;
 const render = (layout: 'thread' | 'dock', subagentId?: string) => root.render(React.createElement(layout === 'thread' ? ThreadView : DockPanel, { agentId: mainId, workerId: subagentId }));

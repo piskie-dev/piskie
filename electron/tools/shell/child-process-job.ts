@@ -45,6 +45,7 @@ export type ChildProcessExit = Awaited<ReturnType<BackgroundJob['exited']>>;
 
 export class ChildProcessJob implements BackgroundJob {
   readonly outFile: string;
+  readonly description?: string;
   private readonly child: ChildProcess;
   private readonly startedAt = Date.now();
   private readonly treeKiller: TreeKiller;
@@ -52,12 +53,14 @@ export class ChildProcessJob implements BackgroundJob {
   private resolveExit!: (value: ChildProcessExit) => void;
   private fd: number;
   private tail = Buffer.alloc(0);
+  private outputTruncated = false;
   private settled = false;
   private killRequested = false;
   private spool?: OutputSpoolPort;
 
   constructor(options: {
     command: string;
+    description?: string;
     cwd: string;
     tempDir: string;
     spool?: OutputSpoolPort;
@@ -67,6 +70,7 @@ export class ChildProcessJob implements BackgroundJob {
     const outputDirectory = path.join(options.tempDir, 'bg');
     fs.mkdirSync(outputDirectory, { recursive: true });
     this.outFile = path.join(outputDirectory, `${id}.log`);
+    this.description = options.description;
     this.fd = fs.openSync(this.outFile, 'wx', 0o600);
     this.spool = options.spool;
     this.exitPromise = new Promise((resolve) => { this.resolveExit = resolve; });
@@ -85,7 +89,6 @@ export class ChildProcessJob implements BackgroundJob {
       onWindowsFallbackDeadline: () => this.finish({
         status: 'killed',
         durationMs: Date.now() - this.startedAt,
-        tail: this.tail.toString('utf8'),
       }),
     });
 
@@ -96,7 +99,6 @@ export class ChildProcessJob implements BackgroundJob {
       this.finish({
         status: this.killRequested ? 'killed' : 'failed',
         durationMs: Date.now() - this.startedAt,
-        tail: this.tail.toString('utf8'),
       });
     });
     this.child.on('close', (code, signal) => {
@@ -106,7 +108,6 @@ export class ChildProcessJob implements BackgroundJob {
         status: this.killRequested ? 'killed' : exitCode === 0 ? 'ok' : 'failed',
         exitCode,
         durationMs: Date.now() - this.startedAt,
-        tail: this.tail.toString('utf8'),
       });
     });
     if (invocation.stdin !== undefined) {
@@ -159,16 +160,21 @@ export class ChildProcessJob implements BackgroundJob {
     }
     this.tail = Buffer.concat([this.tail, chunk]);
     if (this.tail.length > TAIL_BYTES) {
+      this.outputTruncated = true;
       this.tail = this.tail.subarray(this.tail.length - TAIL_BYTES);
     }
   }
 
-  private finish(outcome: ChildProcessExit): void {
+  private finish(outcome: Omit<ChildProcessExit, 'tail' | 'outputTruncated'>): void {
     if (this.settled) return;
     this.settled = true;
     this.treeKiller.dispose();
     try { fs.fsyncSync(this.fd); } catch { /* output remains best effort */ }
     try { fs.closeSync(this.fd); } catch { /* already closed */ }
-    this.resolveExit(outcome);
+    this.resolveExit({
+      ...outcome,
+      tail: this.tail.toString('utf8'),
+      outputTruncated: this.outputTruncated,
+    });
   }
 }

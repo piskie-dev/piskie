@@ -123,9 +123,9 @@ export const DockPanel = memo<DockPanelProps>(
       [agent?.askUser, request, worker],
     );
 
-    const tasks = worker
-      ? projectWorkerTasks(agent?.taskBoard, worker.taskIds)
-      : (agent?.taskBoard?.items ?? []);
+    const tasks = useMemo(() => workerId
+      ? projectWorkerTasks(agent?.taskBoard, workerId)
+      : (agent?.taskBoard?.items ?? []), [agent?.taskBoard, workerId]);
 
     const submit = useCallback(
       async (payload: MessagePayload) => {
@@ -223,10 +223,10 @@ export const DockPanel = memo<DockPanelProps>(
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
     const taskChips = useMemo<ReadonlyMap<string, ActivityChips> | undefined>(() => {
-      const only = worker?.taskIds.length === 1 ? worker.taskIds[0] : undefined;
+      const only = worker && tasks.length === 1 ? tasks[0]?.id : undefined;
       if (!only) return undefined;
       return new Map([[only, chips]]);
-    }, [chips, worker]);
+    }, [chips, tasks, worker]);
 
     if (!request) return null;
 

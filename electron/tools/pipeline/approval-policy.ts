@@ -10,7 +10,6 @@ const ALWAYS_ALLOWED = new Set([
   'send_event',
   'plan',
   'task',
-  'task_read',
   'read',
   'glob',
   'grep',

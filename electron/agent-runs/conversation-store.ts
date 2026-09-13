@@ -175,6 +175,18 @@ export class ConversationStore {
     return this.readIndexedRange(filePath, index.lines, 0, index.lines.length);
   }
 
+  /** Runtime-written creation markers remain after Worker teardown and context compaction. */
+  readCreatedWorkerIds(mainAgentId: string): string[] {
+    const ids = new Set<string>();
+    for (const entry of this.read(mainAgentId, mainAgentId)) {
+      if (entry.t !== 'marker' || entry.key !== 'child_created') continue;
+      const value = entry.value;
+      if (typeof value !== 'object' || value === null || !('id' in value)) continue;
+      if (typeof value.id === 'string' && value.id.trim()) ids.add(value.id);
+    }
+    return [...ids];
+  }
+
   /**
    * 从指定偏移量开始读取（前端增量拉取）
    * offset 是行号（从 0 开始）
@@ -287,7 +299,12 @@ export class ConversationStore {
     this.ensureDirSync(path.dirname(filePath));
 
     const tmpPath = `${filePath}.tmp`;
-    const json = JSON.stringify(header, null, 2);
+    const json = JSON.stringify({
+      ...header,
+      childAgents: header.childAgents.map((child) => ({
+        ...child, config: childConfigSchema.strict().parse(child.config),
+      })),
+    }, null, 2);
     fs.writeFileSync(tmpPath, json, 'utf-8');
     fs.renameSync(tmpPath, filePath);
   }
@@ -861,18 +878,19 @@ const runConfigSchema = z.object({
   mcpServers: z.array(z.string()).optional(),
 });
 
+const childConfigSchema = z.object({
+  type: z.string().min(1),
+  subject: z.string(),
+  prompt: z.string(),
+  skills: z.array(z.string()).optional(),
+  browserEnvironmentId: z.string().optional(),
+  advancedSettings: advancedSettingsSchema.optional(),
+});
+
 const childSnapshotSchema = z.object({
   id: z.string(),
   workspace: z.string().optional(),
-  config: z.object({
-    type: z.string().min(1),
-    subject: z.string(),
-    taskIds: z.array(z.string()).optional(),
-    prompt: z.string(),
-    skills: z.array(z.string()).optional(),
-    browserEnvironmentId: z.string().optional(),
-    advancedSettings: advancedSettingsSchema.optional(),
-  }),
+  config: childConfigSchema,
   createdAt: z.number(),
 });
 

@@ -39,10 +39,6 @@ export class AgentRunPaths {
     return path.join(this.mainDir(mainAgentId), 'tasks.json');
   }
 
-  ataEventPayloadDir(target: AgentTarget): string {
-    return path.join(this.targetOwnerDir(target), 'ata-events');
-  }
-
   plansDir(mainAgentId: string): string {
     return path.join(this.mainDir(mainAgentId), 'plans');
   }

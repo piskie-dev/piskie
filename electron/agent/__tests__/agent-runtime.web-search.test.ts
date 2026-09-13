@@ -27,7 +27,7 @@ describe('runtime search port binding', () => {
         onStateChange: vi.fn(), options: { mainAgentId: 'sample-main', initialModel: 'sample::model', isResume,
           search: { search, get capabilities() { return capabilities; } },
           runConfig: { name: 'Sample', description: '', promptTemplate: '' },
-          subagentConfig: { subject: 'Sample', taskIds: ['sample-task'], prompt: 'Search sample evidence', type: 'local-worker', skills: [] },
+          subagentConfig: { subject: 'Sample', prompt: 'Search sample evidence', type: 'local-worker', skills: [] },
         },
       });
       const internal = runtime as unknown as { createToolContext(): ToolActivationContext;
