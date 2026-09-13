@@ -38,7 +38,10 @@ export function createRendererRuntime(api: PiskieDesktopApi): RendererRuntime {
         'browser-profiles': async () => {
           await refreshEnvironments();
         },
-        'im-bots': refreshConnections,
+        'im-bots': async () => {
+          const result = await refreshConnections();
+          if (result.kind === 'refresh-failed') throw new Error(result.error);
+        },
       }, (domain) => {
         void api.observability.clientLogs.record({
           event: 'config.domain.refresh.failed',

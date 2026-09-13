@@ -19,11 +19,27 @@ import type {
   SaveMessagingConnectionRequest,
 } from '../../shared/electron-contracts/messaging';
 
+export type ConnectionsRefreshResult =
+  | { kind: 'refreshed'; snapshot: readonly MessagingConnectionState[] }
+  | { kind: 'refresh-failed'; error: string };
+
+export type SaveConnectionResult =
+  | { kind: 'write-unconfirmed'; botId: string; error: string }
+  | { kind: 'saved-refresh-failed'; botId: string; error: string }
+  | { kind: 'saved-refreshed'; botId: string; snapshot: readonly MessagingConnectionState[] };
+
+const DESKTOP_UNAVAILABLE = 'Desktop messaging is unavailable';
+
 // 检查是否在 Electron 环境中
 const isElectron = () => typeof window !== 'undefined' && window.piskie?.runtime.host === 'electron';
 
 // 错误自动清除定时器
 let errorTimerId: ReturnType<typeof setTimeout> | null = null;
+
+// 只保留最新查询期间的变更；null 表示已删除，防止旧快照恢复该 Bot。
+let pendingConnectionUpdates: Map<string, MessagingConnectionState | null> | null = null;
+// 重叠查询的调用方一起等待最新查询落地，不能因自己的旧响应被丢弃就提前继续。
+let connectionRefreshWaiters: Array<(result: ConnectionsRefreshResult) => void> = [];
 
 /** 设置 error 并在 timeout 毫秒后自动清除 */
 function setErrorWithAutoClear(set: (partial: Partial<MessagingState>) => void, error: string, timeout = 20000) {
@@ -55,8 +71,9 @@ interface MessagingState {
   fetchConnectorDescriptors: () => Promise<void>;
 
   // Actions - Connection lifecycle
-  fetchConnections: () => Promise<void>;
-  saveConnection: (config: SaveMessagingConnectionRequest) => Promise<boolean>;
+  fetchConnections: () => Promise<ConnectionsRefreshResult>;
+  // 统一编排写入与同步，调用方依据完整结果决定提示和页面迁移。
+  saveConnection: (config: SaveMessagingConnectionRequest) => Promise<SaveConnectionResult>;
   deleteConnection: (connectionId: string) => Promise<boolean>;
   startConnection: (connectionId: string) => Promise<boolean>;
   stopConnection: (connectionId: string) => Promise<boolean>;
@@ -120,45 +137,71 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
   // Connection lifecycle
   // ============================================================
 
-  fetchConnections: async () => {
-    if (!isElectron()) return;
+  fetchConnections: () => {
+    if (!isElectron()) return Promise.resolve({ kind: 'refresh-failed', error: DESKTOP_UNAVAILABLE });
+    const finished = new Promise<ConnectionsRefreshResult>((resolve) => { connectionRefreshWaiters.push(resolve); });
+    const updates = new Map<string, MessagingConnectionState | null>();
+    pendingConnectionUpdates = updates;
     set({ isLoadingConnections: true });
-    try {
-      const { botStates, configs } = await window.piskie.messaging.status();
-      const stateMap = new Map<string, MessagingConnectionState>();
-      for (const state of botStates) {
-        if (state.config?.id) stateMap.set(state.config.id, state);
+    void (async () => {
+      let result: ConnectionsRefreshResult | undefined;
+      try {
+        const { botStates, configs } = await window.piskie.messaging.status();
+        if (pendingConnectionUpdates !== updates) return;
+        const stateMap = new Map<string, MessagingConnectionState>();
+        for (const state of botStates) {
+          if (state.config?.id) stateMap.set(state.config.id, state);
+        }
+        // Runtime snapshots may hold stale credentials, so merge only their status fields
+        // onto the canonical persisted connection config returned by the same operation.
+        // 查询响应可能晚于状态事件到达，期间收到的状态优先于快照。
+        const merged: MessagingConnectionState[] = configs
+          .filter((config) => updates.get(config.id) !== null)
+          .map((config: MessagingConnectionConfig) => {
+            const runtime = updates.get(config.id) ?? stateMap.get(config.id);
+            return runtime ? { ...runtime, config } : { config, status: 'stopped' as const };
+          });
+        result = { kind: 'refreshed', snapshot: merged };
+        set({ connections: merged });
+      } catch (error) {
+        result = { kind: 'refresh-failed', error: String(error) };
+        if (pendingConnectionUpdates === updates) setErrorWithAutoClear(set, result.error);
+      } finally {
+        if (pendingConnectionUpdates === updates && result) {
+          const waiters = connectionRefreshWaiters;
+          connectionRefreshWaiters = [];
+          pendingConnectionUpdates = null;
+          set({ isLoadingConnections: false });
+          for (const resolve of waiters) resolve(result);
+        }
       }
-      // Runtime snapshots may hold stale credentials, so merge only their status fields
-      // onto the canonical persisted connection config returned by the same operation.
-      const merged: MessagingConnectionState[] = configs.map((config: MessagingConnectionConfig) => {
-        const runtime = stateMap.get(config.id);
-        return runtime ? { ...runtime, config } : { config, status: 'stopped' as const };
-      });
-      set({ connections: merged });
-    } catch (error) {
-      setErrorWithAutoClear(set, String(error));
-    } finally {
-      set({ isLoadingConnections: false });
-    }
+    })();
+    return finished;
   },
 
   saveConnection: async (config) => {
-    if (!isElectron()) return false;
+    const botId = config.id;
+    if (!isElectron()) return { kind: 'write-unconfirmed', botId, error: DESKTOP_UNAVAILABLE };
+    get().clearError();
     try {
       await window.piskie.messaging.saveBot(config);
-      await get().fetchConnections();
-      return true;
     } catch (error) {
-      setErrorWithAutoClear(set, String(error));
-      return false;
+      const message = String(error);
+      setErrorWithAutoClear(set, message);
+      // 响应丢失也可能发生在落盘之后，失败时不能断言配置未写入。
+      return { kind: 'write-unconfirmed', botId, error: message };
     }
+    const refreshed = await get().fetchConnections();
+    return refreshed.kind === 'refreshed'
+      ? { kind: 'saved-refreshed', botId, snapshot: refreshed.snapshot }
+      : { kind: 'saved-refresh-failed', botId, error: refreshed.error };
   },
 
   deleteConnection: async (connectionId) => {
     if (!isElectron()) return false;
     try {
       await window.piskie.messaging.deleteBot(connectionId);
+      pendingConnectionUpdates?.set(connectionId, null);
       set((prev) => ({
         connections: prev.connections.filter((connection) => connection.config.id !== connectionId),
       }));
@@ -171,20 +214,19 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
 
   startConnection: async (connectionId) => {
     if (!isElectron()) return false;
+    let failure: string | null = null;
     try {
       await window.piskie.messaging.startBot(connectionId);
-      set((prev) => ({
-        connections: prev.connections.map((connection) =>
-          connection.config.id === connectionId
-            ? { ...connection, status: 'starting' as const }
-            : connection
-        ),
-      }));
-      return true;
     } catch (error) {
-      setErrorWithAutoClear(set, String(error));
+      failure = String(error);
+    }
+    // 扫码已成功时，即使启动失败也要同步账号；查询结果不改变命令结果。
+    await get().fetchConnections();
+    if (failure !== null) {
+      setErrorWithAutoClear(set, failure);
       return false;
     }
+    return true;
   },
 
   stopConnection: async (connectionId) => {
@@ -192,11 +234,12 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     try {
       await window.piskie.messaging.stopBot(connectionId);
       set((prev) => ({
-        connections: prev.connections.map((connection) =>
-          connection.config.id === connectionId
-            ? { ...connection, status: 'stopped' as const, error: undefined }
-            : connection
-        ),
+        connections: prev.connections.map((connection) => {
+          if (connection.config.id !== connectionId) return connection;
+          const stopped = { ...connection, status: 'stopped' as const, error: undefined };
+          pendingConnectionUpdates?.set(connectionId, stopped);
+          return stopped;
+        }),
       }));
       return true;
     } catch (error) {
@@ -333,6 +376,7 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     if (!isElectron()) return false;
     try {
       await window.piskie.messaging.logoutAccount(connectionId);
+      // 同步失败不代表账号退出被回滚。
       await get().fetchConnections();
       return true;
     } catch (error) {
@@ -351,6 +395,9 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     // 监听连接运行状态变更
     const unsubStatus = window.piskie.messaging.observeStatus(
       (event: MessagingConnectionChangedEvent) => {
+        if (pendingConnectionUpdates?.get(event.botId) !== null) {
+          pendingConnectionUpdates?.set(event.botId, event.state);
+        }
         // 双快照分离：状态事件只更新运行状态字段，config 保持
         // 列表中已加载的持久配置——事件携带的是启动快照 config，不能回写覆盖
         set((prev) => ({
