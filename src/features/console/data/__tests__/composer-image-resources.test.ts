@@ -111,6 +111,52 @@ describe('capture budget and batch ownership', () => {
     expect(getComposerAttachments('one').images[0]?.status).toBe('error');
   });
 
+  it.each([false, true])('settles every source release after capture failure (release failure: %s)', async (releaseFails) => {
+    const captureError = new Error('Example capture failure');
+    const releaseError = new Error('Example release failure');
+    const delayed = deferred<void>();
+    ports.source.mockRejectedValueOnce(captureError);
+    if (releaseFails) ports.release.mockRejectedValueOnce(releaseError);
+    else ports.release.mockResolvedValueOnce(undefined);
+    ports.release.mockReturnValueOnce(delayed.promise);
+    state().setDraft('one', 'Example draft');
+    captureComposerImages('one', [], async () => [
+      { kind: 'image', name: 'first.png', path: '/workspace/first.png', size: 1, previewUrl: 'piskie-attachment://preview/first' },
+      { kind: 'image', name: 'second.png', path: '/workspace/second.png', size: 1, previewUrl: 'piskie-attachment://preview/second' },
+    ]);
+    const capture = batch('one'); await ticks();
+    expect(ports.release.mock.calls).toEqual([['piskie-attachment://preview/first'], ['piskie-attachment://preview/second']]);
+    expect(composerImageUsage().captureBytes).toBe(12);
+    delayed.resolve();
+    await expect(capture.done).rejects.toBe(releaseFails ? releaseError : captureError);
+    expect(composerImageUsage().captureBytes).toBe(0);
+    expect(state().drafts.one?.text).toBe('Example draft');
+    expect(getComposerAttachments('one').images.map((image) => image.status)).toEqual(['error']);
+    const send = vi.fn();
+    await expect(submitComposerDraft('one', send)).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('preserves cancellation while releasing late-discovered sources even if release fails', async () => {
+    const discovery = deferred<import('../../../../../shared/electron-contracts/desktop').ClipboardAttachmentDescriptor[]>();
+    const delayed = deferred<void>();
+    ports.release.mockReturnValueOnce(delayed.promise);
+    captureComposerImages('one', [], () => discovery.promise);
+    const capture = batch('one');
+    state().resetDraft('one');
+    const cancelled = capture.controller.signal.reason;
+    discovery.resolve([{ kind: 'image', name: 'example.png', path: '/workspace/example.png', size: 1,
+      previewUrl: 'piskie-attachment://preview/example' }]);
+    await ticks();
+    expect(ports.source).not.toHaveBeenCalled();
+    expect(ports.release).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/example');
+    expect(composerImageUsage().captureBytes).toBe(12);
+    delayed.reject(new Error('Example release failure'));
+    await expect(capture.done).rejects.toBe(cancelled);
+    expect(state().drafts.one).toBeUndefined();
+    expect(composerImageUsage().captureBytes).toBe(0);
+  });
+
   it('rolls back the whole batch and holds reservations until uncancellable readers settle', async () => {
     const slow = deferred<Blob>();
     ports.file.mockImplementationOnce(() => slow.promise).mockRejectedValueOnce(new Error('source failed'));

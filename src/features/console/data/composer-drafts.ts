@@ -383,7 +383,7 @@ export function captureComposerImages(
   catch (error) { discovery = guard(Promise.reject(error)); }
   const sources = guard((async () => {
     const descriptors = await discovery;
-    try {
+    const [captured] = await Promise.allSettled([(async () => {
       controller.signal.throwIfAborted();
       const imageSources = descriptors.filter((item) => item.kind === 'image')
         .filter((item) => !files.some((file) => file.name === item.name && file.size === item.size));
@@ -413,12 +413,13 @@ export function captureComposerImages(
         textFiles.push({ id: attachmentId(), name: descriptor.name, path: descriptor.path });
       }
       return { images, files: textFiles };
-    } finally {
-      const releases = await Promise.allSettled(descriptors.map((descriptor) => descriptor.kind === 'image'
-        ? window.piskie.desktop.files.releasePreview(descriptor.previewUrl) : undefined));
-      const failed = releases.find((result) => result.status === 'rejected');
-      if (failed?.status === 'rejected') throw failed.reason;
-    }
+    })()]);
+    const releases = await Promise.allSettled(descriptors.map((descriptor) => descriptor.kind === 'image'
+      ? window.piskie.desktop.files.releasePreview(descriptor.previewUrl) : undefined));
+    const failed = releases.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    if (captured.status === 'rejected') throw captured.reason;
+    return captured.value;
   })());
 
   void (async () => {
