@@ -38,6 +38,7 @@ import InstallScopeDialog from './InstallScopeDialog';
 import type { McpInstallProbeReceipt } from './McpLiveStatusSection';
 import SourceFilter from './SourceFilter';
 import SourceManagerDialog from './SourceManagerDialog';
+import { ExtensionsGuide } from '../../features/guides/ExtensionsGuide';
 import {
   MARKET_PAGE_SIZE,
   capabilityLocations,
@@ -843,6 +844,11 @@ const Market: React.FC = () => {
 
   return (
     <div className={styles.page}>
+      <ExtensionsGuide
+        onAction={() => { clearFilters(); setKinds(['skill']); changeView('marketplace'); }}
+        pageReady={catalogInitialized && installedInitialized && !catalogLoading && !installedLoading && !catalogError && !installedError}
+        blocked={Boolean(searchValue) || sourceManagerOpen || installEntry !== null || confirmAsk !== null}
+      />
       <div className={styles.toolbar}>
         <nav className={styles.viewTabs} aria-label={t('marketUi.page.viewsAria')}>
           <button

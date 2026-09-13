@@ -28,6 +28,9 @@ import { useProxyStore } from '../../store/proxyStore';
 import { CatalogPane, type CatalogProviderItem, type DeckSect } from './CatalogPane';
 import { AboutDesk } from './desks/AboutDesk';
 import { AccountDesk } from './desks/AccountDesk';
+import { GuideDesk } from './desks/GuideDesk';
+import { AutoGuide } from '../guides/AutoGuide';
+import { useModelGuideState } from '../guides/useModelGuideState';
 import { KernelDesk } from './desks/KernelDesk';
 import { LogDesk } from './desks/LogDesk';
 import { LookDesk } from './desks/LookDesk';
@@ -41,7 +44,7 @@ import { matchVendor, type GatewayKind, type VendorSpec } from './data/vendor-at
 import styles from './deck.module.css';
 
 const SECTS: readonly DeckSect[] = [
-  'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'about',
+  'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'guides', 'about',
 ];
 
 /** 旧 /settings 的 ?tab= 值映射 */
@@ -107,6 +110,7 @@ export const PrefDeckPage: React.FC = () => {
   const updateProxy = useProxyStore((s) => s.updateProxy);
 
   const sect = sectFromSearch(location.search);
+  const modelGuide = useModelGuideState();
   const [picked, setPicked] = useState<Record<GatewayKind, string | null>>({ ai: null, image: null });
   const [flash, setFlash] = useState<{
     text: PresentationText;
@@ -249,6 +253,7 @@ export const PrefDeckPage: React.FC = () => {
     if (sect === 'look') return <LookDesk onFlash={onFlash} />;
     if (sect === 'kernel') return <KernelDesk onFlash={onFlash} />;
     if (sect === 'logs') return <LogDesk onFlash={onFlash} />;
+    if (sect === 'guides') return <GuideDesk />;
     return <AboutDesk />;
   };
 
@@ -256,6 +261,7 @@ export const PrefDeckPage: React.FC = () => {
 
   return (
     <div className={styles.stage}>
+      {sect === 'ai' && <AutoGuide id="model-setup" ready={modelGuide.ready} eligible={!modelGuide.hasModel} />}
       {(inferenceErrorText || searchErrorText || flashText) && (
         <div className={styles.stripDock}>
           {searchErrorText && <div className={styles.strip} data-tone="halt" role="alert">

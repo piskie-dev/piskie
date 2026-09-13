@@ -69,13 +69,16 @@ describe('fuseBotRecord', () => {
     expect(replaced.appSecret).toBe('sk-new');
   });
 
-  it('扫码渠道剥除凭证键', () => {
-    const fused = fuseBotRecord(persisted, form({ channelType: 'openclaw-weixin' }), {
+  it.each([
+    { scenario: '新建', existing: undefined },
+    { scenario: '编辑', existing: { ...persisted, channelType: 'openclaw-weixin' } },
+  ])('扫码渠道$scenario保存用空 appId 兼容请求校验，并剥除 appSecret', ({ existing }) => {
+    const fused = fuseBotRecord(existing, form({ channelType: 'openclaw-weixin' }), {
       botId: 'bot-1',
       atRest: true,
       scanLogin: true,
     });
-    expect('appId' in fused).toBe(false);
+    expect(fused.appId).toBe('');
     expect('appSecret' in fused).toBe(false);
   });
 

@@ -29,6 +29,17 @@ function formatTokens(value: number | undefined, locale: string): string {
 
 /** Read-only catalog metadata; selecting a model changes only the current type's draft. */
 export function WorkerModelDialog(props: Props) {
+  const { t } = useTranslation();
+  return (
+    <Dialog open={props.open} onClose={props.onClose} ariaLabel={t('agentManagement.chooseModel')}
+      width={1000} className={styles.dialog} bodyClassName={styles.body}>
+      {props.open && <WorkerModelPicker {...props} />}
+    </Dialog>
+  );
+}
+
+/** Shared catalog presentation without a native overlay or business requests. */
+export function WorkerModelPicker(props: Omit<Props, 'open'> & { autoFocus?: boolean }) {
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState<string | null>(null);
@@ -63,14 +74,7 @@ export function WorkerModelDialog(props: Props) {
   } as const;
 
   return (
-    <Dialog
-      open={props.open}
-      onClose={close}
-      ariaLabel={t('agentManagement.chooseModel')}
-      width={1000}
-      className={styles.dialog}
-      bodyClassName={styles.body}
-    >
+    <>
       <header className={styles.header}>
         <div>
           <h2>{t('agentManagement.chooseModel')}</h2>
@@ -89,7 +93,7 @@ export function WorkerModelDialog(props: Props) {
         <label className={styles.search}>
           <Search size={16} />
           <input
-            autoFocus
+            autoFocus={props.autoFocus ?? true}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t('sessionWorkbenchUi.composer.searchModelOrProvider')}
@@ -241,6 +245,6 @@ export function WorkerModelDialog(props: Props) {
           <ArrowUpRight size={14} />
         </button>
       </footer>
-    </Dialog>
+    </>
   );
 }

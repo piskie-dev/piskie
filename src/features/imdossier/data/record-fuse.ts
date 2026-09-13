@@ -5,7 +5,7 @@
  * - 打底合并持久配置:表单未展示的字段(replyForward.toolFilter、allowFrom、
  *   groupSenderAllowFrom、corpId、agentId 等)一律原样保留,不因保存丢失
  * - Secret 留空 = 保留旧值(持久层有旧 secret 且表单为空串时不写键)
- * - 扫码渠道(weixin)无凭证:appId/appSecret 从结果中剥除
+ * - 扫码渠道(weixin)无应用凭证:appId 传空串兼容请求校验,appSecret 剥除
  * - 非静止(运行中等)禁止改绑:definitionId 强制保留持久值(后端另有
  *   task_definition_binding_locked 双闸,这里是前端侧的第一道)
  * - 群白名单仅 allowlist 策略时按行写入;其他策略保留持久值不动
@@ -36,7 +36,7 @@ export interface FuseContext {
   botId: string;
   /** 是否静止(stopped/error);非静止时 definitionId 锁定为持久值 */
   atRest: boolean;
-  /** 扫码渠道(weixin):剥除凭证键 */
+  /** 扫码渠道(weixin):appId 传空串,剥除 appSecret */
   scanLogin: boolean;
 }
 
@@ -70,7 +70,7 @@ export function fuseBotRecord(
   };
 
   if (context.scanLogin) {
-    delete fused.appId;
+    fused.appId = '';
     delete fused.appSecret;
   } else {
     fused.appId = form.appId.trim();

@@ -3,12 +3,14 @@ import type { AgentTarget } from '../../../../shared/types/agent-control';
 export type ConsoleHeaderAction =
   | { kind: 'approval'; requestId: number }
   | { kind: 'error'; requestId: number; target: AgentTarget }
-  | { kind: 'newChat'; requestId: number };
+  | { kind: 'newChat'; requestId: number }
+  | { kind: 'newTemplate'; requestId: number };
 
 export type ConsoleHeaderActionInput =
   | { kind: 'approval' }
   | { kind: 'error'; target: AgentTarget }
-  | { kind: 'newChat' };
+  | { kind: 'newChat' }
+  | { kind: 'newTemplate' };
 
 let lastRequestId = 0;
 

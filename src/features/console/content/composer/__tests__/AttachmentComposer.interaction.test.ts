@@ -25,6 +25,10 @@ vi.mock('../ContextUsageRing', () => ({ ContextUsageRing: () => null }));
 vi.mock('../useComposerSettings', () => ({ useComposerSettings: () => ({ modelGroups: [] }) }));
 vi.mock('../../../data/useMcpPrewarm', () => ({ useMcpPrewarm: () => ({ claim: () => undefined, settle: vi.fn() }) }));
 vi.mock('../../McpRuntimeCard', () => ({ McpRuntimeCard: () => null }));
+vi.mock('../../../../../renderer-runtime/hooks', () => ({
+  useAgentRunList: (select: (state: { phase: string; runs: unknown[] }) => unknown) => select({ phase: 'ready', runs: [] }),
+}));
+vi.mock('../../../../guides/WelcomeGuide', () => ({ WelcomeGuide: () => null }));
 vi.mock('../../../chrome/Popover', () => ({ Popover: ({ trigger }: { trigger: React.ReactNode }) => trigger }));
 vi.mock('../../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: React.ReactNode }) => children }));
 let root: Root;

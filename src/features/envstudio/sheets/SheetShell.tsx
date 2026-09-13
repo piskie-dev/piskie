@@ -16,7 +16,8 @@ interface SheetShellProps {
   children: React.ReactNode;
 }
 
-export const SheetShell: React.FC<SheetShellProps> = ({ title, sub, onClose, foot, children }) => {
+export const SheetShell: React.FC<SheetShellProps> = (props) => {
+  const { onClose } = props;
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -35,19 +36,27 @@ export const SheetShell: React.FC<SheetShellProps> = ({ title, sub, onClose, foo
         aria-label={t('environmentUi.sheet.closePanel')}
         onClick={onClose}
       />
-      <aside className={styles.sheet} role="dialog" aria-label={title}>
-        <header className={styles.sheetHead}>
-          <span className={styles.sheetTitle}>{title}</span>
-          {sub && <span className={styles.sheetSub}>{sub}</span>}
-          <span className={styles.sheetClose}>
-            <ActPill tone="hush" onClick={onClose}>
-              {t('environmentUi.sheet.closeAction')}
-            </ActPill>
-          </span>
-        </header>
-        <div className={styles.sheetBody}>{children}</div>
-        {foot && <footer className={styles.sheetFoot}>{foot}</footer>}
-      </aside>
+      <SheetFrame {...props} />
     </>
+  );
+};
+
+/** Presentational panel shared with inert guide scenes; no scrim or global listeners. */
+export const SheetFrame: React.FC<SheetShellProps> = ({ title, sub, onClose, foot, children }) => {
+  const { t } = useTranslation();
+  return (
+    <aside className={styles.sheet} role="dialog" aria-label={title}>
+      <header className={styles.sheetHead}>
+        <span className={styles.sheetTitle}>{title}</span>
+        {sub && <span className={styles.sheetSub}>{sub}</span>}
+        <span className={styles.sheetClose}>
+          <ActPill tone="hush" onClick={onClose}>
+            {t('environmentUi.sheet.closeAction')}
+          </ActPill>
+        </span>
+      </header>
+      <div className={styles.sheetBody}>{children}</div>
+      {foot && <footer className={styles.sheetFoot}>{foot}</footer>}
+    </aside>
   );
 };
