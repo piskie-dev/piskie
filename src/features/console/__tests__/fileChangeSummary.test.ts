@@ -74,7 +74,7 @@ let main: AgentVM = {
   imageNodeIds: [],
 };
 
-let worker: WorkerVM = {
+const worker: WorkerVM = {
   ...main,
   id: 'session-worker',
   mainAgentId: main.agentId,

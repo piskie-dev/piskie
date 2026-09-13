@@ -21,10 +21,11 @@ export function AttachmentThumbnail({ image, alt, className, onPreview }: {
   readonly onPreview?: AttachmentPreviewOpener;
 }) {
   const { t } = useTranslation();
-  const [thumbnail, setThumbnail] = useState<ThumbnailResult>();
+  const [snapshot, setSnapshot] = useState<{ image: AttachmentImage; result?: ThumbnailResult }>({ image });
+  if (snapshot.image !== image) setSnapshot({ image });
+  const thumbnail = snapshot.image === image ? snapshot.result : undefined;
   useEffect(() => {
-    setThumbnail(undefined);
-    if (image.status === 'ready') return observeAttachmentThumbnail(image, setThumbnail);
+    if (image.status === 'ready') return observeAttachmentThumbnail(image, (result) => setSnapshot({ image, result }));
     return undefined;
   }, [image]);
   const error = image.status === 'error' ? image.error : thumbnail?.kind === 'error' ? thumbnail.error : undefined;
