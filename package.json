@@ -1,6 +1,6 @@
 {
   "name": "piskie",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "面向复杂任务的 AI 智能体桌面工作台，统一组织计划、工具与执行过程",
