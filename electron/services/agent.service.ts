@@ -788,8 +788,27 @@ export class AgentService {
     if (!this.agentInference) {
       throw new Error('AgentService not initialized');
     }
-    this.validateModelReference(header.currentModel);
     const selections = await this.readEffectiveInferenceSelections();
+    let initialModel = header.currentModel;
+    try {
+      this.validateModelReference(initialModel);
+    } catch (error) {
+      const fallbackModel = selectedModelReference(selections.ai);
+      if (!fallbackModel || fallbackModel === initialModel) throw error;
+      this.validateModelReference(fallbackModel);
+      initialModel = fallbackModel;
+      appLog.warn({
+        event: 'agent.model.restore.fallback',
+        message: 'Saved model is unavailable; restoring with the default model',
+        context: {
+          scope: 'agent.model',
+          agentId,
+          model: header.currentModel,
+          fallbackModel,
+        },
+        error,
+      });
+    }
 
     const specName = header.agentSpec;
     const spec = specRegistry.get(specName);
@@ -817,7 +836,7 @@ export class AgentService {
           mainAgentId,
           runConfig,
           initialModeId: header.modeId,
-          initialModel: header.currentModel,
+          initialModel,
           initialApprovalMode: header.approvalMode,
           isResume: true,
           allocateAgentId: () => this.allocateAgentId(),
@@ -853,6 +872,7 @@ export class AgentService {
           // 恢复 = 重新活跃，刷新 lastActiveAt（历史列表排序依据）
           this.conversationStore.writeHeader(mainAgentId, {
             ...header,
+            currentModel: initialModel,
             lastActiveAt: new Date().toISOString(),
             childAgents: [],
           });
@@ -936,7 +956,7 @@ export class AgentService {
         ).selection;
       }
     } catch {
-      // 历史模型可能已被删除；预览仍保持可读，真正恢复时会返回精确配置错误。
+      // 历史模型可能已被删除；预览保持可读，恢复时重新选择可用模型。
     }
     return {
       agentId,

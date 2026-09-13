@@ -1,4 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ConversationEntry } from '../../../shared/types/agent-control.js';
+import type { InferenceSelections, ModelTarget } from '../../../shared/types/inference.js';
 
 const h = vi.hoisted(() => {
   function deferred() {
@@ -179,7 +181,7 @@ const h = vi.hoisted(() => {
     configHost = { show: vi.fn(async () => ({ schemaVersion: 1, revision: 0, profiles: {} })) };
     control = { runtime: { capture: () => ({ configRevision: 1 }) } };
     selections = {
-      read: async () => ({
+      read: async (): Promise<InferenceSelections> => ({
         schemaVersion: 1,
         revision: 1,
         ai: { providerId: 'provider-1', modelId: 'model-1' },
@@ -192,7 +194,7 @@ const h = vi.hoisted(() => {
   }
 
   class FakeAgentInference {
-    assertTarget(): void {}
+    assertTarget(_target: ModelTarget): void {}
     resolveReasoning(_target: unknown, selection: unknown) { return { selection }; }
     contextWindow(): number { return 200_000; }
   }
@@ -282,6 +284,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { agentService } from '../agent.service.js';
+import { MessagingAgentSession } from '../../im-gateway/messaging-agent-session.js';
 
 const service = agentService as any;
 const releases: Array<{ agentId: string; reason: string }> = [];
@@ -438,6 +441,103 @@ describe('AgentService 激活事务', () => {
     expect(h.instances[0]?.destroyCalls).toBe(1);
     expect(service.conversationStore.readHeader('disk-run')).toMatchObject({ agentId: 'disk-run' });
     expect(agentService.hasAgentInMemory('disk-run')).toBe(false);
+  });
+});
+
+describe('AgentService saved model fallback', () => {
+  const unavailableModel = 'removed-provider::saved-model';
+  const fallbackModel = 'provider-1::model-1';
+  const entries: ConversationEntry[] = [{
+    t: 'msg', ts: 1, id: 'message-1', role: 'user', subtype: 'user_input',
+    content: 'Remember the sample task.',
+  }];
+  let diskHeader: ReturnType<typeof header>;
+
+  beforeEach(() => {
+    diskHeader = { ...header('disk-run'), currentModel: unavailableModel };
+    service.conversationStore.writeHeader('disk-run', diskHeader);
+    service.conversationStore.entries.set('disk-run/disk-run', structuredClone(entries));
+    vi.spyOn(h.FakeAgentInference.prototype, 'assertTarget').mockImplementation((target) => {
+      if (target.providerId !== 'provider-1') {
+        throw new Error(`Unavailable model: ${target.providerId}::${target.modelId}`);
+      }
+    });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([true, false])('restores the same conversation with the default model (autoStart=%s)', async (autoStart) => {
+    const state = await agentService.resumeAgent('disk-run', { autoStart });
+
+    expect(state).toMatchObject({
+      agentId: 'disk-run', currentModel: fallbackModel, runConfig: diskHeader.runConfig,
+    });
+    expect(service.conversationStore.readHeader('disk-run')).toMatchObject({
+      ...diskHeader, currentModel: fallbackModel, lastActiveAt: expect.any(String),
+    });
+    expect(h.instances[0]?.replayedEntries).toEqual(entries);
+    expect(service.conversationStore.read('disk-run', 'disk-run')).toEqual(entries);
+    expect(h.instances[0]?.prepareCalls).toBe(1);
+    expect(h.instances[0]?.startCalls).toBe(autoStart ? 1 : 0);
+  });
+
+  it('resumes an IM binding and accepts its incoming message without replacing the conversation', async () => {
+    const bindings = { get: vi.fn(async () => 'disk-run'), set: vi.fn() };
+    const sessions = new MessagingAgentSession(agentService, bindings);
+    const resolveLaunch = vi.fn(() => launch());
+    const agentId = await sessions.ensure(
+      { botId: 'bot-1', peerKind: 'direct', peerId: 'sender-1' }, resolveLaunch,
+    );
+    const event = {
+      id: 'incoming-1', timestamp: new Date(2), source: 'user' as const,
+      content: 'Continue the sample task.', priority: 'normal' as const,
+    };
+
+    await expect(agentService.injectEventToAgent(agentId, event)).resolves.toBe(true);
+
+    expect(agentId).toBe('disk-run');
+    expect(h.instances).toHaveLength(1);
+    expect(h.instances[0]?.getControlState().currentModel).toBe(fallbackModel);
+    expect(h.instances[0]?.replayedEntries).toEqual(entries);
+    expect(h.instances[0]?.posted).toEqual([event]);
+    expect(h.instances[0]?.startCalls).toBe(0);
+    expect(bindings.set).not.toHaveBeenCalled();
+    expect(resolveLaunch).not.toHaveBeenCalled();
+  });
+
+  it('keeps an available saved model even when the default is different', async () => {
+    const savedModel = 'provider-1::saved-model';
+    service.conversationStore.writeHeader('disk-run', { ...diskHeader, currentModel: savedModel });
+
+    const state = await agentService.resumeAgent('disk-run', { autoStart: false });
+
+    expect(state?.currentModel).toBe(savedModel);
+    expect(service.conversationStore.readHeader('disk-run').currentModel).toBe(savedModel);
+  });
+
+  it('preserves history and reports the unavailable model when no default is configured', async () => {
+    vi.spyOn(h.FakeInferenceRuntimeHost.prototype, 'readEffectiveSelections').mockResolvedValue({
+      schemaVersion: 1, revision: 2,
+    });
+
+    await expect(agentService.resumeAgent('disk-run')).rejects.toThrow(`Unavailable model: ${unavailableModel}`);
+
+    expect(h.instances).toHaveLength(0);
+    expect(service.conversationStore.readHeader('disk-run')).toEqual(diskHeader);
+    expect(service.conversationStore.read('disk-run', 'disk-run')).toEqual(entries);
+  });
+
+  it('validates the default before changing the saved model', async () => {
+    vi.spyOn(h.FakeInferenceRuntimeHost.prototype, 'readEffectiveSelections').mockResolvedValue({
+      schemaVersion: 1, revision: 2,
+      ai: { providerId: 'unavailable-default', modelId: 'default-model' },
+    });
+
+    await expect(agentService.resumeAgent('disk-run')).rejects.toThrow('Unavailable model: unavailable-default::default-model');
+
+    expect(h.instances).toHaveLength(0);
+    expect(service.conversationStore.readHeader('disk-run')).toEqual(diskHeader);
+    expect(service.conversationStore.read('disk-run', 'disk-run')).toEqual(entries);
   });
 });
 
