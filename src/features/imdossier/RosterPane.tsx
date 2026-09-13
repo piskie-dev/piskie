@@ -214,13 +214,13 @@ export const RosterPane: React.FC<RosterPaneProps> = ({ pickedBotId, onPick, onD
                 descriptor.channelId,
               );
             })}
-            {orphans.length > 0 && renderGroup(
-              '__orphans__',
-              t('imPlugin.roster.unknownChannel'),
-              'UNKNOWN',
-              orphans,
-            )}
           </>
+        )}
+        {orphans.length > 0 && renderGroup(
+          '__orphans__',
+          t('imPlugin.roster.unknownChannel'),
+          'UNKNOWN',
+          orphans,
         )}
       </div>
     </aside>

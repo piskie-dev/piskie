@@ -39,6 +39,7 @@ const CODE_SHAPE = /^\d{1,8}$/;
 export function createQrFlow(deps: QrFlowDeps) {
   let generation = 0;
   let landed = false;
+  let begun = false;
 
   const paint = (gen: number, view: QrView): boolean => {
     if (gen !== generation) return false;
@@ -80,19 +81,24 @@ export function createQrFlow(deps: QrFlowDeps) {
   return {
     begin(force: boolean): void {
       const gen = ++generation;
+      begun = true;
       paint(gen, { phase: 'boot', qr: null });
       void (async () => {
+        if (force) await deps.cancel(deps.botId, deps.channelType);
+        if (gen !== generation) return;
         const started = await deps.start(deps.botId, deps.channelType, force);
         if (gen !== generation) return;
-        if (!started) {
+        if (!started?.qrDataUrl) {
           paint(gen, {
             phase: 'fault',
             qr: null,
-            word: messageText('imPlugin.qr.imageUnavailable'),
+            word: started?.message
+              ? rawText(started.message)
+              : messageText('imPlugin.qr.imageUnavailable'),
           });
           return;
         }
-        const qr = started.qrDataUrl ?? null;
+        const qr = started.qrDataUrl;
         paint(gen, { phase: 'scan', qr, word: rawText(started.message) });
         await awaitOutcome(gen, qr);
       })();
@@ -125,7 +131,8 @@ export function createQrFlow(deps: QrFlowDeps) {
 
     dispose(): void {
       generation += 1;
-      if (!landed) void deps.cancel(deps.botId, deps.channelType);
+      if (begun && !landed) void deps.cancel(deps.botId, deps.channelType);
+      begun = false;
     },
   };
 }

@@ -12,6 +12,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from 'react-i18next';
 
 import { resolvePresentationText } from '../../i18n/presentationText';
@@ -62,8 +63,10 @@ export const WeixinQrFlow: React.FC<WeixinQrFlowProps> = ({
       connected: (already) => onConnectedRef.current(already),
     });
     flowRef.current = flow;
-    flow.begin(force);
+    // StrictMode 会先执行一次 setup/cleanup；只启动实际保留的登录流。
+    const timer = setTimeout(() => flow.begin(force), 0);
     return () => {
+      clearTimeout(timer);
       flowRef.current = null;
       flow.dispose();
     };
@@ -77,7 +80,9 @@ export const WeixinQrFlow: React.FC<WeixinQrFlowProps> = ({
     <div className={styles.qrDock}>
       {(view.phase === 'boot' || view.phase === 'scan' || view.phase === 'verify' || view.phase === 'submitting') && (
         <div className={styles.qrShell}>
-          {view.qr ? <img src={view.qr} alt={t('imPlugin.qr.imageAlt')} /> : <span className={styles.qrPulse} />}
+          {view.qr ? (
+            <QRCodeSVG value={view.qr} size={168} marginSize={4} role="img" aria-label={t('imPlugin.qr.imageAlt')} />
+          ) : <span className={styles.qrPulse} />}
         </div>
       )}
 
@@ -127,8 +132,11 @@ export const WeixinQrFlow: React.FC<WeixinQrFlowProps> = ({
         </div>
       )}
 
-      {(view.phase === 'expired' || view.phase === 'fault') && (
-        <button type="button" className={styles.btn} onClick={() => flowRef.current?.begin(false)}>
+      {(view.phase === 'expired' || view.phase === 'blocked' || view.phase === 'fault') && (
+        <button type="button" className={styles.btn} onClick={() => {
+          setCode('');
+          flowRef.current?.begin(true);
+        }}>
           {t('imPlugin.qr.fetchAnother')}
         </button>
       )}

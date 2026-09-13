@@ -1,10 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { MESSAGING_OPERATIONS } from '../../../../shared/electron-contracts/messaging.js';
+import { fuseBotRecord } from '../../../../src/features/imdossier/data/record-fuse.js';
 import { MessagingApplication } from '../messaging-application.js';
 import { createMessagingController } from '../messaging-controller.js';
 
 describe('messaging configuration boundaries', () => {
+  it.each(['wecom', 'feishu', 'qqbot', 'openclaw-weixin'])('accepts actual %s editor requests for new and existing Bots', (channelType) => {
+    const save = createMessagingController({} as never).operations.find(
+      ({ id }) => id === MESSAGING_OPERATIONS.saveBot,
+    )!;
+    for (const existing of [undefined, {
+      id: 'bot-1', name: 'Old Bot', channelType, appId: 'app-1', appSecret: 'stored-secret',
+      definitionId: 'old-definition', pluginAccountId: 'account-1',
+      allowFrom: ['user-1'], groupSenderAllowFrom: ['user-2'], corpId: 'corp-1', agentId: 42,
+      replyForward: { forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false,
+        toolFilter: { mode: 'include' as const, tools: ['browser.click'] } },
+    }]) {
+      const fused = fuseBotRecord(existing, {
+        name: 'Bot', channelType, appId: 'app-1', appSecret: existing ? '' : 'new-secret',
+        definitionId: 'definition-1', dmPolicy: 'pairing', groupPolicy: 'allowlist',
+        groupAllowText: 'group-1\ngroup-2', requireMention: true,
+        forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false,
+      }, { botId: 'bot-1', atRest: true, scanLogin: channelType === 'openclaw-weixin' });
+      expect(save.input.safeParse([fused]).success).toBe(true);
+    }
+  });
+
   it('keeps ConfigHost runtime observations outside editor configs', async () => {
     const application = new MessagingApplication({
       config: {

@@ -9,6 +9,7 @@ vi.mock('electron', () => ({
 }));
 
 import { ElectronPreloadClient } from '../preload-client.js';
+import { createElectronPiskieClient } from '../piskie-client.js';
 
 const openPorts: MessagePort[] = [];
 
@@ -60,6 +61,28 @@ function frames<T extends { kind?: string }>(messages: unknown[], kind: string):
 }
 
 describe('ElectronPreloadClient', () => {
+  it('keeps QR login waiting beyond the regular 30-second request deadline', async () => {
+    const { client: transport, host, messages } = await connect();
+    const client = createElectronPiskieClient({ transport, version: 'test', platform: 'darwin' });
+    vi.useFakeTimers();
+    try {
+      const result = client.messaging.waitForQrLogin('bot-1', 'openclaw-weixin');
+      void result.catch(() => undefined); // 清理失败用例的未完成请求时也消费 rejection。
+      await vi.waitFor(() => expect(frames(messages, 'request')).toHaveLength(1));
+      await vi.advanceTimersByTimeAsync(35_000);
+      expect(frames(messages, 'cancel')).toHaveLength(0);
+      const [request] = frames<{ kind: 'request'; id: string; deadlineAt?: number }>(messages, 'request');
+      expect(request!.deadlineAt).toBeUndefined();
+      host.postMessage({ kind: 'result', id: request!.id, value: {
+        connected: true, state: 'connected', message: 'Connected',
+      } });
+      await expect(result).resolves.toMatchObject({ connected: true });
+    } finally {
+      transport.close();
+      vi.useRealTimers();
+    }
+  });
+
   it('removes AbortSignal listeners after a request settles', async () => {
     const { client, host, messages } = await connect();
     const controller = new AbortController();

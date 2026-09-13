@@ -107,7 +107,7 @@ export interface MessagingRuntimeChangedEvent {
 
 /** QR 扫码登录结果（loginWithQrStart） */
 export interface QrLoginStartResult {
-  qrDataUrl?: string;   // data:image/png;base64,...
+  qrDataUrl?: string;   // 登录链接等二维码原始内容，由前端编码绘制；不是图片地址。
   message: string;
 }
 
