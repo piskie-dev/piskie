@@ -90,6 +90,7 @@ import {
   resolveToolUseSettlement,
 } from './context/conversation-protocol.js';
 import { linkAbort } from '../utils/abort.js';
+import { groupByConcurrencySafety, isConcurrencySafe } from './tool-call/tool-concurrency.js';
 import { isMcpAbortError, sanitizeMcpErrorText } from '../mcp/security/sanitize.js';
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -223,6 +224,7 @@ export abstract class AgentEngine {
     string,
     {
       pending: PendingToolCall;
+      autoApprovalCancelled?: boolean;
       resolve: (d: ToolApprovalDecision) => void;
     }
   >();
@@ -345,7 +347,8 @@ export abstract class AgentEngine {
     if (events.length === 0) return; // ensurePump 守卫后仍可能空批：守卫检查与微任务启动之间 interrupt 可丢弃队列
 
     // 抛异常即冲程 fatal：内容正确性在生产边界保证
-    this.applyEventBatch(events);
+    const applied = this.applyEventBatch(events);
+    if (applied) await applied;
 
     const config = this.getTurnConfig();
     await this.runTurn(signal, config);
@@ -356,15 +359,16 @@ export abstract class AgentEngine {
    * applyEvents 的唯一调用面（runPump 与 runTurn 共用）：
    * 任何一处应用失败，异常都携带本批 event ids（takeEvents 已单点 trace 本批）。
    */
-  protected applyEventBatch(events: AgentInputEvent[]): void {
+  protected applyEventBatch(events: AgentInputEvent[]): void | Promise<void> {
     if (events.length === 0) return;
+    const failed = (cause: unknown): never => {
+      throw new EventBatchApplyError(events.map((event) => event.id), cause);
+    };
     try {
-      this.applyEvents(events);
+      const applied = this.applyEvents(events);
+      if (applied) return applied.catch(failed);
     } catch (cause) {
-      throw new EventBatchApplyError(
-        events.map((e) => e.id),
-        cause
-      );
+      failed(cause);
     }
   }
 
@@ -440,7 +444,7 @@ export abstract class AgentEngine {
    * 应用一批事件到上下文（AgentRuntime 实现模块分发）。
    * 只由 applyEventBatch 调用（错误包装收口）；实现不得自行 drain Mailbox。
    */
-  protected abstract applyEvents(events: AgentInputEvent[]): void;
+  protected abstract applyEvents(events: AgentInputEvent[]): void | Promise<void>;
 
   /** 冲程 turn 配置（AgentRuntime 从 role.configureLoop 获取；每冲程 lazy 求值） */
   protected getTurnConfig(): TurnConfig {
@@ -934,11 +938,23 @@ export abstract class AgentEngine {
     }
   }
 
+  /** 取消只属于这份待审批计划；状态刷新和模式切换均不会恢复其计时。 */
+  public cancelPlanApprovalCountdown(callId: string): boolean {
+    const item = this.pendingApprovals.get(callId);
+    if (!item || item.pending.toolName !== 'plan' || item.pending.params.action !== 'create') {
+      return false;
+    }
+    item.autoApprovalCancelled = true;
+    this.refreshPendingApprovals();
+    return true;
+  }
+
   /** 只为当前可审批的计划计时，排队中的下一份计划获得完整的 60 秒。 */
   private refreshPendingApprovals(): void {
     const first = this.pendingApprovals.values().next().value;
     const plan = this.approvalMode === 'auto' && !this._interrupted && !this.destroyPromise
       && first?.pending.toolName === 'plan' && first.pending.params.action === 'create'
+      && !first.autoApprovalCancelled
       ? first : undefined;
 
     if (!plan || this.planAutoApproval?.callId !== plan.pending.id) {
@@ -1294,7 +1310,9 @@ export abstract class AgentEngine {
       signal.throwIfAborted();
 
       // AI/tool 执行期间到达的新事件在每个 AI 边界统一吸收（唯一消费入口）
-      this.applyEventBatch(this.takeEvents());
+      const applied = this.applyEventBatch(this.takeEvents());
+      if (applied) await applied;
+      signal.throwIfAborted();
 
       // 已作答的工具续跑（MCP elicitation）在模型边界前消费：
       // 答案喂回在途请求 → 最终 tool_result 或下一轮挂起
@@ -1723,27 +1741,37 @@ export abstract class AgentEngine {
       options.onAfterExecute?.(item.toolUse, item.outcome.result);
     };
 
+    // 中断后不再启动新工具，为剩余 tool_use 写占位结果保持对话完整——
+    // "尚未启动"是 not_started 的直接证据（三条已知路径之一）
+    const settleNotStarted = (toolUse: ContentBlock): void => {
+      const text = buildToolInterruptionResult({
+        reason: 'user_interrupted',
+        execution: 'not_started',
+      });
+      const result = settleSystem(toolUse, text, false);
+      options.onAfterExecute?.(toolUse, result);
+    };
+
     // options.mode 是本批快照；实时 confirm 是并行分支的最终安全门。
+    // 并行只对并发安全的调用成立（effects 只含 read-fs/external）：写类工具
+    // 各自成组按发出顺序串行，否则同文件的两个 edit 会互相覆盖（见 tool-concurrency.ts）。
     const executeInParallel =
       options.mode === 'parallel' && this.approvalMode === 'auto' && validToolUses.length > 1;
+    const groups = executeInParallel
+      ? groupByConcurrencySafety(validToolUses, (toolUse) =>
+          isConcurrencySafe(toolUse, snapshot, loadedDeferredTools))
+      : validToolUses.map((toolUse) => [toolUse]);
 
-    if (executeInParallel) {
-      for (const item of await Promise.all(validToolUses.map(executeOne))) commitOne(item);
-    } else {
-      for (const toolUse of validToolUses) {
-        // 中断后不再启动新工具，为剩余 tool_use 写占位结果保持对话完整——
-        // "尚未启动"是 not_started 的直接证据（三条已知路径之一）
-        if (options.signal?.aborted) {
-          const text = buildToolInterruptionResult({
-            reason: 'user_interrupted',
-            execution: 'not_started',
-          });
-          const result = settleSystem(toolUse, text, false);
-          options.onAfterExecute?.(toolUse, result);
-          continue;
-        }
-        commitOne(await executeOne(toolUse));
+    for (const group of groups) {
+      if (options.signal?.aborted) {
+        for (const toolUse of group) settleNotStarted(toolUse);
+        continue;
       }
+      if (group.length === 1) {
+        commitOne(await executeOne(group[0]));
+        continue;
+      }
+      for (const item of await Promise.all(group.map(executeOne))) commitOne(item);
     }
 
     return { terminalReason, suspended };

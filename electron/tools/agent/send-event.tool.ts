@@ -12,13 +12,7 @@ import type {
   ToolOutput,
 } from '../types.js';
 import { z } from '../params.js';
-import type { AgentTarget } from '../../../shared/types/agent-control.js';
-import type {
-  ATAEventEnvelope,
-  ATAEventPayload,
-} from '../../agent/ata/ata-event-envelope.js';
-import { ataEventPayloadStore } from '../../agent/ata/ata-event-payload-store.js';
-import { notificationFromATAEventEnvelope } from '../../agent/ata/ata-event-protocol.js';
+import type { SubagentNotification } from '../../../shared/types/index.js';
 
 const EVENT_TYPES = [
   'message',
@@ -34,7 +28,7 @@ const sendEventSchema = z.object({
   message: z.string().min(1)
     .describe('完整、自包含的事件正文'),
   summary: z.string().optional()
-    .describe('一句话摘要（可选）'),
+    .describe('一句话摘要（可选），概括核心结果，不只写“任务完成”'),
   targetId: z.string().optional()
     .describe('接收消息的完整 Worker ID'),
 });
@@ -48,10 +42,10 @@ export const sendEventOptionsSchema = z.strictObject({
 
 const EVENT_GUIDANCE: Record<(typeof EVENT_TYPES)[number], string> = {
   "message": "普通进展，以及能够自行处理的新发现和问题，不发送 message，完成后随完整结果一并汇报。只有需要 Director 解除无法自行解决的阻碍或协调工作冲突时，才发送 message，写清问题和需要它采取的行动。",
-  "completed": "当前 Assignment 的全部要求已经完成；message 写明关键结果、产出路径和验证结论。",
+  "completed": "当前 Assignment 的全部要求已经完成；message 写明足以判断任务结果的关键结论、必要数据、验证结论和未完成项；有任务产出文件时，附上文件绝对路径。",
   "failed": "当前 Assignment 无法完成；message 写明原因、原始错误、已完成部分和未完成项。",
   "user_stopped": "用户明确停止当前 Assignment。",
-  "need_user_action": "登录、验证码、授权确认或用户选择等只有用户能解除的阻断；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。"
+  "need_user_action": "登录、验证码、授权确认或用户选择等只有用户能解除的阻断，不报告 failed；message 写明当前状态、用户要做的动作、解除阻断的可观察标志和恢复点。"
 };
 
 function terminalEvents(events: readonly (typeof EVENT_TYPES)[number][]): string[] {
@@ -124,7 +118,7 @@ export class SendEventTool extends BaseTool<SendEventParams> {
     params: SendEventParams,
     context: ToolContext,
   ): Promise<ToolOutput<unknown>> {
-    const { type, message, summary } = params;
+    const { type, message } = params;
     let targetId: string;
 
     if (!message) {
@@ -151,29 +145,16 @@ export class SendEventTool extends BaseTool<SendEventParams> {
       }
     }
 
-    const eventData: ATAEventPayload = {
-      type,
-      message,
-      ...(summary ? { summary } : {}),
-    };
-
     if (!allowedTargets.includes(targetId)) {
       return this.error(
         `无权限发送事件到目标: ${targetId}。允许的目标: ${allowedTargets.join(', ') || '无'}`
       );
     }
 
-    // ATA Envelope: 统一封装所有 eventData（超长 message 自动落盘）
-    const source: AgentTarget = context.agentType === 'worker'
-      ? { agentId: context.mainAgentId, workerId: context.agentId }
-      : { agentId: context.mainAgentId };
-    const envelope = await ataEventPayloadStore.prepareEnvelope(source, eventData);
-
-    // 根据 Agent 类型选择发送方式
     if (context.agentType === 'worker') {
-      return this.sendToParent(targetId, envelope, context);
+      return this.sendToParent(targetId, { type, message }, context);
     } else {
-      return this.sendToSubagent(targetId, envelope, context);
+      return this.sendToSubagent(targetId, message, context);
     }
   }
 
@@ -182,15 +163,18 @@ export class SendEventTool extends BaseTool<SendEventParams> {
    */
   private sendToParent(
     targetId: string,
-    envelope: ATAEventEnvelope,
+    { type, message }: Pick<SendEventParams, 'type' | 'message'>,
     context: ToolContext,
   ): ToolOutput<unknown> {
     if (!context.events) {
       return this.error('onNotification 回调未配置');
     }
 
-    // 从 envelope 提取 type，构建通知（envelope 作为 notification.data）
-    const notification = notificationFromATAEventEnvelope(envelope);
+    const notification: SubagentNotification = type === 'failed'
+      ? { type, error: message }
+      : type === 'user_stopped'
+        ? { type, reason: message }
+        : { type, message };
     const delivered = context.events.notifyParent(notification);
 
     // 投递守门：只有实际送达才产生 terminal——
@@ -203,19 +187,19 @@ export class SendEventTool extends BaseTool<SendEventParams> {
 
     // 终态类型送达后声明终态；need_user_action 的 yield 由成功结算后
     // 派生出的 user_action IdlePermit 驱动，不结束 Assignment。
-    const isTerminal = envelope.type === 'completed' || envelope.type === 'failed' || envelope.type === 'user_stopped';
+    const isTerminal = type === 'completed' || type === 'failed' || type === 'user_stopped';
     if (isTerminal) {
-      context.declareTerminal(envelope.type as import('../types.js').TerminalReason);
+      context.declareTerminal(type);
       return this.success(
-        `send_event(type: "${envelope.type}") 已成功发送到 director（targetId: ${targetId}）。当前任务的 ${envelope.type} 通知已送达，等待新的指令。`,
+        `send_event(type: "${type}") 已成功发送到 director（targetId: ${targetId}）。当前任务的 ${type} 通知已送达，等待新的指令。`,
       );
     }
-    if (envelope.type === 'need_user_action') {
+    if (type === 'need_user_action') {
       return this.success(
         `send_event(type: "need_user_action") 已成功发送到 director（targetId: ${targetId}）。当前执行将挂起，等待 director 转达用户已完成操作的消息。`,
       );
     }
-    return this.success(`已发送事件到 ${targetId}: ${envelope.type}`);
+    return this.success(`已发送事件到 ${targetId}: ${type}`);
   }
 
   /**
@@ -223,7 +207,7 @@ export class SendEventTool extends BaseTool<SendEventParams> {
    */
   private sendToSubagent(
     targetId: string,
-    envelope: ATAEventEnvelope,
+    message: string,
     context: ToolContext,
   ): ToolOutput<unknown> {
     if (!context.events) {
@@ -231,7 +215,7 @@ export class SendEventTool extends BaseTool<SendEventParams> {
     }
 
     // 投递守门：post 返回 false = 子流程已停止/销毁，事件未入队
-    const delivered = context.events.send(targetId, envelope as unknown as Record<string, unknown>);
+    const delivered = context.events.send(targetId, message);
     if (!delivered) {
       return this.error(
         `事件未送达子流程（targetId: ${targetId} 不存在、已停止或已销毁）。请勿假设事件已送达。`

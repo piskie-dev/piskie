@@ -13,8 +13,10 @@ vi.mock('../../../../renderer-runtime/hooks', () => ({
 
 import {
   resolveConversationTarget,
+  projectWorkerTasks,
   resolveConversationRequest,
   resolveRequest,
+  useAgentVM,
   useWorkerVM,
   type AgentVM,
   type WorkerVM,
@@ -95,16 +97,18 @@ describe('resolveRequest', () => {
     harness.controlStates = {
       main: {
         runMetrics: { rounds: 99, steps: 99 },
+        runConfig: { workspace: '/workspace/sample-main' },
         children: [{
           id: 'worker',
           subject: 'Worker',
+          workspace: '/workspace/sample-worker',
           type: 'local-worker',
           phase: 'waiting',
           currentModel: 'provider::model',
           approvalMode: 'confirm',
           conversationLength: 0,
           runMetrics: workerMetrics,
-          taskIds: [],
+
           browserReady: false,
         }],
       },
@@ -119,9 +123,66 @@ describe('resolveRequest', () => {
 
     expect(projected).toMatchObject({
       id: 'worker',
+      workspace: '/workspace/sample-worker',
       approvalMode: 'confirm',
       runMetrics: workerMetrics,
     });
+  });
+});
+
+describe('reasoning snapshots', () => {
+  it('projects each main and Worker value independently when the current target changes', () => {
+    const medium = { kind: 'effort', effort: 'medium' } as const;
+    const low = { kind: 'effort', effort: 'low' } as const;
+    const high = { kind: 'effort', effort: 'high' } as const;
+    const main = {
+      agentId: 'session-example', phase: 'waiting', currentModel: 'provider::model',
+      runConfig: { name: 'Example session' }, reasoningOverride: medium,
+      children: [{
+        id: 'worker-example', phase: 'waiting', currentModel: 'provider::model',
+        reasoningOverride: low,
+      }],
+    };
+    const other = { ...main, agentId: 'session-other', children: [] };
+    harness.controlStates = { 'session-example': main, 'session-other': other };
+    let projected: Array<AgentVM | WorkerVM | null> = [];
+    function Probe() {
+      projected = [useAgentVM('session-example'), useWorkerVM('session-example', 'worker-example'), useAgentVM('session-other')];
+      return null;
+    }
+    const selections = () => projected.map((target) => target?.reasoningOverride);
+
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([medium, low, medium]);
+
+    harness.controlStates['session-example'] = { ...main, reasoningOverride: high };
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([high, low, medium]);
+
+    harness.controlStates['session-example'] = {
+      ...main, reasoningOverride: high,
+      children: [{ ...main.children[0], reasoningOverride: medium }],
+    };
+    renderToStaticMarkup(createElement(Probe));
+    expect(selections()).toEqual([high, medium, medium]);
+  });
+});
+
+describe('Worker task projection', () => {
+  it('shows Main’s latest owner matches, including completed and newly recorded work', () => {
+    const make = (id: string, owner: string | null, status: 'pending' | 'completed' = 'pending') => ({
+      id, owner, status, subject: 'Sample task', description: 'Sample scope', dependsOn: [],
+    });
+    const board = { taskSummary: 'Sample board', items: [
+      make('main-work', 'main-a'), make('unassigned', null), make('other-work', 'worker-b'),
+      make('open', 'worker-a'), make('done', 'worker-a', 'completed'),
+    ] };
+    expect(projectWorkerTasks(board, 'worker-a')).toEqual(board.items.slice(3));
+    expect(projectWorkerTasks(undefined, 'worker-a')).toEqual([]);
+    expect(projectWorkerTasks(board, 'worker-missing')).toEqual([]);
+    const updated = { ...board, items: [make('open', 'worker-b'), make('new-work', 'worker-a')] };
+    expect(projectWorkerTasks(updated, 'worker-a')).toEqual([updated.items[1]]);
+    expect(board.items).toHaveLength(5);
   });
 });
 

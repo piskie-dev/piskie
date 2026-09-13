@@ -177,7 +177,7 @@ vi.mock('../../agent-runs/agent-run-trace-service.js', () => ({
   },
 }));
 vi.mock('../../agent-runs/task-board-service.js', () => ({
-  taskBoardService: { releaseStaleWorkerTasks: vi.fn(async () => undefined) },
+  taskBoardService: { readTaskBoard: vi.fn(async () => null) },
 }));
 vi.mock('../../core/occupancy/index.js', () => ({
   occupancyRegistry: {

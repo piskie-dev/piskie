@@ -108,7 +108,7 @@ export class DesktopTray {
     if (this.tray) return;
     const darwin = this.options.platform === 'darwin';
     this.tray = new Tray(this.buildIcon());
-    this.tray.setToolTip('piskie');
+    this.tray.setToolTip('Piskie');
 
     const menu = Menu.buildFromTemplate([
       { label: '显示', click: () => this.options.onSummon() },
@@ -177,7 +177,7 @@ export class DesktopTray {
     if (!tray) return;
     const rateText = `${formatTokens(this.currentOutputRate())}/s`;
     const totalText = formatTokens(this.pulse.total);
-    tray.setToolTip(`piskie · ${rateText} · 总消耗 ${totalText}`);
+    tray.setToolTip(`Piskie · ${rateText} · 总消耗 ${totalText}`);
     if (this.options.platform === 'darwin') {
       // setTitle 无字号控制,双行(\n)会按全尺寸字体溢出菜单栏——单行只放速率,总量进 tooltip
       tray.setTitle(rateText, { fontType: 'monospacedDigit' });

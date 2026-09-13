@@ -301,7 +301,7 @@ describe('AgentEngine canonical response persistence', () => {
 describe('AgentEngine durable tool-call ordering', () => {
   it('writes an exclusive mixed batch as assistant then one ToolEntry per call', async () => {
     const engine = new OrderedPersistenceEngine(await createConversationStore(), [
-      [toolUse('read-call', 'task_read'), toolUse('event-call', 'send_event')],
+      [toolUse('read-call', 'read'), toolUse('event-call', 'send_event')],
       [{ type: 'text', text: 'retried' } as ContentBlock],
     ]);
     engine.addUserQuestion();

@@ -32,6 +32,7 @@ import type {
 } from '../../shared/electron-contracts/agents.js';
 import { createChangeChannel, type ChangeSource, type Unsubscribe } from '../core/change-channel.js';
 import { AgentRunPaths } from './agent-run-paths.js';
+import { isVisibleConversationMessage, type AgentRunMessageState } from '../../shared/agent-run-messages.js';
 
 const PERSISTED_PLAIN_MESSAGE_TYPES = new Set([
   'text',
@@ -73,6 +74,7 @@ export interface ConversationAppendRecord extends ConversationAppendMetadata {
   agentId: string;
   index: number;
   entry: ConversationEntry;
+  messages?: AgentRunMessageState;
 }
 
 export class ConversationStore {
@@ -87,6 +89,11 @@ export class ConversationStore {
     size: number;
     lines: Array<{ start: number; end: number }>;
   }> = new Map();
+  private readonly messageSummaries = new Map<string, {
+    count: number;
+    latestMessage: AgentRunMessageState['latestMessage'];
+    latestAssistantIndex: number;
+  }>();
   private readIssueCount = 0;
   private readonly appendChannel = createChangeChannel<ConversationAppendRecord>({
     onSubscriberError: (error, change) =>
@@ -130,6 +137,8 @@ export class ConversationStore {
     entry: ConversationWriteEntry,
     metadata: ConversationAppendMetadata = {}
   ): number {
+    // Establish the existing-history read baseline before the first new main entry.
+    if (mainAgentId === agentId) this.readMessageState(mainAgentId);
     const filePath = this.getConversationPath(mainAgentId, agentId);
     this.ensureDirSync(path.dirname(filePath));
     this.ensureTrailingNewline(filePath);
@@ -147,7 +156,12 @@ export class ConversationStore {
       lines: [...lineIndex.lines, { start, end }],
     });
     this.entryCounts.set(filePath, { count: index + 1, size });
-    this.appendChannel.sink.publish({ mainAgentId, agentId, index, entry: processed, ...metadata });
+    const messages = mainAgentId === agentId && isVisibleConversationMessage(processed)
+      ? this.readMessageState(mainAgentId) : undefined;
+    this.appendChannel.sink.publish({
+      mainAgentId, agentId, index, entry: processed, ...metadata,
+      ...(messages && { messages }),
+    });
     return index;
   }
 
@@ -159,6 +173,18 @@ export class ConversationStore {
     const filePath = this.getConversationPath(mainAgentId, agentId);
     const index = this.getLineIndex(filePath);
     return this.readIndexedRange(filePath, index.lines, 0, index.lines.length);
+  }
+
+  /** Runtime-written creation markers remain after Worker teardown and context compaction. */
+  readCreatedWorkerIds(mainAgentId: string): string[] {
+    const ids = new Set<string>();
+    for (const entry of this.read(mainAgentId, mainAgentId)) {
+      if (entry.t !== 'marker' || entry.key !== 'child_created') continue;
+      const value = entry.value;
+      if (typeof value !== 'object' || value === null || !('id' in value)) continue;
+      if (typeof value.id === 'string' && value.id.trim()) ids.add(value.id);
+    }
+    return [...ids];
   }
 
   /**
@@ -210,6 +236,57 @@ export class ConversationStore {
     return this.getEntryCount(this.getConversationPath(mainAgentId, agentId));
   }
 
+  /** Aggregate only the main JSONL; the cache retains positions, never message bodies. */
+  readMessageState(mainAgentId: string): AgentRunMessageState {
+    const count = this.count(mainAgentId, mainAgentId);
+    const cached = this.messageSummaries.get(mainAgentId);
+    const summary = cached && cached.count <= count
+      ? { ...cached }
+      : { count: 0, latestMessage: null, latestAssistantIndex: -1 };
+    if (summary.count < count) {
+      this.readFrom(mainAgentId, mainAgentId, summary.count).forEach((entry, offset) => {
+        if (!isVisibleConversationMessage(entry)) return;
+        const index = summary.count + offset;
+        summary.latestMessage = { index, timestamp: entry.ts };
+        if (entry.role === 'assistant') summary.latestAssistantIndex = index;
+      });
+    }
+    summary.count = count;
+    this.messageSummaries.set(mainAgentId, summary);
+
+    const filePath = path.join(this.paths.mainDir(mainAgentId), 'read-state.json');
+    let readThroughIndex: number;
+    try {
+      const value = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+      readThroughIndex = readStateSchema.parse(value).readThroughIndex;
+    } catch {
+      readThroughIndex = summary.latestMessage?.index ?? -1;
+      this.writeReadPosition(mainAgentId, readThroughIndex);
+    }
+    return {
+      latestMessage: summary.latestMessage,
+      latestAssistantIndex: summary.latestAssistantIndex,
+      readThroughIndex,
+    };
+  }
+
+  markRead(mainAgentId: string, throughIndex: number): AgentRunMessageState {
+    const state = this.readMessageState(mainAgentId);
+    const readThroughIndex = Math.max(
+      state.readThroughIndex,
+      Math.min(throughIndex, state.latestMessage?.index ?? -1),
+    );
+    if (readThroughIndex !== state.readThroughIndex) this.writeReadPosition(mainAgentId, readThroughIndex);
+    return { ...state, readThroughIndex };
+  }
+
+  private writeReadPosition(mainAgentId: string, readThroughIndex: number): void {
+    const filePath = path.join(this.paths.mainDir(mainAgentId), 'read-state.json');
+    this.ensureDirSync(path.dirname(filePath));
+    fs.writeFileSync(`${filePath}.tmp`, JSON.stringify({ readThroughIndex }), 'utf8');
+    fs.renameSync(`${filePath}.tmp`, filePath);
+  }
+
   // ============================================================
   // Header 操作
   // ============================================================
@@ -222,7 +299,12 @@ export class ConversationStore {
     this.ensureDirSync(path.dirname(filePath));
 
     const tmpPath = `${filePath}.tmp`;
-    const json = JSON.stringify(header, null, 2);
+    const json = JSON.stringify({
+      ...header,
+      childAgents: header.childAgents.map((child) => ({
+        ...child, config: childConfigSchema.strict().parse(child.config),
+      })),
+    }, null, 2);
     fs.writeFileSync(tmpPath, json, 'utf-8');
     fs.renameSync(tmpPath, filePath);
   }
@@ -282,6 +364,7 @@ export class ConversationStore {
    */
   deleteOwner(mainAgentId: string, agentId: string): void {
     const ownerDir = this.paths.ownerDir(mainAgentId, agentId);
+    if (mainAgentId === agentId) this.messageSummaries.delete(mainAgentId);
     this.clearEntryCountsUnder(ownerDir);
     try {
       fs.rmSync(ownerDir, { recursive: true, force: true });
@@ -297,6 +380,7 @@ export class ConversationStore {
 
   deleteAgentRun(mainAgentId: string): void {
     const mainDir = this.paths.mainDir(mainAgentId);
+    this.messageSummaries.delete(mainAgentId);
     this.clearEntryCountsUnder(mainDir);
     fs.rmSync(mainDir, { recursive: true, force: true });
   }
@@ -340,6 +424,8 @@ export class ConversationStore {
           role: 'user',
           content,
           subtype: entry.subtype,
+          ...(entry.metadata ? { metadata: entry.metadata } : {}),
+          ...(entry.instructions ? { instructions: entry.instructions } : {}),
         };
       }
       return {
@@ -362,7 +448,10 @@ export class ConversationStore {
       };
     }
 
-    if (entry.t === 'summary') return { t: 'summary', ts: entry.ts, summary: entry.summary };
+    if (entry.t === 'summary') return {
+      t: 'summary', ts: entry.ts, summary: entry.summary,
+      ...(entry.pendingEntries?.length ? { pendingEntries: entry.pendingEntries } : {}),
+    };
     return { t: 'marker', ts: entry.ts, key: entry.key, value: entry.value };
   }
 
@@ -755,6 +844,8 @@ export class ConversationStore {
   }
 }
 
+const readStateSchema = z.object({ readThroughIndex: z.number().int().min(-1) });
+
 const fingerprintSchema = z.object({
   platform: z.enum(['macos', 'windows', 'linux']).optional(),
   clientHintsFromUA: z.boolean().optional(),
@@ -776,6 +867,7 @@ const runConfigSchema = z.object({
   description: z.string(),
   category: z.string().optional(),
   promptTemplate: z.string(),
+  skills: z.array(z.string()).optional(),
   systemPrompt: z.string().optional(),
   workspace: z.string().optional(),
   bindings: z.object({
@@ -786,17 +878,19 @@ const runConfigSchema = z.object({
   mcpServers: z.array(z.string()).optional(),
 });
 
+const childConfigSchema = z.object({
+  type: z.string().min(1),
+  subject: z.string(),
+  prompt: z.string(),
+  skills: z.array(z.string()).optional(),
+  browserEnvironmentId: z.string().optional(),
+  advancedSettings: advancedSettingsSchema.optional(),
+});
+
 const childSnapshotSchema = z.object({
   id: z.string(),
-  config: z.object({
-    type: z.string().min(1),
-    subject: z.string(),
-    taskIds: z.array(z.string()).optional(),
-    prompt: z.string(),
-    skills: z.array(z.string()).optional(),
-    browserEnvironmentId: z.string().optional(),
-    advancedSettings: advancedSettingsSchema.optional(),
-  }),
+  workspace: z.string().optional(),
+  config: childConfigSchema,
   createdAt: z.number(),
 });
 

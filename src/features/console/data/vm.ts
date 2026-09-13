@@ -28,8 +28,8 @@ import type {
   AgentModeId,
   TaskItem,
 } from '../../../../shared/types';
-import type { ReasoningSelection } from '../../../../shared/types/reasoning';
 import type { ContextUsage } from '../../../../shared/types/token';
+import type { ReasoningSelection } from '../../../../shared/types/reasoning';
 import type { AgentMcpView } from '../../../../shared/types/mcp';
 import { useDisplayAgentState } from '../../../renderer-runtime/hooks';
 import { useIncidentStore } from '../../../store/incidentStore';
@@ -107,6 +107,7 @@ export interface AgentVM {
   readonly canPause: boolean;
   readonly canStop: boolean;
   readonly model: string;
+  readonly reasoningOverride: ReasoningSelection;
   readonly approvalMode: ApprovalMode;
   readonly modeId: AgentModeId;
   readonly agentSpec?: string;
@@ -165,6 +166,7 @@ function projectAgent(
     canPause: canPause(state),
     canStop: canStop(state),
     model: state.currentModel,
+    reasoningOverride: state.reasoningOverride,
     approvalMode: state.approvalMode,
     modeId: state.modeId,
     agentSpec: state.agentSpec,
@@ -213,6 +215,7 @@ export function useAgentVM(agentId: string | null | undefined): AgentVM | null {
 export interface WorkerVM {
   readonly id: string;
   readonly mainAgentId: string;
+  readonly workspace?: string;
   readonly subject: string;
   readonly type: string;
   readonly phase: AgentPhase;
@@ -220,7 +223,7 @@ export interface WorkerVM {
   readonly interrupted: boolean;
   readonly canPause: boolean;
   readonly model: string;
-  readonly reasoning: ReasoningSelection;
+  readonly reasoningOverride: ReasoningSelection;
   readonly approvalMode: ApprovalMode;
   readonly conversationLength: number;
   readonly contextUsage?: ContextUsage;
@@ -231,7 +234,6 @@ export interface WorkerVM {
   readonly request?: RequestVM;
   readonly pendingToolCall?: PendingToolCall;
   readonly pendingEvents: readonly PendingAgentEventView[];
-  readonly taskIds: readonly string[];
   /** 能力位：决定辅助面板出哪些槽（屏幕） */
   readonly browserId?: string;
   readonly browserReady: boolean;
@@ -247,6 +249,7 @@ function projectWorker(
   return {
     id: child.id,
     mainAgentId,
+    workspace: child.workspace,
     subject: child.subject,
     type: child.type,
     phase: child.phase,
@@ -254,7 +257,7 @@ function projectWorker(
     interrupted: isInterrupted(child),
     canPause: canPause(child),
     model: child.currentModel,
-    reasoning: child.reasoningOverride,
+    reasoningOverride: child.reasoningOverride,
     approvalMode: child.approvalMode,
     conversationLength: child.conversationLength,
     contextUsage: child.contextUsage,
@@ -265,7 +268,6 @@ function projectWorker(
     request: resolveConversationRequest(child.aiRequestState, incident),
     pendingToolCall: child.pendingToolCall,
     pendingEvents: child.pendingEvents,
-    taskIds: child.taskIds,
     browserId: child.browserId,
     browserReady: child.browserReady,
     imageNodeIds: (child.imageNodes ?? []).map((node) => node.id),
@@ -315,9 +317,7 @@ export function resolveConversationTarget(
 /** Worker 任务投影：始终从 Parent 权威看板派生，不从 worker 自身取 */
 export function projectWorkerTasks(
   taskBoard: AgentVM['taskBoard'],
-  taskIds: readonly string[],
+  workerId: string,
 ): readonly TaskItem[] {
-  if (!taskBoard || taskIds.length === 0) return [];
-  const wanted = new Set(taskIds);
-  return taskBoard.items.filter((item) => wanted.has(item.id));
+  return taskBoard?.items.filter((item) => item.owner === workerId) ?? [];
 }

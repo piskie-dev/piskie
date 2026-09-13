@@ -27,6 +27,7 @@ import { StatusBadge } from '../../chrome/StatusBadge';
 import { statusOf } from '../../chrome/statusOf';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import { useTranscript } from '../../data/useTranscript';
+import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
   projectWorkerTasks,
@@ -105,6 +106,7 @@ export const DockPanel = memo<DockPanelProps>(
       active,
     });
 
+    useMarkSessionRead(active && !workerId ? agentId : undefined);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const status = worker?.status ?? agent?.status;
     const request = resolveConversationTarget(agent, worker, workerId);
@@ -121,9 +123,9 @@ export const DockPanel = memo<DockPanelProps>(
       [agent?.askUser, request, worker],
     );
 
-    const tasks = worker
-      ? projectWorkerTasks(agent?.taskBoard, worker.taskIds)
-      : (agent?.taskBoard?.items ?? []);
+    const tasks = useMemo(() => workerId
+      ? projectWorkerTasks(agent?.taskBoard, workerId)
+      : (agent?.taskBoard?.items ?? []), [agent?.taskBoard, workerId]);
 
     const submit = useCallback(
       async (payload: MessagePayload) => {
@@ -142,6 +144,7 @@ export const DockPanel = memo<DockPanelProps>(
         setNotice(result.ok
           ? null
           : result.error ?? messageText('sessionWorkbenchUi.action.operationFailed'));
+        return result.ok;
       },
       [actions, target],
     );
@@ -220,10 +223,10 @@ export const DockPanel = memo<DockPanelProps>(
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
     const taskChips = useMemo<ReadonlyMap<string, ActivityChips> | undefined>(() => {
-      const only = worker?.taskIds.length === 1 ? worker.taskIds[0] : undefined;
+      const only = worker && tasks.length === 1 ? tasks[0]?.id : undefined;
       if (!only) return undefined;
       return new Map([[only, chips]]);
-    }, [chips, worker]);
+    }, [chips, tasks, worker]);
 
     if (!request) return null;
 
@@ -271,7 +274,7 @@ export const DockPanel = memo<DockPanelProps>(
             <AIRequestStatus request={request.request} variant={worker ? 'worker' : 'main'} />
             <McpRuntimeCard
               view={request.mcp}
-              workspace={agent?.workspace}
+              workspace={request.workspace}
               variant={worker ? 'worker' : 'main'}
             />
           </>
@@ -282,7 +285,7 @@ export const DockPanel = memo<DockPanelProps>(
               request={gate}
               // 停止中 / 等待中锁门
               disabled={gateDisabled}
-              onDecide={(decision) => void decide(decision)}
+              onDecide={decide}
               onViewDiff={viewDiff}
               onPreviewImage={onPreviewImage}
             />
@@ -296,9 +299,10 @@ export const DockPanel = memo<DockPanelProps>(
               <ConversationComposer
                 agentId={agentId}
                 workerId={workerId}
+                workspace={request.workspace}
                 targetName={subject}
                 model={request.model}
-                reasoning={worker?.reasoning}
+                reasoningOverride={request.reasoningOverride}
                 modeId={agent?.modeId}
                 approvalMode={request.approvalMode}
                 agentSpec={agent?.agentSpec}

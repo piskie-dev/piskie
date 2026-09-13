@@ -444,10 +444,32 @@ describe('WindowRegistry bootstrap authorization', () => {
     expect(await response.text()).toBe('image-bytes');
     expect(electron.fetch).toHaveBeenCalledWith('file:///tmp/private%20folder/screenshot.png', {
       method: 'GET',
+      signal: expect.any(AbortSignal),
       headers: undefined,
     });
     await registry.stop('test');
     expect(contents.protocol.unhandle).toHaveBeenCalledWith('piskie-attachment');
+  });
+
+  it('retains 256 ordinary tokens while held captures survive pool eviction and release by owner', async () => {
+    const { registry, session } = await registryFixture();
+    const contents = session.window.webContents as unknown as InstanceType<typeof electron.FakeBrowserWindow>['webContents'];
+    const handler = contents.protocolHandlers.get('piskie-attachment')!;
+    const held = registry.createFilePreviewUrl(session.id, '/workspace/held.png', 'image/png', true);
+    const ordinary = Array.from({ length: 256 }, (_, index) => registry.createFilePreviewUrl(session.id, `/workspace/example-${index}.png`, 'image/png'));
+    expect((await handler(new Request(ordinary[0]!))).status).toBe(200);
+    expect((await handler(new Request(ordinary[128]!))).status).toBe(200);
+    registry.createFilePreviewUrl(session.id, '/workspace/next.png', 'image/png');
+    expect((await handler(new Request(ordinary[0]!))).status).toBe(404);
+    expect((await handler(new Request(ordinary[1]!))).status).toBe(200);
+    expect((await handler(new Request(held))).status).toBe(200);
+    registry.releaseFilePreview(session.id + 1, held);
+    expect((await handler(new Request(held))).status).toBe(200);
+    registry.releaseFilePreview(session.id, held);
+    expect((await handler(new Request(held))).status).toBe(404);
+    registry.releaseFilePreview(session.id, ordinary[1]!);
+    expect((await handler(new Request(ordinary[1]!))).status).toBe(404);
+    await registry.stop('test');
   });
 
   it('rejects unknown and released preview tokens without touching the filesystem', async () => {

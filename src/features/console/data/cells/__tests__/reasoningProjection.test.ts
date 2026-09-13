@@ -14,7 +14,7 @@ function assistant(content: PersistedMessageBlock[]): ConversationEntry {
 }
 
 describe('canonical reasoning projection', () => {
-  it('preserves provider block order, prefers summary, and falls back after blank summaries', () => {
+  it('groups adjacent reasoning blocks in order while preferring visible summaries', () => {
     const entry: ConversationEntry = {
       t: 'msg',
       ts: 1,
@@ -48,15 +48,11 @@ describe('canonical reasoning projection', () => {
     expect(cells.map((cell) => cell.kind)).toEqual([
       'assistant',
       'think',
-      'think',
-      'think',
       'assistant',
     ]);
     expect(cells.map((cell) => 'markdown' in cell ? cell.markdown : undefined)).toEqual([
       'before',
-      'fallback reasoning',
-      'anthropic thought',
-      'public summary',
+      'fallback reasoning\n\n---\n\nanthropic thought\n\n---\n\npublic summary',
       'after',
     ]);
     expect(JSON.stringify(cells)).not.toContain('opaque-redacted');
@@ -81,5 +77,20 @@ describe('canonical reasoning projection', () => {
       { type: 'text', text: 'I will inspect it.' },
       tool,
     ])]).map((cell) => cell.kind)).toEqual(['assistant', 'tool']);
+
+    const cells = projectConversationNodes([assistant([
+      { type: 'thinking', thinking: 'inspect first' },
+      tool,
+      { type: 'thinking', thinking: 'review the result' },
+      { type: 'thinking', thinking: 'check the details' },
+      { type: 'text', text: 'The result is ready.' },
+      { type: 'thinking', thinking: 'prepare the next action' },
+    ])]);
+    expect(cells.map((cell) => cell.kind)).toEqual(['think', 'tool', 'think', 'assistant', 'think']);
+    expect(cells.filter((cell) => cell.kind === 'think').map((cell) => cell.markdown)).toEqual([
+      'inspect first',
+      'review the result\n\n---\n\ncheck the details',
+      'prepare the next action',
+    ]);
   });
 });

@@ -35,6 +35,7 @@ export const AGENT_OPERATIONS = Object.freeze({
   setApprovalMode: 'agents.approval.setMode',
   setSubagentApprovalMode: 'agents.approval.setSubagentMode',
   respondToApproval: 'agents.approval.respond',
+  cancelPlanApprovalCountdown: 'agents.approval.cancelPlanCountdown',
   approveImages: 'agents.images.approve',
   enterImageEdit: 'agents.images.enterEdit',
   regenerateImages: 'agents.images.regenerate',
@@ -94,6 +95,7 @@ interface AgentImagesClient {
 }
 
 interface AgentApprovalClient {
+  cancelPlanCountdown(agentId: string, subagentId: string | undefined, callId: string): Promise<void>;
   setMode(agentId: string, mode: ApprovalMode): Promise<void>;
   setSubagentMode(agentId: string, subagentId: string, mode: ApprovalMode): Promise<void>;
   respond(
@@ -118,10 +120,12 @@ export type StartAgentRequest = StartAgentCommon & (
   | {
       definitionId: string;
       input?: never;
+      skills?: never;
       modeId?: 'normal' | 'plan';
     }
   | {
       input: string;
+      skills?: string[];
       definitionId?: never;
       modeId: 'normal' | 'plan' | 'browser-skill';
     }

@@ -16,7 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { ChevronsLeft, ChevronsRight, Play, Search, SquarePen } from 'lucide-react';
 
 import { useUIStore } from '../../../store/uiStore';
-import { StatusBadge } from '../chrome/StatusBadge';
+import { OrbIndicator } from './OrbIndicator';
+import { hasUnreadMessages } from '@shared/agent-run-messages';
 import { Tooltip } from '../chrome/Tooltip';
 import { useConsoleActions } from '../data/actions';
 import { useHistoryRowsReady } from '../data/session';
@@ -103,6 +104,10 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
 
     const onRowMenu = useCallback(
       (key: ThreadMenuKey, row: ThreadRow) => {
+        if (key === 'markRead' && row.messages?.latestMessage) {
+          void actions.markRead(row.agentId, row.messages.latestMessage.index);
+          return;
+        }
         if (row.live) {
           if (key === 'workspace') void actions.openWorkspace(row.workspace);
           else if (key === 'trace') void actions.openTrace(row.agentId);
@@ -177,7 +182,9 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
                       onClick={() => onSelectSession(row.agentId)}
                       aria-label={row.label}
                     >
-                      <StatusBadge status={row.live!.status} dotOnly />
+                      {row.live!.working
+                        ? <OrbIndicator size={14} variant="expanding" />
+                        : <span className={styles.dotSlot} data-unread={hasUnreadMessages(row.messages) || undefined} />}
                     </button>
                   </Tooltip>
                 )),

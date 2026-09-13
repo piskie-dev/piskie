@@ -35,6 +35,8 @@ export interface RemoteCatalogOptions {
   driverIds: ReadonlySet<string>;
   bundledVersion: string;
   bundledGeneratedAt: string;
+  /** Content hash of the bundled publication; an identical remote publication is not downloaded again. */
+  bundledSha256?: string;
   fetch?: typeof globalThis.fetch;
   now?: () => Date;
   onError?: (error: unknown) => void;
@@ -153,6 +155,10 @@ export class RemoteCatalogSource {
         throw new CatalogUpdateError('untrusted', 'Model catalog publication is older than the verified cache');
       }
       if (Date.parse(manifest.generatedAt) < Date.parse(this.options.bundledGeneratedAt)) {
+        this.currentStatus = { ...this.currentStatus, state: 'current', checkedAt: this.now().toISOString() };
+        return this.status();
+      }
+      if (!this.document && manifest.sha256 === this.options.bundledSha256) {
         this.currentStatus = { ...this.currentStatus, state: 'current', checkedAt: this.now().toISOString() };
         return this.status();
       }

@@ -8,7 +8,7 @@ export const workerDefinitionSchema = z.strictObject({
   name: nonempty,
   description: nonempty,
   instructions: nonempty,
-  assignment: z.enum(['question', 'task-board']),
+  assignment: z.enum(['question', 'work-package']),
   tools: z.array(z.strictObject({
     name: nonempty,
     options: z.record(z.string(), z.json()).optional(),

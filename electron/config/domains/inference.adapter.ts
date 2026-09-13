@@ -1,5 +1,3 @@
-import type { WorkerPreferencesDocument } from '../../../shared/types/worker-preferences.js';
-import { validateWorkerReferenceImpact } from './worker-inference-validation.js';
 import type {
   ConfigChangeImpact,
   ConfigDynamicExtensionDescriptor,
@@ -63,24 +61,13 @@ export function createInferenceDomain(
         const references = readDomain
           ? await validateReferences(candidate, readDomain)
           : [];
-        const workers = readDomain
-          ? await validateWorkerReferenceImpact(control,
-              await readDomain('worker-preferences') as WorkerPreferencesDocument, { config: candidate })
-          : { valid: true, issues: [] };
         return {
-          valid: inference.valid && references.length === 0 && workers.valid,
-          issues: [...inference.issues, ...references, ...workers.issues],
+          valid: inference.valid && references.length === 0,
+          issues: [...inference.issues, ...references],
         };
       },
       analyzeImpact: readDomain
-        ? async (current, candidate) => {
-            const workers = await validateWorkerReferenceImpact(control,
-              await readDomain('worker-preferences') as WorkerPreferencesDocument, { config: candidate });
-            return [...await analyzeReferenceImpact(current, candidate, readDomain), ...workers.issues.map((issue) => ({
-              code: issue.code, severity: issue.severity === 'warning' ? 'warning' as const : 'high' as const,
-              path: issue.path, message: issue.message, details: issue.details,
-            }))];
-          }
+        ? (current, candidate) => analyzeReferenceImpact(current, candidate, readDomain)
         : undefined,
       probe: (candidate, input) => probeCandidate(control, candidate, input),
       publish: (candidate) => control.publishConfigCandidate(candidate),
@@ -92,7 +79,7 @@ export function createInferenceDomain(
 async function dependencyRevisions(
   readDomain: ConfigDomainReader,
 ): Promise<Readonly<Record<string, number>>> {
-  const domainIds = ['inference-selections', 'model-catalog', 'proxies', 'worker-preferences'] as const;
+  const domainIds = ['inference-selections', 'model-catalog', 'proxies'] as const;
   const documents = await Promise.all(domainIds.map((domain) => readDomain(domain)));
   return Object.fromEntries(domainIds.map((domain, index) => [
     domain,

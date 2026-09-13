@@ -4,6 +4,13 @@ export type SkillScope = 'builtin' | 'user' | 'project'
 
 export type SkillType = 'browser' | 'local'
 
+/** Effective, enabled Skill shown in the chat composer. */
+export interface ComposerSkillOption {
+  name: string
+  description: string
+  scope: SkillScope
+}
+
 /** registry.json 条目（全局层记账；内置/项目级无记账） */
 export interface SkillRegistryEntry {
   name: string

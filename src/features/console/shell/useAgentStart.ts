@@ -22,6 +22,7 @@ export type StartOutcome =
     };
 
 export interface QuickChatOptions extends Partial<ComposerDraftSettings> {
+  readonly skills?: readonly string[];
   readonly images?: readonly { data: string; media_type: string }[];
   readonly mcpPrewarmToken?: string;
 }
@@ -60,11 +61,14 @@ export function useAgentStart(onStarted: (agentId: string) => void): AgentStart 
   const startQuickChat = useCallback(
     async (text: string, options?: QuickChatOptions): Promise<StartOutcome> => {
       const message = text.trim();
-      if (!message) return { kind: 'failed', reason: 'empty-content' };
+      if (!message && !options?.skills?.length && !options?.images?.length) {
+        return { kind: 'failed', reason: 'empty-content' };
+      }
 
       return startRequest({
         modeId: options?.modeId ?? 'normal',
         input: message,
+        skills: options?.skills?.length ? [...options.skills] : undefined,
         workspace: options?.workspace,
         approvalMode: options?.approvalMode ?? useComposerDraftStore.getState().defaults.approvalMode,
         environmentIds: options?.environmentIds ? [...options.environmentIds] : undefined,

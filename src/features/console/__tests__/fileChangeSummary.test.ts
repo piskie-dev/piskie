@@ -15,6 +15,7 @@ vi.mock('../data/vm', async (importOriginal) => ({
   useWorkerVM: (_agentId: string | undefined, workerId?: string) => workerId ? worker : null,
 }));
 vi.mock('../data/actions', () => ({ useConsoleActions: () => ({}) }));
+vi.mock('../data/useMarkSessionRead', () => ({ useMarkSessionRead: () => undefined }));
 vi.mock('../data/useTranscript', () => ({
   useTranscript: (agentId: string) => ({
     nodes: nodesByAgent.get(agentId) ?? [],
@@ -41,6 +42,7 @@ let main: AgentVM = {
   canPause: false,
   canStop: true,
   model: 'provider::model',
+  reasoningOverride: { kind: 'provider-default' },
   approvalMode: 'auto',
   modeId: 'normal',
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -78,8 +80,7 @@ let worker: WorkerVM = {
   mainAgentId: main.agentId,
   subject: 'Example worker',
   type: 'local-worker',
-  reasoning: { kind: 'disabled' },
-  taskIds: [],
+
   browserReady: false,
 };
 
@@ -98,7 +99,6 @@ function writes(paths: readonly string[]): TranscriptNode[] {
 
 beforeEach(() => {
   main = { ...main, taskBoard: undefined };
-  worker = { ...worker, taskIds: [] };
   nodesByAgent.clear();
   nodesByAgent.set(main.agentId, writes(['/workspace/sample.txt', '/workspace/another.txt']));
   nodesByAgent.set(worker.id, writes(['/workspace/worker.txt']));
@@ -149,7 +149,6 @@ describe.each(views)('%s file change summary', (_name, View) => {
         items: [{ id: 'task-one', subject: 'Example task', description: '', status: 'in_progress', owner: workerId ?? main.agentId, dependsOn: [] }],
       },
     };
-    worker = { ...worker, taskIds: workerId ? ['task-one'] : [] };
 
     const html = render(workerId);
 

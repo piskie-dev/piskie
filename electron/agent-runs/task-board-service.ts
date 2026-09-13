@@ -1,17 +1,15 @@
 import { createUuid } from '@shared/utils/identifiers.js';
 /**
- * TaskBoardService - Main-owned shared Task Board persistence and ownership rules.
+ * TaskBoardService - Main-owned Task Board persistence and ownership rules.
  *
  * Each Main instance owns one tasks.json. Writes are short, cross-process
- * read/merge/replace transactions; the file is the only task business truth.
+ * read/replace transactions; the file is the only task business truth.
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { app } from 'electron';
 import type {
-  AssignmentTaskBoardSnapshot,
   TaskBoardData,
   TaskItem,
   TaskItemStatus,
@@ -23,22 +21,14 @@ const ITEM_KEYS = new Set(['id', 'subject', 'description', 'status', 'owner', 'd
 const LOCK_STALE_MS = 30_000;
 const LOCK_RETRIES = 160;
 
-type ExpectedOwner = string | null;
-
 export interface SyncTaskBoardInput {
   mainAgentId: string;
-  callerAgentId: string;
   taskSummary?: string;
   items: TaskItem[];
-  /** Runtime-owned Worker IDs that Main may assign new work to. */
+  /** Active Worker IDs used to report affected work. */
   activeWorkerIds?: readonly string[];
-  /** Assignment creation snapshot, used as a per-task compare-and-claim guard. */
-  assignmentOwners?: ReadonlyMap<string, ExpectedOwner> | Readonly<Record<string, ExpectedOwner>>;
-}
-
-export interface ReadTaskBoardForMainInput {
-  mainAgentId: string;
-  callerAgentId: string;
+  /** Worker IDs from this Main's persisted creation records, including stopped Workers. */
+  createdWorkerIds?: readonly string[];
 }
 
 export interface AffectedWorkerTasks {
@@ -54,7 +44,7 @@ export interface SyncTaskBoardResult {
 export class TaskBoardError extends Error {
   constructor(
     message: string,
-    readonly code: 'not_found' | 'invalid' | 'conflict' | 'read_required' | 'lock_timeout',
+    readonly code: 'invalid' | 'lock_timeout',
     readonly currentBoard?: TaskBoardData
   ) {
     super(message);
@@ -181,23 +171,6 @@ export function parseTaskBoard(value: unknown): TaskBoardData {
   return { schemaVersion: 1, taskSummary, items };
 }
 
-function expectedOwnerMap(
-  value: SyncTaskBoardInput['assignmentOwners']
-): ReadonlyMap<string, ExpectedOwner> {
-  if (!value) return new Map();
-  return value instanceof Map ? value : new Map(Object.entries(value));
-}
-
-function ownersMatch(left: ExpectedOwner, right: ExpectedOwner): boolean {
-  return left === right;
-}
-
-function boardRevision(board: TaskBoardData | null): string {
-  return createHash('sha256')
-    .update(board === null ? '<missing-task-board>' : JSON.stringify(board))
-    .digest('hex');
-}
-
 function itemsEqual(left: TaskItem, right: TaskItem): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -243,7 +216,6 @@ function collectAffectedWorkers(
 
 export class TaskBoardService {
   private readonly paths: AgentRunPaths;
-  private readonly mainReadBaselines = new Map<string, string>();
 
   constructor(userDataDirectory = app.getPath('userData')) {
     this.paths = new AgentRunPaths(userDataDirectory);
@@ -257,31 +229,12 @@ export class TaskBoardService {
     return this.readBoardFile(this.getTaskBoardPath(mainAgentId));
   }
 
-  /**
-   * Establishes the read baseline promised by TaskReadTool.description.
-   * Ordinary UI/restoration reads intentionally do not authorize a Main write.
-   */
-  async readTaskBoardForMain(input: ReadTaskBoardForMainInput): Promise<TaskBoardData | null> {
-    if (input.callerAgentId !== input.mainAgentId) {
-      throw new TaskBoardError('只有 Main 可以建立全局 Task Board 读取基线', 'invalid');
-    }
-    const filePath = this.getTaskBoardPath(input.mainAgentId);
-    const board = await this.readBoardFile(filePath);
-    this.mainReadBaselines.set(filePath, boardRevision(board));
-    return board;
-  }
-
   async syncTaskBoard(input: SyncTaskBoardInput): Promise<SyncTaskBoardResult> {
     const submittedItems = normalizeItems(input.items);
     validateUnassignedItems(submittedItems);
     const filePath = this.getTaskBoardPath(input.mainAgentId);
-    const isMain = input.callerAgentId === input.mainAgentId;
-    const expectedMainRevision = isMain ? this.mainReadBaselines.get(filePath) : undefined;
     const activeWorkerIds = new Set(input.activeWorkerIds ?? []);
 
-    if (!isMain && input.taskSummary !== undefined) {
-      throw new TaskBoardError('Worker 不能修改 taskSummary', 'invalid');
-    }
     const requestedSummary =
       input.taskSummary === undefined
         ? undefined
@@ -289,160 +242,43 @@ export class TaskBoardService {
 
     return this.withBoardLock(filePath, async () => {
       const current = await this.readBoardFile(filePath);
-      if (!current && !isMain) {
-        throw new TaskBoardError('当前 Main 尚未建立 Task Board', 'not_found');
-      }
       if (!current && !requestedSummary) {
         throw new TaskBoardError('Main 首次提交 Task Board 时必须提供 taskSummary', 'invalid');
       }
 
-      let nextItems: TaskItem[];
-      let affectedWorkers: AffectedWorkerTasks[] = [];
-      if (isMain) {
-        if (current) this.assertMainReadBaseline(expectedMainRevision, current);
-        this.validateMainOwners(
-          current?.items ?? [],
-          submittedItems,
-          input.mainAgentId,
-          activeWorkerIds,
-          current ?? undefined
-        );
-        if (current) {
-          affectedWorkers = collectAffectedWorkers(
-            current.items,
-            submittedItems,
-            input.mainAgentId,
-            activeWorkerIds
-          );
-        }
-        nextItems = submittedItems;
-      } else {
-        nextItems = this.mergeWorkerScope(
-          current!.items,
-          submittedItems,
-          input.callerAgentId,
-          expectedOwnerMap(input.assignmentOwners),
-          current!
-        );
-      }
-      validateDependencies(nextItems);
+      this.validateMainOwners(
+        current?.items ?? [],
+        submittedItems,
+        input.mainAgentId,
+        new Set(input.createdWorkerIds ?? []),
+        current ?? undefined
+      );
+      const affectedWorkers = current
+        ? collectAffectedWorkers(current.items, submittedItems, input.mainAgentId, activeWorkerIds)
+        : [];
+      validateDependencies(submittedItems);
 
       const board: TaskBoardData = {
         schemaVersion: 1,
         taskSummary: requestedSummary ?? current!.taskSummary,
-        items: nextItems,
+        items: submittedItems,
       };
       await this.writeBoardAtomically(filePath, board);
-      if (isMain) this.mainReadBaselines.set(filePath, boardRevision(board));
 
       return { board, affectedWorkers };
     });
-  }
-
-  async createCompactSnapshot(
-    mainAgentId: string,
-    taskIds: string[]
-  ): Promise<AssignmentTaskBoardSnapshot> {
-    const board = await this.readTaskBoard(mainAgentId);
-    if (!board) {
-      throw new TaskBoardError('当前 Main 尚未建立 Task Board', 'not_found');
-    }
-
-    const requested = new Set(taskIds);
-    const existing = new Set(board.items.map((item) => item.id));
-    const missing = taskIds.filter((id) => !existing.has(id));
-    if (missing.length > 0) {
-      throw new TaskBoardError(
-        `Task Board 中不存在以下 taskIds: ${missing.join(', ')}`,
-        'not_found',
-        board
-      );
-    }
-
-    return {
-      taskSummary: board.taskSummary,
-      items: board.items.map((item) => ({
-        id: item.id,
-        subject: item.subject,
-        status: item.status,
-        owner: item.owner,
-        dependsOn: [...item.dependsOn],
-        assignedHere: requested.has(item.id),
-      })),
-    };
-  }
-
-  /** Release unfinished work owned by one Worker while retaining completed history. */
-  async releaseOwnerTasks(
-    mainAgentId: string,
-    ownerId: string
-  ): Promise<TaskBoardData | null> {
-    return this.releaseOwners(mainAgentId, (owner) => owner === ownerId);
-  }
-
-  /** On Main resume every non-Main runtime owner is stale because Workers are not restored. */
-  async releaseStaleWorkerTasks(
-    mainAgentId: string
-  ): Promise<TaskBoardData | null> {
-    // A restored Main runtime must establish its own task_read baseline even when no item changes.
-    this.mainReadBaselines.delete(this.getTaskBoardPath(mainAgentId));
-    return this.releaseOwners(
-      mainAgentId,
-      (owner) => owner !== null && owner !== mainAgentId
-    );
-  }
-
-  private async releaseOwners(
-    mainAgentId: string,
-    matches: (owner: string | null) => boolean
-  ): Promise<TaskBoardData | null> {
-    const filePath = this.getTaskBoardPath(mainAgentId);
-    return this.withBoardLock(filePath, async () => {
-      const current = await this.readBoardFile(filePath);
-      if (!current) return null;
-
-      let changed = false;
-      const items = current.items.map((item) => {
-        if (item.status === 'completed' || !matches(item.owner)) return item;
-        changed = true;
-        return { ...item, owner: null, status: 'pending' as const };
-      });
-      if (!changed) return current;
-
-      const board = { ...current, items };
-      await this.writeBoardAtomically(filePath, board);
-      return board;
-    });
-  }
-
-  /** Implements the Main task prompt's read-before-global-replace contract. */
-  private assertMainReadBaseline(baseline: string | undefined, current: TaskBoardData): void {
-    if (!baseline) {
-      throw new TaskBoardError(
-        '修改已有 Task Board 前需要先调用 task_read',
-        'read_required',
-        current
-      );
-    }
-    if (baseline !== boardRevision(current)) {
-      throw new TaskBoardError(
-        'Task Board 在读取后已发生变化；请重新调用 task_read 后重试',
-        'read_required',
-        current
-      );
-    }
   }
 
   private validateMainOwners(
     currentItems: TaskItem[],
     submittedItems: TaskItem[],
     mainAgentId: string,
-    activeWorkerIds: ReadonlySet<string>,
+    createdWorkerIds: ReadonlySet<string>,
     currentBoard?: TaskBoardData
   ): void {
     const currentById = new Map(currentItems.map((item) => [item.id, item]));
     for (const item of submittedItems) {
-      if (item.owner === null || item.owner === mainAgentId || activeWorkerIds.has(item.owner)) {
+      if (item.owner === null || item.owner === mainAgentId || createdWorkerIds.has(item.owner)) {
         continue;
       }
       if (currentById.get(item.id)?.owner === item.owner) continue;
@@ -453,86 +289,6 @@ export class TaskBoardService {
         currentBoard
       );
     }
-  }
-
-  /** Implements the Worker task prompt's owner-scoped direct replacement contract. */
-  private mergeWorkerScope(
-    currentItems: TaskItem[],
-    submittedItems: TaskItem[],
-    callerAgentId: string,
-    assignmentOwners: ReadonlyMap<string, ExpectedOwner>,
-    currentBoard: TaskBoardData
-  ): TaskItem[] {
-    const currentById = new Map(currentItems.map((item) => [item.id, item]));
-    const submittedById = new Map(submittedItems.map((item) => [item.id, item]));
-    const claimIds = new Set<string>();
-
-    for (const item of submittedItems) {
-      const existing = currentById.get(item.id);
-      if (!existing) {
-        if (assignmentOwners.has(item.id)) {
-          throw new TaskBoardError(
-            `Assignment 任务 ${item.id} 已从最新 Task Board 消失，不能按旧快照重新创建`,
-            'conflict',
-            currentBoard
-          );
-        }
-        continue;
-      }
-
-      const callerOwnsCurrent = existing.owner === callerAgentId;
-      if (callerOwnsCurrent) continue;
-
-      const expectedOwner = assignmentOwners.get(item.id);
-      const canClaim =
-        assignmentOwners.has(item.id) && ownersMatch(existing.owner, expectedOwner ?? null);
-      if (canClaim) {
-        if (item.owner !== callerAgentId) {
-          throw new TaskBoardError(
-            `Worker 认领 Assignment 任务 ${item.id} 时必须把 owner 设为自身 ${callerAgentId}`,
-            'invalid',
-            currentBoard
-          );
-        }
-        claimIds.add(item.id);
-        continue;
-      }
-
-      if (existing.owner === null && !assignmentOwners.has(item.id)) {
-        throw new TaskBoardError(
-          `任务 ${item.id} 当前未分配，但未指派给 ${callerAgentId}；${callerAgentId} 无权认领、修改或使用该 task`,
-          'conflict',
-          currentBoard
-        );
-      }
-
-      throw new TaskBoardError(
-        `owner 冲突：任务 ${item.id} 当前属于 ${existing.owner ?? 'unassigned'}，${callerAgentId} 无权覆盖`,
-        'conflict',
-        currentBoard
-      );
-    }
-
-    const merged: TaskItem[] = [];
-    for (const current of currentItems) {
-      const inCallerScope = current.owner === callerAgentId;
-      const submitted = submittedById.get(current.id);
-
-      if (inCallerScope) {
-        if (submitted) merged.push(submitted);
-        continue;
-      }
-      if (submitted && claimIds.has(current.id)) {
-        merged.push(submitted);
-      } else {
-        merged.push(current);
-      }
-    }
-
-    for (const submitted of submittedItems) {
-      if (!currentById.has(submitted.id)) merged.push(submitted);
-    }
-    return merged;
   }
 
   private async readBoardFile(filePath: string): Promise<TaskBoardData | null> {

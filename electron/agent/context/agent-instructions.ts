@@ -29,6 +29,6 @@ export async function loadAgentInstructions(userDataDir: string, workspace: stri
   const body = sections.filter((section) => section !== undefined).join('\n\n');
   if (!body) return '';
   return '# AGENTS.md instructions\n\n'
-    + '以下规则适用于当前任务。项目规则与全局规则冲突时，优先遵循项目规则。\n\n'
+    + '以下是本次运行加载的全部规则文件，参与本次运行的每个 Agent 都已收到同一份。项目规则与全局规则冲突时，优先遵循项目规则。\n\n'
     + `<INSTRUCTIONS>\n${neutralizeClosing('INSTRUCTIONS', body)}\n</INSTRUCTIONS>`;
 }

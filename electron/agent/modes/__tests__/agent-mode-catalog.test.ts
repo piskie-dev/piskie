@@ -105,6 +105,24 @@ describe('AgentModeCatalog', () => {
     }));
   });
 
+  it('starts a skill-only input and carries selections in its run config', async () => {
+    const { agent, catalog } = harness();
+    await catalog.start({ modeId: 'normal', input: '', skills: ['sample-guide', 'other-guide'] });
+    expect(agent.startAgent).toHaveBeenCalledWith(expect.objectContaining({
+      runConfig: expect.objectContaining({ promptTemplate: '', skills: ['sample-guide', 'other-guide'] }),
+    }));
+  });
+
+  it('accepts images with selections and an empty body', async () => {
+    const { agent, catalog } = harness();
+    const launchOptions = { images: [{ data: 'c2FtcGxl', media_type: 'image/png' }] };
+    await catalog.start({ modeId: 'normal', input: '', skills: ['sample-guide'], launchOptions });
+    expect(agent.startAgent).toHaveBeenCalledWith(expect.objectContaining({
+      launchOptions,
+      runConfig: expect.objectContaining({ promptTemplate: '', skills: ['sample-guide'] }),
+    }));
+  });
+
   it('copies Composer browser bindings into a one-off run config', async () => {
     const { agent, catalog } = harness();
 

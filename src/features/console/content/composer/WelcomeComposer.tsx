@@ -24,17 +24,25 @@ import BrowserEnvironmentBindingPicker from '../../../../components/BrowserEnvir
 import { ModelReasoningControl } from '../../../../components/shared';
 import { getAvailableModelOptions, useInferenceStore } from '../../../../store/inferenceStore';
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
+import type { PresentationText } from '../../../../i18n/presentationText';
 import { Popover } from '../../chrome/Popover';
-import { ImageThumbnail } from '../ImageThumbnail';
+import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
+import { SkillTags } from '../SkillTags';
+import { SkillPicker } from './SkillPicker';
+import { useSkillComposer } from './useSkillComposer';
 import styles from './welcomeComposer.module.css';
 
 export interface WelcomeComposerProps {
   readonly value: string;
+  readonly skills: readonly string[];
+  readonly onSkillsChange: (skills: readonly string[]) => void;
+  readonly draftIdentity: string;
   readonly onChange: (value: string) => void;
   readonly onSubmit: () => void;
   readonly onPaste: React.ClipboardEventHandler;
   readonly placeholder: string;
   readonly sending?: boolean;
+  readonly error?: PresentationText;
   readonly images: readonly AttachmentImage[];
   readonly files: readonly AttachmentFile[];
   readonly onRemoveAttachment: (id: string) => void;
@@ -58,11 +66,15 @@ export interface WelcomeComposerProps {
 export const WelcomeComposer = memo<WelcomeComposerProps>(
   ({
     value,
+    skills,
+    onSkillsChange,
+    draftIdentity,
     onChange,
     onSubmit,
     onPaste,
     placeholder,
     sending,
+    error,
     images,
     files,
     onRemoveAttachment,
@@ -92,18 +104,21 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
       [aiModels, availableAiTargets, inferenceConfig],
     );
 
+    const skillComposer = useSkillComposer({ value, onChange, skills, onSkillsChange, workspace: workspacePath, draftIdentity });
+    const { onKeyDown: onSkillKeyDown } = skillComposer;
     const hasAttachments = images.length > 0 || files.length > 0;
     const attachmentCount = images.length + files.length;
-    const canSend = (value.trim().length > 0 || hasAttachments) && !sending;
+    const canSend = (value.trim().length > 0 || hasAttachments || skills.length > 0) && !sending;
 
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (onSkillKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           onSubmit();
         }
       },
-      [onSubmit],
+      [onSubmit, onSkillKeyDown],
     );
 
     const onReasoningChange = useCallback(
@@ -124,14 +139,22 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     return (
       <div className={styles.composerBlock}>
         {statusSlot}
-        <div className={styles.composerFrame} onClick={focusInput}>
+        <div ref={skillComposer.anchorRef} className={styles.composerFrame} onClick={focusInput}>
+          <SkillPicker controller={skillComposer} />
           <div className={styles.composerShell}>
+            <AttachmentError error={error} />
+            {skills.length > 0 && (
+              <div className={styles.attachments}>
+                <SkillTags skills={skills} options={skillComposer.options}
+                  onRemove={(name) => onSkillsChange(skills.filter((skill) => skill !== name))} />
+              </div>
+            )}
             {hasAttachments && (
               <div className={styles.attachments}>
                 {images.map((image) => (
                   <div key={image.id} className={styles.imageThumb}>
-                    <ImageThumbnail
-                      resource={{ kind: 'preview-url', url: image.previewUrl }}
+                    <AttachmentThumbnail
+                      image={image}
                       alt={t('sessionWorkbenchUi.composer.imagePreview')}
                       className={styles.imageThumbPreview}
                       onPreview={onPreviewImage}
@@ -168,11 +191,14 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
 
             <div className={styles.textareaWrap}>
               <textarea
+                ref={skillComposer.textareaRef}
+                {...skillComposer.textareaProps}
+                aria-label={placeholder}
                 className={styles.textarea}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 onKeyDown={onKeyDown}
-                onPaste={onPaste}
+                onPaste={(event) => { skillComposer.onPasteOrDrop(); onPaste(event); }}
                 placeholder={placeholder}
                 rows={1}
               />

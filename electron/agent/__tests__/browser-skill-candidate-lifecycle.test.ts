@@ -49,7 +49,7 @@ function runtime(spec = browserSkillDirectorSpec): AgentRuntime {
             subagentConfig: {
               type: 'local-worker',
               subject: 'worker',
-              taskIds: ['task-1'],
+
               prompt: 'test',
               skills: [],
             },

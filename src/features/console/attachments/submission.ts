@@ -16,13 +16,21 @@ export function composeAttachmentText(
   return `${message ? `${message}\n\n` : ''}附件文件（使用 read 读取）:\n${references}`;
 }
 
-export function blobToImagePayload(blob: Blob, mediaType: string): Promise<ImagePayload> {
+export function blobToImagePayload(blob: Blob, mediaType: string, signal?: AbortSignal): Promise<ImagePayload> {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new PresentationError(
+    const abort = () => reader.abort();
+    const finish = () => {
+      signal?.removeEventListener('abort', abort);
+      reader.onload = reader.onerror = reader.onabort = null;
+    };
+    reader.onabort = () => { finish(); reject(signal?.reason); };
+    reader.onerror = () => { finish(); reject(new PresentationError(
       messageText('sessionWorkbenchUi.attachmentFailure.imageRead'),
-    ));
+    )); };
     reader.onload = () => {
+      finish();
       if (typeof reader.result !== 'string') {
         reject(new PresentationError(
           messageText('sessionWorkbenchUi.attachmentFailure.imageRead'),
@@ -38,6 +46,7 @@ export function blobToImagePayload(blob: Blob, mediaType: string): Promise<Image
       }
       resolve({ data: reader.result.slice(separator + 1), media_type: mediaType });
     };
-    reader.readAsDataURL(blob);
+    signal?.addEventListener('abort', abort, { once: true });
+    try { reader.readAsDataURL(blob); } catch (error) { finish(); reject(error); }
   });
 }

@@ -85,15 +85,7 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
 
 ## 编写 taskDescription
 
-把新的顶层智能体当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断，但不知道当前对话和既有进展。taskDescription 应完整、自包含，并包含：
-
-- 独立任务的目标、范围和可观察结果；
-- 已知、尝试过和已排除的事实；
-- 安全边界与用户约束；
-- 所需网站入口、文件路径和环境标识；
-- 期望产出、验证标准和结果去向。
-
-边界示例：用户明确要求在当前任务之外另行运行一项独立工作时使用 agent_run；把当前任务拆成多个协作工作包时使用 subagent。`,
+把新的顶层智能体当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断，但不知道当前对话和既有进展；taskDescription 是它拿到的全部材料。`,
   };
 
   async execute(params: AgentRunParams, context: ToolContext): Promise<ToolOutput<unknown>> {

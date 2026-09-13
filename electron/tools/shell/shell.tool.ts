@@ -24,7 +24,7 @@ const shellSchema = z.object({
     .default(DEFAULT_TIMEOUT_MS)
     .describe('Foreground wait in milliseconds, from 1000 to 600000.'),
   description: z.string().trim().min(1).optional().describe(
-    'Brief human-readable command description for approval and activity display.',
+    'Brief human-readable command description for approval, activity display, and background completion notices.',
   ),
   run_in_background: bool().default(false).describe('Start directly as a background task.'),
 });
@@ -77,6 +77,7 @@ export class ShellTool extends BaseTool<ShellParams, ShellData> {
     try {
       job = new ChildProcessJob({
         command: params.command,
+        description: params.description,
         cwd,
         tempDir: ctx.workspace.tempDir,
         spool: ctx.spool,

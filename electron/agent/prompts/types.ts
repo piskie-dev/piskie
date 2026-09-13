@@ -20,7 +20,7 @@ export interface PromptContext {
   canManageAgentRuns: boolean;
   toolNames?: readonly string[];
   sendEventTypes?: readonly string[];
-  assignment?: 'question' | 'task-board';
+  assignment?: 'question' | 'work-package';
   /** 当前工具面允许创建的调查型（question）Worker 类型名；为空表示不教学调查委派。 */
   investigatorTypes?: readonly string[];
 

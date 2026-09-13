@@ -3,7 +3,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useInferenceStore } from '../../../../../store/inferenceStore';
-import { useToastStore } from '../../../../toasts';
 import { useUIStore } from '../../../../../store/uiStore';
 import type { HistoryRow, SessionRow } from '../../../data/sessionRow';
 import { rawText } from '../../../data/presentationText';
@@ -20,6 +19,8 @@ import { useAgentStart, type AgentStart, type StartOutcome } from '../../../shel
 import { useConsoleActions } from '../../../data/actions';
 import { useComposerSettings, type ComposerSettings } from '../useComposerSettings';
 import { WelcomeInput } from '../WelcomeInput';
+import { pngBytes } from '../../../attachments/__tests__/fixtures';
+import { composerImageUsage } from '../../../data/composer-drafts';
 import type { WelcomeComposerProps } from '../WelcomeComposer';
 
 const { renderComposer, runtime, control, preview, rows } = vi.hoisted(() => ({
@@ -29,7 +30,7 @@ const { renderComposer, runtime, control, preview, rows } = vi.hoisted(() => ({
     agentCommands: {
       setSubagentReasoning: vi.fn(), setSubagentModel: vi.fn(),
       setApprovalMode: vi.fn(), setSubagentApprovalMode: vi.fn(),
-      respondToApproval: vi.fn(), start: vi.fn(),
+      respondToApproval: vi.fn(), start: vi.fn(), inject: vi.fn(), injectSubagent: vi.fn(),
     },
   },
   control: { agentsById: {} },
@@ -100,21 +101,25 @@ async function fillDraft(): Promise<void> {
     composer().onEnvironmentIdsChange(['browser-a', 'browser-b']);
     composer().onSelectWorkspace();
   });
+  act(() => composer().onSkillsChange(['sample-guide', 'sample-table']));
   act(() => composer().onPaste({
     clipboardData: {
       items: [{
         kind: 'file',
-        getAsFile: () => new File(['image-bytes'], 'sample.png', { type: 'image/png' }),
+        getAsFile: () => new File([pngBytes()], 'sample.png', { type: 'image/png' }),
       }],
       getData: () => '',
     },
     preventDefault: vi.fn(),
   } as unknown as React.ClipboardEvent));
+  const image = composer().images[0]!;
+  if (image.status === 'capturing') await act(async () => { await image.capture.done; });
 }
 
 function expectFresh(workspacePath?: string, approvalMode: 'auto' | 'confirm' = 'auto'): void {
   expect(composer()).toMatchObject({
     value: '',
+    skills: [],
     model: 'sample-provider::default-model',
     modeId: 'normal',
     approvalMode,
@@ -216,12 +221,13 @@ describe('welcome composer lifecycle', () => {
 
     expect(composer()).toMatchObject({
       value: 'Inspect the sample',
+      skills: ['sample-guide', 'sample-table'],
       model: 'sample-provider::chosen-model',
       modeId: 'plan',
       approvalMode: 'auto',
       workspacePath: '/tmp/sample-workspace',
       environmentIds: ['browser-a', 'browser-b'],
-      images: [{ previewUrl: 'blob:sample-image' }],
+      images: [{ status: 'ready' }],
     });
     expect(revokeObjectURL).not.toHaveBeenCalled();
   });
@@ -307,13 +313,13 @@ describe('welcome composer lifecycle', () => {
     });
   });
 
-  it('starts fresh on every plus action, preserves other targets and releases previews', async () => {
+  it('starts fresh on every welcome plus action, preserves other targets and releases image bytes', async () => {
     const agentKey = composerDraftKey('agent-a');
     useComposerDraftStore.getState().setDraft(agentKey, 'Another draft');
     await fillDraft();
     act(() => shellRef.current!.newSession());
     expectFresh();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:sample-image');
+    expect(composerImageUsage().originalBytes).toBe(0);
     expect(useComposerDraftStore.getState().drafts[agentKey]?.text).toBe('Another draft');
 
     act(() => composer().onChange('A second draft'));
@@ -343,10 +349,12 @@ describe('welcome composer lifecycle', () => {
     expect(onStart).toHaveBeenCalledWith('Inspect the sample', expect.objectContaining({
       model: 'sample-provider::chosen-model', modeId: 'plan', approvalMode: 'auto',
       workspace: '/tmp/sample-workspace', environmentIds: ['browser-a', 'browser-b'],
-      images: [{ data: 'aW1hZ2UtYnl0ZXM=', media_type: 'image/png' }],
+      images: [{ data: Buffer.from(pngBytes()).toString('base64'), media_type: 'image/png' }],
+      skills: ['sample-guide', 'sample-table'],
     }));
     expect(composer().value).toBe('Inspect the sample');
     expect(composer().images).toHaveLength(1);
+    expect(composer().skills).toEqual(['sample-guide', 'sample-table']);
 
     onStart.mockResolvedValue({ kind: 'started', agentId: 'agent-a' });
     await act(async () => { await composer().onSubmit(); });
@@ -375,8 +383,66 @@ describe('welcome composer lifecycle', () => {
 });
 
 
+describe('selected skill send boundaries', () => {
+  it('retains newer welcome edits when an earlier startup succeeds', async () => {
+    let accepted!: (outcome: StartOutcome) => void;
+    onStart.mockReturnValueOnce(new Promise<StartOutcome>((resolve) => { accepted = resolve; }));
+    act(() => composer().onSkillsChange(['sample-guide']));
+    await act(async () => { composer().onSubmit(); });
+    act(() => composer().onChange('Next example'));
+    await act(async () => accepted({ kind: 'started', agentId: 'session-example' }));
+    expect(composer()).toMatchObject({ value: 'Next example', skills: ['sample-guide'] });
+  });
+
+  it('starts with only selected skills and retains the welcome draft until accepted', async () => {
+    act(() => composer().onSkillsChange(['sample-guide']));
+    await remount();
+    await act(async () => { await composer().onSubmit(); });
+    expect(onStart).toHaveBeenLastCalledWith('', expect.objectContaining({ skills: ['sample-guide'] }));
+    expect(composer().skills).toEqual(['sample-guide']);
+    await act(async () => { await startRef.current!.startQuickChat('', { skills: ['sample-guide'], workspace: '/workspace/sample' }); });
+    expect(runtime.agentCommands.start).toHaveBeenLastCalledWith(expect.objectContaining({
+      input: '', skills: ['sample-guide'], workspace: '/workspace/sample',
+    }));
+    onStart.mockResolvedValue({ kind: 'started', agentId: 'session-example' });
+    await act(async () => { await composer().onSubmit(); });
+    expect(composer().skills).toEqual([]);
+  });
+
+  it('clears only skill choices when the welcome workspace changes', async () => {
+    await fillDraft();
+    act(() => composer().onUseDefaultWorkspace());
+    expect(composer().skills).toEqual([]);
+    expect(composer().value).toBe('Inspect the sample');
+    expect(composer().images).toHaveLength(1);
+    act(() => composer().onSkillsChange(['sample-guide']));
+    act(() => composer().onUseDefaultWorkspace());
+    expect(composer().skills).toEqual(['sample-guide']);
+    await act(async () => composer().onSelectWorkspace());
+    expect(composer().skills).toEqual([]);
+  });
+
+  it.each(['main', 'worker'] as const)('preserves selected skills in the %s inject request alongside attachments', async (kind) => {
+    const target = { agentId: 'session-example', ...(kind === 'worker' ? { workerId: 'worker-example' } : {}) };
+    const command = kind === 'worker' ? runtime.agentCommands.injectSubagent : runtime.agentCommands.inject;
+    command.mockResolvedValue({ ok: true });
+    await act(async () => {
+      await actionsRef.current!.send(target, {
+        text: '', skills: ['sample-guide', 'sample-table'],
+        files: [{ name: 'sample.txt', path: '/workspace/sample.txt' }],
+        images: [{ data: 'c2FtcGxl', media_type: 'image/png' }],
+      });
+    });
+    const event = command.mock.calls.at(-1)!.at(-1);
+    expect(event).toMatchObject({ source: 'user', skills: ['sample-guide', 'sample-table'], images: [{ data: 'c2FtcGxl', media_type: 'image/png' }] });
+    expect(event.content).toContain('/workspace/sample.txt');
+    await act(async () => { await actionsRef.current!.send(target, { text: '/sample-guide' }); });
+    expect(command.mock.calls.at(-1)!.at(-1)).toMatchObject({ content: '/sample-guide', skills: undefined });
+  });
+});
+
 describe('Worker instance inference settings', () => {
-  it('writes concrete reasoning only to the Worker and surfaces rejected commands', async () => {
+  it('writes concrete reasoning only to the Worker without touching model defaults', async () => {
     const defaults = vi.spyOn(useInferenceStore.getState(), 'updateModelReasoningDefault');
     runtime.agentCommands.setSubagentReasoning.mockResolvedValue({ ok: true });
     await act(async () => { await workerSettingsRef.current!.onReasoningChange({ kind: 'effort', effort: 'high' }); });
@@ -384,7 +450,7 @@ describe('Worker instance inference settings', () => {
     expect(defaults).not.toHaveBeenCalled();
     runtime.agentCommands.setSubagentModel.mockResolvedValue({ ok: false, error: 'Unavailable model' });
     await act(async () => { await workerSettingsRef.current!.onModelChange('gone::model'); });
-    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ tone: 'error', detail: 'Unavailable model' });
+    expect(runtime.agentCommands.setSubagentModel).toHaveBeenCalledWith('agent-a', 'worker-a', 'gone::model');
     defaults.mockRestore();
   });
 });

@@ -335,8 +335,6 @@ export interface SubagentConfig {
   type: string;
   /** 整个 Assignment 的简短显示标题 */
   subject: string;
-  /** 本次 Assignment 包含的细任务 ID */
-  taskIds?: string[];
   /** 整个多任务工作包的完整、自包含执行标准 */
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
@@ -407,6 +405,8 @@ export interface AgentRunConfig {
   description: string;
   category?: string;
   promptTemplate: string;
+  /** Skill selections belonging to the initial chat input. */
+  skills?: string[];
   systemPrompt?: string;
   workspace?: string;
   bindings?: AgentRunBindings;
@@ -633,6 +633,8 @@ export interface AgentInputEvent {
   source: AgentInputSource;
   /** 事件内容（用户消息或结构化数据） */
   content: string | Record<string, unknown>;
+  /** 本条用户消息显式选择的技能名称。 */
+  skills?: string[];
   /** 可选的优先级提示（AI 参考，不强制） */
   priority?: 'high' | 'normal' | 'low';
   /** 可选的元数据 */
@@ -728,19 +730,6 @@ export interface TaskBoardData {
   taskSummary: string;
   /** 全部细任务的扁平唯一集合 */
   items: TaskItem[];
-}
-
-/** Worker 创建时写入初始对话的一次性紧凑看板快照。 */
-export interface AssignmentTaskBoardSnapshot {
-  taskSummary: string;
-  items: Array<{
-    id: string;
-    subject: string;
-    status: TaskItemStatus;
-    owner: string | null;
-    dependsOn: string[];
-    assignedHere: boolean;
-  }>;
 }
 
 /**

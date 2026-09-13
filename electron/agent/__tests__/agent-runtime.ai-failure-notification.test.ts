@@ -45,7 +45,7 @@ describe('AgentRuntime worker AI failure notification', () => {
           type: 'local-worker',
           skills: [],
           subject: 'test',
-          taskIds: ['task-1'],
+
           prompt: 'test',
         },
       },

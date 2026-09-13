@@ -109,14 +109,6 @@
   color: var(--cyber-text-muted);
 }
 
-/* 小地图外观（旧版：14px 圆角 + 描边 + 半透明底 + 投影） */
-.minimap {
-  border: 1px solid var(--line-2) !important;
-  border-radius: 14px !important;
-  background: color-mix(in srgb, var(--surface-2) 95%, transparent) !important;
-  box-shadow: 0 12px 30px rgb(0 0 0 / 34%) !important;
-}
-
 /* ── 工具栏（竖排，贴右缘居中；旧版同位置）── */
 
 .toolbar {

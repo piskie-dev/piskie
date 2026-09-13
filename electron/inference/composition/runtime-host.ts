@@ -1,10 +1,9 @@
 import { watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import packageJson from '../../../package.json' with { type: 'json' };
-import { AI_MODEL_CATALOG } from '../../../shared/ai-model-catalog/index.js';
 import trustedKeys from '../../../shared/ai-model-catalog/trusted-keys.json' with { type: 'json' };
+import { bundledCatalogManifest } from '../catalog/bundled-source.js';
 import { RemoteCatalogSource, type RemoteCatalogOptions } from '../catalog/remote-source.js';
-import { inferenceCatalogVersion } from '../catalog/projection.js';
 import { DefaultAiGateway } from '../ai/public-gateway.js';
 import { bootstrapInferenceConfig, type BootstrapInferenceConfigResult } from '../control/bootstrap-config.js';
 import { compileInferenceConfig } from '../control/compiler.js';
@@ -127,8 +126,9 @@ export class InferenceRuntimeHost {
       keys: options.remoteCatalog?.keys ?? trustedKeys,
       fetch: options.remoteCatalog?.fetch,
       driverIds: new Set(this.drivers.list().map((driver) => driver.manifest.id)),
-      bundledVersion: inferenceCatalogVersion(AI_MODEL_CATALOG),
-      bundledGeneratedAt: AI_MODEL_CATALOG.generatedAt,
+      bundledVersion: bundledCatalogManifest.version,
+      bundledGeneratedAt: bundledCatalogManifest.generatedAt,
+      bundledSha256: bundledCatalogManifest.sha256,
       now: this.now,
       onError: options.remoteCatalog?.onError,
     });

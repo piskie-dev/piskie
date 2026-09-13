@@ -28,6 +28,7 @@ export interface AgentUserInput {
   readonly text: string;
   readonly subtype?: MessageSubtype;
   readonly images?: readonly { data: string; media_type: string }[];
+  readonly skills?: readonly string[];
 }
 
 export interface AgentHost {
@@ -47,7 +48,7 @@ export interface AgentHost {
   getControlState(): AgentControlState;
 
   // --- 上下文操作 ---
-  addUserMessage(input: AgentUserInput): void;
+  addUserMessage(input: AgentUserInput): void | Promise<void>;
 
   // --- 存储操作 ---
   getConversationStore(): ConversationStore;

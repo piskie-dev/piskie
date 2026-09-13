@@ -199,6 +199,19 @@ describe('renderSkillTeachingDoc', () => {
     }
   });
 
+  it('reports a teaching read failure even when executable functions are available', async () => {
+    const manager = createManager({
+      getSkillDocs: vi.fn().mockRejectedValue(new Error('Sample teaching read failed')),
+      getLoadedSkillModule: vi.fn(() => ({
+        functions: { produce: { description: 'Sample action', params: z.object({}) } },
+        provenance: { entryPoint: 'skill_call' },
+      })),
+    });
+    expect(await renderSkillTeachingDoc(manager, 'sample-actions')).toMatchObject({
+      found: false, content: '', error: 'Sample teaching read failed',
+    });
+  });
+
   it('文档与函数都不存在时报 not found', async () => {
     const manager = createManager({
       getSkillDocs: vi.fn().mockRejectedValue(new Error('missing')),

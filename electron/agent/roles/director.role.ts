@@ -51,10 +51,11 @@ export class DirectorRole implements AgentRole {
     // 添加初始任务（支持多模态）
     const initialImages = options.images;
     const initialTaskText = runConfig.promptTemplate || (initialImages?.length ? '(图片)' : '');
-    if (initialTaskText || (initialImages && initialImages.length > 0)) {
-      host.addUserMessage({
+    if (initialTaskText || initialImages?.length || runConfig.skills?.length) {
+      await host.addUserMessage({
         text: initialTaskText,
         images: initialImages,
+        ...(runConfig.skills?.length ? { skills: runConfig.skills } : {}),
         subtype: 'system_task',
       });
     }

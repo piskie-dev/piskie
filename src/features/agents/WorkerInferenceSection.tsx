@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bot, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Bot, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatModelReference, type ModelOptGroup } from '../../store/inferenceStore';
 import {
@@ -16,6 +16,8 @@ interface Props {
   groups: ModelOptGroup[];
   saving: boolean;
   edit: (value: InferenceDraft) => void;
+  /** 已保存的模型当前不可用：新实例按继承创建，界面按继承展示并保留原目标供重选。 */
+  degraded?: boolean;
   modelError: string | null;
   onConfigureModels: () => void;
   onRefresh: () => void;
@@ -24,7 +26,8 @@ interface Props {
 /** A configuration section; its draft belongs to the current type's shared save transaction. */
 export function WorkerInferenceSection(props: Props) {
   const { t } = useTranslation();
-  const { value, groups, saving, edit } = props;
+  const { value, groups, saving, edit, degraded } = props;
+  const displayMode = degraded ? 'inherit' : value.mode;
   const [modelOpen, setModelOpen] = useState(false);
   const options = groups.flatMap((group) =>
     group.options.map((option) => ({ ...option, provider: group.label }))
@@ -53,9 +56,10 @@ export function WorkerInferenceSection(props: Props) {
               key={mode}
               className={styles.strategy}
               disabled={!!saving}
-              aria-pressed={value.mode === mode}
+              aria-pressed={displayMode === mode}
               onClick={() => {
-                if (value.mode !== mode) edit({ mode });
+                if (degraded && mode === 'fixed') setModelOpen(true);
+                else if (value.mode !== mode) edit({ mode });
               }}
             >
               <span className={styles.radio}>{value.mode === mode && <span />}</span>
@@ -67,13 +71,35 @@ export function WorkerInferenceSection(props: Props) {
           ))}
         </div>
       </section>
-      {value.mode === 'inherit' && (
-        <div className={styles.inheritNote}>
-          <Bot size={20} />
-          <p>{t('agentManagement.inheritNote')}</p>
+      {degraded ? (
+        <div className={styles.warning} role="status">
+          <AlertTriangle size={16} />
+          <div>
+            <strong>{t('agentManagement.degradedTitle')}</strong>
+            <p>
+              {t('agentManagement.degradedDescription', {
+                model:
+                  value.mode === 'fixed' && value.target
+                    ? `${value.target.providerId} / ${value.target.modelId}`
+                    : '',
+              })}
+            </p>
+            <div className={styles.actions}>
+              <button className={styles.button} disabled={!!saving} onClick={() => setModelOpen(true)}>
+                {t('agentManagement.reselectModel')}
+              </button>
+            </div>
+          </div>
         </div>
+      ) : (
+        displayMode === 'inherit' && (
+          <div className={styles.inheritNote}>
+            <Bot size={20} />
+            <p>{t('agentManagement.inheritNote')}</p>
+          </div>
+        )
       )}
-      {value.mode === 'fixed' && (
+      {value.mode === 'fixed' && !degraded && (
         <>
           <section className={styles.section}>
             <div className={styles.sectionHeading}>

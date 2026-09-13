@@ -58,13 +58,36 @@ describe('fileChangeOf', () => {
     const change = fileChangeOf(
       toolCell({
         id: 'c1',
-        fileOp: { kind: 'edit', path: '/a/x.ts', oldText: 'a', newText: 'b', replaceAll: false },
+        fileOp: { kind: 'edit', path: '/a/x.ts', edits: [{ oldText: 'a', newText: 'b', replaceAll: false }] },
       }),
     );
 
     expect(change?.kind).toBe('edit');
     expect(change?.absoluteLines).toBe(false);
     expect(change?.stat).toEqual({ added: 1, removed: 1 });
+  });
+
+  it('一次 edit 调用带多条 edits：按顺序拼接各条 diff，stat 累加，任一条 replaceAll 即标记', () => {
+    const change = fileChangeOf(
+      toolCell({
+        id: 'c1',
+        fileOp: {
+          kind: 'edit',
+          path: '/a/x.ts',
+          edits: [
+            { oldText: 'a', newText: 'b', replaceAll: false },
+            { oldText: 'c', newText: 'd\ne', replaceAll: true },
+          ],
+        },
+      }),
+    );
+
+    expect(change?.absoluteLines).toBe(false);
+    expect(change?.replaceAll).toBe(true);
+    expect(change?.stat).toEqual({ added: 3, removed: 2 });
+    expect(change?.diff.lines.map((line) => `${line.kind}:${line.text}`)).toEqual([
+      'remove:a', 'add:b', 'remove:c', 'add:d', 'add:e',
+    ]);
   });
 
   it('只解读被点这一条，不牵连同文件其它轮次', () => {
@@ -75,7 +98,7 @@ describe('fileChangeOf', () => {
     const edit = fileChangeOf(
       toolCell({
         id: 'c2',
-        fileOp: { kind: 'edit', path: '/a/x.ts', oldText: 'v1', newText: 'v2', replaceAll: false },
+        fileOp: { kind: 'edit', path: '/a/x.ts', edits: [{ oldText: 'v1', newText: 'v2', replaceAll: false }] },
       }),
     );
 

@@ -2,7 +2,6 @@ import type { SearchPort } from '../../shared/types/web-search.js';
 /** Activation-scoped values and runtime ports contributed by roles/modules. */
 
 import type {
-  AssignmentTaskBoardSnapshot,
   AgentRunConfig,
   SubagentConfig,
 } from '../../shared/types/index.js';
@@ -33,7 +32,6 @@ export interface AgentInfo {
 export interface TypedToolContext {
   readonly agentInfo: Readonly<AgentInfo>;
   readonly resourceIds: ToolResourceIds;
-  readonly assignmentSnapshot?: Readonly<AssignmentTaskBoardSnapshot>;
   readonly skillInventory?: Readonly<SkillInventorySnapshot>;
   readonly modes: ModesPort;
   readonly taskBoard?: TaskBoardPort;
@@ -48,7 +46,6 @@ export interface TypedToolContext {
 export class ToolContextBuilder {
   private _agentInfo?: AgentInfo;
   private _resourceIds: ToolResourceIds = {};
-  private _assignmentSnapshot?: AssignmentTaskBoardSnapshot;
   private _skillInventory?: SkillInventorySnapshot;
   private _modes?: ModesPort;
   private _taskBoard?: TaskBoardPort;
@@ -75,11 +72,6 @@ export class ToolContextBuilder {
 
   addResourceIds(ids: ToolResourceIds): this {
     this._resourceIds = { ...this._resourceIds, ...ids };
-    return this;
-  }
-
-  setAssignmentSnapshot(snapshot: AssignmentTaskBoardSnapshot | undefined): this {
-    this._assignmentSnapshot = snapshot;
     return this;
   }
 
@@ -156,9 +148,6 @@ export class ToolContextBuilder {
     return Object.freeze({
       agentInfo,
       resourceIds: Object.freeze({ ...this._resourceIds }),
-      assignmentSnapshot: this._assignmentSnapshot
-        ? Object.freeze({ ...this._assignmentSnapshot })
-        : undefined,
       skillInventory: this._skillInventory
         ? Object.freeze({ ...this._skillInventory })
         : undefined,

@@ -42,7 +42,7 @@ const STRICT_NUMERIC_PARAMS = new Set([
 
 // Cross-field constraints need a valid combination beyond sampling each field independently.
 const BASELINE_OVERRIDES: Record<string, JsonSchema> = {
-  subagent: { type: 'local-worker', subject: '本地任务', prompt: '完成看板任务', taskIds: ['task-a'], skills: ['skill-a'] },
+  subagent: { type: 'local-worker', subject: '本地任务', prompt: '完成看板任务', skills: ['skill-a'] },
   web_search: { publishedAfter: '2026-01-01', publishedBefore: '2026-02-01' },
 };
 
@@ -157,7 +157,7 @@ describe('model-facing parameter coercion matrix', () => {
       excluded: new Set(),
       domains: new Set(['local', 'browser']),
       subagentTypes: [
-        { name: 'local-worker', description: '本地执行', assignment: 'task-board', browser: false, skills: true },
+        { name: 'local-worker', description: '本地执行', assignment: 'work-package', browser: false, skills: true },
       ],
     }));
     const entries = new Map(snapshots.flatMap((snapshot) => (

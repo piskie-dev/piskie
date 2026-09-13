@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import type { AgentEngine } from '../../agent-engine.js';
 import type { AgentHost } from '../../agent-host.js';
@@ -7,7 +7,6 @@ import type {
   ConversationEntry,
   SubagentConfig,
 } from '../../../../shared/types/index.js';
-import type { ATAEventEnvelope } from '../../ata/ata-event-envelope.js';
 import type { AgentRunHeader } from '../../../../shared/types/agent-control.js';
 import { AgentRunPaths } from '../../../agent-runs/agent-run-paths.js';
 import { resolveWorkerInference } from '../../worker-inference.js';
@@ -31,12 +30,12 @@ vi.mock('electron', () => ({
 vi.mock('../../agent-runtime.js', () => ({
   AgentRuntime: class {
     readonly id: string;
-    readonly spec: { assignment: 'question' | 'task-board' };
+    readonly spec: { assignment: 'question' | 'work-package' };
     approvalMode: 'auto' | 'confirm';
 
     constructor(config: {
       id: string;
-      spec: { assignment: 'question' | 'task-board' };
+      spec: { assignment: 'question' | 'work-package' };
       options?: { initialApprovalMode?: 'auto' | 'confirm'; [key: string]: unknown };
     }) {
       runtimeMock.configs.push(config as unknown as Record<string, unknown>);
@@ -46,6 +45,7 @@ vi.mock('../../agent-runtime.js', () => ({
     }
 
     async start(): Promise<void> {}
+    getEffectiveWorkspace(): string { return '/sample/worker-workspace'; }
     async destroy(): Promise<void> {
       await runtimeMock.destroyGates.get(this.id);
     }
@@ -83,7 +83,7 @@ type TestableSubagentModule = {
   subagentMeta: Map<string, WatchdogMeta>;
   checkSubagentLifecycles: () => void;
   destroySubagentOrEscalate: ReturnType<typeof vi.fn>;
-  sendEventToSubagent: (subagentId: string, event: Record<string, unknown>) => boolean;
+  sendEventToSubagent: (subagentId: string, message: string) => boolean;
 };
 
 function createModule() {
@@ -118,7 +118,7 @@ function createMeta(overrides: Partial<WatchdogMeta> = {}): WatchdogMeta {
 function createChild(overrides: Record<string, unknown> = {}): AgentEngine {
   return {
     id: 'child-1',
-    spec: { assignment: 'task-board' },
+    spec: { assignment: 'work-package' },
     interrupted: false,
     post: vi.fn(() => true),
     // IdlePermit 由 runtime 从对话/后台租约派生；默认 inert 且无 permit。
@@ -163,16 +163,10 @@ function moduleConfig(prefix: string) {
   };
 }
 
-beforeEach(() => {
-  vi.spyOn(taskBoardService, 'createCompactSnapshot').mockImplementation(async (_main, ids) => ({
-    taskSummary: 'Sample tasks',
-    items: ids.map((id) => ({ id, subject: id, status: 'pending', owner: null, dependsOn: [], assignedHere: true })),
-  }));
-});
 afterEach(() => vi.restoreAllMocks());
 
 describe('SubagentModule resume boundaries', () => {
-  it('reads preferences for each creation, preserves earlier selections and skips task-board work for Explore', async () => {
+  it('reads preferences for each creation and preserves earlier selections', async () => {
     const mainAgentId = `preferences-${Date.now()}`;
     const headerStore = createHeaderStore(mainAgentId);
     const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
@@ -192,11 +186,10 @@ describe('SubagentModule resume boundaries', () => {
       await module.createSubagent(input);
       expect(runtimeMock.configs[before]).toMatchObject({ options: { initialModel: 'parent::model', initialReasoning: { kind: 'effort', effort: 'high' } } });
       expect(runtimeMock.configs[before + 1]).toMatchObject({ options: { initialModel: 'custom::model', initialReasoning: { kind: 'effort', effort: 'low' } } });
-      expect(taskBoardService.createCompactSnapshot).not.toHaveBeenCalled();
     } finally { await module.onDestroy(); }
   });
 
-  it('propagates preference read errors before task-board snapshots, IDs or Runtime creation', async () => {
+  it('propagates preference read errors before IDs or Runtime creation', async () => {
     const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
     const allocateAgentId = vi.fn(() => 'never');
     module.init({ id: 'parent', mainAgentId: 'parent', phase: 'running', spec: { name: 'director' },
@@ -205,9 +198,8 @@ describe('SubagentModule resume boundaries', () => {
       resolveWorkerInference: async () => { throw new Error('Preferences could not be read'); },
     });
     const before = runtimeMock.configs.length;
-    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', taskIds: ['task'] })).rejects.toThrow('Preferences could not be read');
+    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', })).rejects.toThrow('Preferences could not be read');
     expect(allocateAgentId).not.toHaveBeenCalled();
-    expect(taskBoardService.createCompactSnapshot).not.toHaveBeenCalled();
     expect(runtimeMock.configs).toHaveLength(before);
   });
 
@@ -222,14 +214,44 @@ describe('SubagentModule resume boundaries', () => {
       getInference: () => inference, getConversationStore: () => headerStore.store,
     } as unknown as AgentHost;
     module.init(host, { ...moduleConfig('preference-wait'), resolveWorkerInference: async (input) => resolveWorkerInference(input, { schemaVersion: 1, revision: 0, profiles: {} }, inference) });
-    vi.mocked(taskBoardService.createCompactSnapshot).mockImplementationOnce(async () => {
+    const allocateAgentId = moduleConfig('preparation-worker').allocateAgentId;
+    (module as unknown as { allocateAgentId: () => string }).allocateAgentId = () => {
       available = false;
-      return { taskSummary: '', items: [] };
-    });
+      return allocateAgentId();
+    };
     const before = runtimeMock.configs.length;
-    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', taskIds: ['task'] })).rejects.toThrow('Model became unavailable');
+    await expect(module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', })).rejects.toThrow('Model became unavailable');
     expect(runtimeMock.configs).toHaveLength(before);
     expect(headerStore.readHeader().childAgents).toEqual([]);
+  });
+
+  it('falls back to the parent when the preferred model becomes unavailable during creation preparation', async () => {
+    const mainAgentId = `preference-fallback-${Date.now()}`;
+    const headerStore = createHeaderStore(mainAgentId);
+    const module = new SubagentModule() as unknown as SubagentModule & { createSubagent: (config: SubagentConfig) => Promise<string> };
+    let available = true;
+    const inference = fakeAgentInference({ assertTarget: ({ providerId }) => {
+      if (!available && providerId === 'custom') throw new Error('Preferred model removed');
+    } });
+    const preferences: WorkerPreferencesDocument = { schemaVersion: 1, revision: 0, profiles: {
+      'local-worker': { inference: { target: { providerId: 'custom', modelId: 'model' }, reasoning: { kind: 'effort', effort: 'low' } } },
+    } };
+    const host = { id: mainAgentId, mainAgentId, phase: 'running', spec: { name: 'director' },
+      currentModel: 'parent::model', reasoningOverride: { kind: 'effort', effort: 'high' }, approvalMode: 'auto',
+      getInference: () => inference, getConversationStore: () => headerStore.store,
+      appendConversationEntry: vi.fn(), emitStateChange: vi.fn(),
+    } as unknown as AgentHost;
+    module.init(host, { ...moduleConfig('preference-fallback'), resolveWorkerInference: async (input) => resolveWorkerInference(input, preferences, inference) });
+    const allocateAgentId = moduleConfig('preparation-worker').allocateAgentId;
+    (module as unknown as { allocateAgentId: () => string }).allocateAgentId = () => {
+      available = false;
+      return allocateAgentId();
+    };
+    const before = runtimeMock.configs.length;
+    try {
+      await module.createSubagent({ type: 'local-worker', subject: 'Task', prompt: 'Inspect', });
+      expect(runtimeMock.configs[before]).toMatchObject({ options: { initialModel: 'parent::model', initialReasoning: { kind: 'effort', effort: 'high' } } });
+    } finally { await module.onDestroy(); }
   });
 
   it('rejects invalid reasoning before mutating the child', () => {
@@ -270,7 +292,7 @@ describe('SubagentModule resume boundaries', () => {
         {
           type: 'local-worker',
           subject: 'trace initialization',
-          taskIds: ['task-a'],
+
           prompt: 'Verify that the trace exists before creation returns.',
         }
       );
@@ -315,7 +337,7 @@ describe('SubagentModule resume boundaries', () => {
     expect(sibling.setReasoningOverride).not.toHaveBeenCalled();
   });
 
-  it('新 Worker 继承 Main 当前模式，创建完成后不随 Main 批量变化', async () => {
+  it('new Workers inherit the parent model, reasoning and approval at creation', async () => {
     const mainAgentId = `main-approval-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const module = new SubagentModule() as unknown as SubagentModule & {
       createSubagent: (
@@ -337,6 +359,7 @@ describe('SubagentModule resume boundaries', () => {
       phase: 'running',
       spec: { name: 'director' },
       currentModel: 'provider::model',
+      reasoningOverride: { kind: 'effort', effort: 'medium' },
       approvalMode: 'auto' as 'auto' | 'confirm',
       getMcpCapabilitySnapshot: () => parentMcpCapability,
       getConversationStore: () => headerStore.store,
@@ -350,7 +373,7 @@ describe('SubagentModule resume boundaries', () => {
         {
           type: 'local-worker',
           subject: 'first',
-          taskIds: ['task-a'],
+
           prompt: 'first',
           skills: ['skill-a'],
         }
@@ -360,15 +383,19 @@ describe('SubagentModule resume boundaries', () => {
       const firstConfig = runtimeMock.configs.at(-1) as {
         options: Record<string, unknown>;
       };
+      expect(firstConfig.options).toMatchObject({
+        initialModel: 'provider::model', initialReasoning: { kind: 'effort', effort: 'medium' },
+      });
       expect(firstConfig.options.parentMcpCapability).toBe(parentMcpCapability);
       expect(firstConfig.options).not.toHaveProperty('mcpSession');
 
       host.approvalMode = 'confirm';
+      Object.assign(host, { currentModel: 'provider::model-next', reasoningOverride: { kind: 'effort', effort: 'high' } });
       const secondId = await module.createSubagent(
         {
           type: 'local-worker',
           subject: 'second',
-          taskIds: ['task-b'],
+
           prompt: 'second',
           skills: ['skill-b-automation'],
         }
@@ -377,6 +404,11 @@ describe('SubagentModule resume boundaries', () => {
       expect(firstId).toBe('worker-approval-1');
       expect(secondId).toBe('worker-approval-2');
       expect(module.getSubagents().get(secondId)?.approvalMode).toBe('confirm');
+      const secondConfig = runtimeMock.configs.at(-1) as { options: Record<string, unknown> };
+      expect(secondConfig.options).toMatchObject({
+        initialModel: 'provider::model-next', initialReasoning: { kind: 'effort', effort: 'high' },
+      });
+      expect(firstConfig.options.initialReasoning).toEqual({ kind: 'effort', effort: 'medium' });
       expect(first.approvalMode).toBe('auto');
     } finally {
       await module.onDestroy();
@@ -403,7 +435,7 @@ describe('SubagentModule resume boundaries', () => {
         {
           type: 'director',
           subject: 'invalid child',
-          taskIds: ['task-a'],
+
           prompt: 'This must be rejected before runtime creation.',
         }
       )
@@ -437,7 +469,7 @@ describe('SubagentModule resume boundaries', () => {
         {
           type: 'site-scout',
           subject: 'scout',
-          taskIds: ['task-scout'],
+
           prompt: 'scout',
         }
       );
@@ -459,7 +491,7 @@ describe('SubagentModule resume boundaries', () => {
         {
           type: 'browser-skill-builder',
           subject: 'builder',
-          taskIds: ['task-builder'],
+
           prompt: 'builder',
         }
       );
@@ -503,7 +535,7 @@ describe('SubagentModule resume boundaries', () => {
       {
         type: 'site-scout',
         subject: 'scout',
-        taskIds: ['task-scout'],
+
         prompt: 'scout',
       }
     );
@@ -522,7 +554,7 @@ describe('SubagentModule resume boundaries', () => {
       {
         type: 'browser-skill-builder',
         subject: 'builder',
-        taskIds: ['task-builder'],
+
         prompt: 'builder',
       }
     );
@@ -538,18 +570,17 @@ describe('SubagentModule resume boundaries', () => {
     runtimeMock.destroyGates.clear();
   });
 
-  it('releases unfinished task ownership when the Main tears down active Workers', async () => {
+  it.each(['parent teardown', 'explicit stop', 'completed'] as const)('preserves the complete board after %s', async (reason) => {
     const mainAgentId = `main-release-${Date.now()}-${Math.random()}`;
     await taskBoardService.syncTaskBoard({
       mainAgentId,
-      callerAgentId: mainAgentId,
       taskSummary: 'Release board',
-      activeWorkerIds: ['worker-release'],
+      createdWorkerIds: ['worker-release'],
       items: [
         {
           id: 'task-open',
           subject: 'Open task',
-          description: 'Must return to the unassigned pool.',
+          description: 'Retain the last progress confirmed by Main.',
           status: 'in_progress',
           owner: 'worker-release',
           dependsOn: [],
@@ -564,7 +595,7 @@ describe('SubagentModule resume boundaries', () => {
       config: {
         type: 'local-worker',
         subject: 'Open task',
-        taskIds: ['task-open'],
+
         prompt: 'Finish the open task.',
       },
       createdAt: Date.now(),
@@ -578,20 +609,34 @@ describe('SubagentModule resume boundaries', () => {
       id: mainAgentId,
       mainAgentId,
       getConversationStore: () => headerStore.store,
+      appendConversationEntry: vi.fn(), addUserMessage: vi.fn(), emitStateChange: vi.fn(),
     } as unknown as AgentHost;
     module.init(host, {});
     module.getSubagents().set('worker-release', {
-      spec: { assignment: 'task-board' },
+      spec: { assignment: 'work-package' },
       destroy: vi.fn().mockResolvedValue(undefined),
     } as unknown as AgentEngine);
 
-    await module.onDestroy();
-
-    expect(await taskBoardService.readTaskBoard(mainAgentId)).toMatchObject({
-      items: [{ id: 'task-open', owner: null, status: 'pending' }],
-    });
-    expect(headerStore.store.writeHeader).not.toHaveBeenCalled();
-    expect(headerStore.readHeader().childAgents).toEqual([interruptedChild]);
+    try {
+      if (reason === 'parent teardown') {
+        await module.onDestroy();
+      } else if (reason === 'explicit stop') {
+        await module.stopSubagentById('worker-release');
+      } else {
+        (module as unknown as TestableSubagentModule).subagentMeta.set('worker-release', createMeta({ onTerminal: 'immediate' }));
+        module.processEvent({
+          id: 'sample-terminal', source: 'subagent', timestamp: new Date(), priority: 'normal',
+          content: { subagentId: 'worker-release', type: 'completed', message: 'Sample work delivered.' },
+        });
+        await vi.waitFor(() => expect(module.getSubagents().size).toBe(0));
+      }
+      expect(await taskBoardService.readTaskBoard(mainAgentId)).toMatchObject({
+        items: [{ id: 'task-open', owner: 'worker-release', status: 'in_progress', description: 'Retain the last progress confirmed by Main.' }],
+      });
+      expect(headerStore.readHeader().childAgents).toEqual(reason === 'parent teardown' ? [interruptedChild] : []);
+    } finally {
+      await module.onDestroy();
+    }
   });
 });
 
@@ -689,23 +734,15 @@ describe('SubagentModule watchdog interrupt semantics', () => {
     module.subagents.set('child-1', child);
     module.subagentMeta.set('child-1', meta);
     const before = Date.now();
-    const envelope = {
-      storage: 'inline',
-      type: 'message',
-      data: { type: 'message', message: 'continue' },
-      originalSize: 8,
-    } satisfies ATAEventEnvelope;
+    const message = 'Continue the sample task.';
 
-    const delivered = module.sendEventToSubagent(
-      'child-1',
-      envelope as unknown as Record<string, unknown>
-    );
+    const delivered = module.sendEventToSubagent('child-1', message);
 
     expect(delivered).toBe(true);
     expect(post).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'parent',
-        content: envelope,
+        content: message,
       })
     );
     expect(meta.lastProgressAt).toBeGreaterThanOrEqual(before);

@@ -1,8 +1,25 @@
 # Model catalogs
 
-The website repository maintains and publishes the remote catalog through a manually triggered
-GitHub Actions workflow. This desktop repository owns the bundled baseline, consumer contract,
-trusted public keys, and local model configuration.
+The website repository (`piskie-site`) owns model sourcing, validation, signing, and publication of the
+remote catalog through its manually triggered **Update model catalog** GitHub Actions workflow. This
+desktop repository owns the consumer contract, the trusted public keys, the local model configuration,
+and a bundled snapshot of that publication.
+
+## Bundled baseline
+
+`generated/catalog.json` holds the exact bytes of one published catalog object and
+`generated/manifest.json` holds its signed manifest, so the same Ed25519 signature and SHA-256 hash
+protect the website publication and the desktop build. There is no separate desktop sync; both sides
+share one baseline.
+
+```bash
+npm run catalog:pull       # fetch and verify the current publication into generated/
+npm run catalog:validate   # re-verify the checked-in snapshot offline
+```
+
+Run `catalog:pull` before tagging a desktop release, review the printed added, removed, and changed
+model IDs, and commit the two generated files. `PISKIE_MODEL_CATALOG_BASE_URL` can point the pull at
+a preview or localhost origin. A publication older than the bundled revision is rejected.
 
 ## Desktop behavior
 
@@ -16,22 +33,10 @@ credentials. The default origin is `https://www.piskie.dev`; `PISKIE_MODEL_CATAL
 it with HTTPS or a localhost HTTP origin for development.
 
 Updates require a valid Ed25519 signature, exact SHA-256 hash, supported client version and drivers,
-and valid model definitions. A newer bundled baseline takes precedence over an older remote snapshot.
-The cache retains its current and previous complete snapshots. Download or verification failures
-leave existing models usable, and running inference snapshots remain stable.
-
-## Bundled baseline
-
-The local development commands remain available when preparing a desktop release:
-
-```bash
-npm run catalog:sync
-npm run catalog:validate
-```
-
-Review provider changes and generated output before committing. Missing upstream models are retained
-as retired definitions so existing references continue to resolve. Website publication is independent
-of these commands and does not require an action in this repository.
+and valid model definitions. A publication whose hash matches the bundled snapshot is not downloaded,
+and a newer bundled baseline takes precedence over an older remote snapshot. The cache retains its
+current and previous complete snapshots. Download or verification failures leave existing models
+usable, and running inference snapshots remain stable.
 
 ## Consumer contract
 

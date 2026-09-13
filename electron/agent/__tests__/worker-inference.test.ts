@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveEffectiveReasoning } from '../../inference/ai/reasoning-policy.js';
-import { resolveWorkerInference } from '../worker-inference.js';
+import { reconcileWorkerInference, resolveWorkerInference } from '../worker-inference.js';
 import { listWorkerTypes } from '../specs/worker-catalog.js';
 import type { AgentSpec } from '../specs/spec.js';
 import type { WorkerPreferencesDocument } from '../../../shared/types/worker-preferences.js';
@@ -41,14 +41,25 @@ describe('Worker creation inference', () => {
     expect(resolveWorkerInference({ ...input, type: 'local-worker', parentModel: 'another::model' }, preferences, inference).model).toBe('another::model');
   });
 
-  it('rejects explicit invalid preferences instead of falling back, preserving the failure reason', () => {
+  it('falls back to the parent when the preferred model is unavailable but still rejects invalid reasoning', () => {
     const saved = structuredClone(preferences);
     const input = { type: 'explore', parentModel: 'parent::model', parentReasoning: { kind: 'effort', effort: 'high' } } as const;
     saved.profiles.explore!.inference!.target.providerId = 'gone';
-    expect(() => resolveWorkerInference(input, saved, inference)).toThrow('Worker explore (gone::chosen): Target removed');
+    expect(resolveWorkerInference(input, saved, inference)).toEqual({ model: 'parent::model', reasoning: { kind: 'effort', effort: 'high' } });
     saved.profiles.explore!.inference!.target.providerId = 'configured';
     saved.profiles.explore!.inference!.reasoning = { kind: 'effort', effort: 'max' };
     expect(() => resolveWorkerInference(input, saved, inference)).toThrow('Agent reasoning override is not valid');
+  });
+
+  it('still fails loudly when the inherited parent model itself is unavailable', () => {
+    const input = { type: 'explore', parentModel: 'gone::model', parentReasoning: { kind: 'effort', effort: 'high' } } as const;
+    const saved = structuredClone(preferences);
+    saved.profiles.explore!.inference!.target.providerId = 'gone';
+    expect(() => resolveWorkerInference(input, saved, inference)).toThrow('Worker explore (gone::model): Target removed');
+    const inherited = { model: 'gone::model', reasoning: { kind: 'effort', effort: 'high' } } as const;
+    expect(() => reconcileWorkerInference('local-worker', inherited, inherited, inference)).toThrow('Worker local-worker (gone::model): Target removed');
+    const valid = { model: 'configured::chosen', reasoning: { kind: 'effort', effort: 'low' } } as const;
+    expect(reconcileWorkerInference('local-worker', valid, inherited, inference)).toBe(valid);
   });
 
   it('projects all registered Workers without inferring type from browser resources or parent permissions', () => {

@@ -37,13 +37,14 @@ describe('AgentSpec registry', () => {
     );
   });
 
-  it('exposes task_read to directors but not workers', () => {
+  it('exposes task to directors while Workers report through send_event', () => {
     const specs = specRegistry.getAll();
     for (const spec of specs.filter((candidate) => candidate.role === 'director')) {
-      expect(spec.tools.customTools, spec.name).toContain('task_read');
+      expect(spec.tools.customTools, spec.name).toContain('task');
     }
     for (const spec of specs.filter((candidate) => candidate.role === 'worker')) {
-      expect(spec.tools.customTools, spec.name).not.toContain('task_read');
+      expect(spec.tools.customTools, spec.name).not.toContain('task');
+      expect(spec.tools.customTools, spec.name).toContain('send_event');
     }
   });
 });

@@ -26,23 +26,23 @@ export const DiffGate = memo<DiffGateProps>(
     const { t } = useTranslation();
     const { call } = request;
     const [feedback, setFeedback] = useState('');
-    const attachments = useAttachmentDraft();
+    const attachments = useAttachmentDraft(undefined, setFeedback);
 
     const filePath = typeof call.params?.path === 'string' ? call.params.path : '';
     const fileName = filePath.split('/').pop() || filePath;
     const added = call.preview?.stat?.linesAdded ?? 0;
     const removed = call.preview?.stat?.linesDeleted ?? 0;
 
-    const canSubmit = (feedback.trim().length > 0 || attachments.hasAttachments) && !disabled;
+    const canSubmit = (feedback.trim().length > 0 || attachments.hasAttachments) && !disabled && !attachments.submitting;
     const deny = useCallback(async () => {
       if (!canSubmit) return;
-      onDecide({
+      const ok = await attachments.withImages(async (images, files) => onDecide({
         kind: 'deny',
         callId: call.id,
-        feedback: composeAttachmentText(feedback, attachments.files, attachments.images.length > 0),
-        images: await attachments.imagePayloads(),
-      });
-      attachments.clear();
+        feedback: composeAttachmentText(feedback, files, Boolean(images?.length)),
+        images,
+      }));
+      if (ok) attachments.clear();
     }, [attachments, call.id, canSubmit, feedback, onDecide]);
 
     const allow = useCallback(
@@ -89,6 +89,7 @@ export const DiffGate = memo<DiffGateProps>(
 
           <GateAttachments
             images={attachments.images}
+          error={attachments.error}
             files={attachments.files}
             onRemove={attachments.remove}
             onPreviewImage={onPreviewImage}

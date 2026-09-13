@@ -1,6 +1,8 @@
 import path from 'node:path';
 import type { ChangeSink, ChangeSource } from '../../core/change-channel.js';
 import { getAppSkillsPort } from '../../core/pilot/pilot-manager.js';
+import { listAvailableSkills } from '../../skills/discovery/resolve.js';
+import type { ComposerSkillOption } from '../../../shared/types/skill.js';
 import type { DesktopPresentationPort } from '../../desktop/desktop-presentation-port.js';
 import { createMarketPort, type MarketPort } from '../../market/ports.js';
 import { intersectMcpSelections } from '../../mcp/bridge/injection.js';
@@ -201,6 +203,17 @@ export class CapabilityMarketApplication {
         serverName: input?.serverName,
       }).filter((session) => session.ownerKind !== 'composer');
     });
+  }
+
+  async availableSkills(workspace?: string): Promise<ComposerSkillOption[]> {
+    const skills = getAppSkillsPort();
+    const items = await listAvailableSkills({ listManagedSkills: (filter) => skills.list(filter) }, {
+      workspace,
+      defaultWorkspaceDir: path.join(this.dependencies.userDataDirectory, 'workspace'),
+    });
+    return items.filter((item) => item.enabled).map(({ name, description, scope }) => ({
+      name, description, scope,
+    }));
   }
 
   listMarket(query?: MarketListQuery) {

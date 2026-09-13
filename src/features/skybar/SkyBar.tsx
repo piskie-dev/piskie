@@ -105,8 +105,8 @@ export const SkyBar: React.FC = () => {
   return (
     <header className={styles.bar} data-mac={isMacOSPlatform() ? 'true' : undefined}>
       <div className={styles.brand}>
-        <img src={logo64} alt="piskie" className="app-logo-adaptive" />
-        <b>piskie</b>
+        <img src={logo64} alt="Piskie" className="app-logo-adaptive" />
+        <b>Piskie</b>
       </div>
 
       {headline && (

@@ -77,7 +77,28 @@ describe('信封覆盖', () => {
     ).toEqual({ as: 'user', origin: 'user', text: '群里的消息' });
   });
 
-  it('父流程 ATA 信封只展示可读消息，不暴露传输字段', () => {
+  it('preserves a long parent message as readable text', () => {
+    const message = 'Sample instruction.\n'.repeat(100) + 'Final requirement.';
+    expect(message.length).toBeGreaterThan(1000);
+    expect(presentUserMessage(
+      'system_event',
+      `<agent_input source="parent" ts="t">\n${message}\n</agent_input>`,
+    )).toEqual({ as: 'user', origin: 'parent', text: message });
+  });
+
+  it('preserves a long worker notification in the transcript and expanded detail', () => {
+    const message = 'Sample finding.\n'.repeat(100) + 'Final result.';
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 1, id: 'sample-long-notice', role: 'user', subtype: 'subagent_notification',
+      content: `<subagent_event id="sample-worker" type="completed" ts="t">\n${message}\n</subagent_event>`,
+    }]);
+
+    expect(message.length).toBeGreaterThan(1000);
+    expect(cell).toMatchObject({ kind: 'notice', eventType: 'completed', text: message });
+    expect(cell?.detail?.().sections).toEqual([{ value: message, format: 'text' }]);
+  });
+
+  it('父流程历史 ATA 信封只展示可读消息，不暴露传输字段', () => {
     const inlineEnvelope = JSON.stringify({
       storage: 'inline',
       type: 'message',
@@ -275,6 +296,46 @@ describe('system injection presentation', () => {
     expect(cell?.detail?.().sections).toEqual([
       { value: `Sample job result.\n\n${tail}`, format: 'text' },
       { value: messageText('transcript.detail.eventFile', { path: rawText('/tmp/sample-output.log') }), format: 'text' },
+    ]);
+  });
+});
+
+describe('background output completeness presentation', () => {
+  it.each([
+    { name: 'no output', truncated: false, output: '无输出。' },
+    {
+      name: 'complete multiline output',
+      truncated: false,
+      output: '完整输出：\nFirst line\nLiteral </output> in a sample log.\n  \n',
+    },
+    {
+      name: 'truncated output', truncated: true,
+      output: '输出已截断，仅显示最后 16 KB：\nLast sample line\n',
+    },
+  ])('projects $name from a saved notification into expanded details', (sample) => {
+    const summary = '后台任务「Sample check」完成，用时 12ms。';
+    const content = [
+      '<task-notification>',
+      '<task-id>sample-job</task-id>',
+      ...(sample.truncated ? ['<output-file>/tmp/sample-output.log</output-file>'] : []),
+      '<status>ok</status>',
+      `<summary>${summary}</summary>`,
+      `<output>${sample.output}</output>`,
+      '</task-notification>',
+    ].join('\n');
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 1, id: 'sample-background-notice', role: 'user', subtype: 'system_event', content,
+    }]);
+    expect(cell).toMatchObject({
+      kind: 'notice', source: 'task_notification', titleKey: 'transcript.systemEvent.backgroundCompleted',
+      summary: rawText(summary), text: `${summary}\n\n${sample.output}`,
+    });
+    expect(cell?.detail?.().sections).toEqual([
+      { value: `${summary}\n\n${sample.output}`, format: 'text' },
+      ...(sample.truncated ? [{
+        value: messageText('transcript.detail.eventFile', { path: rawText('/tmp/sample-output.log') }),
+        format: 'text',
+      }] : []),
     ]);
   });
 });

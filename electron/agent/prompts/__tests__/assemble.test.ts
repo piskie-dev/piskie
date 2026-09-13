@@ -78,9 +78,9 @@ describe('assemble L0-L5 组装规则', () => {
     const auto = assemble(directorIdentity, directorCtx({ modeId: 'plan', approvalMode: 'auto' }));
     expect(auto).toBe(confirm);
     expect(confirm).toContain('## 执行模式：计划');
-    // L3 只承载模式语义与澄清判据；工具用法字面量归 plan description。
+    // L3 只承载模式语义；澄清判据归 L0 通用歧义处理，工具用法字面量归 plan description。
     expect(confirm).toContain('制定计划提交用户审批');
-    expect(confirm).toContain('**澄清判据**');
+    expect(confirm).not.toContain('**澄清判据**');
     expect(confirm).not.toMatch(/confirm|auto|其余工具调用自动执行/);
     expect(confirm).not.toContain('plan(action: "create")');
   });
@@ -97,11 +97,12 @@ describe('assemble L0-L5 组装规则', () => {
     expect(prompt).toContain('## 执行模式：Browser Skill 构建');
     expect(prompt).toContain('本次要固化的能力范围与验收场景');
     expect(prompt).toContain('本模式的交付物是 Browser Skill，而不是一次业务结果');
-    expect(prompt).toContain('只给出网站或范围较宽时');
-    expect(prompt).toContain('范围已经明确时可跳过全站侦察');
-    expect(prompt).toContain('范围确定后先提交验收计划供用户确认');
+    expect(prompt).toContain('用户只指定网站、范围较宽');
+    expect(prompt).toContain('可跳过全站范围盘点');
+    expect(prompt).not.toContain('真实探索不能省略');
+    expect(prompt).toContain('范围确定后、创建实现工作前，调用 plan(create) 提交验收计划给用户确认');
     expect(prompt).not.toContain('## 执行模式：Browser Skill + 确认');
-    expect(prompt).not.toContain('直接执行任务，不需要事先制定计划');
+    expect(prompt).not.toContain('本来就在用户要求之内的可逆动作');
     expect(prompt).toContain('## Browser Skill 构建编排');
     expect(prompt).toContain('不能路由成替用户完成一次原始网站业务');
     expect(prompt).toContain('创建 site-scout 做有界的网站能力与风险侦察');
@@ -153,7 +154,7 @@ describe('assemble L0-L5 组装规则', () => {
     );
 
     expect(auto).toBe(confirm);
-    expect(auto).toContain('范围确定后先提交验收计划供用户确认');
+    expect(auto).toContain('范围确定后、创建实现工作前，调用 plan(create) 提交验收计划给用户确认');
     expect(auto).not.toMatch(/confirm|auto|确认模式|自动模式/);
   });
 
@@ -173,7 +174,10 @@ describe('assemble L0-L5 组装规则', () => {
       })
     );
 
-    expect(normal).toContain('直接执行任务，不需要事先制定计划');
+    expect(normal).not.toContain('直接执行任务，不需要事先制定计划');
+    expect(normal).toContain('本来就在用户要求之内的可逆动作，需要工具就直接调用');
+    expect(normal).toContain('只有会造成破坏的操作，或者真正要用户自己拿主意的范围变化，才停下来确认');
+    expect(normal).toContain('做完以后可以提议接下来还能做什么');
     expect(normal).not.toContain('本次要固化的能力范围与验收场景');
     expect(plan).toContain('制定计划提交用户审批');
     expect(plan).not.toContain('本次要固化的能力范围与验收场景');
@@ -184,31 +188,42 @@ describe('assemble L0-L5 组装规则', () => {
     expect(without).not.toContain('subagent(type:');
     expect(without).not.toContain('派出去的调查不要自己再查一遍');
     const withExplore = assemble(directorIdentity, directorCtx({ modeId: 'normal', approvalMode: 'confirm', investigatorTypes: ['explore'] }));
-    expect(withExplore).toContain('先弄清楚要查什么，再把需要翻多个文件的检索交给 subagent(type: "explore")，你只要结论，不要文件内容；知道去哪个文件看、看一眼就有答案的，自己看');
+    expect(withExplore).toContain('回答要翻好几个文件才给得出时，交给 subagent(type: "explore")，你只要结论，不要文件内容；只查一个事实且已经知道在哪个文件、哪个符号的，自己直接看');
+    expect(withExplore).not.toContain('先弄清楚要查什么');
+    expect(withExplore).not.toContain('看一眼就有答案');
   });
 
-  it('顶层先查清事实再委派关联任务，分配后等待汇报', () => {
+  it('顶层信息够就动手，委派关联任务后等待汇报并转达结果', () => {
     const prompt = assemble(
       directorIdentity,
       directorCtx({ modeId: 'normal', approvalMode: 'confirm', investigatorTypes: ['explore'] })
     );
 
     expect(prompt).toContain('像一位带队办事、对最终交付负责的人：你可以自己完成任务，也可以交给聪明、能独当一面的同事');
-    expect(prompt).toContain('需要分工时，先查清影响目标和分工的关键事实');
-    expect(prompt).toContain('再把多个关联任务一并交给一个 Worker，由它自己拿主意');
+    expect(prompt).toContain('信息够动手了就动手');
+    expect(prompt).not.toContain('先查清影响目标和分工的关键事实');
+    expect(prompt).toContain('值得分出去的是能并行的独立工作，或者你只要结论、不要过程的活');
+    expect(prompt).toContain('分的时候把关联任务一并交给一个 Worker，由它自己拿主意');
+    expect(prompt).toContain('交出去的活，它的汇报用户看不到，把要紧的转达给用户');
     expect(prompt).toContain('派出去的调查不要自己再查一遍，等结果回来再综合');
     expect(prompt).toContain('由它自己拿主意，办妥后交回完整结果');
     expect(prompt).toContain('需要其他负责人提供前置结果的工作，在看板中登记依赖，取得所需结果后再执行或委派');
-    expect(prompt).toContain('已知存在冲突的工作按顺序安排');
+    expect(prompt).toContain('有冲突的工作按顺序安排');
+    expect(prompt).not.toContain('已知存在冲突');
     expect(prompt).toContain('相互无依赖且互不冲突的工具调用在同一响应里并行发出');
     expect(prompt).toContain('有依赖或冲突时顺序执行');
-    expect(prompt).toContain('需要接管仍在执行的工作时，先停止原 Worker');
+    expect(prompt).not.toContain('需要接管仍在执行的工作时，先停止原 Worker');
     expect(prompt).toContain('完成本轮可以开始的 Worker 任务分配后，告知用户当前安排并结束本轮响应，等待 Worker 汇报');
     expect(prompt).toContain('收到汇报后，根据结果决定下一步，再执行或分配后续任务');
     expect(prompt).toContain('用户询问进度或出现执行异常迹象时，优先查看已有汇报和执行记录');
     expect(prompt).toContain('整合各项结果，将未满足的用户要求交给相应负责人继续完成');
     expect(prompt).toContain('全部要求满足后才报告整体完成');
-    expect(prompt).toContain('用户发来新要求时，按任务处理方式直接处理或委派');
+    expect(prompt).toContain('照用户实际说的去做，别把自己猜到的言外之意当成任务；用户说的范围就是交付范围');
+    expect(prompt).toContain('碰到歧义，像一位细心的同事那样处理');
+    expect(prompt).toContain('觉得任务本身有问题，用一两句话说出顾虑，然后照做');
+    expect(prompt).toContain('明显超出用户要求范围的动作和改动，不要做');
+    expect(prompt).not.toContain('用户发来新要求时，按任务处理方式直接处理或委派');
+    expect(prompt).not.toContain('问答归问答，任务归任务');
     expect(prompt).not.toContain('| 写入/修改/执行 | 创建子流程来完成 |');
     expect(prompt).not.toContain('将新任务纳入全局 Task Board');
     expect(prompt).not.toContain('正确示例：');
@@ -326,13 +341,12 @@ describe('assemble L0-L5 组装规则', () => {
     }
   });
 
-  it('L2 按角色二选一：director 含调度协议，worker 含 completed 契约', () => {
+  it('L2 按角色二选一：director 含调度协议，worker 含执行协议', () => {
     const director = assemble(directorIdentity, directorCtx());
     expect(director).not.toContain('ENRICH_INFO:');
     expect(director).toContain('<subagent_event');
     expect(director).toContain('非终态通知；需要补充执行信息、解决协调请求或调整要求时才回复');
     expect(director).toContain('Assignment 已完成');
-    expect(director).toContain('failed 只表示当前 Assignment 未能完成');
     expect(director).toContain('只有错误明确属于临时问题且重试仍有价值时');
     expect(director).not.toContain('你在一个事件循环中运行');
     expect(director).not.toContain('阶段性汇报');
@@ -354,11 +368,11 @@ describe('assemble L0-L5 组装规则', () => {
     expect(worker).toContain('<assignment>');
     expect(worker).toContain('终态 send_event 前先收口任务状态');
     expect(worker).not.toContain('返回空响应');
-    expect(worker).toContain('send_event(type: "need_user_action")');
+    expect(worker).not.toContain('send_event(type: "need_user_action")');
     expect(worker).toContain('用户已完成操作');
-    expect(worker).toContain('持续处理当前任务及用户后续提出的要求');
-    expect(worker).toContain('全部要求完成后，调用 send_event(type: "completed")');
-    expect(worker).toContain('仍有工作时继续执行');
+    expect(worker).not.toContain('## 任务收尾');
+    expect(worker).not.toContain('completed 契约');
+    expect(worker).not.toContain('用户请求停止任务时');
   });
 
   it('Browser Skill 专属身份继承通用基座，角色正文不拼接会话值', () => {
@@ -401,7 +415,6 @@ describe('assemble L0-L5 组装规则', () => {
     expect(scout).toContain('等待用户在当前浏览器完成');
     expect(scout).toContain('确认阻断解除后继续侦察');
     expect(scout).toContain('登录后区域明确不在 Assignment 边界内时');
-    expect(scout).toContain('send_event(type: "need_user_action")');
     expect(scout).not.toContain('不执行登录提交');
     expect(scout).toContain('不为“全面”穷举网站');
     expect(scout).toContain('不要替用户选择多个彼此独立的固化方向');

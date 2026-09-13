@@ -16,8 +16,7 @@
  *
  * 本函数只聚合**给它的 nodes**。按谁的流水算就是谁的活动：
  * - 会话级总量：当前视图的流水（ThreadView 传 `transcript.nodes`）
- * - 单任务 worker：它整条流水的活动就是那个任务的活动（`worker.taskIds.length === 1`
- *   时归属是事实，不是推断）
+ * - main 看板仅记录一个由当前 Worker 负责的任务时，展示该 Worker 的活动量
  * - 主流水任务 / 多任务 worker：工具调用没有明确的任务标记时**不显示**，
  *   避免把活动量错误归给某个任务
  */
@@ -98,10 +97,16 @@ export function activityChips(nodes: readonly TranscriptNode[]): ActivityChips {
       continue;
     }
     if (op?.kind === 'edit') {
-      const stat = diffLines(op.oldText, op.newText).stat;
-      added += stat.added;
-      removed += stat.removed;
-      if (stat.added > 0 || stat.removed > 0) changedPaths.add(op.path);
+      let editAdded = 0;
+      let editRemoved = 0;
+      for (const hunk of op.edits) {
+        const stat = diffLines(hunk.oldText, hunk.newText).stat;
+        editAdded += stat.added;
+        editRemoved += stat.removed;
+      }
+      added += editAdded;
+      removed += editRemoved;
+      if (editAdded > 0 || editRemoved > 0) changedPaths.add(op.path);
       continue;
     }
 

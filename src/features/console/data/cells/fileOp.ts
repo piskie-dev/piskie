@@ -19,7 +19,7 @@
  * | | 本实现 | 有后端 diff 时 |
  * |---|---|---|
  * | `write` 的行号 | **准确**（全量内容，1..N） | 同 |
- * | `edit` 的行号 | **没有**（不知道 old_string 落在文件第几行） | 准确 |
+ * | `edit` 的行号 | **没有**（不知道各条 old_string 落在文件第几行） | 准确 |
  * | 多次改同一文件 | 逐次 hunk 罗列 | 可合并成一份净 diff |
  * | 改动是否被后续覆盖 | 看不出来 | 能看出 |
  *
@@ -27,7 +27,7 @@
  * 视图据此决定画不画行号槽 —— 不画假行号。
  */
 
-import type { FileOp } from '@/domains/transcript/nodes';
+import type { FileEditHunk, FileOp } from '@/domains/transcript/nodes';
 import { messageText, rawText } from '../presentationText';
 
 export type { FileOp };
@@ -38,6 +38,24 @@ const READ_LINE_RE = /^\s*(\d+)\t([\s\S]*)$/;
 function str(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * `edit` 的 `edits[]`：任一条缺 old_string / new_string 就整条不产出——宁可不显示也不显示半个。
+ * new_string 允许为空串（纯删除），所以用 undefined 判定而不是真值判定。
+ */
+function parseEdits(value: unknown): readonly FileEditHunk[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const hunks: FileEditHunk[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return undefined;
+    const record = item as Record<string, unknown>;
+    const oldText = str(record, 'old_string');
+    const newText = str(record, 'new_string');
+    if (oldText === undefined || newText === undefined) return undefined;
+    hunks.push({ oldText, newText, replaceAll: record.replace_all === true });
+  }
+  return hunks;
 }
 
 /**
@@ -80,17 +98,9 @@ export function extractFileOp(input: {
 
   switch (input.tool) {
     case 'edit': {
-      const oldText = str(params, 'old_string');
-      const newText = str(params, 'new_string');
-      // new_string 允许为空串（纯删除），所以用 undefined 判定而不是真值判定
-      if (oldText === undefined || newText === undefined) return undefined;
-      return {
-        kind: 'edit',
-        path,
-        oldText,
-        newText,
-        replaceAll: params.replace_all === true,
-      };
+      const edits = parseEdits(params.edits);
+      if (!edits) return undefined;
+      return { kind: 'edit', path, edits };
     }
 
     case 'write': {

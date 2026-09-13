@@ -674,6 +674,21 @@ describe('inferenceStore configuration mutations', () => {
     });
   });
 
+  it('accepts the already saved reasoning default without another config write', async () => {
+    const selection = { kind: 'effort', effort: 'high' } as const;
+    const currentConfig = structuredClone(config());
+    currentConfig.providers['provider-main']!.models['model-main']!.defaultReasoning = selection;
+    const currentSelections = selections();
+    const gateway = api(currentConfig, currentSelections);
+    resetStore(currentConfig, currentSelections);
+
+    await expect(useInferenceStore.getState().updateModelReasoningDefault(
+      'provider-main::model-main', selection,
+    )).resolves.toBe(true);
+
+    expect(gateway.config.plan).not.toHaveBeenCalled();
+  });
+
   it('reads an image artifact preview through the restricted inference IPC', async () => {
     const currentConfig = config();
     const currentSelections = selections();

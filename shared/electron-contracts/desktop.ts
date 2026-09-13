@@ -8,6 +8,7 @@ export const DESKTOP_OPERATIONS = Object.freeze({
   openAgentRunTrace: 'desktop.system.openAgentRunTrace',
   clipboardAttachments: 'desktop.system.clipboardAttachments',
   previewFile: 'desktop.files.preview',
+  releasePreview: 'desktop.files.releasePreview',
   selectFiles: 'desktop.files.select',
   pickBackground: 'desktop.theme.pickBackground',
   clearBackground: 'desktop.theme.clearBackground',
@@ -35,13 +36,15 @@ export type FilePreviewDescriptor =
       readonly size: number;
     };
 
-export interface ClipboardAttachmentDescriptor {
+export type ClipboardAttachmentRequest =
+  | { readonly kind: 'paths'; readonly paths: readonly string[] }
+  | { readonly kind: 'native'; readonly files: readonly { readonly name: string; readonly size: number }[]; readonly text: string };
+
+export type ClipboardAttachmentDescriptor = {
   readonly name: string;
   readonly path: string;
   readonly size: number;
-  readonly mediaType?: string;
-  readonly previewUrl?: string;
-}
+} & ({ readonly kind: 'image'; readonly previewUrl: string } | { readonly kind: 'file' });
 
 export const DESKTOP_TOPICS = Object.freeze({
   network: 'desktop.system.network',
@@ -56,12 +59,13 @@ interface DesktopSystemClient {
   revealPath(path: string): Promise<void>;
   openWorkspace(workspace?: string): Promise<void>;
   openAgentRunTrace(agentId: string): Promise<void>;
-  clipboardAttachments(): Promise<ClipboardAttachmentDescriptor[]>;
+  clipboardAttachments(request: ClipboardAttachmentRequest): Promise<ClipboardAttachmentDescriptor[]>;
   observeNetwork(listener: (online: boolean) => void): () => void;
 }
 
 interface DesktopFilesClient {
   preview(path: string): Promise<FilePreviewDescriptor>;
+  releasePreview(url: string): Promise<void>;
   select(input?: { type?: 'file' | 'folder' | 'any' }): Promise<string[]>;
 }
 

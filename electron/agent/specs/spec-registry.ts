@@ -45,9 +45,6 @@ export class SpecRegistry {
     if (!['completed', 'failed', 'user_stopped'].every((event) => events.includes(event))) {
       throw new Error('Worker must report completed, failed, and user_stopped');
     }
-    if ((definition.assignment === 'task-board') !== granted.includes('task')) {
-      throw new Error('Task-board assignments require task; question assignments use independent results');
-    }
     const browser = definition.resources?.browser;
     const spec: AgentSpec = {
       name: definition.name,
@@ -133,7 +130,7 @@ export class SpecRegistry {
       )
       .map((spec) => ({
         name: spec.name,
-        assignment: spec.assignment ?? 'task-board',
+        assignment: spec.assignment ?? 'work-package',
         browser: spec.modules.includes('browser'),
         skills: spec.tools.customTools.includes('load_skill') && !spec.tools.exclude?.includes('load_skill'),
         description: describeWorkerType(spec),

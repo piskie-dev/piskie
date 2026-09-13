@@ -15,7 +15,8 @@ import { SendHorizonal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
-import { ImageThumbnail } from '../ImageThumbnail';
+import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
+import type { PresentationText } from '../../../../i18n/presentationText';
 import styles from './gates.module.css';
 
 export type GateImage = { readonly data: string; readonly media_type: string };
@@ -85,6 +86,7 @@ export interface GateFeedbackProps {
   readonly ordinal?: number;
   readonly value: string;
   readonly onChange: (value: string) => void;
+  readonly onFocus?: () => void;
   readonly onSubmit: () => void;
   readonly onPaste: React.ClipboardEventHandler;
   readonly placeholder: string;
@@ -95,7 +97,7 @@ export interface GateFeedbackProps {
 }
 
 export const GateFeedback = memo<GateFeedbackProps>(
-  ({ ordinal, value, onChange, onSubmit, onPaste, placeholder, canSubmit, disabled, hideSend }) => {
+  ({ ordinal, value, onChange, onFocus, onSubmit, onPaste, placeholder, canSubmit, disabled, hideSend }) => {
     const { t } = useTranslation();
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -116,6 +118,7 @@ export const GateFeedback = memo<GateFeedbackProps>(
           className={styles.feedbackInput}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           placeholder={placeholder}
@@ -143,22 +146,24 @@ GateFeedback.displayName = 'GateFeedback';
 
 export interface GateAttachmentsProps {
   readonly images: readonly AttachmentImage[];
+  readonly error?: PresentationText;
   readonly files: readonly AttachmentFile[];
   readonly onRemove: (id: string) => void;
   readonly onPreviewImage?: (src: string) => void;
 }
 
 export const GateAttachments = memo<GateAttachmentsProps>(
-  ({ images, files, onRemove, onPreviewImage }) => {
+  ({ images, files, error, onRemove, onPreviewImage }) => {
     const { t } = useTranslation();
-    if (images.length === 0 && files.length === 0) return null;
+    if (images.length === 0 && files.length === 0 && !error) return null;
 
     return (
       <div className={styles.attachments}>
+        <AttachmentError error={error} />
         {images.map((image) => (
           <span key={image.id} className={styles.chip}>
-            <ImageThumbnail
-              resource={{ kind: 'preview-url', url: image.previewUrl }}
+            <AttachmentThumbnail
+              image={image}
               className={styles.chipThumb}
               alt={t('sessionWorkbenchUi.gate.attachmentImage')}
               onPreview={onPreviewImage}

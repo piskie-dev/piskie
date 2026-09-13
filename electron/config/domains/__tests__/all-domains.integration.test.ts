@@ -31,6 +31,9 @@ import {
 } from '../../host/local-transport.js';
 import { configDomainStoragePaths } from '../../core/storage-layout.js';
 
+// Cross-Domain scenarios perform many durable writes, especially costly on Windows CI.
+const CROSS_DOMAIN_TEST_TIMEOUT_MS = 30_000;
+
 const temporaryDirectories: string[] = [];
 const DEFINITION_A_ID = 'td-AAAAAA';
 const DEFINITION_B_ID = 'td-BBBBBB';
@@ -759,7 +762,7 @@ describe('all managed Config Domains', () => {
       'proxies',
       'web-search',
     ]));
-  });
+  }, CROSS_DOMAIN_TEST_TIMEOUT_MS);
 
   it('keeps proxies referenced by search providers until the reference is removed', async () => {
     const { host } = await fixture();
@@ -1111,7 +1114,7 @@ describe('all managed Config Domains', () => {
       }]),
     ]);
     for (const plan of readOnlyPlans) expect(plan.validation.valid).toBe(false);
-  });
+  }, CROSS_DOMAIN_TEST_TIMEOUT_MS);
 
   it('exposes live browser and Bot lifecycle state through the local ConfigHost port', async () => {
     const { root, host, runningBots, runningEnvironments } = await fixture();

@@ -64,7 +64,7 @@ function buildRuntime(): AgentRuntime {
       initialModel: 'p::m',
       subagentConfig: {
         subject: '测试任务',
-        taskIds: ['task-test'],
+
         prompt: '完成测试任务。',
         skills: [],
         type: 'local-worker',

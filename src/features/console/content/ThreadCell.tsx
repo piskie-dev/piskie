@@ -55,6 +55,7 @@ import {
 import { LinkedMarkdown, LinkedText } from '@/components/content-links';
 import { isMacOSPlatform } from '@/utils/platform';
 import { ImageThumbnail } from './ImageThumbnail';
+import { SkillTags } from './SkillTags';
 import { OrbIndicator } from './OrbIndicator';
 import type { QuestionAnswerItem, ToolCellArtifact } from '../data/toolArtifacts';
 import {
@@ -621,7 +622,17 @@ export const ThreadCell = memo<ThreadCellProps>(({
       return (
         <div className={styles.cell}>
           <div className={styles.userRow}>
-            <div className={styles.bubble}>{cell.text || summary}</div>
+            <div className={styles.bubble}>
+              {cell.skills && <SkillTags skills={cell.skills} />}
+              {(cell.text || summary) && <div>{cell.text || summary}</div>}
+              {!!cell.skillLoadErrors?.length && (
+                <div className={styles.skillErrors}>
+                  {cell.skillLoadErrors.map(({ name, error }) => (
+                    <div key={name}>{t('sessionWorkbenchUi.composer.skills.loadFailed', { name, error })}</div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {cell.images && cell.images.length > 0 && (

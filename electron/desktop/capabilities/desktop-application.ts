@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { clipboard, net, shell } from 'electron';
 import type {
   ClipboardAttachmentDescriptor,
+  ClipboardAttachmentRequest,
   DesktopColorScheme,
   FilePreviewDescriptor,
 } from '../../../shared/electron-contracts/desktop.js';
@@ -116,39 +117,53 @@ export class DesktopApplication {
     ));
   }
 
-  async clipboardAttachments(windowId: number): Promise<ClipboardAttachmentDescriptor[]> {
-    const candidates = readClipboardPathCandidates().slice(0, MAX_CLIPBOARD_ATTACHMENTS);
-    const described = await Promise.all(candidates.map(async (candidate) => {
-      try {
-        const file = await resolveRegularFile(candidate);
-        const mediaType = IMAGE_MIME[path.extname(file.path).toLowerCase()];
-        return {
-          name: path.basename(file.path),
-          path: file.path,
-          size: file.size,
-          ...(mediaType && {
-            mediaType,
-            previewUrl: this.dependencies.presentation.createFilePreviewUrl(
-              windowId,
-              file.path,
-              mediaType,
-            ),
-          }),
-        } satisfies ClipboardAttachmentDescriptor;
-      } catch {
-        return undefined;
-      }
-    }));
-
-    const unique = new Map<string, ClipboardAttachmentDescriptor>();
-    for (const descriptor of described) {
-      if (descriptor) unique.set(descriptor.path, descriptor);
+  async clipboardAttachments(windowId: number, request: ClipboardAttachmentRequest, signal?: AbortSignal): Promise<ClipboardAttachmentDescriptor[]> {
+    signal?.throwIfAborted();
+    // Native formats are read together before the first asynchronous filesystem operation.
+    const candidates = request.kind === 'paths'
+      ? request.paths.map((value) => value.startsWith('file:') ? fileURLToPath(value) : value)
+      : readClipboardPathCandidates();
+    if (request.kind === 'native' && (request.files.length === 0 || clipboard.readText() !== request.text)) {
+      throw new PublicOperationError('invalid-input', 'Clipboard source could not be matched. Paste the files again.');
     }
-    return [...unique.values()];
+    if (candidates.length === 0 || candidates.length > MAX_CLIPBOARD_ATTACHMENTS) {
+      throw new PublicOperationError('invalid-input', 'Paste between 1 and 32 supported files.');
+    }
+    const resolved = await Promise.all([...new Set(candidates)].map(resolveRegularFile));
+    signal?.throwIfAborted();
+    const unique = [...new Map(resolved.map((file) => [file.path, file])).values()];
+    if (request.kind === 'native') {
+      const expected = request.files.map((file) => `${file.name}\0${file.size}`).sort();
+      const actual = unique.map((file) => `${path.basename(file.path)}\0${file.size}`).sort();
+      if (expected.length !== actual.length || expected.some((value, index) => value !== actual[index])) {
+        throw new PublicOperationError('invalid-input', 'Clipboard source changed. Paste the files again.');
+      }
+    }
+    const descriptors: ClipboardAttachmentDescriptor[] = [];
+    try {
+      for (const file of unique) {
+        const mediaType = IMAGE_MIME[path.extname(file.path).toLowerCase()];
+        const metadata = { name: path.basename(file.path), path: file.path, size: file.size };
+        descriptors.push(mediaType ? {
+          ...metadata, kind: 'image',
+          previewUrl: this.dependencies.presentation.createFilePreviewUrl(windowId, file.path, mediaType, true),
+        } : { ...metadata, kind: 'file' });
+      }
+      return descriptors;
+    } catch (error) {
+      for (const descriptor of descriptors) if (descriptor.kind === 'image') this.releasePreview(windowId, descriptor.previewUrl);
+      throw error;
+    }
   }
 
-  async previewFile(windowId: number, targetPath: string): Promise<FilePreviewDescriptor> {
+  releasePreview(windowId: number, url: string): void {
+    this.dependencies.presentation.releaseFilePreview(windowId, url);
+  }
+
+  async previewFile(windowId: number, targetPath: string, signal?: AbortSignal): Promise<FilePreviewDescriptor> {
+    signal?.throwIfAborted();
     const file = await resolveRegularFile(targetPath);
+    signal?.throwIfAborted();
     const extension = path.extname(file.path).toLowerCase();
     const imageMediaType = IMAGE_MIME[extension];
     if (imageMediaType) {
@@ -168,6 +183,7 @@ export class DesktopApplication {
     if (binaryMediaType) return { kind: 'file', mediaType: binaryMediaType, size: file.size };
 
     const buffer = await readFilePrefix(file.path, MAX_TEXT_PREVIEW_BYTES + 1);
+    signal?.throwIfAborted();
     if (looksBinaryBuffer(buffer.subarray(0, BINARY_SAMPLE_BYTES))) {
       return { kind: 'file', size: file.size };
     }
@@ -307,8 +323,10 @@ function readClipboardPathCandidates(): string[] {
         try {
           addPath(fileURLToPath(value));
         } catch {
-          // Malformed URLs are ignored alongside stale clipboard entries.
+          // Other native formats may still contain the path.
         }
+      } else {
+        addPath(value);
       }
     }
     for (const match of raw.matchAll(/<string>([\s\S]*?)<\/string>/g)) addPath(match[1] ?? '');

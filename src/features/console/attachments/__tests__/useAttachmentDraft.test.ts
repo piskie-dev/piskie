@@ -4,188 +4,204 @@ import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAllComposerDrafts, useComposerDraftStore, WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { useAttachmentDraft, type AttachmentDraft } from '../useAttachmentDraft';
+import { pngBytes, deferred } from './fixtures';
 
 const clipboardAttachments = vi.fn();
-const createObjectURL = vi.fn();
-const revokeObjectURL = vi.fn();
-
-let container: HTMLDivElement;
+const releasePreview = vi.fn();
+const onText = vi.fn();
 let root: Root;
 let dom: JSDOM;
 const draftRef = React.createRef<AttachmentDraft>();
-
-const Probe = React.forwardRef<AttachmentDraft, { readonly draftKey?: string }>(function Probe(
-  { draftKey },
-  ref,
-): null {
-  const draft = useAttachmentDraft(draftKey);
+const Probe = React.forwardRef<AttachmentDraft, { readonly draftKey?: string }>(function Probe({ draftKey }, ref) {
+  const draft = useAttachmentDraft(draftKey, onText);
   React.useImperativeHandle(ref, () => draft, [draft]);
   return null;
 });
-
-function currentDraft(): AttachmentDraft {
-  if (!draftRef.current) throw new Error('Attachment draft is not mounted');
-  return draftRef.current;
+const draft = () => draftRef.current!;
+const render = async (draftKey?: string) => { await act(async () => root.render(React.createElement(Probe, { ref: draftRef, draftKey }))); };
+function paste(files: readonly File[] = [], plain = '', uris = '') {
+  const input = document.createElement('textarea');
+  input.value = 'Before after'; input.setSelectionRange(7, 7);
+  return { clipboardData: { items: files.map((file) => ({ kind: 'file', getAsFile: () => file })),
+    getData: (type: string) => type === 'text/plain' ? plain : type === 'text/uri-list' ? uris : '', types: [],
+  }, currentTarget: input, preventDefault: vi.fn() } as unknown as React.ClipboardEvent;
 }
-
-async function renderProbe(draftKey?: string): Promise<void> {
-  await act(async () => root.render(React.createElement(Probe, { ref: draftRef, draftKey })));
+async function settle() {
+  const captures = new Set(draft().images.flatMap((image) => image.status === 'capturing' ? [image.capture] : []));
+  await act(async () => { await Promise.all([...captures].map((capture) => capture.done.catch(() => undefined))); });
 }
-
-async function hideProbe(): Promise<void> {
-  await act(async () => root.render(null));
-}
-
-function pasteEvent(
-  items: readonly Partial<DataTransferItem>[],
-  uriList = '',
-): React.ClipboardEvent {
-  return {
-    clipboardData: {
-      items,
-      getData: (type: string) => (type === 'text/uri-list' ? uriList : ''),
-    },
-    preventDefault: vi.fn(),
-  } as unknown as React.ClipboardEvent;
-}
+const imageFile = () => new File([pngBytes()], 'sample.png', { type: 'image/png' });
 
 beforeEach(async () => {
   dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
-  const expose = (name: string, value: unknown): void => {
-    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
-  };
-  expose('window', dom.window);
-  expose('document', dom.window.document);
-  expose('navigator', dom.window.navigator);
-  expose('File', dom.window.File);
-  expose('FileReader', dom.window.FileReader);
-  expose('Blob', dom.window.Blob);
-  expose('URL', dom.window.URL);
-  expose('IS_REACT_ACT_ENVIRONMENT', true);
+  for (const name of ['window', 'document', 'navigator', 'File', 'FileReader', 'Blob'] as const) {
+    vi.stubGlobal(name, name === 'window' ? dom.window : dom.window[name]);
+  }
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   clipboardAttachments.mockReset().mockResolvedValue([]);
-  createObjectURL.mockReset().mockImplementation(() => `blob:preview-${createObjectURL.mock.calls.length}`);
-  revokeObjectURL.mockReset();
-  Object.defineProperty(window, 'piskie', {
-    configurable: true,
-    value: { desktop: { system: { clipboardAttachments } } },
-  });
-  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
-  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+  releasePreview.mockReset().mockResolvedValue(undefined);
+  onText.mockReset();
+  Object.defineProperty(window, 'piskie', { value: { desktop: {
+    system: { clipboardAttachments }, files: { releasePreview },
+  } } });
   clearAllComposerDrafts();
-  container = document.createElement('div');
-  root = createRoot(container);
-  await renderProbe();
+  root = createRoot(document.createElement('div'));
+  await render();
 });
-
 afterEach(async () => {
   await act(async () => root.unmount());
   clearAllComposerDrafts();
   dom.window.close();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
-describe('useAttachmentDraft', () => {
-  it('does not intercept ordinary text paste', () => {
-    const event = pasteEvent([{ kind: 'string' }]);
-
-    act(() => currentDraft().handlePaste(event));
-
+describe('paste event capture', () => {
+  it('leaves ordinary paragraphs, including embedded paths, to default text insertion', () => {
+    const event = paste([], 'Example paragraph\n/workspace/sample.png');
+    act(() => draft().handlePaste(event));
     expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(onText).not.toHaveBeenCalled();
     expect(clipboardAttachments).not.toHaveBeenCalled();
-    expect(currentDraft().hasAttachments).toBe(false);
   });
 
-  it('uses an object URL for an immediate thumbnail and encodes only for submission', async () => {
-    const image = new File(['image-bytes'], 'capture.png', { type: 'image/png' });
-    const event = pasteEvent([{ kind: 'file', getAsFile: () => image }]);
+  it('starts real reads in the callback and sends independently captured original bytes', async () => {
+    const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+    const file = imageFile();
+    const event = paste([file]);
+    act(() => draft().handlePaste(event));
+    expect(read).toHaveBeenCalledOnce();
+    expect(draft().images[0]?.status).toBe('capturing');
+    const send = vi.fn().mockResolvedValue(undefined);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    const ready = draft().images[0]!;
+    expect(ready.status).toBe('ready');
+    if (ready.status === 'ready') expect(ready.blob).not.toBe(file);
+    expect(send).toHaveBeenCalledWith([{ data: Buffer.from(pngBytes()).toString('base64'), media_type: 'image/png' }], []);
+  });
 
-    act(() => currentDraft().handlePaste(event));
-
+  it('inserts mixed ordinary text once and does not rediscover a direct image', async () => {
+    const event = paste([imageFile()], 'Example text', 'file:///workspace/sample.png');
+    act(() => draft().handlePaste(event));
     expect(event.preventDefault).toHaveBeenCalledOnce();
-    expect(currentDraft().images).toHaveLength(1);
-    expect(currentDraft().images[0]?.previewUrl).toBe('blob:preview-1');
+    expect(onText).toHaveBeenCalledExactlyOnceWith('Before Example textafter');
     expect(clipboardAttachments).not.toHaveBeenCalled();
-    await expect(currentDraft().imagePayloads()).resolves.toEqual([{
-      data: 'aW1hZ2UtYnl0ZXM=',
-      media_type: 'image/png',
-    }]);
-
-    const id = currentDraft().images[0]!.id;
-    act(() => currentDraft().remove(id));
-    expect(currentDraft().images).toHaveLength(0);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-1');
+    await settle();
+    expect(draft().images).toHaveLength(1);
   });
 
-  it('retains filesystem text attachments as path references', () => {
-    const file = new File(['hello'], 'notes.md', { type: 'text/markdown' });
-    Object.defineProperty(file, 'path', { value: '/tmp/notes.md' });
-    const event = pasteEvent([{ kind: 'file', getAsFile: () => file }]);
+  it.each(['md', 'txt'])('imports an unresolved .%s alongside a direct image using the complete native identity', async (extension) => {
+    const image = imageFile();
+    const text = new File(['Example'], `sample.${extension}`, { type: 'text/plain' });
+    const known = new File(['Known'], 'known.md', { type: 'text/markdown' });
+    Object.defineProperty(known, 'path', { value: '/workspace/known.md' });
+    const other = new File(['Binary'], 'sample.bin', { type: 'application/octet-stream' });
+    const files = [image, text, known, other];
+    const discovery = deferred<unknown[]>();
+    clipboardAttachments.mockReturnValue(discovery.promise);
+    const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    act(() => draft().handlePaste(paste(files)));
+    expect(read).toHaveBeenCalledExactlyOnceWith(image);
+    expect(clipboardAttachments).toHaveBeenCalledExactlyOnceWith({ kind: 'native',
+      files: files.map((file) => ({ name: file.name, size: file.size })), text: '' });
+    discovery.resolve([
+      { kind: 'image', name: image.name, path: '/workspace/sample.png', size: image.size, previewUrl: 'piskie-attachment://preview/duplicate' },
+      { kind: 'file', name: text.name, path: `/workspace/${text.name}`, size: text.size },
+      { kind: 'file', name: known.name, path: '/workspace/known.md', size: known.size },
+      { kind: 'file', name: other.name, path: '/workspace/sample.bin', size: other.size },
+    ]);
+    await settle();
+    expect(draft().images.map((image) => image.status)).toEqual(['ready']);
+    expect(draft().files.map((file) => file.path)).toEqual(['/workspace/known.md', `/workspace/${text.name}`]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(releasePreview).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/duplicate');
+    const send = vi.fn().mockResolvedValue(true);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    expect(send.mock.calls[0]![0]).toHaveLength(1);
+    expect(send.mock.calls[0]![1]).toHaveLength(2);
+  });
 
-    act(() => currentDraft().handlePaste(event));
+  it('keeps ordinary text when the image batch is rejected', () => {
+    const oversized = imageFile();
+    Object.defineProperty(oversized, 'size', { value: 33 * 1024 * 1024 });
+    act(() => draft().handlePaste(paste([oversized], 'Example text')));
+    expect(onText).toHaveBeenCalledOnce();
+    expect(draft().images[0]?.status).toBe('error');
+  });
 
-    expect(currentDraft().files).toEqual([expect.objectContaining({
-      name: 'notes.md',
-      path: '/tmp/notes.md',
-    })]);
+  it('passes explicit event paths, captures once, and releases the source token', async () => {
+    clipboardAttachments.mockResolvedValue([{ kind: 'image', name: 'sample.png', path: '/workspace/sample.png', size: pngBytes().length,
+      previewUrl: 'piskie-attachment://preview/example' }]);
+    const fetch = vi.fn().mockResolvedValue(new Response(pngBytes()));
+    vi.stubGlobal('fetch', fetch);
+    act(() => draft().handlePaste(paste([], '/workspace/sample.png')));
+    expect(clipboardAttachments).toHaveBeenCalledWith({ kind: 'paths', paths: ['/workspace/sample.png'] });
+    expect(onText).not.toHaveBeenCalled();
+    await settle();
+    expect(releasePreview).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/example');
+    fetch.mockRejectedValue(new Error('source removed'));
+    const send = vi.fn().mockResolvedValue(undefined);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]![0][0].data).toBe(Buffer.from(pngBytes()).toString('base64'));
+  });
+
+  it('preserves text alongside URI attachments', async () => {
+    clipboardAttachments.mockResolvedValue([{ kind: 'file', name: 'sample.md', path: '/workspace/sample.md', size: 10 }]);
+    act(() => draft().handlePaste(paste([], 'Example text', 'file:///workspace/sample.md')));
+    await settle();
+    expect(onText).toHaveBeenCalledExactlyOnceWith('Before Example textafter');
+    expect(draft().files[0]?.path).toBe('/workspace/sample.md');
+  });
+
+  it('shows failed path import without sending its path as text, then recovers by re-paste', async () => {
+    clipboardAttachments.mockRejectedValue(new Error('source unavailable'));
+    act(() => draft().handlePaste(paste([], '/workspace/sample.png')));
+    await settle();
+    expect(draft().images[0]?.status).toBe('error');
+    expect(onText).not.toHaveBeenCalled();
+    const send = vi.fn();
+    await act(async () => { expect(await draft().withImages(send)).toBe(false); });
+    expect(send).not.toHaveBeenCalled();
+    act(() => draft().handlePaste(paste([imageFile()])));
+    await settle();
+    expect(draft().images.map((image) => image.status)).toEqual(['ready']);
+  });
+
+  it('retains filesystem text files as path references', () => {
+    const file = new File(['Example'], 'sample.md', { type: 'text/markdown' });
+    Object.defineProperty(file, 'path', { value: '/workspace/sample.md' });
+    act(() => draft().handlePaste(paste([file])));
+    expect(draft().files).toEqual([expect.objectContaining({ path: '/workspace/sample.md' })]);
     expect(clipboardAttachments).not.toHaveBeenCalled();
   });
 
-  it('keeps keyed attachments isolated and restores them after unmount', async () => {
-    await renderProbe('agent:a');
-    const image = new File(['image-a'], 'a.png', { type: 'image/png' });
-    act(() => currentDraft().handlePaste(pasteEvent([{ kind: 'file', getAsFile: () => image }])));
-
-    expect(currentDraft().images).toHaveLength(1);
-    await renderProbe('agent:b');
-    expect(currentDraft().images).toHaveLength(0);
-
-    await hideProbe();
-    expect(revokeObjectURL).not.toHaveBeenCalled();
-
-    await renderProbe('agent:a');
-    expect(currentDraft().images).toHaveLength(1);
-    act(() => currentDraft().clear());
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-1');
+  it('keeps keyed attachments across switching and unmount', async () => {
+    await render('agent:example-one');
+    act(() => draft().handlePaste(paste([imageFile()])));
+    await settle();
+    await render('agent:example-two');
+    expect(draft().images).toHaveLength(0);
+    await act(async () => root.render(null));
+    await render('agent:example-one');
+    expect(draft().images[0]?.status).toBe('ready');
+    act(() => draft().clear());
+    expect(draft().images).toHaveLength(0);
   });
 
-  it('delivers delayed clipboard results to the target that initiated them', async () => {
-    let resolveDescriptors!: (value: Array<{ name: string; path: string; size: number }>) => void;
-    clipboardAttachments.mockReturnValue(new Promise((resolve) => {
-      resolveDescriptors = resolve;
-    }));
-    await renderProbe('agent:a');
-
-    act(() => currentDraft().handlePaste(pasteEvent([], 'file:///tmp/notes.md')));
-    await renderProbe('agent:b');
+  it.each(['clear', 'reset'])('does not repopulate after %s while discovering', async (action) => {
+    await render(WELCOME_DRAFT_KEY);
+    const discovery = deferred<unknown[]>();
+    clipboardAttachments.mockReturnValue(discovery.promise);
+    act(() => draft().handlePaste(paste([], '', 'file:///workspace/sample.md')));
+    const capture = draft().images[0]!;
+    act(() => action === 'clear' ? draft().clear() : useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY));
     await act(async () => {
-      resolveDescriptors([{ name: 'notes.md', path: '/tmp/notes.md', size: 5 }]);
-      await Promise.resolve();
+      discovery.resolve([{ kind: 'file', name: 'sample.md', path: '/workspace/sample.md', size: 1 }]);
+      if (capture.status === 'capturing') await capture.capture.done.catch(() => undefined);
     });
-
-    expect(currentDraft().files).toHaveLength(0);
-    await renderProbe('agent:a');
-    expect(currentDraft().files).toEqual([expect.objectContaining({ path: '/tmp/notes.md' })]);
-  });
-
-  it.each(['clear attachments', 'new draft'])('ignores a delayed clipboard result after %s', async (action) => {
-    await renderProbe(WELCOME_DRAFT_KEY);
-    let resolveDescriptors!: (value: Array<{ name: string; path: string; size: number }>) => void;
-    clipboardAttachments.mockReturnValue(new Promise((resolve) => {
-      resolveDescriptors = resolve;
-    }));
-    const event = pasteEvent([], 'file:///tmp/notes.md');
-
-    act(() => currentDraft().handlePaste(event));
-    expect(clipboardAttachments).toHaveBeenCalledOnce();
-    act(() => {
-      if (action === 'new draft') useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY);
-      else currentDraft().clear();
-    });
-    await act(async () => {
-      resolveDescriptors([{ name: 'notes.md', path: '/tmp/notes.md', size: 5 }]);
-      await Promise.resolve();
-    });
-
-    expect(currentDraft().files).toHaveLength(0);
-    expect(currentDraft().images).toHaveLength(0);
+    expect(draft().images).toHaveLength(0);
+    expect(draft().files).toHaveLength(0);
   });
 });

@@ -86,7 +86,7 @@ export const AboutDesk: React.FC = () => {
         <div className={styles.aboutStack}>
           <img src={logo128} alt="Piskie" className={`${styles.aboutBadge} app-logo-adaptive`} />
           <div>
-            <div className={styles.aboutTitle}>piskie</div>
+            <div className={styles.aboutTitle}>Piskie</div>
             <div className={styles.fieldNote} style={{ textAlign: 'center' }}>
               {t('console.entryPromise')}
             </div>

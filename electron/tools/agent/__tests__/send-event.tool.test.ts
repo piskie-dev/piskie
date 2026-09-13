@@ -4,39 +4,17 @@
  * 投递失败以工具错误回给 AI，不结束冲程。
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ATAEventEnvelope } from '../../../agent/ata/ata-event-envelope.js';
-import { ataEventPayloadStore } from '../../../agent/ata/ata-event-payload-store.js';
-import type { ToolContext, ToolOutput } from '../../types.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { SubagentNotification } from '../../../../shared/types/index.js';
+import type { ToolContext } from '../../types.js';
 import { parse, toApiSchema } from '../../params.js';
 import { ToolCatalog } from '../../catalog.js';
 import { SendEventTool } from '../send-event.tool.js';
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/piskie-test' },
-}));
-
-type SendMethod = (
-  targetId: string,
-  envelope: ATAEventEnvelope,
-  context: ToolContext,
-) => ToolOutput<unknown>;
-
-function sendToParent(
-  envelopeType: ATAEventEnvelope['type'],
+async function sendToParent(
+  type: SubagentNotification['type'],
   onNotification: () => boolean,
-): { output: ToolOutput<unknown>; declareTerminal: ReturnType<typeof vi.fn> } {
-  const tool = new SendEventTool();
-  const envelope = {
-    storage: 'inline',
-    type: envelopeType,
-    data: { type: envelopeType, message: '正文' },
-    originalSize: 2,
-  } satisfies ATAEventEnvelope;
+) {
   const declareTerminal = vi.fn();
   const context = {
     agentId: 'worker-1',
@@ -49,25 +27,14 @@ function sendToParent(
     declareTerminal,
   } as unknown as ToolContext;
   return {
-    output: (tool as unknown as { sendToParent: SendMethod }).sendToParent(
-      'director-1',
-      envelope,
-      context,
-    ),
+    output: await new SendEventTool().execute({ type, message: '正文' }, context),
     declareTerminal,
   };
 }
 
 function sendToSubagent(
-  sendEventToSubagent: (id: string, event: Record<string, unknown>) => boolean,
-): ToolOutput<unknown> {
-  const tool = new SendEventTool();
-  const envelope = {
-    storage: 'inline',
-    type: 'message',
-    data: { type: 'message', message: '正文' },
-    originalSize: 2,
-  } satisfies ATAEventEnvelope;
+  sendEventToSubagent: (id: string, message: string) => boolean,
+) {
   const context = {
     agentId: 'director-1',
     agentType: 'main',
@@ -77,9 +44,8 @@ function sendToSubagent(
       notifyParent: () => false,
     },
   } as unknown as ToolContext;
-  return (tool as unknown as { sendToSubagent: SendMethod }).sendToSubagent(
-    'worker-1',
-    envelope,
+  return new SendEventTool().execute(
+    { type: 'message', message: '正文', targetId: 'worker-1' },
     context,
   );
 }
@@ -144,29 +110,29 @@ describe('send_event ToolDefinition', () => {
 });
 
 describe('send_event 投递守门', () => {
-  it('终态送达（delivered=true）：返回 terminalReason，runTurn 据此 yield', () => {
-    const { output, declareTerminal } = sendToParent('completed', () => true);
+  it('终态送达（delivered=true）：返回 terminalReason，runTurn 据此 yield', async () => {
+    const { output, declareTerminal } = await sendToParent('completed', () => true);
     expect(output.ok).toBe(true);
     expect(declareTerminal).toHaveBeenCalledWith('completed');
   });
 
-  it('终态未送达（delivered=false）：工具错误且无 terminalReason，冲程不结束', () => {
-    const { output, declareTerminal } = sendToParent('completed', () => false);
+  it('终态未送达（delivered=false）：工具错误且无 terminalReason，冲程不结束', async () => {
+    const { output, declareTerminal } = await sendToParent('completed', () => false);
     expect(output.ok).toBe(false);
     expect(declareTerminal).not.toHaveBeenCalled();
     expect(output.text).toContain('未送达');
   });
 
-  it('三种终态在送达时对称产生 terminalReason', () => {
+  it('三种终态在送达时对称产生 terminalReason', async () => {
     for (const type of ['completed', 'failed', 'user_stopped'] as const) {
-      const { output, declareTerminal } = sendToParent(type, () => true);
+      const { output, declareTerminal } = await sendToParent(type, () => true);
       expect(output.ok).toBe(true);
       expect(declareTerminal).toHaveBeenCalledWith(type);
     }
   });
 
-  it('need_user_action 送达：普通成功，不产生 terminalReason', () => {
-    const { output, declareTerminal } = sendToParent('need_user_action', () => true);
+  it('need_user_action 送达：普通成功，不产生 terminalReason', async () => {
+    const { output, declareTerminal } = await sendToParent('need_user_action', () => true);
     expect(output.ok).toBe(true);
     expect(declareTerminal).not.toHaveBeenCalled();
     expect(output.text).toContain('当前执行将挂起');
@@ -174,28 +140,21 @@ describe('send_event 投递守门', () => {
 });
 
 describe('send_event 父→子投递守门', () => {
-  it('送达（post 返回 true）：普通成功', () => {
-    const res = sendToSubagent(() => true);
+  it('送达（post 返回 true）：普通成功', async () => {
+    const res = await sendToSubagent(() => true);
     expect(res.ok).toBe(true);
   });
 
-  it('未送达（post 返回 false）：工具错误，不假装已发送', () => {
-    const res = sendToSubagent(() => false);
+  it('未送达（post 返回 false）：工具错误，不假装已发送', async () => {
+    const res = await sendToSubagent(() => false);
     expect(res.ok).toBe(false);
     expect(res.text).toContain('未送达');
   });
 });
 
-describe('send_event ATA event execute boundary', () => {
-  it('Main 构造顶层 source，并把当前 ATAEventEnvelope 投递给 Worker', async () => {
-    const envelope = {
-      storage: 'inline',
-      type: 'message',
-      data: { type: 'message', message: '继续执行' },
-      originalSize: 4,
-    } satisfies ATAEventEnvelope;
-    const prepareEnvelope = vi.spyOn(ataEventPayloadStore, 'prepareEnvelope')
-      .mockResolvedValue(envelope);
+describe('send_event full message delivery', () => {
+  it.each([undefined, 'Sample preview.'])('delivers the complete long parent message with summary %s', async (summary) => {
+    const message = 'Sample instruction.\n'.repeat(100) + 'Final requirement.';
     const send = vi.fn(() => true);
     const context = {
       agentId: 'main-1',
@@ -209,27 +168,23 @@ describe('send_event ATA event execute boundary', () => {
     } as unknown as ToolContext;
 
     const output = await new SendEventTool().execute(
-      { type: 'message', message: '继续执行', targetId: 'worker-1' },
+      { type: 'message', message, summary, targetId: 'worker-1' },
       context,
     );
 
+    expect(message.length).toBeGreaterThan(1000);
     expect(output.ok).toBe(true);
-    expect(prepareEnvelope).toHaveBeenCalledWith(
-      { agentId: 'main-1' },
-      { type: 'message', message: '继续执行' },
-    );
-    expect(send).toHaveBeenCalledWith('worker-1', envelope);
+    expect(send).toHaveBeenCalledWith('worker-1', message);
   });
 
-  it('Worker 构造 owner-local source，并经当前 ATAEventEnvelope 通知 Main', async () => {
-    const envelope = {
-      storage: 'inline',
-      type: 'completed',
-      data: { type: 'completed', message: '任务完成' },
-      originalSize: 4,
-    } satisfies ATAEventEnvelope;
-    const prepareEnvelope = vi.spyOn(ataEventPayloadStore, 'prepareEnvelope')
-      .mockResolvedValue(envelope);
+  it.each([
+    ['message', 'message'],
+    ['completed', 'message'],
+    ['failed', 'error'],
+    ['user_stopped', 'reason'],
+    ['need_user_action', 'message'],
+  ] as const)('delivers the complete long %s notification in its %s field', async (type, field) => {
+    const message = 'Sample result.\n'.repeat(100) + 'Final finding.';
     const notifyParent = vi.fn(() => true);
     const declareTerminal = vi.fn();
     const context = {
@@ -245,32 +200,29 @@ describe('send_event ATA event execute boundary', () => {
     } as unknown as ToolContext;
 
     const output = await new SendEventTool().execute(
-      { type: 'completed', message: '任务完成' },
+      { type, message, summary: 'Sample preview.' },
       context,
     );
 
+    expect(message.length).toBeGreaterThan(1000);
     expect(output.ok).toBe(true);
-    expect(prepareEnvelope).toHaveBeenCalledWith(
-      { agentId: 'main-1', workerId: 'worker-1' },
-      { type: 'completed', message: '任务完成' },
-    );
-    expect(notifyParent).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'completed',
-      message: '任务完成',
-      data: envelope,
-    }));
-    expect(declareTerminal).toHaveBeenCalledWith('completed');
+    expect(notifyParent).toHaveBeenCalledWith({ type, [field]: message });
+    if (type === 'completed' || type === 'failed' || type === 'user_stopped') {
+      expect(declareTerminal).toHaveBeenCalledWith(type);
+    } else {
+      expect(declareTerminal).not.toHaveBeenCalled();
+    }
   });
 
   it('Runtime 拒绝 Director 发送控制事件', async () => {
-    const prepareEnvelope = vi.spyOn(ataEventPayloadStore, 'prepareEnvelope');
+    const send = vi.fn(() => true);
     const context = {
       agentId: 'main-1',
       mainAgentId: 'main-1',
       agentType: 'main',
       events: {
         allowedTargets: () => ['worker-1'],
-        send: () => true,
+        send,
         notifyParent: () => false,
       },
     } as unknown as ToolContext;
@@ -282,11 +234,11 @@ describe('send_event ATA event execute boundary', () => {
 
     expect(output.ok).toBe(false);
     expect(output.text).toContain('Director 只能发送');
-    expect(prepareEnvelope).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('Runtime 拒绝 Worker 自行指定 targetId', async () => {
-    const prepareEnvelope = vi.spyOn(ataEventPayloadStore, 'prepareEnvelope');
+    const notifyParent = vi.fn(() => true);
     const context = {
       agentId: 'worker-1',
       mainAgentId: 'main-1',
@@ -294,7 +246,7 @@ describe('send_event ATA event execute boundary', () => {
       events: {
         allowedTargets: () => ['main-1'],
         send: () => false,
-        notifyParent: () => true,
+        notifyParent,
       },
     } as unknown as ToolContext;
 
@@ -305,6 +257,6 @@ describe('send_event ATA event execute boundary', () => {
 
     expect(output.ok).toBe(false);
     expect(output.text).toContain('不能指定 targetId');
-    expect(prepareEnvelope).not.toHaveBeenCalled();
+    expect(notifyParent).not.toHaveBeenCalled();
   });
 });

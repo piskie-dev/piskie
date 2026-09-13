@@ -6,7 +6,7 @@
  * 三条必须保持的语义：
  * 1. **两遍扫描**：先按 `toolUseId` 索引全部 `ToolEntry`，再按序处理消息——否则工具结果
  *    早于其调用出现时会配不上。
- * 2. **内容顺序**：assistant 的 Think、正文和工具按最终 ContentBlock 顺序投影。
+ * 2. **内容顺序**：assistant 的 Think、正文和工具按最终 ContentBlock 顺序投影，连续思考块合为一条。
  * 3. **消息归属**：user 消息是"谁说的话"还是"运行时事件"，由 `messagePresentation.ts`
  *    按 `subtype` 穷尽判定、信封只做覆盖。本文件不解析信封。
  */
@@ -179,6 +179,9 @@ function buildUserNode(
     text,
     images,
     files,
+    ...(entry.role === 'user' && entry.metadata?.skills?.length ? { skills: entry.metadata.skills } : {}),
+    ...(entry.role === 'user' && entry.metadata?.skillLoadErrors?.length
+      ? { skillLoadErrors: entry.metadata.skillLoadErrors } : {}),
     tone: userTone(origin),
     interaction,
     defaultExpanded: false,
@@ -343,10 +346,6 @@ function buildWorkerNode(
   outcome: ToolOutcome,
 ): WorkerNode {
   const subject = typeof params.subject === 'string' ? params.subject : '';
-  const taskIds = Array.isArray(params.taskIds)
-    ? params.taskIds.filter((id): id is string => typeof id === 'string')
-    : [];
-
   const title = resolveToolTitle({ tool: 'subagent', params });
   return {
     kind: 'worker',
@@ -360,7 +359,6 @@ function buildWorkerNode(
     workerType: typeof params.type === 'string' ? params.type : '',
     subject,
     mode: typeof params.mode === 'string' ? params.mode : '',
-    taskIds,
     tone: staticTone('worker'),
     interaction: 'expand',
     defaultExpanded: false,
@@ -432,15 +430,27 @@ export function projectEntryNodes(
   }
   if (!Array.isArray(content)) return nodes;
 
-  let textBlockCount = 0;
-  content.forEach((block, blockIndex) => {
-    if (block.type === 'thinking' && block.thinking?.trim()) {
+  const appendThink = (markdown: string, blockIndex: number): void => {
+    const previous = nodes.at(-1);
+    if (previous?.kind === 'think') {
+      nodes[nodes.length - 1] = {
+        ...previous,
+        markdown: `${previous.markdown}\n\n---\n\n${markdown}`,
+      };
+    } else {
       nodes.push(buildThinkNode(
         `${entry.id}-think-${blockIndex}`,
         entry.ts,
         sourceIndex,
-        block.thinking,
+        markdown,
       ));
+    }
+  };
+
+  let textBlockCount = 0;
+  content.forEach((block, blockIndex) => {
+    if (block.type === 'thinking' && block.thinking?.trim()) {
+      appendThink(block.thinking, blockIndex);
       return;
     }
 
@@ -455,12 +465,7 @@ export function projectEntryNodes(
           .join('\n\n')
         || '';
       if (markdown.trim()) {
-        nodes.push(buildThinkNode(
-          `${entry.id}-think-${blockIndex}`,
-          entry.ts,
-          sourceIndex,
-          markdown,
-        ));
+        appendThink(markdown, blockIndex);
       }
       return;
     }

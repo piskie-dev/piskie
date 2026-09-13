@@ -26,7 +26,7 @@ export interface GateProps {
   readonly request: GateRequest;
   /** 停止中 / 等待中时锁门 */
   readonly disabled?: boolean;
-  readonly onDecide: (decision: GateDecision) => void;
+  readonly onDecide: (decision: GateDecision) => void | boolean | Promise<void | boolean>;
   readonly onViewDiff?: () => void;
   readonly onPreviewImage?: (src: string) => void;
 }
@@ -48,7 +48,7 @@ export const Gate = memo<GateProps>(
         return <CommandGate request={request} {...common} />;
 
       case 'plan':
-        return <PlanGate request={request} {...common} />;
+        return <PlanGate key={request.call.id} request={request} {...common} />;
 
       case 'question':
         return <QuestionGate request={request} {...common} />;

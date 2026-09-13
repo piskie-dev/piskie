@@ -28,6 +28,7 @@ const temporaryDirectories: string[] = [];
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   electron.readBuffer.mockImplementation(() => Buffer.alloc(0));
   electron.readText.mockImplementation(() => '');
   for (const directory of temporaryDirectories.splice(0)) {
@@ -39,6 +40,7 @@ function fixture() {
   const userDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'piskie-desktop-files-'));
   temporaryDirectories.push(userDataDirectory);
   const presentation = {
+    releaseFilePreview: vi.fn(),
     createFilePreviewUrl: vi.fn((_windowId: number, _filePath: string, _mediaType: string) => (
       'piskie-attachment://preview/opaque-token'
     )),
@@ -87,7 +89,7 @@ describe('DesktopApplication file and URL handling', () => {
     expect(electron.openPath).toHaveBeenCalledWith(resolved);
   });
 
-  it('describes clipboard text and image files asynchronously', async () => {
+  it('resolves explicit event paths without consulting the later clipboard', async () => {
     const { application, presentation } = fixture();
     const external = fs.mkdtempSync(path.join(os.tmpdir(), 'piskie-clipboard-files-'));
     temporaryDirectories.push(external);
@@ -95,26 +97,84 @@ describe('DesktopApplication file and URL handling', () => {
     const text = path.join(external, 'notes.md');
     fs.writeFileSync(image, 'png');
     fs.writeFileSync(text, 'notes');
-    const uriList = `${pathToFileURL(image)}\n${pathToFileURL(text)}\nfile:///missing.txt`;
+    const uriList = 'file:///workspace/later-image.png';
     electron.readBuffer.mockImplementation((format: string) => (
       format === 'text/uri-list' ? Buffer.from(uriList) : Buffer.alloc(0)
     ));
 
-    await expect(application.clipboardAttachments(11)).resolves.toEqual([
+    await expect(application.clipboardAttachments(11, { kind: 'paths', paths: [pathToFileURL(image).toString(), text] })).resolves.toEqual([
       {
         name: 'screen shot.png',
         path: fs.realpathSync.native(image),
         size: 3,
-        mediaType: 'image/png',
+        kind: 'image',
         previewUrl: 'piskie-attachment://preview/opaque-token',
       },
       {
-        name: 'notes.md',
+        kind: 'file', name: 'notes.md',
         path: fs.realpathSync.native(text),
         size: 5,
       },
     ]);
-    expect(presentation.createFilePreviewUrl).toHaveBeenCalledOnce();
+    expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(11, fs.realpathSync.native(image), 'image/png', true);
+    expect(electron.readBuffer).not.toHaveBeenCalled();
+    expect(electron.readText).not.toHaveBeenCalled();
+  });
+
+  it('matches native event metadata to the immediate clipboard snapshot', async () => {
+    const { application, userDataDirectory } = fixture();
+    const image = path.join(userDataDirectory, 'example.png');
+    fs.writeFileSync(image, 'sample');
+    electron.readBuffer.mockImplementation((format: string) => format === 'text/uri-list' ? Buffer.from(pathToFileURL(image).toString()) : Buffer.alloc(0));
+    const importing = application.clipboardAttachments(4, { kind: 'native', files: [{ name: 'example.png', size: 6 }], text: '' });
+    electron.readBuffer.mockImplementation(() => Buffer.alloc(0));
+    electron.readText.mockReturnValue('Later clipboard');
+    await expect(importing).resolves.toEqual([expect.objectContaining({ kind: 'image', name: 'example.png' })]);
+  });
+
+  it('rejects changed or unverifiable native sources instead of importing another clipboard', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const image = path.join(userDataDirectory, 'example.png'); fs.writeFileSync(image, 'sample');
+    electron.readBuffer.mockImplementation((format: string) => format === 'text/uri-list' ? Buffer.from(pathToFileURL(image).toString()) : Buffer.alloc(0));
+    await expect(application.clipboardAttachments(4, { kind: 'native', files: [], text: '' })).rejects.toThrow('could not be matched');
+    await expect(application.clipboardAttachments(4, { kind: 'native', files: [{ name: 'other.png', size: 6 }], text: '' })).rejects.toThrow('changed');
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+  });
+
+  it('fails an explicit batch atomically when any path cannot be resolved', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const image = path.join(userDataDirectory, 'example.png'); fs.writeFileSync(image, 'sample');
+    await expect(application.clipboardAttachments(4, { kind: 'paths', paths: [image, path.join(userDataDirectory, 'missing.png')] })).rejects.toThrow('does not exist');
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(['clipboard', 'preview'])('does not publish %s sources after cancellation during filesystem resolution', async (kind) => {
+    const { application, presentation } = fixture();
+    const controller = new AbortController();
+    let resume!: (stats: fs.Stats) => void;
+    vi.spyOn(fs.promises, 'realpath').mockResolvedValue('/workspace/sample.png');
+    const stat = vi.spyOn(fs.promises, 'stat').mockReturnValue(new Promise<fs.Stats>((resolve) => { resume = resolve; }));
+    const operation = kind === 'clipboard'
+      ? application.clipboardAttachments(7, { kind: 'paths', paths: ['/workspace/sample.png'] }, controller.signal)
+      : application.previewFile(7, '/workspace/sample.png', controller.signal);
+    await Promise.resolve();
+    expect(stat).toHaveBeenCalledOnce();
+    controller.abort(new Error('Example request cancelled'));
+    resume({ isFile: () => true, size: 8 } as fs.Stats);
+    await expect(operation).rejects.toThrow('Example request cancelled');
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+  });
+
+  it('releases previously published batch tokens when a later source cannot be published', async () => {
+    const { application, presentation } = fixture();
+    vi.spyOn(fs.promises, 'realpath').mockImplementation(async (value) => String(value));
+    vi.spyOn(fs.promises, 'stat').mockResolvedValue({ isFile: () => true, size: 8 } as fs.Stats);
+    presentation.createFilePreviewUrl.mockReturnValueOnce('piskie-attachment://preview/first')
+      .mockImplementationOnce(() => { throw new Error('Example window closed'); });
+    await expect(application.clipboardAttachments(7, {
+      kind: 'paths', paths: ['/workspace/first.png', '/workspace/second.png'],
+    }, new AbortController().signal)).rejects.toThrow('Example window closed');
+    expect(presentation.releaseFilePreview).toHaveBeenCalledExactlyOnceWith(7, 'piskie-attachment://preview/first');
   });
 
   it('previews bounded text and classifies unsupported binary files', async () => {

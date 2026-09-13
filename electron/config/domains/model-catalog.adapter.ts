@@ -1,5 +1,3 @@
-import type { WorkerPreferencesDocument } from '../../../shared/types/worker-preferences.js';
-import { validateWorkerReferenceImpact } from './worker-inference-validation.js';
 import { z } from 'zod';
 import {
   aiModelLimitsSchema,
@@ -95,15 +93,12 @@ export function createModelCatalogDomain(
       },
       dependencyRevisions: async () => ({
         inference: revisionOf(await readDomain('inference')),
-        'worker-preferences': revisionOf(await readDomain('worker-preferences')),
       }),
       validateSemantic: async (candidate) => {
         try {
           const catalog = toLocalCatalog(candidate);
           const report = await inference.validateCatalogCandidate(catalog);
-          const workers = await validateWorkerReferenceImpact(inference,
-            await readDomain('worker-preferences') as WorkerPreferencesDocument, { catalog });
-          return { valid: report.valid && workers.valid, issues: [...report.issues, ...workers.issues] };
+          return { valid: report.valid, issues: report.issues };
         } catch (cause) {
           return {
             valid: false,
@@ -116,21 +111,14 @@ export function createModelCatalogDomain(
           };
         }
       },
-      analyzeImpact: async (current, candidate) => {
-        const workers = await validateWorkerReferenceImpact(inference,
-          await readDomain('worker-preferences') as WorkerPreferencesDocument, { catalog: toLocalCatalog(candidate) });
-        return [...workers.issues.map((issue) => ({ code: issue.code,
-          severity: issue.severity === 'warning' ? 'warning' as const : 'high' as const,
-          path: issue.path, message: issue.message, details: issue.details,
-        })), ...Object.keys(current.models)
+      analyzeImpact: async (current, candidate) => Object.keys(current.models)
         .filter((id) => !candidate.models[id])
         .map((id) => ({
           code: 'CATALOG_MODEL_REMOVED',
           severity: 'warning' as const,
           path: `/models/${escapePointer(id)}`,
           message: `Local model metadata ${id} will be removed and inference will be recompiled.`,
-        }))];
-      },
+        })),
       publish: (candidate) => inference.publishCatalogCandidate(toLocalCatalog(candidate)),
     },
   });

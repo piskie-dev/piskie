@@ -27,6 +27,41 @@ describe('resolveShellInvocation', () => {
   });
 });
 
+describe('ChildProcessJob output completeness', () => {
+  it.each([
+    { name: 'empty output', output: '', tail: '', truncated: false },
+    { name: 'multiple lines', output: 'First line\nSecond line\n  \n', tail: 'First line\nSecond line\n  \n', truncated: false },
+    { name: 'one byte below the limit', output: 'a'.repeat(16_383), tail: 'a'.repeat(16_383), truncated: false },
+    { name: 'exactly the limit', output: 'b'.repeat(16_384), tail: 'b'.repeat(16_384), truncated: false },
+    { name: 'one byte above the limit', output: 'c' + 'd'.repeat(16_384), tail: 'd'.repeat(16_384), truncated: true },
+    { name: 'multiple captured chunks', output: 'older\n'.repeat(20_000) + 'e'.repeat(16_383) + '\n', tail: 'e'.repeat(16_383) + '\n', truncated: true },
+    { name: 'UTF-8 byte limit', output: 'é'.repeat(9_000), tail: 'é'.repeat(8_192), truncated: true },
+    { name: 'stderr output', output: 'older\n' + 'f'.repeat(16_384), tail: 'f'.repeat(16_384), truncated: true, stderr: true },
+  ])('reports $name without losing the complete log', async (sample) => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-command-output-'));
+    await fs.writeFile(path.join(tempDir, 'sample-output.txt'), sample.output, 'utf8');
+    const job = new ChildProcessJob({
+      command: process.platform === 'win32'
+        ? `[Console]::${sample.stderr ? 'Error.Write' : 'Write'}([IO.File]::ReadAllText('sample-output.txt'))`
+        : `cat sample-output.txt${sample.stderr ? ' >&2' : ''}`,
+      cwd: tempDir,
+      tempDir,
+    });
+
+    try {
+      const outcome = await job.exited();
+      expect(outcome).toMatchObject({
+        status: 'ok', exitCode: 0, tail: sample.tail, outputTruncated: sample.truncated,
+      });
+      await expect(fs.readFile(job.outFile, 'utf8')).resolves.toBe(sample.output);
+    } finally {
+      await job.kill();
+      await job.removeOutputFile();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
 const windowsIt = process.platform === 'win32' ? it : it.skip;
 
 describe('ChildProcessJob on Windows', () => {

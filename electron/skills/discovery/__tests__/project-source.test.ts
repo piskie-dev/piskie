@@ -109,7 +109,7 @@ describe('project Skill source selection', () => {
     const options = {
       isResume: true, mainAgentId: 'sample-main', workspace,
       runConfig: { name: 'Sample', description: '', promptTemplate: '', workspace },
-      subagentConfig: { skills: [name], subject: 'Sample', prompt: 'Sample', taskIds: [], type: 'local-worker' },
+      subagentConfig: { skills: [name], subject: 'Sample', prompt: 'Sample', type: 'local-worker' },
     } as RuntimeOptions;
     const role = new WorkerRole();
     await role.onStart(host, options);

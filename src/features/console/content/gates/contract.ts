@@ -19,8 +19,10 @@ export type GateRequest =
   | { readonly kind: 'plan'; readonly call: PendingToolCall; readonly taskSummary: string }
   | { readonly kind: 'question'; readonly id: string; readonly items: readonly AIQuestionItem[] };
 
-/** 用户的决定——与既有 IPC 载荷一一对应，接线层直接转发 */
+/** 用户的决定——由动作层路由到审批、计时或中断命令。 */
 export type GateDecision =
+  | { readonly kind: 'cancel-plan-countdown'; readonly callId: string }
+  | { readonly kind: 'reject-plan'; readonly callId: string }
   | {
       readonly kind: 'allow';
       readonly callId: string;
@@ -48,6 +50,6 @@ export type GateDecision =
 /** 各门共用的入参（`request` 由各门自己收窄） */
 export interface GateCommonProps {
   readonly disabled?: boolean;
-  readonly onDecide: (decision: GateDecision) => void;
+  readonly onDecide: (decision: GateDecision) => void | boolean | Promise<void | boolean>;
   readonly onPreviewImage?: (src: string) => void;
 }

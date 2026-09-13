@@ -54,7 +54,7 @@ describe('activityChips', () => {
       toolCell({
         id: 'e',
         tool: 'edit',
-        fileOp: { kind: 'edit', path: '/a.ts', oldText: 'a\nb', newText: 'a\nx\ny', replaceAll: false },
+        fileOp: { kind: 'edit', path: '/a.ts', edits: [{ oldText: 'a\nb', newText: 'a\nx\ny', replaceAll: false }] },
       }),
     ];
     const expected = diffLines('a\nb', 'a\nx\ny').stat;
@@ -67,13 +67,35 @@ describe('activityChips', () => {
   it('重复修改同一文件只计一个文件，行数累计每次成功改动', () => {
     const cells = [
       toolCell({ id: 'create', tool: 'write', fileOp: { kind: 'write', path: '/workspace/sample.txt', content: 'alpha\nbeta' } }),
-      toolCell({ id: 'edit-first', tool: 'edit', fileOp: { kind: 'edit', path: '/workspace/sample.txt', oldText: 'alpha', newText: 'gamma', replaceAll: false } }),
-      toolCell({ id: 'edit-second', tool: 'edit', fileOp: { kind: 'edit', path: '/workspace/sample.txt', oldText: 'beta', newText: 'delta', replaceAll: false } }),
+      toolCell({ id: 'edit-first', tool: 'edit', fileOp: { kind: 'edit', path: '/workspace/sample.txt', edits: [{ oldText: 'alpha', newText: 'gamma', replaceAll: false }] } }),
+      toolCell({ id: 'edit-second', tool: 'edit', fileOp: { kind: 'edit', path: '/workspace/sample.txt', edits: [{ oldText: 'beta', newText: 'delta', replaceAll: false }] } }),
       toolCell({ id: 'create-second', tool: 'write', fileOp: { kind: 'write', path: '/workspace/another.txt', content: 'one\ntwo' } }),
       toolCell({ id: 'read-only', tool: 'read', fileOp: { kind: 'read', path: '/workspace/reference.txt', content: 'reference' } }),
     ];
 
     expect(activityChips(cells)).toMatchObject({ filesChanged: 2, added: 6, removed: 2 });
+  });
+
+  it('一次 edit 调用带多条 edits 且无 artifact：行数为逐条 diff 之和，文件只计一次', () => {
+    const cell = toolCell({
+      id: 'multi',
+      tool: 'edit',
+      fileOp: {
+        kind: 'edit',
+        path: '/workspace/sample.txt',
+        edits: [
+          { oldText: 'a', newText: 'b', replaceAll: false },
+          { oldText: 'c\nd', newText: 'e', replaceAll: false },
+        ],
+      },
+    });
+    const first = diffLines('a', 'b').stat;
+    const second = diffLines('c\nd', 'e').stat;
+    expect(activityChips([cell])).toMatchObject({
+      filesChanged: 1,
+      added: first.added + second.added,
+      removed: first.removed + second.removed,
+    });
   });
 
   it('批量替换使用执行期全部改动，与审阅面板一致且不重复计算参数', () => {
@@ -82,7 +104,7 @@ describe('activityChips', () => {
     const cell = toolCell({
       id: 'replace-all',
       tool: 'edit',
-      fileOp: { kind: 'edit', path, oldText: 'old', newText: 'new\nextra', replaceAll: true },
+      fileOp: { kind: 'edit', path, edits: [{ oldText: 'old', newText: 'new\nextra', replaceAll: true }] },
       artifacts: projectToolArtifacts([{ kind: 'file_diff', payload: { path, ...diff } }], { params: {} }),
     });
 
@@ -95,7 +117,7 @@ describe('activityChips', () => {
     const cells: TranscriptNode[] = [
       toolCell({ id: 'f', tool: 'write', phase: 'failed', fileOp: { kind: 'write', path: '/a', content: 'x' } }),
       toolCell({ id: 'r', tool: 'browser_click', phase: 'running' }),
-      toolCell({ id: 'cancelled', tool: 'edit', phase: 'cancelled', fileOp: { kind: 'edit', path: '/workspace/sample.txt', oldText: 'old', newText: 'new', replaceAll: false } }),
+      toolCell({ id: 'cancelled', tool: 'edit', phase: 'cancelled', fileOp: { kind: 'edit', path: '/workspace/sample.txt', edits: [{ oldText: 'old', newText: 'new', replaceAll: false }] } }),
       toolCell({ id: 'approval', tool: 'write', phase: 'awaiting-approval', fileOp: { kind: 'write', path: '/workspace/another.txt', content: 'pending' } }),
     ];
     expect(activityChips(cells)).toEqual(EMPTY_ACTIVITY);

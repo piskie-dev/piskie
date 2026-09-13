@@ -51,9 +51,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:electron-host:live": "node scripts/verify-electron-host-live.mjs",
-    "catalog:sync": "node scripts/model-catalog/sync-models-dev.mjs && node scripts/model-catalog/sync-image-models-dev.mjs && npm run catalog:generate",
-    "catalog:generate": "node scripts/model-catalog/generate.mjs",
-    "catalog:validate": "node scripts/model-catalog/generate.mjs --check"
+    "catalog:pull": "node scripts/model-catalog/pull.mjs",
+    "catalog:validate": "node scripts/model-catalog/pull.mjs --check"
   },
   "keywords": [
     "electron",

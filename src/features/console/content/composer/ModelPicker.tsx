@@ -1,9 +1,9 @@
 /**
  * ModelPicker —— 会话输入器中的模型 + 思考程度选择器。
  *
- * 功能与 `components/shared/ModelReasoningControl` 一致（搜索 / 按 Provider 分组 /
- * 思考档位 / budget tokens / mandatory 锁提示），外壳用 `chrome/Popover`
- * （原生 popover，top layer + light-dismiss），会话输入器内不引 AntD 控件。
+ * 展示当前会话保存的思考值，模型目录提供模型与可选档位。
+ * 支持搜索 / 按 Provider 分组 / budget tokens / mandatory 锁提示，
+ * 外壳用 `chrome/Popover`（原生 popover，top layer + light-dismiss）。
  */
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +17,6 @@ import {
   getSelectableReasoningOptions,
   reasoningOptionKey,
   reasoningSelectionLabel,
-  resolveSelectableReasoning,
 } from '../../../../utils/reasoning-options';
 import { isReasoningInputValid } from '../../../../utils/reasoning-capabilities';
 import { Popover } from '../../chrome/Popover';
@@ -26,8 +25,8 @@ import styles from './conversationComposer.module.css';
 export interface ModelPickerProps {
   readonly modelGroups: ModelOptGroup[];
   readonly model: string;
-  /** Worker actual selection; presence enables controlled mode with no default writes. */
-  readonly reasoning?: ReasoningSelection;
+  /** 目标运行时实际保存的思考值；主 Agent 与 Worker 一致，选择器只展示、不自动写回。 */
+  readonly reasoningOverride: ReasoningSelection;
   readonly onModelChange: (next: string) => Promise<void>;
   readonly onReasoningChange: (selection?: ReasoningSelection) => Promise<void>;
   readonly disabled?: boolean;
@@ -39,16 +38,16 @@ interface FlatModel {
   readonly provider: string;
   readonly searchText: string;
   readonly definition: InferenceModelDefinition;
-  readonly defaultReasoning?: ReasoningSelection;
 }
 
 export const ModelPicker = memo<ModelPickerProps>(
-  ({ modelGroups, model, reasoning, onModelChange, onReasoningChange, disabled }) => {
+  ({ modelGroups, model, reasoningOverride, onModelChange, onReasoningChange, disabled }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
+    // 预算输入的未提交草稿：输入过程中不回写，失焦或回车且校验通过才提交。
     const [budgetDraft, setBudgetDraft] = useState<string | null>(null);
-    useEffect(() => { setBudgetDraft(null); }, [model, reasoning, open]);
+    useEffect(() => { setBudgetDraft(null); }, [model, reasoningOverride, open]);
     const listRef = useRef<HTMLDivElement>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
 
@@ -61,7 +60,6 @@ export const ModelPicker = memo<ModelPickerProps>(
             provider: group.label,
             searchText: `${option.label} ${group.label} ${option.value}`.toLocaleLowerCase(),
             definition: option.definition,
-            defaultReasoning: option.defaultReasoning,
           })),
         ),
       [modelGroups],
@@ -87,21 +85,21 @@ export const ModelPicker = memo<ModelPickerProps>(
     }, [flatModels, query]);
 
     const profile = selectedModel?.definition.reasoning;
-    const requestedReasoning = selectedModel?.defaultReasoning ?? profile?.defaultSelection;
-    const effectiveReasoning = reasoning ?? (profile
-      ? resolveSelectableReasoning(profile, requestedReasoning)
-      : undefined);
-    const reasoningOptions = useMemo(
-      () => (!profile || profile.mode === 'none' ? [] : reasoning ? profile.options : getSelectableReasoningOptions(profile)),
-      [profile, reasoning],
-    );
-
-    // 目录默认档不在可选集里时自动纠正
-    useEffect(() => {
-      if (reasoning !== undefined || !requestedReasoning || !effectiveReasoning) return;
-      if (reasoningOptionKey(requestedReasoning) === reasoningOptionKey(effectiveReasoning)) return;
-      void onReasoningChange(effectiveReasoning);
-    }, [effectiveReasoning, onReasoningChange, reasoning, requestedReasoning]);
+    const reasoningOptions = useMemo(() => {
+      if (!profile || profile.mode === 'none') return [];
+      const options = getSelectableReasoningOptions(profile);
+      const currentIndex = options.findIndex((option) => reasoningOptionKey(option) === reasoningOptionKey(reasoningOverride));
+      // 保留当前预算数值，以及普通可选档位中隐藏的默认或关闭值。
+      if (currentIndex < 0) options.unshift(reasoningOverride);
+      else options[currentIndex] = reasoningOverride;
+      return options;
+    }, [profile, reasoningOverride]);
+    const draftBudget: ReasoningSelection | null =
+      budgetDraft === null ? null : { kind: 'budget', tokens: Number(budgetDraft) };
+    const draftInvalid = draftBudget !== null && !isReasoningInputValid(draftBudget, profile);
+    // 已保存的值可能因模型目录变更而不再受支持；只提示，不替用户改。
+    const savedInvalid =
+      profile !== undefined && profile.mode !== 'none' && !isReasoningInputValid(reasoningOverride, profile);
 
     // 打开时把选中项滚到列表中间（popover 展示后才有布局，等一帧）
     useEffect(() => {
@@ -121,7 +119,7 @@ export const ModelPicker = memo<ModelPickerProps>(
     const modelLabel = selectedModel?.label || model.split('::').at(-1) || t('sessionWorkbenchUi.composer.chooseModel');
     const reasoningLabel = profile?.mode === 'none'
       ? t('reasoning.none')
-      : reasoningSelectionLabel(effectiveReasoning, true, t);
+      : reasoningSelectionLabel(reasoningOverride, true, t);
 
     return (
       <Popover
@@ -201,9 +199,7 @@ export const ModelPicker = memo<ModelPickerProps>(
               <>
                 <div className={styles.reasoningChips}>
                   {reasoningOptions.map((option) => {
-                    const selected =
-                      effectiveReasoning !== undefined &&
-                      reasoningOptionKey(effectiveReasoning) === reasoningOptionKey(option);
+                    const selected = reasoningOptionKey(reasoningOverride) === reasoningOptionKey(option);
                     return (
                       <button
                         key={reasoningOptionKey(option)}
@@ -217,36 +213,31 @@ export const ModelPicker = memo<ModelPickerProps>(
                     );
                   })}
                 </div>
-                {effectiveReasoning?.kind === 'budget' && (
+                {reasoningOverride.kind === 'budget' && (
                   <div className={styles.budgetRow}>
                     <input
                       type="number"
                       className={styles.budgetInput}
                       min={profile.minBudgetTokens ?? 1}
                       max={profile.maxBudgetTokens}
-                      step={reasoning ? 1 : 1024}
-                      value={reasoning ? budgetDraft ?? effectiveReasoning.tokens : effectiveReasoning.tokens}
-                      onChange={(event) => {
-                        if (reasoning) { setBudgetDraft(event.target.value); return; }
-                        const tokens = Number(event.target.value);
-                        if (Number.isFinite(tokens) && tokens > 0) {
-                          void onReasoningChange({ kind: 'budget', tokens });
-                        }
-                      }}
+                      step={1}
+                      value={budgetDraft ?? reasoningOverride.tokens}
+                      onChange={(event) => setBudgetDraft(event.target.value)}
                       onBlur={() => {
-                        if (reasoning && budgetDraft !== null) {
-                          const next = { kind: 'budget' as const, tokens: Number(budgetDraft) };
-                          if (isReasoningInputValid(next, profile)) { void onReasoningChange(next); setBudgetDraft(null); }
-                        }
+                        if (draftBudget === null || !isReasoningInputValid(draftBudget, profile)) return;
+                        void onReasoningChange(draftBudget);
+                        setBudgetDraft(null);
                       }}
                       onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                      aria-invalid={budgetDraft !== null && !isReasoningInputValid({ kind: 'budget', tokens: Number(budgetDraft) }, profile)}
+                      aria-invalid={draftInvalid}
                       aria-label={t('sessionWorkbenchUi.composer.reasoningBudget')}
                     />
                     <span className={styles.panelNote}>tokens</span>
                   </div>
                 )}
-                {reasoning && ((!isReasoningInputValid(reasoning, profile)) || (budgetDraft !== null && !isReasoningInputValid({ kind: 'budget', tokens: Number(budgetDraft) }, profile))) && <div className={styles.panelNote} role="alert">{t('agentManagement.reasoningInvalid')}</div>}
+                {(savedInvalid || draftInvalid) && (
+                  <div className={styles.panelNote} role="alert">{t('agentManagement.reasoningInvalid')}</div>
+                )}
                 {profile.mandatory && (
                   <div className={styles.panelNote}>
                     <LockKeyhole size={11} /> {t('sessionWorkbenchUi.composer.reasoningRequired')}

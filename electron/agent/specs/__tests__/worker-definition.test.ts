@@ -24,7 +24,7 @@ describe('WorkerDefinition registration', () => {
       assignment: 'question', browser: false, skills: false,
       description: `${exploreDefinition.description}（工具：read、glob、grep、ls、send_event）`,
     });
-    const shared = 'web_search、read、write、edit、glob、grep、ls、shell、tool_search、task、send_event、generate_image、load_skill、skill_call';
+    const shared = 'web_search、read、write、edit、glob、grep、ls、shell、tool_search、send_event、generate_image、load_skill、skill_call';
     expect(types.find((type) => type.name === 'browser-worker')?.description).toMatch(
       new RegExp(`（工具：browser_\\* 浏览器操作、${shared}）$`)
     );
@@ -38,8 +38,8 @@ describe('WorkerDefinition registration', () => {
     expect(() => register({ ...custom(), tools: [{ name: 'read', options: { events: [] } }] })).toThrow(/does not accept/);
     expect(() => register({ ...custom(), tools: [{ name: 'send_event', options: { events: ['message'] } }] })).toThrow(/must report/);
     expect(() => register({ ...custom(), tools: [{ name: 'send_event', options: { events: ['completed', 'unknown'] } }] })).toThrow();
-    expect(() => register({ ...custom(), assignment: 'task-board' })).toThrow(/Task-board/);
-    expect(() => register({ ...custom(), tools: [...custom().tools, { name: 'task' }] })).toThrow(/question/);
+    expect(register({ ...custom(), assignment: 'work-package' }).assignment).toBe('work-package');
+    expect(() => register({ ...custom(), tools: [...custom().tools, { name: 'task' }] })).toThrow(/not available/);
     expect(() => register({ ...custom(), tools: [...custom().tools, { name: 'read' }] })).toThrow(/unique/);
   });
 

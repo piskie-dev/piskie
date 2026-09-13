@@ -20,6 +20,7 @@ import { useHistoryRows, useSessionRows, type HistoryRow } from '../data/session
 import type { SessionMenuSource } from '../data/sessionMenu';
 import { useComposerDraftStore, WELCOME_DRAFT_KEY } from '../data/composer-drafts';
 import { resolveConsoleSelectedAgentId } from './selection';
+import { retainFilePreviews } from '../content/file-preview';
 
 export type { ConsoleMode };
 
@@ -47,6 +48,7 @@ export interface ConsoleShell {
     src: string | null,
     contextUrls?: readonly string[],
     contextIndex?: number,
+    release?: () => void,
   ) => void;
   /**
    * 顶栏徽标要求定位到某个 worker 时的**一次性请求**（`useHeaderAction` 发）。
@@ -85,9 +87,14 @@ export function useConsoleShell(): ConsoleShell {
    */
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [previewImage, setPreviewImageState] = useState<ConsoleImagePreview | null>(null);
+  const previewRelease = useRef<(() => void) | undefined>();
+  useEffect(() => () => previewRelease.current?.(), []);
 
   const setPreviewImage = useCallback<ConsoleShell['setPreviewImage']>(
-    (src, contextUrls, contextIndex) => {
+    (src, contextUrls, contextIndex, release) => {
+      const releaseFiles = retainFilePreviews(src === null ? [] : contextUrls ?? [src]);
+      previewRelease.current?.();
+      previewRelease.current = src === null ? undefined : () => { releaseFiles(); release?.(); };
       setPreviewImageState(src === null ? null : {
         urls: contextUrls ?? [src],
         index: contextIndex ?? 0,

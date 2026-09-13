@@ -43,7 +43,7 @@ function buildRuntime(): AgentRuntime {
       initialModel: 'p::m',
       subagentConfig: {
         subject: '打开百度',
-        taskIds: ['task-baidu'],
+
         prompt: '打开百度并完成验证。',
         skills: ['browser'],
         type: 'browser-worker',

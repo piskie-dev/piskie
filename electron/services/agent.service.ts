@@ -89,7 +89,7 @@ function injectChildTerminationNotice(
     .join('\n');
   runtime.addDurableUserMessage(
     `会话已恢复。以下 Worker 已停止，原 ID 已失效，请勿发送消息：\n${notice}\n\n` +
-      '未完成任务已退回 Task Board 未分配区；如需继续，请创建新 Worker。',
+      '如需继续，请创建新 Worker。',
     'system_event',
     messageId
   );
@@ -282,6 +282,7 @@ export class AgentService {
           change.entry
         ),
         ...(change.requestId && { requestId: change.requestId }),
+        ...(change.messages && { messages: change.messages }),
       });
     });
   }
@@ -787,8 +788,27 @@ export class AgentService {
     if (!this.agentInference) {
       throw new Error('AgentService not initialized');
     }
-    this.validateModelReference(header.currentModel);
     const selections = await this.readEffectiveInferenceSelections();
+    let initialModel = header.currentModel;
+    try {
+      this.validateModelReference(initialModel);
+    } catch (error) {
+      const fallbackModel = selectedModelReference(selections.ai);
+      if (!fallbackModel || fallbackModel === initialModel) throw error;
+      this.validateModelReference(fallbackModel);
+      initialModel = fallbackModel;
+      appLog.warn({
+        event: 'agent.model.restore.fallback',
+        message: 'Saved model is unavailable; restoring with the default model',
+        context: {
+          scope: 'agent.model',
+          agentId,
+          model: header.currentModel,
+          fallbackModel,
+        },
+        error,
+      });
+    }
 
     const specName = header.agentSpec;
     const spec = specRegistry.get(specName);
@@ -798,10 +818,8 @@ export class AgentService {
 
     const entries = this.conversationStore.read(mainAgentId, agentId);
 
-    // Worker runtimes are never restored. Re-open their unfinished obligations
-    // before PlanModule rebuilds its disposable UI projection.
     const { taskBoardService } = await import('../agent-runs/task-board-service.js');
-    await taskBoardService.releaseStaleWorkerTasks(mainAgentId);
+    const taskBoard = await taskBoardService.readTaskBoard(mainAgentId);
 
     const runConfig = header.runConfig;
     let runtime!: AgentRuntime;
@@ -818,7 +836,7 @@ export class AgentService {
           mainAgentId,
           runConfig,
           initialModeId: header.modeId,
-          initialModel: header.currentModel,
+          initialModel,
           initialApprovalMode: header.approvalMode,
           isResume: true,
           allocateAgentId: () => this.allocateAgentId(),
@@ -837,6 +855,12 @@ export class AgentService {
       // 合法 pending ask 保持未配对（incoming 用户消息完成它），有修复写入则 flush
       runtime.repairConversationTail();
       injectChildTerminationNotice(runtime, header, entries);
+      if (taskBoard) {
+        runtime.addDurableUserMessage(
+          `当前 Task Board：${JSON.stringify({ taskSummary: taskBoard.taskSummary, items: taskBoard.items })}`,
+          'system_event'
+        );
+      }
 
       // 激活事务：resume 失败保留既有历史（档案不是本次事务的产物），
       // 故不传 rollbackArtifacts；autoStart=false 时环境准备仍完整执行（工具链/技能文档/
@@ -848,6 +872,7 @@ export class AgentService {
           // 恢复 = 重新活跃，刷新 lastActiveAt（历史列表排序依据）
           this.conversationStore.writeHeader(mainAgentId, {
             ...header,
+            currentModel: initialModel,
             lastActiveAt: new Date().toISOString(),
             childAgents: [],
           });
@@ -931,7 +956,7 @@ export class AgentService {
         ).selection;
       }
     } catch {
-      // 历史模型可能已被删除；预览仍保持可读，真正恢复时会返回精确配置错误。
+      // 历史模型可能已被删除；预览保持可读，恢复时重新选择可用模型。
     }
     return {
       agentId,
@@ -1082,6 +1107,18 @@ export class AgentService {
       return false;
     }
     return runtime.setSubagentApprovalMode(subagentId, mode);
+  }
+
+  cancelPlanApprovalCountdown(
+    agentId: string,
+    subagentId: string | null,
+    callId: string
+  ): boolean {
+    const runtime = this.activeRuntimes.get(agentId);
+    if (!runtime) return false;
+    return subagentId
+      ? runtime.cancelSubagentPlanApprovalCountdown(subagentId, callId)
+      : runtime.cancelPlanApprovalCountdown(callId);
   }
 
   async respondToApproval(

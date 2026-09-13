@@ -12,6 +12,9 @@ export function createAgentRunController(
     operation(AGENT_RUN_OPERATIONS.state, args([identifier]), ([agentId]) => (
       application.state(agentId)
     )),
+    operation(AGENT_RUN_OPERATIONS.markRead, args([identifier, nonNegativeInteger]), ([agentId, throughIndex]) => (
+      application.markRead(agentId, throughIndex)
+    )),
     operation(AGENT_RUN_OPERATIONS.delete, args([identifier]), ([agentId]) => (
       application.delete(agentId)
     )),

@@ -49,7 +49,7 @@ function createRuntime(role: 'director' | 'worker', workspace?: string, isResume
       runConfig: { name: 'Sample', description: '', promptTemplate: 'Sample task', workspace },
       workspace: runtimeWorkspace,
       ...(role === 'worker' ? { subagentConfig: {
-        type: 'local-worker', skills: [], subject: 'Sample task', taskIds: [], prompt: 'Sample task',
+        type: 'local-worker', skills: [], subject: 'Sample task', prompt: 'Sample task',
       } } : {}),
     },
   });

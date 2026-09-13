@@ -19,7 +19,6 @@
  * | 平移 | 拖拽空白 / 滚动 |
  * | 节点 | 可拖动、可选中；**不可连线**（`nodesConnectable={false}`） |
  * | 删除键 | 禁用（`deleteKeyCode={null}`）—— 画布上删不掉 agent |
- * | 小地图 | 可拖可缩放，按节点类型着色 |
  * | 工具栏 | 整理画布 / 放大 / 缩小 |
  *
  * **工具栏没有「切换为树状布局」**：没有树状模式，造一个按钮指向不存在的模式是假功能。
@@ -28,7 +27,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -37,10 +35,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react';
-/**
- * react-flow 基础样式表**必须由本文件自己引**：面板/小地图/边的定位全靠它。
- * 少了它，小地图会塌成画布顶部的通栏块（position 回落 static）。
- */
+/** react-flow 基础样式表负责节点、面板和边的定位。 */
 import '@xyflow/react/dist/style.css';
 import { Minus, Plus, Sparkles } from 'lucide-react';
 
@@ -319,31 +314,7 @@ const Inner = memo<DockCanvasProps>(
           nodesConnectable={false}
           elementsSelectable
           deleteKeyCode={null}
-        >
-          {/* 点阵背景由 CSS 画（见 canvas.module.css），不用 react-flow 的 Background —— 少一层节点 */}
-          <MiniMap
-            className={styles.minimap}
-            /**
-             * agent 节点按**状态**着色，不按类型；屏幕节点用固定色。
-             */
-            nodeColor={(node) => {
-              if (node.type === 'screen') return 'var(--cyber-accent)';
-              const worker = byId.get(String((node.data as { workerId?: string } | undefined)?.workerId ?? ''));
-              if (!worker) return 'var(--status-running)';
-              if (worker.interrupted) return 'var(--status-waiting)';
-              if (worker.phase === 'thinking' || worker.phase === 'executing') return 'var(--cyber-primary)';
-              return 'var(--status-running)';
-            }}
-            // 这几个 color prop 最终落到 SVG 的 fill，`var()` / `color-mix()` 在 SVG 里成立，
-            // 所以不用硬编码色值（`check:styles` 的要求）。
-            // 基色用 --cyber-bg（永远实底）而非 --console-canvas-bg：后者在
-            // data-app-bg 下是 transparent（弥散光是默认底，因此常态透明），
-            // 与 transparent 做 color-mix 会让视口遮罩整个消失
-            maskColor="color-mix(in srgb, var(--cyber-bg) 72%, transparent)"
-            pannable
-            zoomable
-          />
-        </ReactFlow>
+        />
 
         {nodes.length === 0 && (
           <div className={styles.empty}>
