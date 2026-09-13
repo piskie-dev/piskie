@@ -66,7 +66,7 @@ describe('单次改动的行号口径', () => {
   it('带 review artifact 的 edit：用权威 diff，absoluteLines: true，行号真实', () => {
     const change = must(fileChangeOf(editCell('c-1', {
       artifact: diffArtifact('/w/app.txt', 42, 'old-line', 'new-line'),
-      fileOp: { kind: 'edit', path: '/w/app.txt', oldText: 'old-line', newText: 'new-line', replaceAll: true },
+      fileOp: { kind: 'edit', path: '/w/app.txt', edits: [{ oldText: 'old-line', newText: 'new-line', replaceAll: true }] },
     })));
 
     expect(change.path).toBe('/w/app.txt');
@@ -82,7 +82,7 @@ describe('单次改动的行号口径', () => {
 
   it('无 artifact 的 edit：维持参数 LCS 重建兜底，absoluteLines: false', () => {
     const change = must(fileChangeOf(editCell('c-1', {
-      fileOp: { kind: 'edit', path: '/w/app.txt', oldText: 'old-line\n', newText: 'new-line\n', replaceAll: false },
+      fileOp: { kind: 'edit', path: '/w/app.txt', edits: [{ oldText: 'old-line\n', newText: 'new-line\n', replaceAll: false }] },
     })));
 
     expect(change.absoluteLines).toBe(false);

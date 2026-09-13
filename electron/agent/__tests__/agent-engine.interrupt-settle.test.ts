@@ -27,6 +27,15 @@ vi.mock('electron', () => ({
 import { AgentEngine, type TurnOutcome, type ExecuteToolsOptions } from '../agent-engine.js';
 import { PendingSettlement } from '../tool-call/pending-settlement.js';
 
+/** 目录里解析不到任何工具：并发分组把未知工具视为安全，与假协调器配合保持全并行 */
+const UNRESOLVED_SNAPSHOT: CatalogSnapshot = {
+  resolve: () => undefined,
+  resolveDeferred: () => undefined,
+  definitions: () => [],
+  deferredTools: () => [],
+  resolveSkillFunction: () => ({ kind: 'notCallable' }),
+};
+
 class SettleEngine extends AgentEngine {
   settleCalls: Array<{ id: string; result: string }> = [];
   turnImpl?: (signal: AbortSignal) => Promise<TurnOutcome>;
@@ -72,7 +81,7 @@ class SettleEngine extends AgentEngine {
   setActualCoordinator(coordinator: ToolCoordinator): void { this.toolCoordinator = coordinator; }
 
   runExecuteTools(toolUses: ContentBlock[], options: ExecuteToolsOptions, snapshot?: CatalogSnapshot): Promise<TurnOutcome> {
-    return this.executeTools(toolUses, snapshot ?? {} as never, options, new Set());
+    return this.executeTools(toolUses, snapshot ?? UNRESOLVED_SNAPSHOT, options, new Set());
   }
 
   runCheckYieldGate(toolUses: ContentBlock[]): string | null {

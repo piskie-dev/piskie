@@ -102,8 +102,8 @@ describe('Think disclosure', () => {
     expect(container.querySelector('[data-think-toggle]')?.textContent).toContain('Thinking');
   });
 
-  it('starts on one settled summary line and expands the complete content', async () => {
-    await renderNode(think('Inspect the request\nCheck cache reuse', false));
+  it('starts on one settled summary line and expands separated reasoning blocks', async () => {
+    await renderNode(think('Inspect the request\n\n---\n\nCheck cache reuse', false));
 
     const toggle = container.querySelector<HTMLElement>('[data-think-toggle]')!;
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -117,6 +117,8 @@ describe('Think disclosure', () => {
     expect(container.querySelector('[data-think-summary]')).toBeNull();
     expect(container.querySelector('[data-think-body]')?.textContent).toContain('Inspect the request');
     expect(container.querySelector('[data-think-body]')?.textContent).toContain('Check cache reuse');
+    expect(container.querySelectorAll('[data-think-body] hr')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-think-toggle]')).toHaveLength(1);
   });
 
   it('renders the collapsed line through XMarkdown', async () => {

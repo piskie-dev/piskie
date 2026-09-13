@@ -69,7 +69,7 @@ export function workerProtocol(ctx?: PromptContext): string {
 
 ## 执行原则
 
-\`<assignment>\` 是本次多任务工作包的执行标准。根据 prompt 执行，并维护自己负责的完整细任务清单；后续事件中的新事实优先。终态 send_event 前先收口任务状态和后续项，结果写入 send_event。
+\`<assignment>\` 是本次多任务工作包的执行标准。根据 prompt 执行；后续事件中的新事实优先。终态 send_event 前先收口任务状态和后续项，结果写入 send_event。
 
 ## 错误重试原则
 

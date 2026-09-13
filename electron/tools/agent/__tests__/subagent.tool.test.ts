@@ -45,17 +45,17 @@ describe('subagent resolved creation contract', () => {
     expect(snapshot().definitions()[0].input_schema.properties).not.toHaveProperty('browserEnvironmentId');
   });
 
-  it('lists Worker types in the description body, before the handoff and the task-board split', () => {
+  it('lists Worker types in the description body, before the handoff', () => {
     const description = snapshot().definitions()[0].description;
     expect(description).toContain('可用的 Worker 类型：\n- explore：调查本地材料\n- local-worker：本地执行');
     expect(description.indexOf('可用的 Worker 类型')).toBeLessThan(description.indexOf('刚走进房间的聪明同事'));
-    expect(description.indexOf('刚走进房间的聪明同事')).toBeLessThan(description.indexOf('先在 Task Board 登记任务'));
+    expect(description.endsWith('prompt 是它拿到的全部材料。')).toBe(true);
   });
 
-  it('describes the handoff once and the task-board split only for task-board types', () => {
+  it('describes the handoff once and never mentions the Task Board', () => {
     const description = snapshot().definitions()[0].description;
     expect(description).toContain('把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断；prompt 是它拿到的全部材料。');
-    expect(description).toContain('local-worker、browser-worker、site-scout：先在 Task Board 登记任务。任务内容以 prompt 为准。');
+    expect(description).not.toContain('Task Board');
     expect(description).not.toMatch(/explore 接收|自包含|action=stop/);
     expect(snapshot([], types.filter((type) => type.assignment === 'question')).definitions()[0].description)
       .not.toContain('Task Board');

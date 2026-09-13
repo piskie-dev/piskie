@@ -66,7 +66,9 @@ function rebuilt(op: Extract<FileOp, { kind: 'edit' | 'write' }>): FileChange {
     return { path: op.path, name, kind: 'write', stat: diff.stat, diff, absoluteLines: true };
   }
 
-  const diff = highlighted(diffLines(op.oldText, op.newText), op.oldText, op.newText, grammar);
+  // 多条 edit：各自一份 LCS diff，按应用顺序拼接。没有真实行号，各条之间也不做位置合并
+  const diff = concatDiffs(op.edits.map((hunk) =>
+    highlighted(diffLines(hunk.oldText, hunk.newText), hunk.oldText, hunk.newText, grammar)));
   return {
     path: op.path,
     name,
@@ -74,7 +76,20 @@ function rebuilt(op: Extract<FileOp, { kind: 'edit' | 'write' }>): FileChange {
     stat: diff.stat,
     diff,
     absoluteLines: false,
-    replaceAll: op.replaceAll,
+    replaceAll: op.edits.some((hunk) => hunk.replaceAll),
+  };
+}
+
+function concatDiffs(diffs: readonly LineDiff[]): LineDiff {
+  const [single] = diffs;
+  if (diffs.length === 1 && single) return single;
+  return {
+    lines: diffs.flatMap((diff) => diff.lines),
+    stat: {
+      added: diffs.reduce((sum, diff) => sum + diff.stat.added, 0),
+      removed: diffs.reduce((sum, diff) => sum + diff.stat.removed, 0),
+    },
+    degraded: diffs.some((diff) => diff.degraded),
   };
 }
 
@@ -109,7 +124,7 @@ export function fileChangeOf(cell: TranscriptNode): FileChange | null {
       stat: diff.stat,
       diff,
       absoluteLines: true,
-      replaceAll: fileOp?.kind === 'edit' ? fileOp.replaceAll : undefined,
+      replaceAll: fileOp?.kind === 'edit' ? fileOp.edits.some((hunk) => hunk.replaceAll) : undefined,
     };
   }
 

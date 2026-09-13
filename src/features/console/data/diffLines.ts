@@ -2,7 +2,7 @@
  * 行级 diff —— 审阅面板的底层算法。纯函数，零 React。
  *
  * 用经典 LCS 动态规划回溯出「保留 / 删除 / 新增」序列。之所以不引 diff 库：
- * 这里的输入是 `edit` 的 old_string/new_string，量级是一个 hunk（几行到几十行），
+ * 这里的输入是 `edit` 里一条 edits[] 的 old_string/new_string，量级是一个 hunk（几行到几十行），
  * 40 行 DP 足够，且能保证输出形状完全受控（行号槽要不要画由调用方决定）。
  *
  * **规模闸门**：LCS 是 O(n·m) 时间与空间。超过 `MAX_CELLS` 就不做精细比对，

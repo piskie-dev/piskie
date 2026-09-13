@@ -13,11 +13,7 @@ function describeSubagent(types: readonly SubagentTypeDescriptor[]): string {
   const typeList = types.length
     ? `可用的 Worker 类型：\n${types.map((type) => `- ${type.name}：${type.description}`).join('\n')}`
     : '';
-  const taskBoardTypes = types.filter((type) => type.assignment === 'work-package').map((type) => type.name);
-  const taskBoard = taskBoardTypes.length
-    ? `${taskBoardTypes.join('、')}：先在 Task Board 登记任务。任务内容以 prompt 为准。`
-    : '';
-  return [OPENING, typeList, HANDOFF, taskBoard].filter(Boolean).join('\n\n');
+  return [OPENING, typeList, HANDOFF].filter(Boolean).join('\n\n');
 }
 
 export class SubagentTool extends BaseTool<SubagentParams> {

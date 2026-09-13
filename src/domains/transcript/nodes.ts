@@ -153,13 +153,19 @@ export interface ThinkNode extends TranscriptNodeBase {
  * 类型定义在本文件而非 `fileOp.ts`，是为了守住文件头第 3 条"零 import"：
  * `ToolNode` 引它，它若定义在别处就得从这里 import 回去。抽取逻辑仍在 `fileOp.ts`。
  */
+/** `edit` 调用里的一条替换（`edits[]` 的一项）；顺序即应用顺序 */
+export interface FileEditHunk {
+  readonly oldText: string;
+  readonly newText: string;
+  readonly replaceAll: boolean;
+}
+
 export type FileOp =
   | {
       readonly kind: 'edit';
       readonly path: string;
-      readonly oldText: string;
-      readonly newText: string;
-      readonly replaceAll: boolean;
+      /** 一次 `edit` 调用的全部替换，至少一条 */
+      readonly edits: readonly FileEditHunk[];
     }
   | { readonly kind: 'write'; readonly path: string; readonly content: string }
   | {

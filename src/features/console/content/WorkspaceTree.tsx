@@ -118,13 +118,13 @@ const Row = memo<{
       }}
       title={row.label}
     >
-      <span className={styles.dotSlot} data-unread={unread || undefined} aria-hidden />
-
-      <span className={styles.rowLabel} title={row.label}>{row.label}</span>
-
       <span className={styles.activitySlot} title={activity}>
         {live?.working && <OrbIndicator size={14} variant="expanding" />}
       </span>
+
+      <span className={styles.rowLabel} title={row.label}>{row.label}</span>
+
+      <span className={styles.dotSlot} data-unread={unread || undefined} aria-hidden />
       <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
 
       <span className={styles.rowMenu}>

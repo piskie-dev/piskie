@@ -97,10 +97,16 @@ export function activityChips(nodes: readonly TranscriptNode[]): ActivityChips {
       continue;
     }
     if (op?.kind === 'edit') {
-      const stat = diffLines(op.oldText, op.newText).stat;
-      added += stat.added;
-      removed += stat.removed;
-      if (stat.added > 0 || stat.removed > 0) changedPaths.add(op.path);
+      let editAdded = 0;
+      let editRemoved = 0;
+      for (const hunk of op.edits) {
+        const stat = diffLines(hunk.oldText, hunk.newText).stat;
+        editAdded += stat.added;
+        editRemoved += stat.removed;
+      }
+      added += editAdded;
+      removed += editRemoved;
+      if (editAdded > 0 || editRemoved > 0) changedPaths.add(op.path);
       continue;
     }
 

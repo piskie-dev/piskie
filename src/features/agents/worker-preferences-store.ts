@@ -37,6 +37,11 @@ interface State {
 }
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+const typePriority = new Map([
+  ['local-worker', 0],
+  ['browser-worker', 1],
+  ['explore', 2],
+]);
 let refreshTail: Promise<void> = Promise.resolve();
 export const useWorkerPreferencesStore = create<State>((set, get) => ({
   document: null,
@@ -61,11 +66,16 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
     const task = refreshTail.then(async () => {
       set({ loading: true });
       try {
-        const [document, descriptor, types] = await Promise.all([
+        const [document, descriptor, availableTypes] = await Promise.all([
           window.piskie.configuration.read<WorkerPreferencesDocument>('worker-preferences'),
           window.piskie.configuration.describe('worker-preferences'),
           window.piskie.agents.listWorkerTypes(),
         ]);
+        const types = [...availableTypes].sort(
+          (left, right) =>
+            (typePriority.get(left.type) ?? typePriority.size) -
+            (typePriority.get(right.type) ?? typePriority.size)
+        );
         set((state) => ({
           document,
           descriptor,

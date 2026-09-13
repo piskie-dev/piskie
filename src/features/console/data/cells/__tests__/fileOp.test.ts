@@ -18,36 +18,54 @@ function numbered(startLine: number, ...lines: string[]): string {
 }
 
 describe('extractFileOp · edit', () => {
-  it('取出 old/new 与 replace_all', () => {
+  it('取出 edits[] 的每条 old/new 与 replace_all，保持顺序', () => {
     const op = extractFileOp({
       tool: 'edit',
-      params: { file_path: '/a/b.ts', old_string: 'x', new_string: 'y', replace_all: true },
+      params: {
+        file_path: '/a/b.ts',
+        edits: [
+          { old_string: 'x', new_string: 'y', replace_all: true },
+          { old_string: 'p', new_string: 'q' },
+        ],
+      },
       ok: true,
     });
 
     expect(op).toEqual({
       kind: 'edit',
       path: '/a/b.ts',
-      oldText: 'x',
-      newText: 'y',
-      replaceAll: true,
+      edits: [
+        { oldText: 'x', newText: 'y', replaceAll: true },
+        { oldText: 'p', newText: 'q', replaceAll: false },
+      ],
     });
   });
 
   it('new_string 为空串（纯删除）仍然成立', () => {
     const op = extractFileOp({
       tool: 'edit',
-      params: { file_path: '/a/b.ts', old_string: 'x', new_string: '' },
+      params: { file_path: '/a/b.ts', edits: [{ old_string: 'x', new_string: '' }] },
       ok: true,
     });
 
     expect(op?.kind).toBe('edit');
-    expect(op && 'newText' in op ? op.newText : undefined).toBe('');
+    expect(op?.kind === 'edit' ? op.edits[0]?.newText : undefined).toBe('');
   });
 
-  it('缺 old_string ⇒ 不产出（宁可不显示也不显示半个）', () => {
+  it('任一条缺 old_string、edits 为空或缺失 ⇒ 不产出（宁可不显示也不显示半个）', () => {
     expect(
-      extractFileOp({ tool: 'edit', params: { file_path: '/a/b.ts', new_string: 'y' }, ok: true }),
+      extractFileOp({
+        tool: 'edit',
+        params: { file_path: '/a/b.ts', edits: [{ old_string: 'x', new_string: 'y' }, { new_string: 'y' }] },
+        ok: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      extractFileOp({ tool: 'edit', params: { file_path: '/a/b.ts', edits: [] }, ok: true }),
+    ).toBeUndefined();
+    // 旧合同的顶层 old_string/new_string 已不再接受
+    expect(
+      extractFileOp({ tool: 'edit', params: { file_path: '/a/b.ts', old_string: 'x', new_string: 'y' }, ok: true }),
     ).toBeUndefined();
   });
 });
@@ -192,7 +210,7 @@ describe('extractFileOp · 其它', () => {
 describe('isMutation', () => {
   it('只有 write / edit 算改动', () => {
     expect(isMutation({ kind: 'write', path: '/a', content: '' })).toBe(true);
-    expect(isMutation({ kind: 'edit', path: '/a', oldText: 'a', newText: 'b', replaceAll: false })).toBe(true);
+    expect(isMutation({ kind: 'edit', path: '/a', edits: [{ oldText: 'a', newText: 'b', replaceAll: false }] })).toBe(true);
     expect(isMutation({ kind: 'read', path: '/a', content: 'x' })).toBe(false);
   });
 });

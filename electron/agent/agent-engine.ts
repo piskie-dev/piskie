@@ -90,6 +90,7 @@ import {
   resolveToolUseSettlement,
 } from './context/conversation-protocol.js';
 import { linkAbort } from '../utils/abort.js';
+import { groupByConcurrencySafety, isConcurrencySafe } from './tool-call/tool-concurrency.js';
 import { isMcpAbortError, sanitizeMcpErrorText } from '../mcp/security/sanitize.js';
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -1740,27 +1741,37 @@ export abstract class AgentEngine {
       options.onAfterExecute?.(item.toolUse, item.outcome.result);
     };
 
+    // 中断后不再启动新工具，为剩余 tool_use 写占位结果保持对话完整——
+    // "尚未启动"是 not_started 的直接证据（三条已知路径之一）
+    const settleNotStarted = (toolUse: ContentBlock): void => {
+      const text = buildToolInterruptionResult({
+        reason: 'user_interrupted',
+        execution: 'not_started',
+      });
+      const result = settleSystem(toolUse, text, false);
+      options.onAfterExecute?.(toolUse, result);
+    };
+
     // options.mode 是本批快照；实时 confirm 是并行分支的最终安全门。
+    // 并行只对并发安全的调用成立（effects 只含 read-fs/external）：写类工具
+    // 各自成组按发出顺序串行，否则同文件的两个 edit 会互相覆盖（见 tool-concurrency.ts）。
     const executeInParallel =
       options.mode === 'parallel' && this.approvalMode === 'auto' && validToolUses.length > 1;
+    const groups = executeInParallel
+      ? groupByConcurrencySafety(validToolUses, (toolUse) =>
+          isConcurrencySafe(toolUse, snapshot, loadedDeferredTools))
+      : validToolUses.map((toolUse) => [toolUse]);
 
-    if (executeInParallel) {
-      for (const item of await Promise.all(validToolUses.map(executeOne))) commitOne(item);
-    } else {
-      for (const toolUse of validToolUses) {
-        // 中断后不再启动新工具，为剩余 tool_use 写占位结果保持对话完整——
-        // "尚未启动"是 not_started 的直接证据（三条已知路径之一）
-        if (options.signal?.aborted) {
-          const text = buildToolInterruptionResult({
-            reason: 'user_interrupted',
-            execution: 'not_started',
-          });
-          const result = settleSystem(toolUse, text, false);
-          options.onAfterExecute?.(toolUse, result);
-          continue;
-        }
-        commitOne(await executeOne(toolUse));
+    for (const group of groups) {
+      if (options.signal?.aborted) {
+        for (const toolUse of group) settleNotStarted(toolUse);
+        continue;
       }
+      if (group.length === 1) {
+        commitOne(await executeOne(group[0]));
+        continue;
+      }
+      for (const item of await Promise.all(group.map(executeOne))) commitOne(item);
     }
 
     return { terminalReason, suspended };

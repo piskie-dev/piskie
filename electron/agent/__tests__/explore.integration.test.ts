@@ -115,7 +115,8 @@ describe('Assignments through the existing Worker runtime', () => {
         expect(requests[0].systemPrompt).toContain('区分源码直接证明的事实');
         expect(fixture.createMcpSession).toHaveBeenCalledWith(expect.objectContaining({ selection: [], parentCapability }));
       } else {
-        expect(requests[0].systemPrompt).toContain('根据 prompt 执行，并维护自己负责的完整细任务清单；后续事件中的新事实优先。');
+        expect(requests[0].systemPrompt).toContain('根据 prompt 执行；后续事件中的新事实优先。');
+        expect(requests[0].systemPrompt).not.toContain('维护自己负责的完整细任务清单');
         expect(requests[0].systemPrompt).toContain('终态 send_event 前先收口任务状态和后续项，结果写入 send_event。');
       }
       expect(store.readHeader('parent-a')?.childAgents[0].config).toEqual({
