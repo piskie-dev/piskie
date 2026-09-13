@@ -4,7 +4,7 @@
  * 关键约束：
  * - 打底合并持久配置:表单未展示的字段(replyForward.toolFilter、allowFrom、
  *   groupSenderAllowFrom、corpId、agentId 等)一律原样保留,不因保存丢失
- * - Secret 留空 = 保留旧值(持久层有旧 secret 且表单为空串时不写键)
+ * - Secret 留空不写键,由后端保留最新已存值,不把缓存中的旧 Secret 发回
  * - 扫码渠道(weixin)无应用凭证:appId 传空串兼容请求校验,appSecret 剥除
  * - 非静止(运行中等)禁止改绑:definitionId 强制保留持久值(后端另有
  *   task_definition_binding_locked 双闸,这里是前端侧的第一道)
@@ -76,7 +76,7 @@ export function fuseBotRecord(
     fused.appId = form.appId.trim();
     const secret = form.appSecret.trim();
     if (secret.length > 0) fused.appSecret = secret;
-    // 空串:键沿用 persisted 展开的旧值(无旧值则键不存在)
+    else delete fused.appSecret;
   }
 
   if (context.atRest) {

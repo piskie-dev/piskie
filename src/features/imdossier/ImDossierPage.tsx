@@ -66,8 +66,8 @@ export const ImDossierPage: React.FC = () => {
   useEffect(() => {
     let alive = true;
     void fetchConnectorDescriptors();
-    void fetchConnections().then(() => {
-      if (alive) setConnectionsReady(!useMessagingStore.getState().error);
+    void fetchConnections().then((result) => {
+      if (alive) setConnectionsReady(result.kind === 'refreshed');
     });
     void fetchSenderAuthorizationRequests();
     void runtime.taskDefinitions.refresh();

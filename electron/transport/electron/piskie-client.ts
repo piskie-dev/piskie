@@ -322,7 +322,7 @@ export function createElectronPiskieClient(options: {
         request(MESSAGING_OPERATIONS.startQrLogin, botId, channelType, force)
       ),
       waitForQrLogin: (botId, channelType) => (
-        request(MESSAGING_OPERATIONS.waitForQrLogin, botId, channelType)
+        waitForUser(MESSAGING_OPERATIONS.waitForQrLogin, botId, channelType)
       ),
       submitQrCode: (botId, channelType, code) => (
         request(MESSAGING_OPERATIONS.submitQrCode, botId, channelType, code)

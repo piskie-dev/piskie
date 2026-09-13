@@ -54,13 +54,13 @@ describe('fuseBotRecord', () => {
     expect(fused.name).toBe('值班号');
   });
 
-  it('Secret 留空保留旧值;填写则覆盖', () => {
+  it('Secret 留空交由后端保留最新值;填写则覆盖', () => {
     const kept = fuseBotRecord(persisted, form({ appSecret: '' }), {
       botId: 'bot-1',
       atRest: true,
       scanLogin: false,
     });
-    expect(kept.appSecret).toBe('sk-old');
+    expect(kept).not.toHaveProperty('appSecret');
     const replaced = fuseBotRecord(persisted, form({ appSecret: ' sk-new ' }), {
       botId: 'bot-1',
       atRest: true,

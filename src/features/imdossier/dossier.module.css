@@ -743,7 +743,7 @@ html[data-theme='light'] .seal {
 }
 
 /* 校验失败的问题控件:红光描边 + 一次轻晃(配合滚动定位,保证被看见) */
-.textIn[data-fault='true'],
+.textIn.textIn[data-fault='true'],
 .dropIn[data-fault='true'],
 .chanPickRack[data-fault='true'] {
   border-color: color-mix(in srgb, var(--imd-halt) 60%, transparent);
@@ -771,7 +771,8 @@ html[data-theme='light'] .seal {
   }
 }
 
-.textIn {
+/* 双类名优先于 base.css 的 input[type]，统一普通输入框和密码框。 */
+.textIn.textIn {
   inline-size: 100%;
   min-block-size: 31px;
   padding: 5px 11px;
@@ -785,7 +786,7 @@ html[data-theme='light'] .seal {
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
-.textIn:focus {
+.textIn.textIn:focus {
   border-color: color-mix(in srgb, var(--imd-beam-a) 50%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--imd-beam-a) 12%, transparent);
 }
@@ -794,7 +795,7 @@ html[data-theme='light'] .seal {
   opacity: 0.55;
 }
 
-textarea.textIn {
+textarea.textIn.textIn {
   resize: vertical;
   min-block-size: 64px;
   line-height: 1.6;
@@ -1306,10 +1307,9 @@ html[data-theme='light'] .popCard {
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
 }
 
-.qrShell img {
+.qrShell svg {
   inline-size: 100%;
   block-size: 100%;
-  object-fit: contain;
 }
 
 .qrPulse {

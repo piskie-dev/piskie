@@ -112,8 +112,11 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const logoutAccount = useMessagingStore((s) => s.logoutAccount);
   const taskDefinitions = useTaskDefinitionRepository((state) => state.definitions);
 
+  // 一份草稿始终使用同一 ID，写入或刷新失败后的重试不会再次创建 Bot。
+  const [draftId] = useState(() => `bot-${createUuid()}`);
   const isBot = focus?.kind === 'bot';
-  const bot = isBot ? connections.find((c) => c.config.id === focus.botId) : undefined;
+  const targetId = isBot ? focus.botId : draftId;
+  const bot = connections.find((c) => c.config.id === targetId);
   const persisted = bot?.config;
 
   const [draftChannel, setDraftChannel] = useState<string | undefined>(
@@ -122,10 +125,13 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const channelType = isBot ? (persisted?.channelType ?? '') : (draftChannel ?? '');
   const scanLogin = SCAN_LOGIN_CHANNELS.has(channelType);
   const status = bot?.status ?? 'stopped';
-  const rest = isBot ? atRest(status) : true;
+  const rest = bot ? atRest(status) : true;
   const loggedIn = !!persisted?.pluginAccountId;
 
   const [form, setForm] = useState(() => seedForm(persisted));
+  // 写入确认后即已具备该渠道的凭证，不依赖后续列表刷新确认。
+  const [savedChannel, setSavedChannel] = useState<string | null>(null);
+  const formRevision = useRef(0);
   const [formFault, setFormFault] = useState<FormFault | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
@@ -133,8 +139,14 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const [qrSession, setQrSession] = useState<{ force: boolean } | null>(null);
   const [defModalOpen, setDefModalOpen] = useState(false);
   const [userDraft, setUserDraft] = useState('');
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const patch = (next: Partial<typeof form>): void => {
+    formRevision.current += 1;
     setFormFault(null);
     setForm((current) => ({ ...current, ...next }));
   };
@@ -200,7 +212,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
     return descriptors.find((descriptor) => descriptor.channelId === id)?.displayName ?? id;
   };
 
-  const claims = claimTemplateOptions(taskDefinitions, connections, botId);
+  const claims = claimTemplateOptions(taskDefinitions, connections, targetId);
   const guide = CHANNEL_SETUP_GUIDES[channelType];
   const credentialLabels = CREDENTIAL_LABELS[channelType] ?? ['App ID', 'App Secret'];
   const botRequests = botId ? requests.filter((request) => request.botId === botId) : [];
@@ -212,20 +224,34 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
       return;
     }
     const values: DossierFormValues = { ...form, channelType };
-    const fault = faultOfForm(values, { scanLogin, hasStoredSecret: !!persisted?.appSecret });
+    const fault = faultOfForm(values, {
+      scanLogin,
+      hasStoredSecret: savedChannel === channelType
+        || (persisted?.channelType === channelType && !!persisted.appSecret),
+    });
     if (fault) {
       setFormFault(fault);
       return;
     }
     setSaving(true);
-    const targetId = botId ?? `bot-${createUuid()}`;
+    const savedRevision = formRevision.current;
     const record = fuseBotRecord(persisted, values, { botId: targetId, atRest: rest, scanLogin });
-    const ok = await saveConnection(record);
+    const result = await saveConnection(record);
+    if (!mounted.current) return;
     setSaving(false);
-    if (!ok) return;
+    if (result.kind === 'write-unconfirmed') return;
+    setSavedChannel(record.channelType);
+    if (result.kind === 'saved-refreshed'
+      && !result.snapshot.some((connection) => connection.config.id === targetId)) {
+      onDismiss();
+      return;
+    }
     if (rest) onFlash(messageText('imPlugin.settingsSaved'), 'calm');
     else onFlash(messageText('imPlugin.dossier.savedRestartNotice'), 'hold');
-    if (!isBot) onSaved(targetId);
+    // 同步失败始终保留输入；成功时也不覆盖等待期间的后续编辑。
+    if (result.kind === 'saved-refreshed' && !isBot && formRevision.current === savedRevision) {
+      onSaved(targetId);
+    }
   };
 
   const doToggleRun = async (): Promise<void> => {
@@ -255,7 +281,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const openQr = async (): Promise<void> => {
     if (!botId) return;
     // 运行中的已登录 Bot 必须先停止，才能重新登录。
-    if (loggedIn && !rest) await stopConnection(botId);
+    if (loggedIn && !rest && !await stopConnection(botId)) return;
     setQrSession({ force: loggedIn });
   };
 
@@ -266,15 +292,14 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
         ? 'imPlugin.dossier.accountAlreadyOnline'
         : 'imPlugin.dossier.scanSignInSucceeded',
     ), 'calm');
-    void fetchConnections().then(() => {
-      // 成功自动启动(需已绑模板;未绑由启动断言给出 error,不在这里启动)
-      if (botId && persisted?.definitionId) void startConnection(botId);
-    });
+    // 登录已由主进程确认；启动流程负责同步，避免额外读取阻塞自动启动。
+    if (botId && persisted?.definitionId) void startConnection(botId);
+    else void fetchConnections();
   };
 
   const doLogout = async (): Promise<void> => {
     if (!botId) return;
-    if (!rest) await stopConnection(botId);
+    if (!rest && !await stopConnection(botId)) return;
     const ok = await logoutAccount(botId);
     if (ok) onFlash(messageText('imPlugin.dossier.accountSignedOut'), 'calm');
   };
@@ -385,7 +410,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
               {descriptors.map((descriptor) => {
                 const soloTaken =
                   SOLO_BOT_CHANNELS.has(descriptor.channelId) &&
-                  connections.some((c) => c.config.channelType === descriptor.channelId);
+                  connections.some((c) => c.config.id !== targetId && c.config.channelType === descriptor.channelId);
                 return (
                   <button
                     key={descriptor.channelId}
@@ -394,6 +419,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
                     data-on={draftChannel === descriptor.channelId}
                     disabled={soloTaken}
                     onClick={() => {
+                      formRevision.current += 1;
                       setFormFault(null);
                       setDraftChannel(descriptor.channelId);
                     }}
