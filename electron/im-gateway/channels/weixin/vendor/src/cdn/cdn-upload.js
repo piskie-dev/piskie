@@ -36,7 +36,9 @@ export async function uploadBufferToCdn(params) {
                 method: "POST",
                 headers: { "Content-Type": "application/octet-stream" },
                 body: new Uint8Array(ciphertext),
-                signal: params.abortSignal,
+                signal: params.abortSignal
+                    ? AbortSignal.any([params.abortSignal, AbortSignal.timeout(120_000)])
+                    : AbortSignal.timeout(120_000),
             });
             if (res.status >= 400 && res.status < 500) {
                 const errMsg = res.headers.get("x-error-message") ?? (await res.text());
@@ -58,6 +60,8 @@ export async function uploadBufferToCdn(params) {
         }
         catch (err) {
             if (params.abortSignal?.aborted)
+                throw err;
+            if (err?.name === "TimeoutError" || err?.name === "AbortError")
                 throw err;
             lastError = err;
             if (err instanceof Error && err.message.includes("client error"))

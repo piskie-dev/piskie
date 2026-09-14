@@ -1,4 +1,6 @@
 import WebSocket from "ws";
+import { sendImageBatch, imageDeliveryErrorText } from '../../../../core/media-io.js';
+import { sendImageMessage } from './api.js';
 import path from "node:path";
 import fs from "node:fs";
 import { MSG_TYPE_QUOTE } from "./types.js";
@@ -18,7 +20,7 @@ import { startImageServer, isImageServerRunning } from "./image-server.js";
 import { resolveTTSConfig } from "./utils/audio-convert.js";
 import { processAttachments, formatVoiceText, buildInboundDynamicContext } from "./inbound-attachments.js";
 import { getQQBotDataDir, runDiagnostics } from "./utils/platform.js";
-import { sendDocument, sendMedia as sendMediaAuto } from "./outbound.js";
+import { sendDocument } from "./outbound.js";
 import { parseFaceTags, parseRefIndices, buildAttachmentSummaries } from "./utils/text-parsing.js";
 import { sendStartupGreetings } from "./admin-resolver.js";
 import { sendWithTokenRetry, sendErrorToTarget, handleStructuredPayload } from "./reply-dispatcher.js";
@@ -665,7 +667,7 @@ export async function startGateway(ctx) {
             const groupHistories = new Map();
             // 处理收到的消息
             const handleMessage = async (event) => {
-                log?.debug?.(`[qqbot:${account.accountId}] Received message: ${JSON.stringify(event)}`);
+                log?.debug?.(`[qqbot:${account.accountId}] Received message: type=${event.type}, textLength=${event.content?.length ?? 0}, attachments=${event.attachments?.length ?? 0}`);
                 log?.info(`[qqbot:${account.accountId}] Processing message from ${event.senderId}: ${event.content}`);
                 if (event.attachments?.length) {
                     log?.info(`[qqbot:${account.accountId}] Attachments: ${event.attachments.length}`);
@@ -677,7 +679,7 @@ export async function startGateway(ctx) {
                 });
                 // 发送输入状态提示 + 启动自动续期（仅 C2C 私聊有效）
                 // refIdx 通过 Promise 延迟获取，在真正需要时再 await
-                const isC2C = event.type === "c2c" || event.type === "dm";
+                const isC2C = event.type === "c2c";
                 // 用对象包装避免 TS 控制流分析将 null 初始值窄化为 never
                 const typing = { keepAlive: null };
                 const inputNotifyPromise = (async () => {
@@ -720,6 +722,7 @@ export async function startGateway(ctx) {
                 // 私聊：用 senderId（框架根据 dmScope 决定隔离粒度）
                 const peerId = event.type === "guild" ? (event.channelId ?? "unknown")
                     : event.type === "group" ? (event.groupOpenid ?? "unknown")
+                        : event.type === "dm" ? (event.guildId ?? "unknown")
                         : event.senderId;
                 const route = pluginRuntime.channel.routing.resolveAgentRoute({
                     cfg,
@@ -750,9 +753,9 @@ export async function startGateway(ctx) {
                     });
                     return saved?.path ?? null;
                 };
-                const attachmentCtx = { appId: account.appId, peerId, cfg, log, saveMedia };
+                const attachmentCtx = { appId: account.appId, peerId, cfg, log, saveMedia, abortSignal };
                 const processed = await processAttachments(event.attachments, attachmentCtx);
-                const { attachmentInfo, imageUrls, imageMediaTypes, voiceAttachmentPaths, voiceAttachmentUrls, voiceAsrReferTexts, voiceTranscripts, voiceTranscriptSources, attachmentLocalPaths, otherMediaPaths } = processed;
+                const { attachmentInfo, imageUrls, voiceAttachmentPaths, voiceAttachmentUrls, voiceAsrReferTexts, voiceTranscripts, voiceTranscriptSources, attachmentLocalPaths, otherMediaPaths } = processed;
                 // PISKIE 本地改动（49号 §4.3.2）：dispatch 前早退（群策略拒绝/未@跳过等）
                 // 时所有权尚未移交 Pipeline，由 Connector 局部清理已落盘的受管文件；
                 // 远程 URL 与 download-failed:// 哨兵不是本地文件，跳过；语音文件归
@@ -1143,29 +1146,6 @@ export async function startGateway(ctx) {
                     : event.type === "group" ? `qqbot:group:${event.groupOpenid}`
                         : `qqbot:c2c:${event.senderId}`;
                 const toAddress = fromAddress;
-                // 分离 imageUrls 为本地路径和远程 URL，供 openclaw 原生媒体处理
-                const localMediaPaths = [];
-                const localMediaTypes = [];
-                const remoteMediaUrls = [];
-                const remoteMediaTypes = [];
-                for (let i = 0; i < imageUrls.length; i++) {
-                    const u = imageUrls[i];
-                    const t = imageMediaTypes[i] ?? "image/png";
-                    if (u.startsWith("http://") || u.startsWith("https://")) {
-                        remoteMediaUrls.push(u);
-                        remoteMediaTypes.push(t);
-                    }
-                    else {
-                        localMediaPaths.push(u);
-                        localMediaTypes.push(t);
-                    }
-                }
-                // PISKIE 本地改动（49号 §4.3.5/§4.3.8）：非图片附件与 download-failed://
-                // 哨兵一并作为媒体路径移交核心层（整条明确拒绝/失败），不进正文
-                for (const p of otherMediaPaths ?? []) {
-                    localMediaPaths.push(p);
-                    localMediaTypes.push("application/octet-stream");
-                }
                 // QQBot 静态系统提示（投递地址、TTS 能力等）合并到 GroupSystemPrompt，
                 // 通过框架的 extraSystemPrompt 机制注入 AI system prompt，
                 // 不会存入 transcript 的 user turn content。
@@ -1205,16 +1185,7 @@ export async function startGateway(ctx) {
                     QQVoiceInputStrategy: "prefer_audio_stt_then_asr_fallback",
                     CommandAuthorized: commandAuthorized,
                     // 传递媒体路径和 URL，使 openclaw 原生媒体处理（视觉等）能正常工作
-                    ...(localMediaPaths.length > 0 ? {
-                        MediaPaths: localMediaPaths,
-                        MediaPath: localMediaPaths[0],
-                        MediaTypes: localMediaTypes,
-                        MediaType: localMediaTypes[0],
-                    } : {}),
-                    ...(remoteMediaUrls.length > 0 ? {
-                        MediaUrls: remoteMediaUrls,
-                        MediaUrl: remoteMediaUrls[0],
-                    } : {}),
+                    MediaUrls: [...imageUrls, ...(otherMediaPaths ?? [])],
                     // 引用消息上下文
                     ...(replyToId ? {
                         ReplyToId: replyToId,
@@ -1230,6 +1201,7 @@ export async function startGateway(ctx) {
                     messageId: event.messageId,
                     channelId: event.channelId,
                     groupOpenid: event.groupOpenid,
+                    guildId: event.guildId,
                 };
                 const replyCtx = { target: replyTarget, account, cfg, log };
                 // 简化的 token 重试包装（使用 reply-dispatcher 的通用实现）
@@ -1246,9 +1218,7 @@ export async function startGateway(ctx) {
                         let hasBlockResponse = false; // 是否收到了面向用户的 block 回复
                         let toolDeliverCount = 0; // tool deliver 计数
                         const toolTexts = []; // 收集所有 tool deliver 文本
-                        const toolMediaUrls = []; // 收集所有 tool deliver 媒体 URL
                         let toolFallbackSent = false; // 兜底消息是否已发送（只发一次）
-                        const blockDeliveredMediaUrls = new Set(); // block deliver 已处理的 mediaUrl，用于 tool 后到时去重
                         const responseTimeout = 120000; // 120秒超时（2分钟，与 TTS/文件生成超时对齐）
                         const toolOnlyTimeout = 60000; // tool-only 兜底超时：60秒内没有 block 就兜底
                         const maxToolRenewals = 3; // tool 续期上限：最多续期 3 次（总等待 = 60s × 3 = 180s）
@@ -1258,44 +1228,16 @@ export async function startGateway(ctx) {
                         // ============ Deliver Debouncer：合并短时间内连续到达的 block deliver ============
                         const debounceConfig = account.config?.deliverDebounce;
                         let debouncer = null;
-                        // tool-only 兜底：转发工具产生的实际内容（媒体/文本），而非生硬的提示语
+                        // tool-only 兜底：转发已收集的工具文字。
                         const sendToolFallback = async () => {
-                            // 优先发送工具产出的媒体文件（TTS 语音、生成图片等）
-                            if (toolMediaUrls.length > 0) {
-                                log?.info(`[qqbot:${account.accountId}] Tool fallback: forwarding ${toolMediaUrls.length} media URL(s) from tool deliver(s)`);
-                                const mediaTimeout = 45000; // 单个媒体发送超时 45s
-                                for (const mediaUrl of toolMediaUrls) {
-                                    try {
-                                        const result = await Promise.race([
-                                            sendMediaAuto({
-                                                to: qualifiedTarget,
-                                                text: "",
-                                                mediaUrl,
-                                                accountId: account.accountId,
-                                                replyToId: event.messageId,
-                                                account,
-                                            }),
-                                            new Promise((resolve) => setTimeout(() => resolve({ channel: "qqbot", error: `Tool fallback media send timeout (${mediaTimeout / 1000}s)` }), mediaTimeout)),
-                                        ]);
-                                        if (result.error) {
-                                            log?.error(`[qqbot:${account.accountId}] Tool fallback sendMedia error: ${result.error}`);
-                                        }
-                                    }
-                                    catch (err) {
-                                        log?.error(`[qqbot:${account.accountId}] Tool fallback sendMedia failed: ${err}`);
-                                    }
-                                }
-                                return;
-                            }
-                            // 其次转发工具产出的文本
+                            // 转发工具产出的文本
                             if (toolTexts.length > 0) {
                                 const text = toolTexts.slice(-3).join("\n---\n").slice(0, 2000);
                                 log?.info(`[qqbot:${account.accountId}] Tool fallback: forwarding tool text (${text.length} chars)`);
                                 await sendErrorMessage(text);
                                 return;
                             }
-                            // 既无媒体也无文本，静默处理（仅日志记录）
-                            log?.info(`[qqbot:${account.accountId}] Tool fallback: no media or text collected from ${toolDeliverCount} tool deliver(s), silently dropping`);
+                            log?.info(`[qqbot:${account.accountId}] Tool fallback: no text collected from ${toolDeliverCount} tool deliver(s), silently dropping`);
                         };
                         const timeoutPromise = new Promise((_, reject) => {
                             timeoutId = setTimeout(() => {
@@ -1339,7 +1281,22 @@ export async function startGateway(ctx) {
                             dispatcherOptions: {
                                 responsePrefix: messagesConfig.responsePrefix,
                                 deliver: async (payload, info) => {
+                                    abortSignal.throwIfAborted();
                                     hasResponse = true;
+                                    const images = payload.mediaUrls?.length ? payload.mediaUrls : payload.mediaUrl ? [payload.mediaUrl] : [];
+                                    if (images.length) {
+                                        // Image delivery is part of this existing dispatcher task.
+                                        hasBlockResponse = true;
+                                        typing.keepAlive?.stop();
+                                        if (timeoutId) clearTimeout(timeoutId);
+                                        if (toolOnlyTimeoutId) clearTimeout(toolOnlyTimeoutId);
+                                        timeoutId = toolOnlyTimeoutId = null;
+                                        await sendImageBatch(images, (_source, buffer) => sendWithRetry(
+                                            (token) => sendImageMessage(token, replyTarget, buffer, abortSignal),
+                                        ), abortSignal);
+                                        payload = { text: payload.text };
+                                        if (!payload.text) return;
+                                    }
                                     log?.info(`[qqbot:${account.accountId}] deliver called, kind: ${info.kind}, payload keys: ${Object.keys(payload).join(", ")}`);
                                     // ============ 跳过工具调用的中间结果（带兜底保护） ============
                                     if (info.kind === "tool") {
@@ -1347,48 +1304,6 @@ export async function startGateway(ctx) {
                                         const toolText = (payload.text ?? "").trim();
                                         if (toolText) {
                                             toolTexts.push(toolText);
-                                        }
-                                        // 收集工具产出的媒体 URL（TTS 语音、生成图片等），供 fallback 转发
-                                        if (payload.mediaUrls?.length) {
-                                            toolMediaUrls.push(...payload.mediaUrls);
-                                        }
-                                        if (payload.mediaUrl && !toolMediaUrls.includes(payload.mediaUrl)) {
-                                            toolMediaUrls.push(payload.mediaUrl);
-                                        }
-                                        log?.info(`[qqbot:${account.accountId}] Collected tool deliver #${toolDeliverCount}: text=${toolText.length} chars, media=${toolMediaUrls.length} URLs`);
-                                        // block 已先发送完毕，tool 后到的媒体立即转发（典型场景：AI 先流式输出文本再执行 TTS）
-                                        if (hasBlockResponse && toolMediaUrls.length > 0) {
-                                            // 去重：跳过已被 block deliver 的 sendPlainReply 处理过的 URL
-                                            const urlsToSend = toolMediaUrls.filter(url => !blockDeliveredMediaUrls.has(url));
-                                            const skippedCount = toolMediaUrls.length - urlsToSend.length;
-                                            toolMediaUrls.length = 0;
-                                            if (urlsToSend.length === 0) {
-                                                log?.info(`[qqbot:${account.accountId}] All ${skippedCount} tool media URL(s) already handled by block deliver, skipping`);
-                                                return;
-                                            }
-                                            log?.info(`[qqbot:${account.accountId}] Block already sent, immediately forwarding ${urlsToSend.length} tool media URL(s) (deduped from block deliver)`);
-                                            for (const mediaUrl of urlsToSend) {
-                                                try {
-                                                    const result = await sendMediaAuto({
-                                                        to: qualifiedTarget,
-                                                        text: "",
-                                                        mediaUrl,
-                                                        accountId: account.accountId,
-                                                        replyToId: event.messageId,
-                                                        account,
-                                                    });
-                                                    if (result.error) {
-                                                        log?.error(`[qqbot:${account.accountId}] Tool media immediate forward error: ${result.error}`);
-                                                    }
-                                                    else {
-                                                        log?.info(`[qqbot:${account.accountId}] Forwarded tool media (post-block): ${mediaUrl.slice(0, 80)}...`);
-                                                    }
-                                                }
-                                                catch (err) {
-                                                    log?.error(`[qqbot:${account.accountId}] Tool media immediate forward failed: ${err}`);
-                                                }
-                                            }
-                                            return;
                                         }
                                         // 兜底已发送，不再续期
                                         if (toolFallbackSent) {
@@ -1497,6 +1412,7 @@ export async function startGateway(ctx) {
                                             channelId: event.channelId,
                                             groupOpenid: event.groupOpenid,
                                             msgIdx: event.msgIdx,
+                                            guildId: event.guildId,
                                         };
                                         const deliverActx = { account, qualifiedTarget, log };
                                         const mediaResult = await parseAndSendMediaTags(replyText, deliverEvent, deliverActx, sendWithRetry, consumeQuoteRef);
@@ -1519,13 +1435,7 @@ export async function startGateway(ctx) {
                                         if (handled)
                                             return;
                                         // ============ 非结构化消息发送 ============
-                                        // 记录 block deliver 处理的 mediaUrl，供 tool 后到时去重
-                                        if (deliverPayload.mediaUrl)
-                                            blockDeliveredMediaUrls.add(deliverPayload.mediaUrl);
-                                        if (deliverPayload.mediaUrls)
-                                            for (const u of deliverPayload.mediaUrls)
-                                                blockDeliveredMediaUrls.add(u);
-                                        await sendPlainReply(deliverPayload, replyText, deliverEvent, deliverActx, sendWithRetry, consumeQuoteRef, toolMediaUrls);
+                                        await sendPlainReply(deliverPayload, replyText, deliverEvent, deliverActx, sendWithRetry, consumeQuoteRef);
                                         pluginRuntime.channel.activity.record({
                                             channel: "qqbot",
                                             accountId: account.accountId,
@@ -1543,12 +1453,19 @@ export async function startGateway(ctx) {
                                         await executeDeliver(payload, info);
                                     }
                                 },
-                                onError: async (err) => {
+                                onError: async (err, info) => {
                                     log?.error(`[qqbot:${account.accountId}] Dispatch error: ${err}`);
+                                    if (abortSignal.aborted) return;
                                     hasResponse = true;
                                     if (timeoutId) {
                                         clearTimeout(timeoutId);
                                         timeoutId = null;
+                                    }
+                                    if (toolOnlyTimeoutId) clearTimeout(toolOnlyTimeoutId);
+                                    toolOnlyTimeoutId = null;
+                                    if (info?.kind === 'tool') {
+                                        await sendErrorMessage(imageDeliveryErrorText(err));
+                                        return;
                                     }
                                     // 流式模式：委托给 streaming controller 处理错误
                                     if (streamingController && !streamingController.isTerminalPhase) {

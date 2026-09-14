@@ -26,6 +26,7 @@ import type {
 import type { MessagingConnectionConfig } from '@shared/types/im-gateway.js';
 
 const VENDOR_AGENT_KEY_PATTERN = /^im-[A-Za-z0-9_-]{43}$/;
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
 
 function makeBot(overrides: Partial<MessagingConnectionConfig> = {}): MessagingConnectionConfig {
   return {
@@ -57,6 +58,7 @@ function makeConnectorCtx(bot: MessagingConnectionConfig, dispatchResult?: Dispa
   });
   const ctx = {
     bot,
+    signal: new AbortController().signal,
     media: { saveBuffer },
     dispatchWithQueue,
     pairing: { getAllowedSenders: () => [], request: () => ({ code: '000000', created: false }) },
@@ -219,7 +221,7 @@ describe('dispatchReplyFromConfig 媒体规整与空判断', () => {
     sessionKey = route.sessionKey as string;
   });
 
-  function managedFile(content = 'x'): string {
+  function managedFile(content: string | Buffer = 'x'): string {
     const dir = getManagedMediaDir();
     fs.mkdirSync(dir, { recursive: true });
     const p = path.join(dir, `host-test-${Math.random().toString(36).slice(2)}.png`);
@@ -272,11 +274,8 @@ describe('dispatchReplyFromConfig 媒体规整与空判断', () => {
   });
 
   it('远程 MediaUrl 先经渠道 saveBuffer 落盘再 dispatch', async () => {
-    const png = Buffer.from('89504e47', 'hex');
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(png, {
       headers: new Headers({ 'content-type': 'image/png; charset=binary' }),
-      arrayBuffer: async () => png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
     })));
     await replyOf(host)({
       ctx: { SessionKey: sessionKey, SenderId: 'user-9', BodyForAgent: '', MediaUrl: 'https://cdn.example/pic.png' },
@@ -301,6 +300,20 @@ describe('dispatchReplyFromConfig 媒体规整与空判断', () => {
     expect(finalPayloads).toEqual([{ text: MEDIA_READ_FAILED_REPLY }]);
     expect(calls).toEqual(['final', 'markComplete', 'waitForIdle']);
     expect(result.queuedFinal).toBe(true);
+  });
+
+  it('keeps remote and already downloaded images in their original order', async () => {
+    const local = managedFile(png);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(png, {
+      headers: { 'content-type': 'image/png' },
+    })));
+    await replyOf(host)({
+      ctx: { SessionKey: sessionKey, SenderId: 'user-9', BodyForAgent: '', MediaUrls: ['https://cdn.example/first.png', local, 'https://cdn.example/last.png'] },
+      dispatcher: makeDispatcher().dispatcher,
+    });
+    const msg = fake.dispatchWithQueue.mock.calls[0][0] as InboundMessage;
+    const saved = await Promise.all(fake.saveBuffer.mock.results.map((result) => result.value));
+    expect(msg.media!.map((file) => file.path)).toEqual([saved[0].path, local, saved[1].path]);
   });
 
   it('下载失败时已落盘的本次受管文件被本地清理（所有权未移交）', async () => {

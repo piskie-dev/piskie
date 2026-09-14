@@ -30,8 +30,11 @@
 | `messaging/inbound/media-resolver.js` 下载失败推 `download-failed://` 哨兵条目；`buildFeishuMediaPayload` 不再把本地路径填进 `MediaUrl(s)` | 2 处 | 49号 §4.3.1/§4.3.8：MediaUrl(s) 语义是待下载远程 URL；下载失败由核心层整条明确失败，不静默丢弃 |
 | `messaging/inbound/enrich.js` `substituteMediaPaths` 改为剥除媒体占位符（不再把本地路径替换进正文）；`dispatch-builders.js` 注释同步 | 2 文件 | 49号 §4.3.5/§11.7：正文不含本地路径/占位符；图片经 MediaPaths 走 `ExternalEvent.images` |
 | `core/lark-client.js` `startWS` 的 probe 等待有界（15s 上限 + abort 可中断）并在 probe 后复查 abort | 1 处 | 49号 §3.2.1 abort 契约：启动 await 前后检查 signal、在途等待有固定上限 |
+| `card/reply-dispatcher.js` 在文字分支前消费完整 `mediaUrls` | 1 文件 | 公共 `sendImageBatch` 有界读取当前文件；`uploadImageLark(Buffer)` + `sendImageLark` 发送原生图片，保留账号/聊天/线程；卡片完成后继续使用原回调发送图片和文字，等待同目标错误通知 |
+| `messaging/outbound/media.js` 原生图片请求与下载流 | 1 文件 | 上传和发送请求传入取消信号与 120 秒超时；消息响应校验；入站下载限制实际字节数，不扩大本地目录授权 |
+| `messaging/inbound/{handler,enrich,dispatch,media-resolver}.js` | 4 文件 | 传递账号停止信号；单图 5 MiB、10 张/合计 20 MiB，保持资源顺序和下载失败哨兵 |
 
-（除上表逻辑改动外，其余胶水在 runtime-adapter.ts / index.ts（TS 侧）。）
+`index.ts` 将账号停止信号传给上述回调，回复出口保留原 dispatcher。CJS vendor 通过 Node 24 `require(esm)` 调用公共 `core/media-io.js`；构建保持同构目录，测试使用 `feishu-cjs-source-resolver.setup.ts` 加载对应 TS 源码。
 
 ## re-vendor 流程
 

@@ -47,7 +47,6 @@ import type {
   DispatchCallbacks,
   DispatchResult,
   InboundMessage,
-  LateSink,
   MediaApi,
   PairingApi,
   ReplyDispatcher,
@@ -87,8 +86,6 @@ export const TASK_DEFINITION_MISSING_REPLY =
 
 export class InboundPipeline {
   private deps: PipelineDeps;
-  /** botId → 迟到帧兜底投递（渠道可选注册） */
-  private lateSinks = new Map<string, LateSink>();
   private readonly rejectionReportedAt = new Map<string, number>();
 
   constructor(deps: PipelineDeps = {}) {
@@ -135,10 +132,6 @@ export class InboundPipeline {
           return EMPTY_RESULT;
         }
         return this.dispatchWithQueue(bot, msg, queue, signal);
-      },
-      setLateSink: (sink) => {
-        if (sink) this.lateSinks.set(bot.id, sink);
-        else this.lateSinks.delete(bot.id);
       },
       setStatus: (patch) => {
         log.debug('setStatus: %o', patch);
@@ -318,22 +311,6 @@ export class InboundPipeline {
     } finally {
       queue.markComplete();
       await queue.waitForIdle();
-    }
-
-    // 迟到帧兜底：agent 多回合工作时最终答案可能在分发窗口关闭后才产出，
-    // 部分渠道的 dispatcher（feishu 流式卡片）会丢弃迟到帧——切换为渠道注册的
-    // 主动发送兜底；必须经 replaceDispatcherIfCurrent 对象身份 CAS：
-    // binding 已删除或 dispatcher 已被新消息替换时 no-op，不复活/不覆盖
-    const lateSink = this.lateSinks.get(bot.id);
-    if (lateSink) {
-      const peer = { ...msg.peer };
-      replyInterceptor.replaceDispatcherIfCurrent(
-        agentId,
-        bot.id,
-        queue,
-        createDeliveryQueue({ deliver: (payload) => lateSink(payload, peer) }),
-        bot.replyForward
-      );
     }
 
     return { kind: 'agent', completion, counts: queue.getQueuedCounts() };

@@ -2087,6 +2087,8 @@ export default {
     forwardToolCallsHelp: 'Weixin shows native progress with the required completion state; other channels keep text output.',
     includeToolResults: 'Include Tool Results',
     forwardToolResultsHelp: 'Controls the additional result text (up to 500 characters), not the native Weixin completion state.',
+    forwardToolImages: 'Send tool images',
+    forwardToolImagesHelp: 'Automatically send images read by tools and confirmed generated images.',
 
     // Auth management
     approvedSenders: 'Approved Senders',

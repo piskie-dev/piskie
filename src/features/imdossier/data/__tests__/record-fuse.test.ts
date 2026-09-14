@@ -17,6 +17,7 @@ function form(overrides: Partial<DossierFormValues> = {}): DossierFormValues {
     forwardAssistantText: true,
     forwardToolCalls: false,
     forwardToolResults: false,
+    forwardToolImages: true,
     ...overrides,
   };
 }
@@ -40,6 +41,11 @@ const persisted: MessagingConnectionConfig = {
 };
 
 describe('fuseBotRecord', () => {
+  it('saves the image toggle and preserves the existing tool filter', () => {
+    const saved = fuseBotRecord(persisted, form({ forwardToolImages: false }), { botId: 'bot-1', atRest: true, scanLogin: false });
+    expect(saved.replyForward?.forwardToolImages).toBe(false);
+    expect(saved.replyForward?.toolFilter).toEqual(persisted.replyForward?.toolFilter);
+  });
   it('打底保留未展示字段(allowFrom/corpId/agentId/toolFilter),表单字段覆盖', () => {
     const fused = fuseBotRecord(persisted, form({ forwardToolCalls: false }), {
       botId: 'bot-1',

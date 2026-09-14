@@ -6,7 +6,7 @@ export function monitorFeishuProvider(opts: {
   /** OpenClawConfig 形状的配置（channels.feishu.*），vendor getLarkAccount 从中解析 */
   config: Record<string, unknown>;
   /** 日志载体 {log?, error?} */
-  runtime?: { log?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void };
+  runtime?: { log?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void; abortSignal?: AbortSignal };
   abortSignal?: AbortSignal;
   /** 指定单账号模式（PISKIE 恒传 bot.id） */
   accountId?: string;

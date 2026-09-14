@@ -1,7 +1,4 @@
-import * as os from 'os';
-import * as path from 'path';
 import { WSClient, WSAuthFailureError, WSReconnectExhaustedError, generateReqId } from '@wecom/aibot-node-sdk';
-import { getDefaultMediaLocalRoots } from './media-compat.js';
 import { SCENE_WECOM_OPENCLAW, WS_MAX_AUTH_FAILURE_ATTEMPTS, WS_MAX_RECONNECT_ATTEMPTS, WS_HEARTBEAT_INTERVAL_MS, EVENT_ENTER_CHECK_UPDATE, CMD_ENTER_EVENT_REPLY, CHANNEL_ID, THINKING_MESSAGE } from './const.js';
 export { WeComCommand } from './const.js';
 import { parseMessageContent } from './message-parser.js';
@@ -14,6 +11,7 @@ import { checkDmPolicy } from './dm-policy.js';
 import { startMessageStateCleanup, setWeComWebSocket, warmupReqIdStore, stopMessageStateCleanup, cleanupAccount, setReqIdForChat, setMessageState, deleteMessageState } from './state-manager.js';
 export { getWeComWebSocket } from './state-manager.js';
 import { PLUGIN_VERSION } from './version.js';
+import { sendImageBatch, imageDeliveryErrorText } from '../../../core/media-io.js';
 
 /**
  * 企业微信 WebSocket 监控器主模块
@@ -171,71 +169,6 @@ async function updateTemplateCardOnEvent(params) {
     });
 }
 // ============================================================================
-// 媒体本地路径白名单扩展
-// ============================================================================
-/**
- * 解析 openclaw 状态目录（与 plugin-sdk 内部逻辑保持一致）
- */
-function resolveStateDir() {
-    const stateOverride = process.env.OPENCLAW_STATE_DIR?.trim() || process.env.CLAWDBOT_STATE_DIR?.trim();
-    if (stateOverride)
-        return stateOverride;
-    return path.join(os.homedir(), ".openclaw");
-}
-/**
- * 在 getDefaultMediaLocalRoots() 基础上，将 stateDir 本身也加入白名单，
- * 并合并用户在 WeComConfig 中配置的自定义 mediaLocalRoots。
- *
- * getDefaultMediaLocalRoots() 仅包含 stateDir 下的子目录（media/agents/workspace/sandboxes），
- * 但 agent 生成的文件可能直接放在 stateDir 根目录下（如 ~/.openclaw-dev/1.png），
- * 因此需要将 stateDir 本身也加入白名单以避免 LocalMediaAccessError。
- *
- * 用户可在 openclaw.json 中配置：
- * {
- *   "channels": {
- *     "wecom": {
- *       "mediaLocalRoots": ["~/Downloads", "~/Documents"]
- *     }
- *   }
- * }
- */
-async function getExtendedMediaLocalRoots(config) {
-    // 从兼容层获取默认白名单（内部已处理低版本 SDK 的 fallback）
-    const defaults = await getDefaultMediaLocalRoots();
-    const roots = [...defaults];
-    const stateDir = path.resolve(resolveStateDir());
-    if (!roots.includes(stateDir)) {
-        roots.push(stateDir);
-    }
-    // 合并用户在 WeComConfig 中配置的自定义路径
-    if (config?.mediaLocalRoots) {
-        for (const r of config.mediaLocalRoots) {
-            const resolved = path.resolve(r.replace(/^~(?=\/|$)/, os.homedir()));
-            if (!roots.includes(resolved)) {
-                roots.push(resolved);
-            }
-        }
-    }
-    return roots;
-}
-// ============================================================================
-// 媒体发送错误提示
-// ============================================================================
-/**
- * 根据媒体发送结果生成纯文本错误摘要（用于替换 thinking 流式消息展示给用户）。
- *
- * 使用纯文本而非 markdown 格式，因为 replyStream 只支持纯文本。
- */
-function buildMediaErrorSummary(mediaUrl, result) {
-    if (result.error?.includes("LocalMediaAccessError")) {
-        return `⚠️ 文件发送失败：没有权限访问路径 ${mediaUrl}\n请在 openclaw.json 的 mediaLocalRoots 中添加该路径的父目录后重启生效。`;
-    }
-    if (result.rejectReason) {
-        return `⚠️ 文件发送失败：${result.rejectReason}`;
-    }
-    return `⚠️ 文件发送失败：无法处理文件 ${mediaUrl}，请稍后再试。`;
-}
-// ============================================================================
 // 进站消息构建
 // ============================================================================
 /**
@@ -294,33 +227,24 @@ async function sendThinkingReply(params) {
  * 因此所有媒体统一走 aibot_send_msg 主动发送。
  */
 async function sendMediaBatch(ctx, mediaUrls) {
-    const { wsClient, frame, state, account, runtime } = ctx;
+    const { wsClient, frame, state, runtime } = ctx;
     const body = frame.body;
     const chatId = body.chatid || body.from.userid;
-    const mediaLocalRoots = await getExtendedMediaLocalRoots(account.config);
-    runtime.log?.(`[wecom][debug] mediaLocalRoots=${JSON.stringify(mediaLocalRoots)}, mediaUrls=${JSON.stringify(mediaUrls)}`);
-    for (const mediaUrl of mediaUrls) {
+    await sendImageBatch(mediaUrls, async (mediaUrl, buffer) => {
         const result = await uploadAndSendMedia({
             wsClient,
             mediaUrl,
             chatId,
-            mediaLocalRoots,
             log: (...args) => runtime.log?.(...args),
             errorLog: (...args) => runtime.error?.(...args),
-        });
+        }, buffer, ctx.abortSignal);
         if (result.ok) {
             state.hasMedia = true;
         }
         else {
-            state.hasMediaFailed = true;
-            runtime.error?.(`[wecom] Media send failed: url=${mediaUrl}, reason=${result.rejectReason || result.error}`);
-            // 收集错误摘要，后续在 finishThinkingStream 中直接替换 thinking 流展示给用户
-            const summary = buildMediaErrorSummary(mediaUrl, result);
-            state.mediaErrorSummary = state.mediaErrorSummary
-                ? `${state.mediaErrorSummary}\n\n${summary}`
-                : summary;
+            throw new Error(result.rejectReason || result.error || 'WeCom media send failed');
         }
-    }
+    }, ctx.abortSignal);
 }
 /**
  * 关闭 thinking 流（发送 finish=true 的流式消息）
@@ -335,11 +259,7 @@ async function sendMediaBatch(ctx, mediaUrls) {
  * 0. [新增] 有模板卡片代码块 → 提取卡片并主动发送，用剩余文本关闭流
  * 1. 有可见文本 → 用完整文本关闭
  * 2. 有媒体成功发送（通过 deliver 回调） → 用友好提示"文件已发送"
- * 3. 媒体发送失败 → 直接用错误摘要替换 thinking
- * 4. 其他 → 用通用"处理完成"提示
- *    （agent 可能已通过内置 message 工具直接发送了文件，
- *    该路径走 outbound.sendMedia 完全绕过 deliver 回调，
- *    所以 state 中无记录，但文件已实际送达）
+ * 发送失败由原 dispatcher 的 onError 发送同目标摘要。
  *
  * 降级策略：
  * - 当 streamExpired=true（errcode 846608）时，流式通道已不可用（>6分钟），
@@ -383,11 +303,7 @@ async function finishThinkingStream(ctx) {
         finishText = state.accumulatedText;
     }
     else if (state.hasMedia) {
-        if (state.hasMediaFailed && state.mediaErrorSummary) {
-            // 媒体成功发送：用友好提示告知用户
-            finishText = finishText ? `${finishText}\n\n${state.mediaErrorSummary}` : state.mediaErrorSummary;
-        }
-        else if (!finishText) {
+        if (!finishText) {
             finishText = "📎 文件已发送，请查收。";
         }
     }
@@ -462,7 +378,8 @@ async function sendTemplateCards(ctx, cards) {
  */
 async function routeAndDispatchMessage(params) {
     const { inboundMsg, account, wsClient, frame, state, runtime, dispatch, onCleanup } = params;
-    const ctx = { wsClient, frame, state, account, runtime };
+    const ctx = { wsClient, frame, state, account, runtime, abortSignal: params.abortSignal };
+    let dispatchComplete = false;
     // 防止 onCleanup 被多次调用（onError 回调与 catch 块可能重复触发）
     let cleanedUp = false;
     const safeCleanup = () => {
@@ -486,8 +403,14 @@ async function routeAndDispatchMessage(params) {
                     }
                 },
                 deliver: async (payload, info) => {
+                    ctx.abortSignal?.throwIfAborted();
+                    if (dispatchComplete && payload.text) {
+                        await wsClient.sendMessage(frame.body.chatid || frame.body.from.userid, {
+                            msgtype: 'markdown', markdown: { content: payload.text },
+                        });
+                        payload = { ...payload, text: undefined };
+                    }
                     state.deliverCalled = true;
-                    // runtime.log?.(`[openclaw -> plugin] kind=${info.kind}, text=${payload.text ?? ''}, mediaUrl=${payload.mediaUrl ?? ''}, mediaUrls=${JSON.stringify(payload.mediaUrls ?? [])}`);
                     // 累积文本
                     if (payload.text) {
                         state.accumulatedText += (payload.text || '');
@@ -495,25 +418,12 @@ async function routeAndDispatchMessage(params) {
                     // 发送媒体（统一走主动发送）
                     const mediaUrls = payload.mediaUrls?.length ? payload.mediaUrls : payload.mediaUrl ? [payload.mediaUrl] : [];
                     if (mediaUrls.length > 0) {
-                        try {
-                            await sendMediaBatch(ctx, mediaUrls);
-                        }
-                        catch (mediaErr) {
-                            // sendMediaBatch 内部异常（如 getDefaultMediaLocalRoots 不可用等）
-                            // 必须标记 state，否则 finishThinkingStream 会显示"处理完成"误导用户
-                            state.hasMediaFailed = true;
-                            const errMsg = String(mediaErr);
-                            const summary = `⚠️ 文件发送失败：内部处理异常，请升级 openclaw 到最新版本后重试。\n错误详情：${errMsg}`;
-                            state.mediaErrorSummary = state.mediaErrorSummary
-                                ? `${state.mediaErrorSummary}\n\n${summary}`
-                                : summary;
-                            runtime.error?.(`[wecom] sendMediaBatch threw: ${errMsg}`);
-                        }
+                        await sendMediaBatch(ctx, mediaUrls);
                     }
                     // 中间帧：有可见文本时流式更新（流式过期后跳过，等 deliver 完成后主动发送）
                     // 使用 maskTemplateCardBlocks 遮罩正在构建中的模板卡片代码块，
                     // 避免 JSON 源码在流式输出过程中暴露给终端用户
-                    if (info.kind !== "final" && state.accumulatedText && !state.streamExpired) {
+                    if (!dispatchComplete && info.kind !== "final" && state.accumulatedText && !state.streamExpired) {
                         try {
                             const displayText = maskTemplateCardBlocks(state.accumulatedText, (...args) => runtime.log?.(...args));
                             if (displayText !== state.accumulatedText) {
@@ -532,12 +442,18 @@ async function routeAndDispatchMessage(params) {
                         }
                     }
                 },
-                onError: (err, info) => {
+                onError: async (err, info) => {
                     runtime.error?.(`[wecom] ${info.kind} reply failed: ${String(err)}`);
+                    if (ctx.abortSignal?.aborted) return;
+                    await wsClient.sendMessage(frame.body.chatid || frame.body.from.userid, {
+                        msgtype: 'markdown',
+                        markdown: { content: imageDeliveryErrorText(err) },
+                    });
                 },
         });
         // 关闭 thinking 流
         await finishThinkingStream(ctx);
+        dispatchComplete = true;
         safeCleanup();
     }
     catch (err) {
@@ -550,6 +466,7 @@ async function routeAndDispatchMessage(params) {
         catch (finishErr) {
             runtime.error?.(`[wecom] Failed to finish thinking stream after dispatch error: ${String(finishErr)}`);
         }
+        dispatchComplete = true;
         safeCleanup();
     }
 }
@@ -623,6 +540,7 @@ async function processWeComMessage(params) {
         downloadAndSaveImages({
             imageUrls,
             imageAesKeys,
+            abortSignal: params.abortSignal,
             account,
             runtime,
             wsClient,
@@ -631,6 +549,7 @@ async function processWeComMessage(params) {
         downloadAndSaveFiles({
             fileUrls,
             fileAesKeys,
+            abortSignal: params.abortSignal,
             account,
             runtime,
             wsClient,
@@ -663,6 +582,7 @@ async function processWeComMessage(params) {
             runtime,
             dispatch,
             onCleanup: cleanupState,
+            abortSignal: params.abortSignal,
         });
     }
     catch (err) {
@@ -854,6 +774,7 @@ async function monitorWeComProvider(options) {
         wsClient.on("message", async (frame) => {
             try {
                 await processWeComMessage({
+                    abortSignal,
                     frame,
                     account,
                     runtime,
@@ -892,6 +813,7 @@ async function monitorWeComProvider(options) {
                     runtime.error?.(`[${account.accountId}] [template-card-update] Failed to update template card: ${String(updateErr)}`);
                 }
                 await processWeComMessage({
+                    abortSignal,
                     frame,
                     account,
                     runtime,

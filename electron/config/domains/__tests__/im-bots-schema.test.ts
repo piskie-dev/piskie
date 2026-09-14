@@ -16,6 +16,13 @@ function bot(replyForward: Record<string, unknown>) {
 }
 
 describe('im-bots assistant text hard cut', () => {
+  it('defaults tool images on, preserves explicit off, and keeps reads tolerant and writes strict', () => {
+    const reply = { forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false };
+    expect(imBotsStoredSchema.parse({ ...bot(reply), revision: 1 }).bots['bot-1']?.replyForward?.forwardToolImages).toBe(true);
+    expect(imBotsWriteSchema.parse(bot({ ...reply, forwardToolImages: false })).bots['bot-1']?.replyForward?.forwardToolImages).toBe(false);
+    expect(imBotsStoredSchema.parse({ ...bot({ ...reply, unknownOption: true }), revision: 1 }).bots['bot-1']?.replyForward).toEqual({ ...reply, forwardToolImages: true });
+    expect(imBotsWriteSchema.safeParse(bot({ ...reply, unknownOption: true })).success).toBe(false);
+  });
   it('accepts only forwardAssistantText and rejects the removed forwardThinking key', () => {
     expect(imBotsWriteSchema.safeParse(bot({
       forwardAssistantText: true,

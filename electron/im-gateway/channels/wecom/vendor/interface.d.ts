@@ -3,7 +3,7 @@
  */
 import type { RuntimeEnv } from "./compat-types.js";
 import type { ResolvedWeComAccount } from "./compat-types.js";
-import type { MediaApi, PairingApi, InboundMessage, DispatchCallbacks, DispatchResult } from "../../core/channel-connector.js";
+import type { MediaApi, PairingApi, InboundMessage, DispatchCallbacks, DispatchResult } from "../../../core/channel-connector.js";
 import { WeComCommand } from "./const.js";
 /**
  * Monitor 配置选项
@@ -28,10 +28,6 @@ export interface MessageState {
     streamId?: string;
     /** 是否已成功发送过媒体文件 */
     hasMedia?: boolean;
-    /** 是否有媒体发送失败（权限不足、文件过大等） */
-    hasMediaFailed?: boolean;
-    /** 媒体发送失败时的纯文本错误摘要（用于替换 thinking 流展示给用户） */
-    mediaErrorSummary?: string;
     /** deliver 回调是否被调用过（用于区分"核心无回复"和"核心回复了空内容"） */
     deliverCalled?: boolean;
     /** 流式回复是否已过期（errcode 846608，>6分钟），需降级为主动发送 */

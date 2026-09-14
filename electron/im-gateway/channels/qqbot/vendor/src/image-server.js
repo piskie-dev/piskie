@@ -437,7 +437,8 @@ export async function downloadFileToBuffer(url, options) {
             console.log(`[image-server] Retry ${attempt}/${maxRetries} after ${delayMs}ms: ${url.slice(0, 120)}`);
             await new Promise(r => setTimeout(r, delayMs));
         }
-        const result = await downloadToBufferOnce(url, { timeoutMs, maxSizeBytes });
+        if (options?.signal?.aborted) return { buffer: null, error: 'Media download cancelled' };
+        const result = await downloadToBufferOnce(url, { timeoutMs, maxSizeBytes, signal: options?.signal });
         if (result.buffer || !result.retryable) {
             return { buffer: result.buffer, contentType: result.contentType, error: result.error };
         }
@@ -451,7 +452,7 @@ async function downloadToBufferOnce(url, opts) {
     const controller = new AbortController();
     const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, { signal: opts.signal ? AbortSignal.any([controller.signal, opts.signal]) : controller.signal });
         if (!response.ok) {
             const reason = `HTTP ${response.status} ${response.statusText}`;
             console.error(`[image-server] Download failed: ${reason}`);

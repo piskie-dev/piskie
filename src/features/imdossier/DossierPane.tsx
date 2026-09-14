@@ -68,6 +68,7 @@ const CREDENTIAL_LABELS: Record<string, [string, string]> = {
 };
 
 function seedForm(persisted: MessagingConnectionConfig | undefined): Omit<DossierFormValues, 'channelType'> {
+  const isDraft = persisted === undefined;
   return {
     name: persisted?.name ?? '',
     appId: persisted?.appId ?? '',
@@ -78,8 +79,9 @@ function seedForm(persisted: MessagingConnectionConfig | undefined): Omit<Dossie
     groupAllowText: (persisted?.groupAllowFrom ?? []).join('\n'),
     requireMention: persisted?.requireMention ?? true,
     forwardAssistantText: persisted?.replyForward?.forwardAssistantText ?? true,
-    forwardToolCalls: persisted?.replyForward?.forwardToolCalls ?? false,
-    forwardToolResults: persisted?.replyForward?.forwardToolResults ?? false,
+    forwardToolCalls: persisted?.replyForward?.forwardToolCalls ?? isDraft,
+    forwardToolResults: persisted?.replyForward?.forwardToolResults ?? isDraft,
+    forwardToolImages: persisted?.replyForward?.forwardToolImages ?? true,
   };
 }
 
@@ -676,6 +678,18 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
             <span className={styles.flagText}>
               {t('imPlugin.includeToolResults')}
               <span className={styles.flagHint}>{t('imPlugin.forwardToolResultsHelp')}</span>
+            </span>
+            <span className={styles.flagPill} />
+          </button>
+          <button
+            type="button"
+            className={styles.flagRow}
+            data-on={form.forwardToolImages}
+            onClick={() => patch({ forwardToolImages: !form.forwardToolImages })}
+          >
+            <span className={styles.flagText}>
+              {t('imPlugin.forwardToolImages')}
+              <span className={styles.flagHint}>{t('imPlugin.forwardToolImagesHelp')}</span>
             </span>
             <span className={styles.flagPill} />
           </button>

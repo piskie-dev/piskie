@@ -70,7 +70,6 @@ function makeCtx(bot: MessagingConnectionConfig): ConnectorContext {
     },
     dispatch: vi.fn(),
     dispatchWithQueue: vi.fn(),
-    setLateSink: vi.fn(),
     setStatus: vi.fn(),
   } as unknown as ConnectorContext;
 }

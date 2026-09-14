@@ -1,4 +1,5 @@
 import path from "node:path";
+import { sendDmMessage } from './api.js';
 import { getAccessToken, sendC2CMessage, sendChannelMessage, sendGroupMessage, clearTokenCache, sendC2CImageMessage, sendGroupImageMessage, sendC2CVoiceMessage, sendGroupVoiceMessage, sendC2CVideoMessage, sendGroupVideoMessage, sendC2CFileMessage, sendGroupFileMessage } from "./api.js";
 import { parseQQBotPayload, encodePayloadForCron, isCronReminderPayload, isMediaPayload } from "./utils/payload.js";
 import { resolveTTSConfig, textToSilk, formatDuration } from "./utils/audio-convert.js";
@@ -37,11 +38,11 @@ export async function sendTextToTarget(ctx, text, refIdx) {
         else if (target.type === "group" && target.groupOpenid) {
             await sendGroupMessage(token, target.groupOpenid, text, target.messageId);
         }
+        else if (target.type === "dm") {
+            await sendDmMessage(token, target.guildId, text, target.messageId);
+        }
         else if (target.channelId) {
             await sendChannelMessage(token, target.channelId, text, target.messageId);
-        }
-        else if (target.type === "dm") {
-            await sendC2CMessage(token, target.senderId, text, target.messageId, refIdx);
         }
     }, ctx.log, account.accountId);
 }

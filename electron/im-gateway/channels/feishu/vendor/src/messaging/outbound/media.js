@@ -67,6 +67,7 @@ const targets_1 = require("../../core/targets.js");
 const media_url_utils_1 = require("./media-url-utils.js");
 const lark_logger_1 = require("../../core/lark-logger.js");
 const log = (0, lark_logger_1.larkLogger)('outbound/media');
+const { MAX_IM_IMAGE_BYTES, MEDIA_LIMIT_REPLY } = require("../../../../../../core/inbound-media.js");
 // ---------------------------------------------------------------------------
 // Response extraction helpers
 // ---------------------------------------------------------------------------
@@ -163,7 +164,13 @@ async function extractBufferFromResponse(response) {
 function streamToBuffer(stream) {
     return new Promise((resolve, reject) => {
         const chunks = [];
+        let size = 0;
         stream.on('data', (chunk) => {
+            size += chunk.length;
+            if (size > MAX_IM_IMAGE_BYTES) {
+                stream.destroy(new Error(MEDIA_LIMIT_REPLY));
+                return;
+            }
             chunks.push(Buffer.from(chunk));
         });
         stream.on('end', () => resolve(Buffer.concat(chunks)));
@@ -205,8 +212,9 @@ async function downloadMessageResourceFeishu(params) {
         params: {
             type,
         },
-    });
+    }, { signal: params.signal, timeout: 120_000, maxContentLength: MAX_IM_IMAGE_BYTES });
     const { buffer, contentType } = await extractBufferFromResponse(response);
+    if (buffer.length > MAX_IM_IMAGE_BYTES) throw new Error(MEDIA_LIMIT_REPLY);
     // Attempt to extract file name from response headers.
     let fileName;
     if (response && typeof response === 'object') {
@@ -242,7 +250,7 @@ async function uploadImageLark(params) {
     const imageStream = Buffer.isBuffer(image) ? node_stream_1.Readable.from(image) : fs.createReadStream(image);
     const response = await client.im.image.create({
         data: { image_type: imageType, image: imageStream },
-    });
+    }, { signal: params.signal, timeout: 120_000 });
     const imageKey = response?.data?.image_key ?? response?.image_key;
     if (!imageKey) {
         throw new Error('[feishu-media] Image upload failed: no image_key in response. ' +
@@ -300,7 +308,8 @@ async function sendMediaMessage(params) {
         const response = await client.im.message.reply({
             path: { message_id: replyToMessageId },
             data: { content, msg_type: msgType, reply_in_thread: replyInThread },
-        });
+        }, { signal: params.signal, timeout: 120_000 });
+        if (response?.code || !response?.data?.message_id) throw new Error('Feishu media reply failed');
         return {
             messageId: response?.data?.message_id ?? '',
             chatId: response?.data?.chat_id ?? '',
@@ -315,7 +324,8 @@ async function sendMediaMessage(params) {
     const response = await client.im.message.create({
         params: { receive_id_type: receiveIdType },
         data: { receive_id: target, msg_type: msgType, content },
-    });
+    }, { signal: params.signal, timeout: 120_000 });
+    if (response?.code || !response?.data?.message_id) throw new Error('Feishu media send failed');
     return {
         messageId: response?.data?.message_id ?? '',
         chatId: response?.data?.chat_id ?? '',
@@ -340,7 +350,7 @@ async function sendImageLark(params) {
     log.info(`sendImageLark: target=${to}, imageKey=${imageKey}`);
     const client = lark_client_1.LarkClient.fromCfg(cfg, accountId).sdk;
     const content = JSON.stringify({ image_key: imageKey });
-    return sendMediaMessage({ client, to, content, msgType: 'image', replyToMessageId, replyInThread });
+    return sendMediaMessage({ client, to, content, msgType: 'image', replyToMessageId, replyInThread, signal: params.signal });
 }
 // ---------------------------------------------------------------------------
 // sendFileLark

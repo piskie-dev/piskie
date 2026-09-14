@@ -104,7 +104,7 @@ export interface UploadAndSendMediaResult {
  * 媒体消息统一走 aibot_send_msg 主动发送，避免多文件场景下 reqId 只能用一次的问题。
  * channel.ts 的 sendMedia 和 monitor.ts 的 deliver 回调都使用此函数。
  */
-export declare function uploadAndSendMedia(options: UploadAndSendMediaOptions): Promise<UploadAndSendMediaResult>;
+export declare function uploadAndSendMedia(options: UploadAndSendMediaOptions, imageBuffer?: Buffer, signal?: AbortSignal): Promise<UploadAndSendMediaResult>;
 /** uploadAndReplyMedia 的参数 */
 export interface UploadAndReplyMediaOptions {
     /** WSClient 实例 */

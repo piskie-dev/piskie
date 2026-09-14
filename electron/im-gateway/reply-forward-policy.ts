@@ -4,4 +4,5 @@ export const DEFAULT_REPLY_FORWARD_CONFIG: Readonly<IMReplyForwardConfig> = Obje
   forwardAssistantText: true,
   forwardToolCalls: false,
   forwardToolResults: false,
+  forwardToolImages: true,
 });

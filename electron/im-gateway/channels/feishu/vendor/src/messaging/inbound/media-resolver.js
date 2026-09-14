@@ -14,6 +14,7 @@ exports.downloadResources = downloadResources;
 exports.buildFeishuMediaPayload = buildFeishuMediaPayload;
 const lark_client_1 = require("../../core/lark-client.js");
 const media_1 = require("../outbound/media.js");
+const { MAX_IM_IMAGE_COUNT, MAX_IM_IMAGE_BYTES, MAX_IM_IMAGE_TOTAL_BYTES } = require("../../../../../../core/inbound-media.js");
 // ---------------------------------------------------------------------------
 // Resource-descriptor-based download
 // ---------------------------------------------------------------------------
@@ -27,8 +28,11 @@ async function downloadResources(params) {
         return [];
     const out = [];
     const core = lark_client_1.LarkClient.runtime;
+    let totalBytes = 0;
     for (const res of resources) {
         try {
+            params.signal?.throwIfAborted();
+            if (resources.length > MAX_IM_IMAGE_COUNT) throw new Error('Image count limit exceeded');
             const resourceType = res.type === 'image' ? 'image' : 'file';
             const result = await (0, media_1.downloadMessageResourceFeishu)({
                 cfg,
@@ -36,13 +40,16 @@ async function downloadResources(params) {
                 fileKey: res.fileKey,
                 type: resourceType,
                 accountId,
+                signal: params.signal,
             });
+            totalBytes += result.buffer.length;
+            if (totalBytes > MAX_IM_IMAGE_TOTAL_BYTES) throw new Error('Image total size limit exceeded');
             let contentType = result.contentType;
             if (!contentType) {
                 contentType = await core.media.detectMime({ buffer: result.buffer });
             }
             const fileName = result.fileName || res.fileName;
-            const saved = await core.channel.media.saveMediaBuffer(result.buffer, contentType, 'inbound', maxBytes, fileName);
+            const saved = await core.channel.media.saveMediaBuffer(result.buffer, contentType, 'inbound', Math.min(maxBytes, MAX_IM_IMAGE_BYTES), fileName);
             const placeholder = inferPlaceholderFromType(res.type);
             out.push({
                 path: saved.path,

@@ -148,6 +148,10 @@ async function fillDraft(channel = 'openclaw-weixin', template = 'First template
 function saveButton() {
   return [...container.querySelectorAll<HTMLButtonElement>('button')].find((element) => element.textContent === '保存')!;
 }
+function flagButton(label: string) {
+  return [...container.querySelectorAll<HTMLButtonElement>('button')]
+    .find((element) => element.textContent?.includes(label))!;
+}
 async function save(waitForRefresh = true) {
   await act(async () => {
     saveButton().click();
@@ -158,6 +162,27 @@ async function save(waitForRefresh = true) {
     }
   });
 }
+
+it('enables tool activity and results by default for a new Bot', async () => {
+  const f = await savedBotFixture();
+  expect(flagButton('附带工具执行过程').dataset.on).toBe('true');
+  expect(flagButton('附带工具结果').dataset.on).toBe('true');
+  await fillDraft();
+  await save();
+  expect(f.saveBot.mock.calls[0]![0].replyForward).toMatchObject({
+    forwardToolCalls: true,
+    forwardToolResults: true,
+  });
+});
+
+it('keeps tool activity and results disabled for an existing Bot without stored settings', async () => {
+  await act(async () => root.render(createElement(DossierPane, {
+    focus: { kind: 'bot', botId: 'bot-1' }, pageGuide: { consoleURL: '', steps: [] },
+    onFlash: vi.fn(), onDismiss: vi.fn(), onSaved: vi.fn(), onDraft: vi.fn(),
+  })));
+  expect(flagButton('附带工具执行过程').dataset.on).toBe('false');
+  expect(flagButton('附带工具结果').dataset.on).toBe('false');
+});
 
 it.each(['refresh', 'write', 'lost-reply'] as const)('retries the same Bot after %s failure using the real form and persistence', async (failure) => {
   const f = await savedBotFixture();

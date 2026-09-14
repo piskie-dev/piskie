@@ -9,6 +9,8 @@ import { redactUrl } from "../util/redact.js";
 import { getExtensionFromContentTypeOrUrl } from "../media/mime.js";
 import { tempFileName } from "../util/random.js";
 import { UploadMediaType } from "../api/types.js";
+import { readMediaFile, readMediaResponse } from "../../../../../core/media-io.js";
+import { MAX_IM_IMAGE_BYTES } from "../../../../../core/inbound-media.js";
 /**
  * Download a remote media URL (image, video, file) to a local temp file in destDir.
  * Returns the local file path; extension is inferred from Content-Type / URL.
@@ -31,7 +33,8 @@ export async function downloadRemoteImageToTemp(url, destDir, abortSignal) {
         logger.error(`downloadRemoteImageToTemp: ${msg}`);
         throw new Error(msg);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
+    const maxBytes = res.headers.get('content-type')?.startsWith('image/') ? MAX_IM_IMAGE_BYTES : 20 * 1024 * 1024;
+    const buf = await readMediaResponse(res, maxBytes);
     logger.debug(`downloadRemoteImageToTemp: downloaded ${buf.length} bytes`);
     await fs.mkdir(destDir, { recursive: true });
     const ext = getExtensionFromContentTypeOrUrl(res.headers.get("content-type"), url);
@@ -44,9 +47,10 @@ export async function downloadRemoteImageToTemp(url, destDir, abortSignal) {
 /**
  * Common upload pipeline: read file → hash → gen aeskey → getUploadUrl → uploadBufferToCdn → return info.
  */
-async function uploadMediaToCdn(params) {
+async function uploadMediaToCdn(params, buffer) {
     const { filePath, toUserId, opts, cdnBaseUrl, mediaType, label } = params;
-    const plaintext = await fs.readFile(filePath);
+    const maxBytes = mediaType === UploadMediaType.IMAGE ? MAX_IM_IMAGE_BYTES : 20 * 1024 * 1024;
+    const plaintext = buffer ?? await readMediaFile(filePath, maxBytes, opts.abortSignal);
     const rawsize = plaintext.length;
     const rawfilemd5 = crypto.createHash("md5").update(plaintext).digest("hex");
     const filesize = aesEcbPaddedSize(rawsize);
@@ -90,12 +94,12 @@ async function uploadMediaToCdn(params) {
     };
 }
 /** Upload a local image file to the Weixin CDN with AES-128-ECB encryption. */
-export async function uploadFileToWeixin(params) {
+export async function uploadFileToWeixin(params, buffer) {
     return uploadMediaToCdn({
         ...params,
         mediaType: UploadMediaType.IMAGE,
         label: "uploadFileToWeixin",
-    });
+    }, buffer);
 }
 /** Upload a local video file to the Weixin CDN. */
 export async function uploadVideoToWeixin(params) {

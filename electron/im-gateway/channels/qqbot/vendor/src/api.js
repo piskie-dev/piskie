@@ -3,6 +3,7 @@
  * [修复版] 已重构为支持多实例并发，消除全局变量冲突
  */
 import os from "node:os";
+import { detectImageMime } from '../../../../core/inbound-media.js';
 import { computeFileHash, getCachedFileInfo, setCachedFileInfo } from "./utils/upload-cache.js";
 import { sanitizeFileName } from "./utils/platform.js";
 /** 默认使用 console，外部可通过 setApiLogger 注入框架 log */
@@ -221,7 +222,8 @@ const FILE_UPLOAD_TIMEOUT = 120000; // 文件上传 120 秒
 /**
  * API 请求封装
  */
-export async function apiRequest(accessToken, method, path, body, timeoutMs) {
+export async function apiRequest(accessToken, method, path, body, timeoutMs, signal) {
+    signal?.throwIfAborted();
     const url = `${API_BASE}${path}`;
     const reqTs = Date.now(); // 毫秒时间戳，用于关联同一次请求的所有日志
     const headers = {
@@ -231,17 +233,15 @@ export async function apiRequest(accessToken, method, path, body, timeoutMs) {
     };
     const isFileUpload = path.includes("/files");
     const timeout = timeoutMs ?? (isFileUpload ? FILE_UPLOAD_TIMEOUT : DEFAULT_API_TIMEOUT);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-    }, timeout);
+    const timeoutSignal = AbortSignal.timeout(timeout);
+    if (body instanceof FormData) delete headers['Content-Type'];
     const options = {
         method,
         headers,
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
     };
     if (body) {
-        options.body = JSON.stringify(body);
+        options.body = body instanceof FormData ? body : JSON.stringify(body);
     }
     // 打印请求信息
     log.info(`[qqbot-api][${reqTs}] >>> ${method} ${url} (timeout: ${timeout}ms)`);
@@ -257,16 +257,13 @@ export async function apiRequest(accessToken, method, path, body, timeoutMs) {
         res = await fetch(url, options);
     }
     catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof Error && err.name === "AbortError") {
+        signal?.throwIfAborted();
+        if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
             log.error(`[qqbot-api][${reqTs}] <<< Request timeout after ${timeout}ms`);
             throw new Error(`Request timeout[${path}]: exceeded ${timeout}ms`);
         }
         log.error(`[qqbot-api][${reqTs}] <<< Network error: ${err}`);
         throw new Error(`Network error [${path}]: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    finally {
-        clearTimeout(timeoutId);
     }
     const responseHeaders = {};
     res.headers.forEach((value, key) => {
@@ -321,13 +318,14 @@ export async function apiRequest(accessToken, method, path, body, timeoutMs) {
 // ============ 上传重试（指数退避） ============
 const UPLOAD_MAX_RETRIES = 2;
 const UPLOAD_BASE_DELAY_MS = 1000;
-async function apiRequestWithRetry(accessToken, method, path, body, maxRetries = UPLOAD_MAX_RETRIES) {
+async function apiRequestWithRetry(accessToken, method, path, body, maxRetries = UPLOAD_MAX_RETRIES, signal) {
     let lastError = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await apiRequest(accessToken, method, path, body);
+            return await apiRequest(accessToken, method, path, body, undefined, signal);
         }
         catch (err) {
+            signal?.throwIfAborted();
             lastError = err instanceof Error ? err : new Error(String(err));
             const errMsg = lastError.message;
             if (errMsg.includes("400") || errMsg.includes("401") || errMsg.includes("Invalid") ||
@@ -486,8 +484,8 @@ export function getApiPluginVersion() {
  * 发送消息并自动触发 refIdx 回调
  * 所有消息发送函数统一经过此处，确保每条出站消息的 refIdx 都被捕获
  */
-async function sendAndNotify(accessToken, method, path, body, meta) {
-    const result = await apiRequest(accessToken, method, path, body);
+async function sendAndNotify(accessToken, method, path, body, meta, signal) {
+    const result = await apiRequest(accessToken, method, path, body, undefined, signal);
     if (result.ext_info?.ref_idx && onMessageSentHook) {
         try {
             onMessageSentHook(result.ext_info.ref_idx, meta);
@@ -732,6 +730,32 @@ export async function sendGroupMediaMessage(accessToken, groupOpenid, fileInfo, 
         ...(msgId ? { msg_id: msgId } : {}),
     });
 }
+/** Native image delivery for the existing gateway target, including guild direct messages. */
+export async function sendImageMessage(accessToken, target, buffer, signal) {
+    signal?.throwIfAborted();
+    if (target.type === 'guild' || target.type === 'dm') {
+        const body = new FormData();
+        const mime = detectImageMime(buffer);
+        body.append('file_image', new Blob([new Uint8Array(buffer)], { type: mime ?? 'application/octet-stream' }), `image.${mime?.slice(6) ?? 'bin'}`);
+        if (target.messageId) body.append('msg_id', target.messageId);
+        const endpoint = target.type === 'dm'
+            ? `/dms/${target.guildId}/messages` : `/channels/${target.channelId}/messages`;
+        return apiRequest(accessToken, 'POST', endpoint, body, undefined, signal);
+    }
+    const peer = target.type === 'group' ? `groups/${target.groupOpenid}` : `users/${target.senderId}`;
+    const uploaded = await apiRequestWithRetry(accessToken, 'POST', `/v2/${peer}/files`, {
+        file_type: MediaFileType.IMAGE, file_data: buffer.toString('base64'), srv_send_msg: false,
+    }, undefined, signal);
+    if (!uploaded.file_info) throw new Error('QQ image upload returned no file_info');
+    signal?.throwIfAborted();
+    return sendAndNotify(accessToken, 'POST', `/v2/${peer}/messages`, {
+        msg_type: 7,
+        media: { file_info: uploaded.file_info },
+        msg_seq: target.messageId ? getNextMsgSeq(target.messageId) : 1,
+        ...(target.messageId ? { msg_id: target.messageId } : {}),
+    }, { mediaType: 'image' }, signal);
+}
+
 export async function sendC2CImageMessage(accessToken, openid, imageUrl, msgId, content, localPath) {
     let uploadResult;
     const isBase64 = imageUrl.startsWith("data:");

@@ -1,4 +1,5 @@
 import type { PersistedMessageBlock, PersistedToolResultBlock } from '../../../../../shared/types';
+import { imagePaths } from '../../../../../shared/tool-images';
 
 /** Renderer media accepted by console Cells; Base64 is deliberately not a member. */
 export type CellMedia =
@@ -12,11 +13,10 @@ export function extractCellMedia(
   blocks: readonly PersistedImageCarrier[] | string,
 ): readonly CellMedia[] | undefined {
   if (!Array.isArray(blocks)) return undefined;
-  const images = blocks
-    .filter((block) => block.type === 'image_ref')
-    .map<CellMedia>((block) => ({
+  const images = imagePaths(blocks)
+    .map<CellMedia>((path) => ({
       kind: 'file',
-      path: block.path,
+      path,
     }));
   return images.length > 0 ? images : undefined;
 }

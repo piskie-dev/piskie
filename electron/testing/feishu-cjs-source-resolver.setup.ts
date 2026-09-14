@@ -32,10 +32,16 @@ if (!nodeModule[STATE_KEY]) {
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'piskie-feishu-compat-'));
   const compiledModules = new Set<string>();
 
-  for (const file of fs.readdirSync(sourceDirectory)) {
+  const sources = [
+    ...fs.readdirSync(sourceDirectory).map((file) => path.join(sourceDirectory, file)),
+    path.join(sourceDirectory, '../media-io.ts'),
+    path.join(sourceDirectory, '../inbound-media.ts'),
+  ];
+  for (const sourcePath of sources) {
+    const file = path.basename(sourcePath);
     if (!file.endsWith('.ts')) continue;
     const moduleName = file.slice(0, -'.ts'.length);
-    const source = fs.readFileSync(path.join(sourceDirectory, file), 'utf8');
+    const source = fs.readFileSync(sourcePath, 'utf8');
     const { code } = transformSync(source, {
       loader: 'ts',
       format: 'cjs',
@@ -52,7 +58,7 @@ if (!nodeModule[STATE_KEY]) {
     parent?: { filename?: string },
     ...rest: unknown[]
   ): string {
-    const match = /[\\/]core[\\/]openclaw-compat[\\/]([\w-]+)\.js$/.exec(request);
+    const match = /[\\/]core[\\/](?:openclaw-compat[\\/])?([\w-]+)\.js$/.exec(request);
     const fromFeishuVendor = parent?.filename?.includes(
       `${path.sep}channels${path.sep}feishu${path.sep}vendor${path.sep}`,
     );

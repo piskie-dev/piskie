@@ -29,6 +29,7 @@ export interface DossierFormValues {
   forwardAssistantText: boolean;
   forwardToolCalls: boolean;
   forwardToolResults: boolean;
+  forwardToolImages: boolean;
 }
 
 export interface FuseContext {
@@ -66,6 +67,7 @@ export function fuseBotRecord(
       forwardAssistantText: form.forwardAssistantText,
       forwardToolCalls: form.forwardToolCalls,
       forwardToolResults: form.forwardToolResults,
+      forwardToolImages: form.forwardToolImages,
     },
   };
 

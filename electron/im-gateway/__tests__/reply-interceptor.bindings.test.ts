@@ -195,58 +195,6 @@ describe('ReplyInterceptor bindings 收口', () => {
     expect(d2.sendBlockReply).toHaveBeenCalledWith({ text: 'alive' });
   });
 
-  it('binding 删除后 lateSink 条件替换返回 false，不复活 binding', () => {
-    const d = fakeDispatcher();
-    interceptor.setDispatcher('a1', 'bot-1', d, FULL_FORWARD);
-    interceptor.removeBinding('a1');
-
-    const sink = fakeDispatcher();
-    expect(interceptor.replaceDispatcherIfCurrent('a1', 'bot-1', d, sink, FULL_FORWARD)).toBe(false);
-    interceptor.processStateEvent('a1', { type: 'assistant_text', content: 'x' });
-    expect(sink.sendBlockReply).not.toHaveBeenCalled();
-    expect(d.sendBlockReply).not.toHaveBeenCalled();
-  });
-
-  it('M2 已替换 M1 dispatcher 后，M1 迟到的 lateSink 替换 no-op；M2 自己的替换成功', () => {
-    const m1 = fakeDispatcher();
-    interceptor.setDispatcher('a1', 'bot-1', m1, FULL_FORWARD);
-    const m2 = fakeDispatcher();
-    interceptor.setDispatcher('a1', 'bot-1', m2, FULL_FORWARD);
-
-    const m1Sink = fakeDispatcher();
-    expect(interceptor.replaceDispatcherIfCurrent('a1', 'bot-1', m1, m1Sink, FULL_FORWARD)).toBe(false);
-
-    const m2Sink = fakeDispatcher();
-    expect(interceptor.replaceDispatcherIfCurrent('a1', 'bot-1', m2, m2Sink, FULL_FORWARD)).toBe(true);
-    interceptor.processStateEvent('a1', { type: 'assistant_text', content: 'via-sink' });
-    expect(m2Sink.sendBlockReply).toHaveBeenCalledWith({ text: 'via-sink' });
-    expect(m1Sink.sendBlockReply).not.toHaveBeenCalled();
-    expect(m2.sendBlockReply).not.toHaveBeenCalled();
-  });
-
-  it('变体：replaceDispatcherIfCurrent 原位替换保留等待中的 waiter', async () => {
-    const d = fakeDispatcher();
-    interceptor.setDispatcher('a1', 'bot-1', d, FULL_FORWARD);
-    const w = probe(interceptor.waitForNextYield('a1'));
-
-    const sink = fakeDispatcher();
-    expect(interceptor.replaceDispatcherIfCurrent('a1', 'bot-1', d, sink, FULL_FORWARD)).toBe(true);
-
-    interceptor.processStateEvent('a1', { type: 'turn_end' });
-    await flush();
-    expect(w).toEqual({ settled: true, outcome: 'yield' });
-    expect(sink.sendFinalReply).toHaveBeenCalledWith({ text: '' });
-  });
-
-  it('replaceDispatcherIfCurrent 未传 config 时重置为默认配置，不沿用旧配置', () => {
-    const d = fakeDispatcher();
-    interceptor.setDispatcher('a1', 'bot-1', d, FULL_FORWARD);
-    const sink = fakeDispatcher();
-    expect(interceptor.replaceDispatcherIfCurrent('a1', 'bot-1', d, sink)).toBe(true);
-
-    interceptor.processStateEvent('a1', { type: 'tool_start', toolName: 'ask_user' });
-    expect(sink.sendToolResult).not.toHaveBeenCalled(); // 默认 forwardToolCalls=false
-  });
 
   it('waiter 超时不删 binding：超时后 turn_end 内容仍走原 dispatcher', async () => {
     const d = fakeDispatcher();

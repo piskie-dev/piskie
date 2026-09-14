@@ -9,8 +9,8 @@
  * - deliver 失败计入 failedCounts、onError 回调、链继续
  *
  * 四渠道 start()/abort 时序记录（代码核读，供第 5 步 barrier 修正对照）：
- * - feishu: setRuntime→register→setLateSink→monitorFeishuProvider(abortSignal)，
- *   finally: setLateSink(null)+unregister+clearCache 后 settle
+ * - feishu: setRuntime→register→monitorFeishuProvider(abortSignal)，
+ *   finally: unregister+clearCache 后 settle
  * - qqbot: setRuntime→register→resolveAccount→startGateway(abortSignal)，
  *   finally: unregister 后 settle（vendor 内部 runDiagnostics 在启动 await 期间）
  * - weixin: startAccount({abortSignal})（vendor getUpdates 长轮询），finally: unregister
@@ -76,7 +76,32 @@ describe('createDeliveryQueue — 帧序与计数', () => {
 });
 
 describe('createDeliveryQueue — markComplete ≠ dispose', () => {
-  it('markComplete 后迟到帧仍可 enqueue 并投递（feishu lateSink 依赖该语义）', async () => {
+  it('only notifies idle after all late images finish, across repeated batches', async () => {
+    const onIdle = vi.fn();
+    const second = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    const queue = createDeliveryQueue({
+      deliver: async ({ text }) => {
+        if (text === 'second') { started.resolve(); await second.promise; }
+      },
+      onIdle,
+    });
+    queue.markComplete();
+    await queue.waitForIdle();
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    queue.sendToolResult({ text: 'first' });
+    queue.sendToolResult({ text: 'second' });
+    await started.promise;
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    second.resolve();
+    await queue.waitForIdle();
+    expect(onIdle).toHaveBeenCalledTimes(2);
+    queue.sendToolResult({ text: 'third' });
+    await queue.waitForIdle();
+    expect(onIdle).toHaveBeenCalledTimes(3);
+  });
+
+  it('markComplete 后迟到帧仍可 enqueue 并投递', async () => {
     const { delivered, deliver } = collectDeliver();
     const queue = createDeliveryQueue({ deliver });
 
@@ -102,6 +127,29 @@ describe('createDeliveryQueue — markComplete ≠ dispose', () => {
 });
 
 describe('createDeliveryQueue — onReplyStart 与错误处理', () => {
+  it('waits for async error notification and work enqueued while draining', async () => {
+    const order: string[] = [];
+    const failed = Promise.withResolvers<void>();
+    const acknowledged = Promise.withResolvers<void>();
+    const queue = createDeliveryQueue({
+      deliver: async ({ text }) => {
+        if (text === 'fail') { await failed.promise; throw new Error('upload rejected'); }
+        order.push(text!);
+      },
+      onError: async () => { await acknowledged.promise; order.push('error delivered'); },
+    });
+    queue.sendToolResult({ text: 'fail' });
+    queue.markComplete();
+    const idle = queue.waitForIdle().then(() => order.push('idle'));
+    queue.sendToolResult({ text: 'late image' });
+    failed.resolve();
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    acknowledged.resolve();
+    await idle;
+    expect(order).toEqual(['error delivered', 'late image', 'idle']);
+  });
+
   it('onReplyStart 首帧前恰好一次', async () => {
     const order: string[] = [];
     const queue = createDeliveryQueue({

@@ -45,6 +45,7 @@ export interface IMReplyForwardConfig {
   forwardAssistantText: boolean;  // default: true
   forwardToolCalls: boolean;      // default: false
   forwardToolResults: boolean;    // default: false
+  forwardToolImages?: boolean;    // default: true
   toolFilter?: {
     mode: 'include' | 'exclude';
     tools: string[];

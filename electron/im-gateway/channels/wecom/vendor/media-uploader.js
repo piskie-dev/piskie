@@ -227,12 +227,16 @@ function mimeToExtension(mime) {
  * 媒体消息统一走 aibot_send_msg 主动发送，避免多文件场景下 reqId 只能用一次的问题。
  * channel.ts 的 sendMedia 和 monitor.ts 的 deliver 回调都使用此函数。
  */
-async function uploadAndSendMedia(options) {
+async function uploadAndSendMedia(options, imageBuffer, signal) {
     const { wsClient, mediaUrl, chatId, mediaLocalRoots, log, errorLog } = options;
     try {
         // 1. 加载媒体文件
-        log?.(`[wecom] Uploading media: url=${mediaUrl}`);
-        const media = await resolveMediaFile(mediaUrl, mediaLocalRoots);
+        log?.(`[wecom] Loading outbound media`);
+        signal?.throwIfAborted();
+        const imageType = imageBuffer ? await detectMime(imageBuffer) : undefined;
+        const media = imageBuffer
+            ? { buffer: imageBuffer, contentType: imageType, fileName: extractFileName(mediaUrl, undefined, imageType) }
+            : await resolveMediaFile(mediaUrl, mediaLocalRoots);
         // 2. 检测企微媒体类型
         const detectedType = detectWeComMediaType(media.contentType);
         // 3. 文件大小检查与降级策略
@@ -247,11 +251,13 @@ async function uploadAndSendMedia(options) {
             };
         }
         const finalType = sizeCheck.finalType;
+        log?.(`[wecom] Uploading media: type=${finalType}, bytes=${media.buffer.length}`);
         // 4. 分片上传获取 media_id
         const uploadResult = await wsClient.uploadMedia(media.buffer, {
             type: finalType,
             filename: media.fileName,
         });
+        signal?.throwIfAborted();
         log?.(`[wecom] Media uploaded: media_id=${uploadResult.media_id}, type=${finalType}`);
         // 5. 统一通过 aibot_send_msg 主动发送媒体消息
         const result = await wsClient.sendMediaMessage(chatId, finalType, uploadResult.media_id);
@@ -267,7 +273,7 @@ async function uploadAndSendMedia(options) {
     }
     catch (err) {
         const errMsg = String(err);
-        errorLog?.(`[wecom] Failed to upload/send media: url=${mediaUrl}, error=${errMsg}`);
+        errorLog?.(`[wecom] Failed to upload/send media: error=${errMsg}`);
         return {
             ok: false,
             error: errMsg,

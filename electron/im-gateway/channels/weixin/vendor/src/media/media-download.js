@@ -3,7 +3,7 @@ import { getMimeFromFilename } from "./mime.js";
 import { downloadAndDecryptBuffer, downloadPlainCdnBuffer, } from "../cdn/pic-decrypt.js";
 import { silkToWav } from "./silk-transcode.js";
 import { MessageItemType } from "../api/types.js";
-const WEIXIN_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+import { MAX_IM_IMAGE_BYTES as WEIXIN_MEDIA_MAX_BYTES } from "../../../../../core/inbound-media.js";
 /**
  * Download and decrypt media from a single MessageItem.
  * Returns the populated WeixinInboundMediaOpts fields; empty object on unsupported type or failure.
@@ -14,11 +14,11 @@ export async function downloadMediaFromItem(item, deps) {
     if (item.type === MessageItemType.IMAGE) {
         const img = item.image_item;
         if (!img?.media?.encrypt_query_param && !img?.media?.full_url)
-            return result;
+            return { decryptedPicPath: `download-failed://${label}-image` };
         const aesKeyBase64 = img.aeskey
             ? Buffer.from(img.aeskey, "hex").toString("base64")
             : img.media.aes_key;
-        logger.debug(`${label} image: encrypt_query_param=${(img.media.encrypt_query_param ?? "").slice(0, 40)}... hasAesKey=${Boolean(aesKeyBase64)} aeskeySource=${img.aeskey ? "image_item.aeskey" : "media.aes_key"} full_url=${Boolean(img.media.full_url)}`);
+        logger.debug(`${label} image: hasAesKey=${Boolean(aesKeyBase64)} full_url=${Boolean(img.media.full_url)}`);
         try {
             const buf = aesKeyBase64
                 ? await downloadAndDecryptBuffer(img.media.encrypt_query_param ?? "", aesKeyBase64, cdnBaseUrl, `${label} image`, img.media.full_url, deps.abortSignal)

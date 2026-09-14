@@ -90,7 +90,7 @@ export interface DispatchCallbacks {
   onReplyStart?: () => void | Promise<void>;
   /** agent 内容帧回调，框架保证按序串行调用 */
   deliver: (payload: DeliverPayload, info: { kind: DeliverKind }) => Promise<void>;
-  onError?: (err: unknown, info: { kind: DeliverKind }) => void;
+  onError?: (err: unknown, info: { kind: DeliverKind }) => void | Promise<void>;
 }
 
 export type DispatchCounts = { block: number; tool: number; final: number };
@@ -187,8 +187,6 @@ export interface ConnectorContext {
    * （如 feishu 的流式卡片 dispatcher）时使用；出站对象统一为 ReplyDispatcher。
    */
   dispatchWithQueue(msg: InboundMessage, dispatcher: ReplyDispatcher): Promise<DispatchResult>;
-  /** 注册/清除迟到帧兜底投递（见 LateSink 说明），connector.start 内调用 */
-  setLateSink(sink: LateSink | null): void;
   /** 连接器状态摘要上报（仅日志/诊断，不参与生命周期） */
   setStatus(patch: Record<string, unknown>): void;
 }
@@ -211,14 +209,6 @@ export interface ChannelConnector {
   loginWithQrCancel?(opts: { accountId: string }): Promise<QrLoginCancelResult>;
   logoutAccount?(opts: { accountId: string }): Promise<LogoutResult>;
 }
-
-/**
- * 迟到帧兜底投递：PISKIE agent 是多回合工作模型（应答→工具→数分钟后才出最终答案），
- * 而部分渠道（feishu 流式卡片）的 dispatcher 在进站分发窗口关闭后丢弃迟到帧。
- * 渠道经 ctx.setLateSink 注册兜底后，框架会在分发完成时把该 agent 的投递器切换为
- * 主动发送（新进站消息到达时自动换回渠道 dispatcher）。
- */
-export type LateSink = (payload: DeliverPayload, peer: InboundPeer) => Promise<void>;
 
 /** 连接器工厂：每次 startBot 创建新实例（连接状态不跨启动复用） */
 export type ConnectorFactory = (bot: MessagingConnectionConfig) => ChannelConnector;

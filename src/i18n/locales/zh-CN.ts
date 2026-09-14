@@ -2086,6 +2086,8 @@ export default {
     forwardToolCallsHelp: '微信渠道会显示原生执行进度，并自动发送必要的完成状态；其他渠道继续显示文本。',
     includeToolResults: '附带工具结果',
     forwardToolResultsHelp: '控制是否额外发送最多 500 字的结果正文，不影响微信原生完成状态。',
+    forwardToolImages: '发送工具图片',
+    forwardToolImagesHelp: '自动发送工具读取的图片和已确认的生成图片。',
 
     // 授权管理
     approvedSenders: '已放行用户',

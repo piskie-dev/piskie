@@ -54,7 +54,11 @@ async function dispatchNormalMessage(dc, ctxPayload, chatHistories, historyKey, 
         await (0, dispatch_commands_1.dispatchSystemCommand)(dc, ctxPayload, false, replyToMessageId);
         return;
     }
+    const abortController = new AbortController();
+    const abortSignal = dc.runtime.abortSignal
+        ? AbortSignal.any([dc.runtime.abortSignal, abortController.signal]) : abortController.signal;
     const { dispatcher, replyOptions, markDispatchIdle, markFullyComplete, abortCard } = (0, reply_dispatcher_1.createFeishuReplyDispatcher)({
+        abortSignal,
         cfg: dc.accountScopedCfg,
         agentId: dc.route.agentId,
         sessionKey: dc.threadSessionKey ?? dc.route.sessionKey,
@@ -67,7 +71,6 @@ async function dispatchNormalMessage(dc, ctxPayload, chatHistories, historyKey, 
     });
     // Create an AbortController so the abort fast-path can cancel the
     // underlying LLM request (not just the streaming card UI).
-    const abortController = new AbortController();
     // Register the active dispatcher so the monitor abort fast-path can
     // terminate the streaming card before this task completes.
     const queueKey = (0, chat_queue_1.buildQueueKey)(dc.account.accountId, dc.ctx.chatId, dc.ctx.threadId);
@@ -82,7 +85,7 @@ async function dispatchNormalMessage(dc, ctxPayload, chatHistories, historyKey, 
             dispatcher,
             replyOptions: {
                 ...replyOptions,
-                abortSignal: abortController.signal,
+                abortSignal,
                 ...(skillFilter ? { skillFilter } : {}),
             },
         });
