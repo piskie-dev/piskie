@@ -296,6 +296,7 @@ interface MsgEntryBase {
 }
 
 export interface UserMessageMetadata {
+  userInput?: import('./user-input.js').UserMessageInput;
   skills?: string[];
   skillLoadErrors?: Array<{ name: string; error: string }>;
 }
@@ -317,6 +318,8 @@ export type MsgEntry = UserMsgEntry | AssistantMsgEntry;
 
 export interface ToolEntry {
   t: 'tool';
+  /** Original input when a user answer settles this tool call. */
+  metadata?: Pick<UserMessageMetadata, 'userInput'>;
   ts: number;
   toolUseId: string;
   result: PersistedToolResultBlock[];

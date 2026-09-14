@@ -129,6 +129,13 @@
   overflow-wrap: anywhere;
 }
 
+.userFiles {
+  display: flex;
+  justify-content: flex-end;
+  min-inline-size: 0;
+  margin-block-start: 6px;
+}
+
 .userMedia {
   display: flex;
   flex-wrap: wrap;

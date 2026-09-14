@@ -7,13 +7,13 @@
  * 计划批准是工作流决定，不修改工具审批模式。
  */
 
-import { memo, useCallback, useRef, useState, type ClipboardEvent } from 'react';
+import { memo, useCallback, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { ClipboardList, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTimeSeconds } from '../../../../hooks/useTimeSeconds';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 
-import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
+import { useAttachmentDraft } from '../../attachments';
 import type { GateCommonProps, GateRequest } from './contract';
 import { GateAttachments, GateFeedback, GateHeader, GateOption } from './parts';
 import styles from './gates.module.css';
@@ -62,6 +62,12 @@ export const PlanGate = memo<PlanGateProps>(
       attachments.handlePaste(event);
     }, [attachments, cancelCountdown, disabled]);
 
+    const dropFeedback = useCallback((event: DragEvent) => {
+      if (disabled) return;
+      void cancelCountdown();
+      attachments.handleDrop(event);
+    }, [attachments, cancelCountdown, disabled]);
+
     const canSubmit = (feedback.trim().length > 0 || attachments.hasAttachments) && !actionsDisabled;
 
     const deny = useCallback(async () => {
@@ -70,7 +76,8 @@ export const PlanGate = memo<PlanGateProps>(
       const ok = await attachments.withImages(async (images, files) => onDecide({
         kind: 'deny',
         callId: call.id,
-        feedback: composeAttachmentText(feedback, files, Boolean(images?.length)),
+        feedback,
+        files,
         images,
       }));
       if (ok) attachments.clear();
@@ -133,6 +140,8 @@ export const PlanGate = memo<PlanGateProps>(
             onChange={changeFeedback}
             onSubmit={deny}
             onPaste={pasteFeedback}
+            onDragOver={attachments.handleDragOver}
+            onDrop={dropFeedback}
             placeholder={t('sessionWorkbenchUi.gate.planFeedbackPlaceholder')}
             canSubmit={canSubmit}
             disabled={disabled}

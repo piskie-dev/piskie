@@ -7,6 +7,7 @@ import type {
   ConversationEntry,
   AgentInputEvent,
   ToolApprovalDecision,
+  UserFileRef,
 } from '../types/index.js';
 import type { ReasoningSelection } from '../types/reasoning.js';
 import type { ContextSnapshot } from '../types/token.js';
@@ -77,6 +78,7 @@ interface AgentImageRegenerateInput {
   nodeId: string;
   imageIds: string[];
   instruction: string;
+  files?: UserFileRef[];
   target?: { providerId: string; modelId: string };
   images?: Array<{ data: string; media_type: string }>;
 }

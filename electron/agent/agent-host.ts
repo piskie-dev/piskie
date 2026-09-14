@@ -4,7 +4,7 @@
  * 只暴露 Module/Role 真正需要的方法。
  */
 
-import type { ApprovalMode, MessageSubtype } from '../../shared/types/index.js';
+import type { ApprovalMode, MessageSubtype, UserMessageInput } from '../../shared/types/index.js';
 import type {
   AgentControlState,
   AgentRunHeader,
@@ -24,8 +24,7 @@ import type { ConversationStore } from '../agent-runs/conversation-store.js';
 import type { ReasoningSelection } from '../../shared/types/reasoning.js';
 import type { McpCapabilitySnapshot } from '../mcp/runtime/capability.js';
 
-export interface AgentUserInput {
-  readonly text: string;
+export interface AgentUserInput extends UserMessageInput {
   readonly subtype?: MessageSubtype;
   readonly images?: readonly { data: string; media_type: string }[];
   readonly skills?: readonly string[];

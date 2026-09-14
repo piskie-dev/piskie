@@ -49,6 +49,7 @@ export interface AgentRunRepository {
   refresh(): Promise<void>;
   applyConversation(event: ConversationAppendEvent): void;
   markRead(agentId: string, throughIndex: number): Promise<void>;
+  rename(agentId: string, name: string): Promise<void>;
   loadPreview(agentId: string): Promise<AgentControlSnapshot | null>;
   clearPreview(agentId?: string): void;
   delete(agentId: string): Promise<void>;
@@ -74,11 +75,16 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
   const previewState = createStore<AgentRunPreviewSnapshot>(() => INITIAL_PREVIEW);
   let listRequest = 0;
   let previewRequest = 0;
+  let mutationRequest = 0;
+  let renameRevision = 0;
+  const renameRequests = new Map<string, number>();
+  const renamedTitles = new Map<string, { readonly name: string; readonly revision: number }>();
   let accepting = true;
 
   const refresh = async (): Promise<void> => {
     if (!accepting) return;
     const request = ++listRequest;
+    const titleRevision = renameRevision;
     const current = listState.getState();
     listState.setState({
       ...current,
@@ -88,14 +94,22 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
     try {
       const runs = await client.list();
       if (!accepting || request !== listRequest) return;
+      const latest = listState.getState();
       listState.setState({
         phase: 'ready',
         runs: runs.map((run) => {
-          const previous = listState.getState().runs.find((item) => item.agentId === run.agentId);
-          return { ...run, messages: mergeMessageState(previous?.messages, run.messages) };
+          const previous = latest.runs.find((item) => item.agentId === run.agentId);
+          const renamed = renamedTitles.get(run.agentId);
+          return {
+            ...run,
+            ...(renamed && renamed.revision > titleRevision
+              ? { runConfig: { ...run.runConfig, name: renamed.name } }
+              : {}),
+            messages: mergeMessageState(previous?.messages, run.messages),
+          };
         }),
         error: null,
-        revision: current.revision + 1,
+        revision: latest.revision + 1,
       }, true);
     } catch (error) {
       if (!accepting || request !== listRequest) return;
@@ -155,13 +169,17 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
           }, true);
           return null;
         }
+        const run = listState.getState().runs.find((item) => item.agentId === agentId);
+        const currentSnapshot = run
+          ? { ...snapshot, runConfig: { ...snapshot.runConfig, name: run.runConfig.name } }
+          : snapshot;
         previewState.setState({
           phase: 'ready',
           agentId,
-          state: snapshot,
+          state: currentSnapshot,
           error: null,
         }, true);
-        return snapshot;
+        return currentSnapshot;
       } catch (error) {
         if (accepting && request === previewRequest) {
           previewState.setState({
@@ -175,9 +193,43 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       }
     },
     clearPreview,
+    async rename(agentId, name) {
+      if (!accepting) throw new Error('AgentRunRepository is closed');
+      const request = ++mutationRequest;
+      renameRequests.set(agentId, request);
+      const renamed = await client.rename(agentId, name);
+      if (!accepting || renameRequests.get(agentId) !== request) return;
+
+      renameRequests.delete(agentId);
+      renamedTitles.set(agentId, { name: renamed.runConfig.name, revision: ++renameRevision });
+      const current = listState.getState();
+      const previous = current.runs.find((run) => run.agentId === agentId);
+      const canonical = {
+        ...renamed,
+        messages: mergeMessageState(previous?.messages, renamed.messages),
+      };
+      listState.setState({
+        ...current,
+        phase: current.phase === 'refreshing' ? 'ready' : current.phase,
+        runs: current.runs.map((run) => run.agentId === agentId ? canonical : run),
+        revision: current.revision + 1,
+      }, true);
+
+      const preview = previewState.getState();
+      if (preview.phase === 'ready' && preview.agentId === agentId) {
+        previewState.setState({
+          ...preview,
+          state: {
+            ...preview.state,
+            runConfig: { ...preview.state.runConfig, name: renamed.runConfig.name },
+          },
+        }, true);
+      }
+    },
     async delete(agentId) {
       if (!accepting) throw new Error('AgentRunRepository is closed');
       await client.delete(agentId);
+      renamedTitles.delete(agentId);
       onDeleted?.(agentId);
       clearPreview(agentId);
       await refresh();
@@ -187,6 +239,8 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       accepting = false;
       listRequest += 1;
       previewRequest += 1;
+      renameRequests.clear();
+      renamedTitles.clear();
       listState.setState(INITIAL_LIST, true);
       previewState.setState(INITIAL_PREVIEW, true);
     },

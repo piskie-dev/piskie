@@ -8,6 +8,7 @@
 
 import { useCallback } from 'react';
 
+import type { UserFileRef } from '../../../../shared/types/user-input';
 import type { StartAgentRequest } from '../../../../shared/electron-contracts/agents';
 import type { TaskDefinitionSnapshot } from '../../../../shared/electron-contracts/task-definitions';
 import { useRendererRuntime } from '../../../renderer-runtime/hooks';
@@ -23,6 +24,7 @@ export type StartOutcome =
 
 export interface QuickChatOptions extends Partial<ComposerDraftSettings> {
   readonly skills?: readonly string[];
+  readonly files?: readonly UserFileRef[];
   readonly images?: readonly { data: string; media_type: string }[];
   readonly mcpPrewarmToken?: string;
 }
@@ -60,14 +62,13 @@ export function useAgentStart(onStarted: (agentId: string) => void): AgentStart 
 
   const startQuickChat = useCallback(
     async (text: string, options?: QuickChatOptions): Promise<StartOutcome> => {
-      const message = text.trim();
-      if (!message && !options?.skills?.length && !options?.images?.length) {
+      if (!text.trim() && !options?.files?.length && !options?.skills?.length && !options?.images?.length) {
         return { kind: 'failed', reason: 'empty-content' };
       }
 
       return startRequest({
         modeId: options?.modeId ?? 'normal',
-        input: message,
+        input: text,
         skills: options?.skills?.length ? [...options.skills] : undefined,
         workspace: options?.workspace,
         approvalMode: options?.approvalMode ?? useComposerDraftStore.getState().defaults.approvalMode,
@@ -76,6 +77,7 @@ export function useAgentStart(onStarted: (agentId: string) => void): AgentStart 
           initialModel: options?.model,
           mcpPrewarmToken: options?.mcpPrewarmToken,
           images: options?.images ? [...options.images] : undefined,
+          files: options?.files?.length ? [...options.files] : undefined,
         },
       });
     },

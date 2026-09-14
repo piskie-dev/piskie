@@ -8,6 +8,8 @@ import type {
   StandardTaskBindings,
 } from './task-bindings.js';
 import type { AIRequestInfo } from './context.js';
+import type { UserFileRef } from './user-input.js';
+export type { UserFileRef, UserMessageInput } from './user-input.js';
 import type { AIErrorType } from '../constants/index.js';
 export type { AgentRunBindings, StandardTaskBindings } from './task-bindings.js';
 export type {
@@ -320,6 +322,7 @@ export interface ToolApprovalDecision {
   reason?: string;
   /** 用户反馈内容（传给 AI，用于调整后续行为） */
   feedback?: string;
+  files?: UserFileRef[];
   /** 统一工具门的 allow 决策可同时把当前 Agent 切换到 Auto。 */
   changeToAuto?: boolean;
   /** 附带的图片（base64） */
@@ -376,6 +379,7 @@ export interface AgentLaunchOptions {
   initialModel?: string;
   /** Welcome composer 独占 MCP runtime 的一次性接管 token；不持久化。 */
   mcpPrewarmToken?: string;
+  files?: UserFileRef[];
   /** First-turn images are launch payload, not persisted task-definition fields. */
   images?: Array<{ data: string; media_type: string }>;
 }
@@ -633,6 +637,8 @@ export interface AgentInputEvent {
   source: AgentInputSource;
   /** 事件内容（用户消息或结构化数据） */
   content: string | Record<string, unknown>;
+  /** Local attachments accompanying the original message text. */
+  files?: UserFileRef[];
   /** 本条用户消息显式选择的技能名称。 */
   skills?: string[];
   /** 可选的优先级提示（AI 参考，不强制） */

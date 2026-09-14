@@ -53,6 +53,22 @@ function harness() {
 }
 
 describe('AgentModeCatalog', () => {
+  it.each(['normal', 'plan', 'browser-skill'] as const)('derives %s titles from raw text or filenames and forwards attachments', async (modeId) => {
+    const { agent, catalog } = harness();
+    const files = [{ name: 'sample.zip', path: '/workspace/sample.zip' }];
+    await catalog.start({ modeId, input: '', launchOptions: { files } });
+    expect(agent.startAgent).toHaveBeenLastCalledWith(expect.objectContaining({
+      runConfig: { name: 'sample.zip', description: 'sample.zip', promptTemplate: '' },
+      launchOptions: { files },
+    }));
+    const input = '  Inspect the sample\nKeep this line.  ';
+    await catalog.start({ modeId, input, launchOptions: { files } });
+    expect(agent.startAgent).toHaveBeenLastCalledWith(expect.objectContaining({
+      runConfig: { name: 'Inspect the sample', description: input.trim(), promptTemplate: input },
+      launchOptions: { files },
+    }));
+  });
+
   it('publishes all top-level modes and filters them by AgentSpec', () => {
     const { catalog } = harness();
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { acquireFilePreview, releaseFilePreview, retainFilePreviews } from '../file-preview';
+import { acquireFilePreview, releaseFilePreview, retainFilePreviews } from '@/services/file-preview';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('ordinary preview leases', () => {

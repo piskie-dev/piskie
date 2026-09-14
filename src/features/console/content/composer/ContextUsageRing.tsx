@@ -18,7 +18,6 @@ export interface ContextUsageRingProps {
   readonly usage?: ContextUsage;
   readonly agentId: string;
   readonly sourceVersion: number;
-  readonly viewerEnabled?: boolean;
 }
 
 function formatTokens(value: number | undefined, locale: string): string {
@@ -33,7 +32,7 @@ function levelOf(percentage: number | undefined): 'normal' | 'warning' | 'critic
 }
 
 export const ContextUsageRing = memo<ContextUsageRingProps>(
-  ({ usage, agentId, sourceVersion, viewerEnabled = false }) => {
+  ({ usage, agentId, sourceVersion }) => {
     const { t, i18n } = useTranslation();
     const locale = i18n.resolvedLanguage ?? i18n.language;
     const percentage = usage?.percentage;
@@ -62,25 +61,15 @@ export const ContextUsageRing = memo<ContextUsageRingProps>(
     );
 
     return (
-      <>
-        {viewerEnabled ? (
-          <InteractiveContextMeter
-            key={agentId}
-            agentId={agentId}
-            sourceVersion={sourceVersion}
-            tooltip={tooltip}
-            inspectAria={t('contextUi.meter.inspectAria', { usage: tooltip })}
-          >
-            {content}
-          </InteractiveContextMeter>
-        ) : (
-          <Tooltip title={tooltip} enterDelay={100}>
-            <span className={styles.contextButton} aria-label={tooltip}>
-              {content}
-            </span>
-          </Tooltip>
-        )}
-      </>
+      <InteractiveContextMeter
+        key={agentId}
+        agentId={agentId}
+        sourceVersion={sourceVersion}
+        tooltip={tooltip}
+        inspectAria={t('contextUi.meter.inspectAria', { usage: tooltip })}
+      >
+        {content}
+      </InteractiveContextMeter>
     );
   },
 );

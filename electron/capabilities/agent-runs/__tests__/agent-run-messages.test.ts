@@ -17,19 +17,28 @@ function setup() {
   const store = new ConversationStore(root);
   const header: AgentRunHeader = {
     agentId: 'sample-main', agentSpec: 'director', modeId: 'normal',
-    runConfig: { name: 'Example', description: 'Example', promptTemplate: '' },
+    runConfig: {
+      name: 'Original title',
+      description: 'Original task description',
+      promptTemplate: 'Original task prompt',
+    },
     createdAt: '2025-01-01T00:00:00Z', lastActiveAt: '2025-01-01T00:00:00Z',
     currentModel: 'example/model', approvalMode: 'auto', childAgents: [],
   };
   store.writeHeader(header.agentId, header);
-  const application = new AgentRunApplication({ agent: { getConversationStore: () => store } } as never);
+  const application = new AgentRunApplication({
+    agent: {
+      getConversationStore: () => store,
+      renameAgentRun: async (agentId: string, name: string) => store.updateHeaderName(agentId, name),
+    },
+  } as never);
   const operations = createAgentRunController(application);
   const request = vi.fn(async (id: string, input: unknown[]) => {
     const operation = operations.find((item) => item.id === id)!;
     return operation.execute({} as never, operation.input.parse(input));
   });
-  const client = createElectronPiskieClient({ transport: { request } as unknown as ElectronPreloadClient, version: 'example', platform: 'linux' });
-  return { store, client, request, operations };
+  const client = createElectronPiskieClient({ getPathForFile: vi.fn(), transport: { request } as unknown as ElectronPreloadClient, version: 'example', platform: 'linux' });
+  return { root, store, application, client, request, operations };
 }
 
 describe('AgentRun message desktop boundary', () => {
@@ -50,6 +59,45 @@ describe('AgentRun message desktop boundary', () => {
     const schema = operations.find((operation) => operation.id === 'agent-runs.markRead')!.input;
     expect(schema.safeParse(['sample-main', 0]).success).toBe(true);
     for (const input of [['sample-main', -1], ['sample-main', 0.5], ['sample-main', 0, true]]) {
+      expect(schema.safeParse(input).success).toBe(false);
+    }
+  });
+
+  it('renames only the durable title through the client, controller, and application boundary', async () => {
+    const { root, store, application, client, request, operations } = setup();
+    const writeHeader = vi.spyOn(store, 'writeHeader');
+
+    const renamed = await client.agentRuns.rename('sample-main', '  Revised title  ');
+
+    expect(request).toHaveBeenLastCalledWith(
+      'agent-runs.rename',
+      ['sample-main', '  Revised title  '],
+    );
+    expect(renamed.runConfig).toMatchObject({
+      name: 'Revised title',
+      description: 'Original task description',
+      promptTemplate: 'Original task prompt',
+    });
+    expect(writeHeader).toHaveBeenCalledOnce();
+    expect(new ConversationStore(root).readHeader('sample-main')?.runConfig).toMatchObject({
+      name: 'Revised title',
+      description: 'Original task description',
+      promptTemplate: 'Original task prompt',
+    });
+
+    await expect(application.rename('sample-main', '   ')).rejects.toThrow(
+      'AgentRun title cannot be empty',
+    );
+    await expect(client.agentRuns.rename('missing-main', 'Available title')).rejects.toThrow(
+      'AgentRun was not found',
+    );
+
+    const schema = operations.find((operation) => operation.id === 'agent-runs.rename')!.input;
+    expect(schema.safeParse(['sample-main', 'Available title']).success).toBe(true);
+    for (const input of [
+      ['sample-main', '   '],
+      ['sample-main', 'Available title', true],
+    ]) {
       expect(schema.safeParse(input).success).toBe(false);
     }
   });

@@ -28,6 +28,8 @@ import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Musi
 import { useTranslation } from 'react-i18next';
 
 import { LinkedMarkdown, type SourceBlockProps } from '@/components/content-links';
+import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
+import { localPathDirectory } from '@/utils/localPath';
 import { collapseContext, type DiffLine } from '../data/diffLines';
 import { grammarForPath, tokenize, MAX_HIGHLIGHT_LINES, type Token } from './diff/highlight';
 import { basename, type FileChange, type ReadOp } from '../data/review';
@@ -248,16 +250,22 @@ const TextPreview = memo<{
   readonly path: string;
   readonly content: string;
   readonly startLine: number;
-}>(({ path, content, startLine }) => {
+  readonly onPreviewImage?: ImagePreviewHandler;
+}>(({ path, content, startLine, onPreviewImage }) => {
   const markdown = grammarForPath(path) === 'markdown';
   const digits = String(startLine + content.split('\n').length - 1).length;
   return (
     <div
       className={markdown ? `${styles.markdown} markdown-dark-theme` : styles.textPreview}
+      data-image-preview-scope
       style={{ '--review-line-width': `calc(${markdown ? digits * 2 + 1 : digits}ch + 20px)` } as React.CSSProperties}
     >
       {markdown ? (
-        <LinkedMarkdown sourceBlocks={{ startLine, component: ReadBlock }}>{content}</LinkedMarkdown>
+        <LinkedMarkdown
+          sourceBlocks={{ startLine, component: ReadBlock }}
+          baseDirectory={localPathDirectory(path)}
+          onPreviewImage={onPreviewImage}
+        >{content}</LinkedMarkdown>
       ) : (
         <ReadCode path={path} content={content} startLine={startLine} />
       )}
@@ -271,7 +279,8 @@ const ReadView = memo<{
   readonly op: ReadOp;
   readonly onOpenPath: (path: string) => void;
   readonly onRevealPath: (path: string) => void;
-}>(({ op, onOpenPath, onRevealPath }) => {
+  readonly onPreviewImage?: ImagePreviewHandler;
+}>(({ op, onOpenPath, onRevealPath, onPreviewImage }) => {
   const { t } = useTranslation();
   if (op.content === undefined) {
     // 图片/二进制不在这里预览：read 图片的缩略图由流水里的工具行直接展示，
@@ -288,7 +297,7 @@ const ReadView = memo<{
     );
   }
 
-  return <TextPreview path={op.path} content={op.content} startLine={op.startLine ?? 1} />;
+  return <TextPreview path={op.path} content={op.content} startLine={op.startLine ?? 1} onPreviewImage={onPreviewImage} />;
 });
 
 ReadView.displayName = 'ReadView';
@@ -307,12 +316,13 @@ export interface ReviewPanelProps {
   readonly read: ReadOp | null;
   /** 正文里的本地路径 ⇒ 当前磁盘内容 / 文件卡 */
   readonly preview: PathPreview | null;
+  readonly onPreviewImage?: ImagePreviewHandler;
   readonly onOpenPath: (path: string) => void;
   readonly onRevealPath: (path: string) => void;
 }
 
 export const ReviewPanel = memo<ReviewPanelProps>(
-  ({ change, read, preview, onOpenPath, onRevealPath }) => {
+  ({ change, read, preview, onOpenPath, onRevealPath, onPreviewImage }) => {
     const { t } = useTranslation();
     /** write/edit 的复制源:本次 diff 的文本形态(+/-/空格前缀,不含行号) */
     const diffText = useMemo(() => {
@@ -354,7 +364,7 @@ export const ReviewPanel = memo<ReviewPanelProps>(
                 {descriptor.truncated && (
                   <div className={styles.notice}>{t('sessionWorkbenchUi.review.truncatedPreview')}</div>
                 )}
-                <TextPreview path={path} content={descriptor.content} startLine={1} />
+                <TextPreview path={path} content={descriptor.content} startLine={1} onPreviewImage={onPreviewImage} />
               </>
             )}
           </div>
@@ -377,7 +387,7 @@ export const ReviewPanel = memo<ReviewPanelProps>(
             />
           </div>
           <div className={styles.scroll}>
-            <ReadView op={read} onOpenPath={onOpenPath} onRevealPath={onRevealPath} />
+            <ReadView op={read} onOpenPath={onOpenPath} onRevealPath={onRevealPath} onPreviewImage={onPreviewImage} />
           </div>
         </div>
       );

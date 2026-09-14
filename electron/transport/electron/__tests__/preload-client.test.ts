@@ -63,7 +63,7 @@ function frames<T extends { kind?: string }>(messages: unknown[], kind: string):
 describe('ElectronPreloadClient', () => {
   it('keeps QR login waiting beyond the regular 30-second request deadline', async () => {
     const { client: transport, host, messages } = await connect();
-    const client = createElectronPiskieClient({ transport, version: 'test', platform: 'darwin' });
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(), transport, version: 'test', platform: 'darwin' });
     vi.useFakeTimers();
     try {
       const result = client.messaging.waitForQrLogin('bot-1', 'openclaw-weixin');

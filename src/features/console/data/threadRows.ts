@@ -51,7 +51,7 @@ export function buildThreadRows(input: {
     merged.set(key, {
       key,
       agentId: session.agentId,
-      label: session.description?.trim() || session.title,
+      label: session.title,
       workspace: session.workspace,
       lastActiveAt: session.createdAt,
       live: session,
@@ -66,7 +66,7 @@ export function buildThreadRows(input: {
     if (existing) {
       merged.set(key, {
         ...existing,
-        label: row.taskDescription,
+        label: row.title,
         workspace: existing.workspace ?? row.workspace,
         lastActiveAt:
           timeOf(row.lastActiveAt) > timeOf(existing.lastActiveAt) ? row.lastActiveAt : existing.lastActiveAt,
@@ -79,7 +79,7 @@ export function buildThreadRows(input: {
     merged.set(key, {
       key,
       agentId: row.agentId,
-      label: row.taskDescription,
+      label: row.title,
       workspace: row.workspace,
       lastActiveAt: row.lastActiveAt,
       messages: row.messages,

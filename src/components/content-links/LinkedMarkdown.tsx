@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { ContentLink, LinkedText } from './ContentLinks';
+import { MarkdownImage, MarkdownImageProvider, type MarkdownImageOptions } from './MarkdownImage';
 import {
   scanContentTargets,
   targetFromHref,
@@ -53,6 +54,11 @@ function renderDetectedTargets(text: string): string {
 
 const linkedMarkdownConfig: NonNullable<XMarkdownProps['config']> = {
   renderer: {
+    image(token) {
+      const titleAttribute = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+      // Preserve local destinations through HTML sanitization; MarkdownImage resolves the actual src.
+      return `<img data-image-src="${escapeHtml(token.href)}" alt="${escapeHtml(token.text)}"${titleAttribute}>`;
+    },
     link(token) {
       explicitLinkDepth += 1;
       try {
@@ -128,6 +134,7 @@ function MarkdownCode(props: ComponentProps) {
 
 const linkedMarkdownComponents: NonNullable<XMarkdownProps['components']> = {
   a: MarkdownAnchor,
+  img: MarkdownImage,
   code: MarkdownCode,
   [TARGET_TAG]: MarkdownDetectedTarget,
 };
@@ -138,7 +145,7 @@ export interface SourceBlockProps {
   readonly children: ReactNode;
 }
 
-export type LinkedMarkdownProps = Omit<XMarkdownProps, 'components' | 'config'> & {
+export type LinkedMarkdownProps = Omit<XMarkdownProps, 'components' | 'config'> & MarkdownImageOptions & {
   readonly sourceBlocks?: {
     readonly startLine: number;
     readonly component: ComponentType<SourceBlockProps>;
@@ -146,7 +153,10 @@ export type LinkedMarkdownProps = Omit<XMarkdownProps, 'components' | 'config'> 
 };
 
 /** XMarkdown with full-text URL/path detection and the shared activation behavior. */
-export function LinkedMarkdown({ escapeRawHtml = true, sourceBlocks, ...props }: LinkedMarkdownProps) {
+export function LinkedMarkdown({
+  escapeRawHtml = true, sourceBlocks, baseDirectory, onPreviewImage, ...props
+}: LinkedMarkdownProps) {
+  const imageOptions = useMemo(() => ({ baseDirectory, onPreviewImage }), [baseDirectory, onPreviewImage]);
   const startLine = sourceBlocks?.startLine;
   const SourceBlock = sourceBlocks?.component;
   const config = useMemo(() => startLine === undefined ? linkedMarkdownConfig : {
@@ -164,11 +174,13 @@ export function LinkedMarkdown({ escapeRawHtml = true, sourceBlocks, ...props }:
     },
   }, [SourceBlock]);
   return (
-    <XMarkdown
-      {...props}
-      escapeRawHtml={escapeRawHtml}
-      components={components}
-      config={config}
-    />
+    <MarkdownImageProvider options={imageOptions}>
+      <XMarkdown
+        {...props}
+        escapeRawHtml={escapeRawHtml}
+        components={components}
+        config={config}
+      />
+    </MarkdownImageProvider>
   );
 }

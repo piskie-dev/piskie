@@ -280,7 +280,7 @@ export function buildToolNode(input: BuildToolNodeInput): ToolNode {
   const view: ToolDetailInput = {
     tool: input.tool,
     params: input.params,
-    result: carriesResult ? unpacked?.result : undefined,
+    result: carriesResult ? (input.entry?.metadata?.userInput?.text ?? unpacked?.result) : undefined,
     state,
     questionAnswers: carriesResult ? questionContribution?.items : undefined,
     mcpAudio: carriesResult && audioContributions && audioContributions.length > 0
@@ -331,6 +331,7 @@ export function buildToolNode(input: BuildToolNodeInput): ToolNode {
     badge: toolBadge(state),
     state,
     media: unpacked?.media,
+    files: input.entry?.metadata?.userInput?.files,
     actions: resolveActions(input.toolUseId, state),
     generatedImages: extractGeneratedImages(input.tool, state, unpacked?.text),
     interaction,

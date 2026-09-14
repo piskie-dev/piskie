@@ -88,6 +88,7 @@ function makeHost(engine: ImageLoopEngine): AgentHost {
     currentTarget: { providerId: 'ai-main', modelId: 'chat-main' },
     emitStateChange: () => {},
     getInference: () => inference,
+    addUserMessage: vi.fn(),
   } as unknown as AgentHost;
 }
 

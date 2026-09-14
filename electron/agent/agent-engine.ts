@@ -1043,7 +1043,7 @@ export abstract class AgentEngine {
       return true;
     }
 
-    if (decision.feedback && decision.decision === 'deny') {
+    if (decision.decision === 'deny' && (decision.feedback || decision.files?.length || decision.images?.length)) {
       item.resolve(decision);
       this.pendingApprovals.delete(decision.callId);
 
@@ -1051,9 +1051,10 @@ export abstract class AgentEngine {
         id: `feedback-${decision.callId}`,
         timestamp: new Date(),
         source: 'user',
-        content: decision.feedback,
+        content: decision.feedback ?? '',
         priority: 'high',
         images: decision.images,
+        files: decision.files,
       });
 
       this.refreshPendingApprovals();

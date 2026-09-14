@@ -8,6 +8,7 @@ import type { ImageNodePublicState } from '../../../../../shared/types';
 import type { InferenceConfig } from '../../../../../shared/types/inference';
 import { useInferenceStore } from '../../../../store/inferenceStore';
 import { ImageReview } from '../ImageReview';
+import { useComposerDraftStore } from '../../data/composer-drafts';
 
 const node: ImageNodePublicState = {
   id: 'image-node-1',
@@ -21,6 +22,9 @@ let dom: JSDOM;
 let container: HTMLDivElement;
 let root: Root;
 let approve: ReturnType<typeof vi.fn>;
+const regenerate = vi.fn();
+const getPathForFile = vi.fn();
+const clipboardAttachments = vi.fn();
 
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -37,9 +41,14 @@ beforeAll(() => {
 
 beforeEach(() => {
   approve = vi.fn(async () => undefined);
+  regenerate.mockReset().mockResolvedValue(undefined);
+  getPathForFile.mockReset().mockReturnValue('/sample/example.pdf');
+  clipboardAttachments.mockReset().mockResolvedValue([{ kind: 'file', name: 'example.pdf', path: '/sample/example.pdf', size: 6 }]);
   Object.defineProperty(dom.window, 'piskie', {
     configurable: true,
-    value: { agents: { images: { approve } } },
+    value: { agents: { images: { approve, regenerate } }, desktop: {
+      files: { getPathForFile }, system: { clipboardAttachments },
+    } },
   });
   useInferenceStore.setState({
     config: { providers: {} } as InferenceConfig,
@@ -75,6 +84,32 @@ async function confirm(target: { agentId: string; workerId?: string }): Promise<
 }
 
 describe('ImageReview Runtime owner', () => {
+  it.each(['paste', 'drop'] as const)('includes an ordinary file added by %s in the revision instruction', async (kind) => {
+    const editable: ImageNodePublicState = { ...node, status: 'pending_approval', images: [{
+      id: 'sample-image', prompt: 'Sample illustration', outputPath: '/sample/illustration.png', version: 1, status: 'completed',
+    }] };
+    await act(async () => root.render(createElement(ImageReview, { target: { agentId: 'sample-agent' }, node: editable })));
+    const file = new dom.window.File(['Sample'], 'example.pdf', { type: 'application/pdf' });
+    const event = new Event(kind, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, kind === 'paste' ? 'clipboardData' : 'dataTransfer', { value: {
+      files: [file], items: [{ kind: 'file', type: file.type, getAsFile: () => file }], types: ['Files'], getData: () => '',
+    } });
+    await act(async () => container.querySelector('textarea')!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    const pending = Object.values(useComposerDraftStore.getState().drafts).flatMap((draft) =>
+      draft.attachments.images.flatMap((image) => image.status === 'capturing' ? [image.capture.done] : []));
+    await act(async () => { await Promise.all(pending); });
+    expect(container.textContent).toContain('example.pdf');
+    await act(async () => container.querySelector<HTMLElement>('[data-selectable="true"]')!.click());
+    const submit = container.querySelector<HTMLButtonElement>('button[data-variant="primary"]')!;
+    expect(submit.disabled).toBe(false);
+    await act(async () => submit.click());
+    expect(regenerate).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'sample-agent', instruction: '', imageIds: ['sample-image'],
+      files: [{ name: 'example.pdf', path: '/sample/example.pdf' }],
+    }));
+  });
+
   it('Worker 节点把动作提交给 Worker Runtime', async () => {
     await confirm({ agentId: 'main-1', workerId: 'worker-1' });
     expect(approve).toHaveBeenCalledWith('worker-1', 'image-node-1');

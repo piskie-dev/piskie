@@ -64,6 +64,8 @@ interface DesktopSystemClient {
 }
 
 interface DesktopFilesClient {
+  /** Resolves a DOM File in preload; returns an empty string for files without a disk backing. */
+  getPathForFile(file: File): string;
   preview(path: string): Promise<FilePreviewDescriptor>;
   releasePreview(url: string): Promise<void>;
   select(input?: { type?: 'file' | 'folder' | 'any' }): Promise<string[]>;

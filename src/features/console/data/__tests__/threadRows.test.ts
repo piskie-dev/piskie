@@ -53,32 +53,42 @@ describe('buildThreadRows', () => {
     expect(rows.map((row) => row.agentId).sort()).toEqual(['agent-1', 'agent-2']);
   });
 
-  it('磁盘文案和工作区覆盖同一运行的实时兜底值', () => {
+  it('uses the persisted editable title while preserving the original task description', () => {
     const rows = buildThreadRows({
-      sessions: [session({ agentId: 'agent-1', title: '模板名称' })],
+      sessions: [session({ agentId: 'agent-1', title: 'Transient title' })],
       history: [record({
         agentId: 'agent-1',
-        taskDescription: '抓一下竞品价格',
-        workspace: '/w/project',
+        title: 'Revised title',
+        taskDescription: 'Original task details',
+        workspace: '/sample/project',
       })],
     });
 
-    expect(rows[0]?.label).toBe('抓一下竞品价格');
-    expect(rows[0]?.workspace).toBe('/w/project');
+    expect(rows[0]?.label).toBe('Revised title');
+    expect(rows[0]?.history?.taskDescription).toBe('Original task details');
+    expect(rows[0]?.workspace).toBe('/sample/project');
   });
 
-  it('只有实时态时 description 优先于 title', () => {
-    const withDescription = buildThreadRows({
-      sessions: [session({ agentId: 'agent-1', title: '模板名称', description: '用户原话' })],
+  it('uses the editable title for both live-only and persisted-only rows', () => {
+    const liveOnly = buildThreadRows({
+      sessions: [session({
+        agentId: 'agent-1',
+        title: 'Live title',
+        description: 'Original task details',
+      })],
       history: [],
     });
-    const withoutDescription = buildThreadRows({
-      sessions: [session({ agentId: 'agent-2', title: '模板名称' })],
-      history: [],
+    const persistedOnly = buildThreadRows({
+      sessions: [],
+      history: [record({
+        agentId: 'agent-2',
+        title: 'History title',
+        taskDescription: 'Original history details',
+      })],
     });
 
-    expect(withDescription[0]?.label).toBe('用户原话');
-    expect(withoutDescription[0]?.label).toBe('模板名称');
+    expect(liveOnly[0]?.label).toBe('Live title');
+    expect(persistedOnly[0]?.label).toBe('History title');
   });
 
   it('lastActiveAt 取实时态和磁盘态中较新的时间', () => {

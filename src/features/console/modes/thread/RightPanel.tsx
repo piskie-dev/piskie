@@ -14,6 +14,7 @@
  */
 
 import React, { memo, useCallback, useMemo } from 'react';
+import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { FileDiff, Globe, Monitor, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -66,6 +67,7 @@ export interface RightPanelProps {
   readonly onPick: (panel: PanelKey) => void;
   /** 用户明确打开的文件操作或正文路径；只决定审阅内容，不锁死选中页。 */
   readonly reviewTarget?: FileReviewTarget;
+  readonly onPreviewImage?: ImagePreviewHandler;
   readonly browserState: EmbeddedBrowserState;
   readonly browserTarget: AgentTarget;
   readonly topRailActions?: React.ReactNode;
@@ -80,6 +82,7 @@ export const RightPanel = memo<RightPanelProps>(
     wanted,
     onPick,
     reviewTarget,
+    onPreviewImage,
     browserState,
     browserTarget,
     topRailActions,
@@ -162,6 +165,7 @@ export const RightPanel = memo<RightPanelProps>(
                 agentId={agentId}
                 workerId={worker?.id}
                 target={reviewTarget}
+                onPreviewImage={onPreviewImage}
               />
             </div>
           ) : (

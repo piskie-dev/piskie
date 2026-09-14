@@ -11,7 +11,7 @@ import { memo, useCallback, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
+import { useAttachmentDraft } from '../../attachments';
 import type { GateCommonProps, GateRequest } from './contract';
 import { GateAttachments, GateFeedback, GateHeader, GateOption } from './parts';
 import styles from './gates.module.css';
@@ -39,7 +39,8 @@ export const DiffGate = memo<DiffGateProps>(
       const ok = await attachments.withImages(async (images, files) => onDecide({
         kind: 'deny',
         callId: call.id,
-        feedback: composeAttachmentText(feedback, files, Boolean(images?.length)),
+        feedback,
+        files,
         images,
       }));
       if (ok) attachments.clear();
@@ -101,6 +102,8 @@ export const DiffGate = memo<DiffGateProps>(
             onChange={setFeedback}
             onSubmit={deny}
             onPaste={attachments.handlePaste}
+            onDragOver={attachments.handleDragOver}
+            onDrop={attachments.handleDrop}
             placeholder={t('sessionWorkbenchUi.gate.alternativePlaceholder')}
             canSubmit={canSubmit}
             disabled={disabled}

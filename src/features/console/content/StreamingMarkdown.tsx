@@ -1,6 +1,7 @@
 import { memo } from 'react';
 
 import { LinkedMarkdown } from '@/components/content-links';
+import type { MarkdownImageOptions } from '@/components/content-links/MarkdownImage';
 
 const LIVE_STREAMING = Object.freeze({
   hasNextChunk: true,
@@ -8,11 +9,13 @@ const LIVE_STREAMING = Object.freeze({
   tail: false,
 });
 
-export const StreamingMarkdown = memo<{
+export const StreamingMarkdown = memo<MarkdownImageOptions & {
   markdown: string;
   live: boolean;
-}>(({ markdown, live }) => (
+}>(({ markdown, live, baseDirectory, onPreviewImage }) => (
   <LinkedMarkdown
+    baseDirectory={baseDirectory}
+    onPreviewImage={onPreviewImage}
     streaming={live ? LIVE_STREAMING : undefined}
   >
     {markdown}

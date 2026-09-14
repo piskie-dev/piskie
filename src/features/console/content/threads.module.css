@@ -434,3 +434,87 @@
   background: var(--surface-2);
   color: var(--cyber-text);
 }
+
+/* ── 重命名对话框 ── */
+
+.renameForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  inline-size: min(360px, calc(92vw - 32px));
+}
+
+.renameField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+}
+
+.renameInput {
+  min-inline-size: 0;
+  block-size: 34px;
+  padding-inline: 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  outline: none;
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.renameInput:focus {
+  border-color: color-mix(in srgb, var(--cyber-primary) 55%, transparent);
+}
+
+.renameInput[aria-invalid='true'] {
+  border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+}
+
+.renameInput:disabled,
+.renameButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.renameError {
+  margin: -4px 0 0;
+  color: var(--status-error);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.renameActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.renameButton {
+  min-block-size: 30px;
+  padding-inline: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.renameButton:not(:disabled):hover {
+  background: var(--surface-2);
+}
+
+.renameButton:focus-visible {
+  outline: 1px solid var(--line-3);
+  outline-offset: 1px;
+}
+
+.renamePrimary {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, var(--line-2));
+  background: color-mix(in srgb, var(--cyber-primary) 16%, var(--surface-1));
+}

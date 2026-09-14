@@ -4,6 +4,8 @@ import type { ControllerContext, OperationDefinition } from '../catalog.js';
 import { args, identifier, nonNegativeInteger } from '../validation.js';
 import type { AgentRunApplication } from './agent-run-application.js';
 
+const runTitle = z.string().trim().min(1);
+
 export function createAgentRunController(
   application: AgentRunApplication,
 ): readonly OperationDefinition[] {
@@ -11,6 +13,9 @@ export function createAgentRunController(
     operation(AGENT_RUN_OPERATIONS.list, args([]), () => application.list()),
     operation(AGENT_RUN_OPERATIONS.state, args([identifier]), ([agentId]) => (
       application.state(agentId)
+    )),
+    operation(AGENT_RUN_OPERATIONS.rename, args([identifier, runTitle]), ([agentId, name]) => (
+      application.rename(agentId, name)
     )),
     operation(AGENT_RUN_OPERATIONS.markRead, args([identifier, nonNegativeInteger]), ([agentId, throughIndex]) => (
       application.markRead(agentId, throughIndex)

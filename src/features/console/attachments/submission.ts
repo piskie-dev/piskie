@@ -1,20 +1,5 @@
-import type { AttachmentFile, ImagePayload } from './model';
+import type { ImagePayload } from './model';
 import { messageText, PresentationError } from '../../../i18n/presentationText';
-
-export function composeAttachmentText(
-  text: string,
-  files: readonly Pick<AttachmentFile, 'path'>[],
-  hasImages = false,
-): string {
-  const message = text.trim();
-  if (files.length === 0) {
-    // i18n-ignore -- model attachment protocol marker
-    return message || (hasImages ? '(图片)' : '');
-  }
-  const references = files.map((file) => `- ${file.path}`).join('\n');
-  // i18n-ignore -- model attachment protocol marker
-  return `${message ? `${message}\n\n` : ''}附件文件（使用 read 读取）:\n${references}`;
-}
 
 export function blobToImagePayload(blob: Blob, mediaType: string, signal?: AbortSignal): Promise<ImagePayload> {
   return new Promise((resolve, reject) => {

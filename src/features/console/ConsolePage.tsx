@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
-import logo128 from '/logo-128.png';
+import logo128 from '/logo-on-dark-128.png';
 import type { TaskDefinitionSnapshot } from '../../../shared/electron-contracts/task-definitions';
 import { TaskDefinitionModal } from '../../components/task-definition/TaskDefinitionModal';
 import ImageLightbox from './content/ImageLightbox';
@@ -39,7 +39,6 @@ import { ErrorBar } from './chrome/ErrorBar';
 import { ModeSwitch } from './chrome/ModeSwitch';
 import { EmptyState } from './content/EmptyState';
 import { WelcomeInput } from './content/composer/WelcomeInput';
-import { useDevelopmentFeatures } from './data/useDevelopmentFeatures';
 import { TaskDefinitionLauncher } from './shell/TaskDefinitionLauncher';
 import { useConsoleKeyboard } from './shell/useConsoleKeyboard';
 import { useConsoleShell } from './shell/useConsoleShell';
@@ -55,7 +54,6 @@ const ConsoleShellView: React.FC = () => {
   const welcomeVersion = useComposerDraftVersion(WELCOME_DRAFT_KEY);
   const hasActiveSession = shell.selectedAgentId !== null;
   const renderedMode = hasActiveSession ? shell.mode : 'thread';
-  const devMode = useDevelopmentFeatures();
   const runtime = useRendererRuntime();
   const taskDefinitions = useTaskDefinitionRepository((store) => store.definitions);
   const taskDefinitionsReady = useTaskDefinitionRepository((store) => store.phase === 'ready');
@@ -246,7 +244,6 @@ const ConsoleShellView: React.FC = () => {
     renderTaskLauncher,
     onNewSession: shell.newSession,
     onNewSessionIn: shell.newSessionIn,
-    devMode,
     // 收起态两模式共用同一份状态：展开 240 / 收起 52，切模式时左栏宽度不变
     sessionsCollapsed: shell.sessionsCollapsed,
     onToggleSessions: shell.toggleSessions,

@@ -19,6 +19,7 @@ const preview = vi.fn(async (sourcePath: string) => ({
   size: 1,
 }));
 const releasePreview = vi.fn(async (_url: string) => undefined);
+const openPath = vi.fn(async (_path: string) => undefined);
 
 let root: Root;
 let container: HTMLDivElement;
@@ -38,9 +39,10 @@ beforeEach(async () => {
   expose('IS_REACT_ACT_ENVIRONMENT', true);
   preview.mockClear();
   releasePreview.mockClear();
+  openPath.mockReset();
   Object.defineProperty(window, 'piskie', {
     configurable: true,
-    value: { desktop: { files: { preview, releasePreview }, system: { platform: 'linux' } } },
+    value: { desktop: { files: { preview, releasePreview }, system: { platform: 'linux', openPath } } },
   });
   ({ ThreadCell } = await import('../ThreadCell'));
   container = document.createElement('div');
@@ -56,6 +58,66 @@ afterEach(async () => {
 });
 
 describe('ThreadCell canonical image refs', () => {
+  it.each(['', '  Inspect the sample\nwith its original spacing.  '])('renders file chips beside images and preserves body %j', async (text) => {
+    const files = [{ name: 'A long sample attachment name with spaces.zip', path: '/workspace/sample/archive.zip' }] as const;
+    const [cell] = projectConversationNodes([{
+      t: 'msg', role: 'user', subtype: 'user_input', id: 'sample-attachments', ts: 1,
+      metadata: { userInput: { text, files } },
+      content: [
+        { type: 'text', text: `${text}\n\nAttached model paths: ${files[0].path}` },
+        { type: 'image_ref', path: '/workspace/sample/image.png', size: 1, mediaType: 'image/png' },
+      ],
+    }]);
+    if (!cell) throw new Error('Expected a sample message');
+    const onPreviewImage = vi.fn();
+    await act(async () => root.render(createElement(ThreadCell, { cell, onPreviewImage })));
+    expect(container.textContent).toBe(`${text}${files[0].name}`);
+    const chip = container.querySelector<HTMLButtonElement>('button[title="/workspace/sample/archive.zip"]')!;
+    expect(chip.type).toBe('button');
+    expect(chip.tabIndex).toBe(0);
+    expect(chip.textContent).toBe(files[0].name);
+    await act(async () => chip.click());
+    expect(openPath).toHaveBeenCalledExactlyOnceWith(files[0].path);
+    container.querySelector('img')!.click();
+    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image.png', expect.any(Array), 0);
+  });
+
+  it('keeps a paired question file visible and opens it with the same file action', async () => {
+    const files = [{ name: 'sample.csv', path: '/workspace/sample.csv' }];
+    const cells = projectConversationNodes([
+      { t: 'msg', role: 'assistant', id: 'sample-question', ts: 1, content: [{
+        type: 'tool_use', id: 'sample-call', name: 'ask_user', input: { questions: [{ question: 'Sample choice?' }] },
+      }] },
+      { t: 'tool', toolUseId: 'sample-call', ts: 2, ok: true, metadata: { userInput: { text: 'Sample answer', files } },
+        result: [{ type: 'text', text: 'Sample answer\n\nModel path: /workspace/sample.csv' }],
+        artifacts: [{ kind: 'ask_user_answers', payload: { answers: ['Sample answer'] } }],
+      },
+    ]);
+    const cell = cells.find((node) => node.kind === 'tool')!;
+    await act(async () => root.render(createElement(ThreadCell, { cell })));
+    const chip = container.querySelector<HTMLButtonElement>('button[title="/workspace/sample.csv"]')!;
+    expect(chip.textContent).toBe('sample.csv');
+    expect(container.textContent).not.toContain('/workspace/sample.csv');
+    await act(async () => chip.click());
+    expect(openPath).toHaveBeenCalledWith('/workspace/sample.csv');
+  });
+
+  it('delegates repeated file clicks to the desktop while keeping the attachment message stable', async () => {
+    const [cell] = projectConversationNodes([{
+      t: 'msg', role: 'user', subtype: 'user_input', id: 'sample-file', ts: 1, content: 'Model path',
+      metadata: { userInput: { text: '', files: [{ name: 'sample.bin', path: '/workspace/sample.bin' }] } },
+    }]);
+    if (!cell) throw new Error('Expected a sample message');
+    openPath.mockRejectedValueOnce(new Error('Sample file unavailable'));
+    await act(async () => root.render(createElement(ThreadCell, { cell })));
+    const chip = container.querySelector<HTMLButtonElement>('button')!;
+    await act(async () => chip.click());
+    expect(container.textContent).toBe('sample.bin');
+    await act(async () => chip.click());
+    expect(openPath.mock.calls).toEqual([['/workspace/sample.bin'], ['/workspace/sample.bin']]);
+    expect(container.textContent).toBe('sample.bin');
+  });
+
   it.each(['browser', 'parent'])('preserves %s event images in the expandable message body', async (source) => {
     const entries: ConversationEntry[] = [{
       t: 'msg', ts: 1, id: 'sample-automatic-image', role: 'user', subtype: 'system_event',
@@ -67,6 +129,7 @@ describe('ThreadCell canonical image refs', () => {
     const [cell] = projectConversationNodes(entries);
     if (!cell) throw new Error('Expected an automatic message');
     expect(cell.interaction).toBe('expand');
+    if (!cell) throw new Error('Expected a sample message');
     const onPreviewImage = vi.fn();
     await act(async () => root.render(createElement(ThreadCell, { cell, onPreviewImage })));
     expect(container.querySelector('img')).toBeNull();

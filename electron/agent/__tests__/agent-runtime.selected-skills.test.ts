@@ -144,7 +144,7 @@ describe('user-selected Skill runtime input', () => {
       { type: 'text', text: 'Sample task' },
     ]));
     const entry = userEntries(h.runtime.id)[0];
-    expect(entry.metadata).toEqual({ skills: ['sample-guide', 'sample-actions'] });
+    expect(entry.metadata).toEqual({ skills: ['sample-guide', 'sample-actions'], userInput: { text: 'Sample task' } });
     expect(entry.instructions).toContain(LOADED);
     expect(JSON.stringify(entry.content)).not.toContain(LOADED);
     expect(entry.subtype).toBe('system_task');

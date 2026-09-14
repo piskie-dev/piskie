@@ -9,6 +9,7 @@ import {
   type PiskieAccountUser,
 } from '../../shared/electron-contracts/account.js';
 import { PublicOperationError } from '../capabilities/public-errors.js';
+import { appLog } from '../observability/logging/app-log.js';
 import type {
   AccountCredential,
   AccountCredentialRecord,
@@ -48,6 +49,7 @@ const protocolErrorSchema = z.object({
 
 interface SignInFlow {
   readonly id: string;
+  readonly startedAt: number;
   readonly authorizationUrl: string;
   readonly codeVerifier: string;
   readonly expiresAt: number;
@@ -57,6 +59,39 @@ interface SignInFlow {
 }
 
 type FetchPort = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+type SignInStage =
+  | 'callback-listen'
+  | 'browser-open'
+  | 'callback-wait'
+  | 'token-exchange'
+  | 'userinfo'
+  | 'credential-save';
+
+type SignInFailureKind =
+  | 'listener-unavailable'
+  | 'invalid-redirect'
+  | 'browser-open-failed'
+  | 'callback-failed'
+  | 'authorization-failed'
+  | 'authorization-expired'
+  | 'http-error'
+  | 'invalid-response'
+  | 'network-error'
+  | 'request-timeout'
+  | 'credential-save-failed';
+
+interface RequestDiagnostics {
+  failureKind: SignInFailureKind;
+  requestPath?: string;
+  httpStatus?: number;
+  systemErrorCode?: string;
+}
+
+interface SignInDiagnostics extends RequestDiagnostics {
+  stage: SignInStage;
+  startedAt: number;
+}
 
 export class AccountApplication {
   private readonly baseUrl: URL;
@@ -123,6 +158,7 @@ export class AccountApplication {
     this.cancelAllFlows();
     if (signal?.aborted) throw abortError();
 
+    const attempt = { id: createUuid(), startedAt: this.now() };
     const state = this.randomSecret();
     const codeVerifier = this.randomSecret();
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
@@ -138,7 +174,14 @@ export class AccountApplication {
         expectedState: state,
         timeoutMs: AUTHORIZATION_LIFETIME_MS,
       });
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) {
+        this.logSignInFailure(attempt, {
+          stage: 'callback-listen',
+          startedAt: attempt.startedAt,
+          failureKind: 'listener-unavailable',
+        }, error);
+      }
       throw new PublicOperationError(
         'unavailable',
         'Piskie could not open a local OAuth callback port',
@@ -147,6 +190,13 @@ export class AccountApplication {
 
     if (!isAllowedLoopbackRedirect(listener.redirectUri)) {
       listener.close();
+      if (!signal?.aborted) {
+        this.logSignInFailure(attempt, {
+          stage: 'callback-listen',
+          startedAt: attempt.startedAt,
+          failureKind: 'invalid-redirect',
+        });
+      }
       throw new PublicOperationError(
         'unavailable',
         'Piskie received an invalid local OAuth callback address',
@@ -166,7 +216,7 @@ export class AccountApplication {
       state,
     }).toString();
     const flow: SignInFlow = {
-      id: createUuid(),
+      ...attempt,
       authorizationUrl: authorizationUrl.toString(),
       codeVerifier,
       expiresAt,
@@ -176,9 +226,17 @@ export class AccountApplication {
     };
     this.flows.set(flow.id, flow);
 
+    const browserStartedAt = this.now();
     try {
       await this.dependencies.openExternal(flow.authorizationUrl);
     } catch (error) {
+      if (!signal?.aborted && !flow.controller.signal.aborted) {
+        this.logSignInFailure(flow, {
+          stage: 'browser-open',
+          startedAt: browserStartedAt,
+          failureKind: 'browser-open-failed',
+        }, error);
+      }
       this.cancelSignIn(flow.id);
       throw error;
     }
@@ -198,20 +256,38 @@ export class AccountApplication {
     flow.waiting = true;
     const abort = (): void => flow.controller.abort(signal.reason);
     signal.addEventListener('abort', abort, { once: true });
+    let diagnostics: SignInDiagnostics = {
+      stage: 'callback-wait',
+      startedAt: this.now(),
+      failureKind: 'callback-failed',
+    };
+    let denied = false;
 
     try {
       const callback = await flow.listener.wait(flow.controller.signal);
       if ('error' in callback) {
         if (callback.error === 'access_denied') {
+          denied = true;
           throw new PublicOperationError('forbidden', 'The account sign-in was denied');
         }
-        if (callback.error === 'expired') throw signInExpired();
+        if (callback.error === 'expired') {
+          diagnostics.failureKind = 'authorization-expired';
+          throw signInExpired();
+        }
+        diagnostics.failureKind = callback.error === 'callback_failed'
+          ? 'callback-failed'
+          : 'authorization-failed';
         throw new PublicOperationError(
           'unavailable',
           callback.errorDescription ?? 'The OAuth authorization failed',
         );
       }
 
+      diagnostics = {
+        stage: 'token-exchange',
+        startedAt: this.now(),
+        failureKind: 'invalid-response',
+      };
       const exchange = await this.request('/api/auth/oauth2/token', {
         method: 'POST',
         form: {
@@ -222,7 +298,7 @@ export class AccountApplication {
           redirect_uri: flow.listener.redirectUri,
         },
         signal: flow.controller.signal,
-      });
+      }, diagnostics);
       if (!exchange.response.ok) throw serviceError(exchange.response.status);
 
       const token = tokenSchema.safeParse(exchange.body);
@@ -230,9 +306,19 @@ export class AccountApplication {
         throw invalidServiceResponse();
       }
 
-      const user = await this.userInfo(token.data.access_token, flow.controller.signal);
+      diagnostics = {
+        stage: 'userinfo',
+        startedAt: this.now(),
+        failureKind: 'invalid-response',
+      };
+      const user = await this.userInfo(token.data.access_token, flow.controller.signal, diagnostics);
       if (!user) throw invalidServiceResponse();
       const issuedAt = this.now();
+      diagnostics = {
+        stage: 'credential-save',
+        startedAt: issuedAt,
+        failureKind: 'credential-save-failed',
+      };
       const record = await this.dependencies.credentials.save({
         accessToken: token.data.access_token,
         accessTokenExpiresAt: issuedAt + token.data.expires_in * 1_000,
@@ -241,6 +327,11 @@ export class AccountApplication {
         user,
       });
       return signedIn(user, record.storage, 'verified');
+    } catch (error) {
+      if (!denied && !flow.controller.signal.aborted && !signal.aborted) {
+        this.logSignInFailure(flow, diagnostics, error);
+      }
+      throw error;
     } finally {
       signal.removeEventListener('abort', abort);
       this.flows.delete(flow.id);
@@ -250,7 +341,20 @@ export class AccountApplication {
   }
 
   async reopenSignIn(flowId: string): Promise<void> {
-    await this.dependencies.openExternal(this.requireFlow(flowId).authorizationUrl);
+    const flow = this.requireFlow(flowId);
+    const startedAt = this.now();
+    try {
+      await this.dependencies.openExternal(flow.authorizationUrl);
+    } catch (error) {
+      if (!flow.controller.signal.aborted) {
+        this.logSignInFailure(flow, {
+          stage: 'browser-open',
+          startedAt,
+          failureKind: 'browser-open-failed',
+        }, error);
+      }
+      throw error;
+    }
   }
 
   cancelSignIn(flowId: string): void {
@@ -290,12 +394,13 @@ export class AccountApplication {
   private async userInfo(
     accessToken: string,
     signal?: AbortSignal,
+    diagnostics?: RequestDiagnostics,
   ): Promise<PiskieAccountUser | null> {
     const exchange = await this.request('/api/auth/oauth2/userinfo', {
       method: 'GET',
       accessToken,
       signal,
-    });
+    }, diagnostics);
     if (!exchange.response.ok) {
       if ([401, 403].includes(exchange.response.status)) return null;
       throw serviceError(exchange.response.status);
@@ -378,7 +483,9 @@ export class AccountApplication {
       accessToken?: string;
       signal?: AbortSignal;
     },
+    diagnostics?: RequestDiagnostics,
   ): Promise<{ response: Response; body: unknown }> {
+    if (diagnostics) diagnostics.requestPath = pathname;
     if (options.signal?.aborted) throw abortError();
     const controller = new AbortController();
     let timedOut = false;
@@ -405,6 +512,10 @@ export class AccountApplication {
           signal: controller.signal,
         },
       );
+      if (diagnostics) {
+        diagnostics.httpStatus = response.status;
+        if (!response.ok) diagnostics.failureKind = 'http-error';
+      }
       const text = await response.text();
       if (text.length > MAX_RESPONSE_BYTES) throw invalidServiceResponse();
       let body: unknown = null;
@@ -417,8 +528,15 @@ export class AccountApplication {
       }
       return { response, body };
     } catch (error) {
-      if (error instanceof PublicOperationError) throw error;
+      if (error instanceof PublicOperationError) {
+        if (diagnostics) diagnostics.failureKind = 'invalid-response';
+        throw error;
+      }
       if (options.signal?.aborted) throw abortError();
+      if (diagnostics) {
+        diagnostics.failureKind = timedOut ? 'request-timeout' : 'network-error';
+        diagnostics.systemErrorCode = signInSystemErrorCode(error) ?? (timedOut ? undefined : 'unknown');
+      }
       if (timedOut) {
         throw new PublicOperationError('deadline-exceeded', 'The Piskie account service timed out', {
           retryable: true,
@@ -431,6 +549,30 @@ export class AccountApplication {
       clearTimeout(timeout);
       options.signal?.removeEventListener('abort', abort);
     }
+  }
+
+  private logSignInFailure(
+    attempt: Pick<SignInFlow, 'id' | 'startedAt'>,
+    diagnostics: SignInDiagnostics,
+    error?: unknown,
+  ): void {
+    const now = this.now();
+    const systemErrorCode = diagnostics.systemErrorCode ?? signInSystemErrorCode(error);
+    appLog.error({
+      event: 'account.sign_in.failed',
+      message: 'Account sign-in failed',
+      context: {
+        scope: 'account.sign_in',
+        flowId: attempt.id,
+        stage: diagnostics.stage,
+        durationMs: now - diagnostics.startedAt,
+        signInDurationMs: now - attempt.startedAt,
+        failureKind: diagnostics.failureKind,
+        ...(diagnostics.requestPath && { requestPath: diagnostics.requestPath }),
+        ...(diagnostics.httpStatus !== undefined && { httpStatus: diagnostics.httpStatus }),
+        ...(systemErrorCode && { systemErrorCode }),
+      },
+    });
   }
 
   private requireFlow(flowId: string): SignInFlow {
@@ -453,6 +595,36 @@ export class AccountApplication {
   private randomSecret(): string {
     return this.dependencies.randomSecret?.() ?? randomBytes(48).toString('base64url');
   }
+}
+
+// Only known platform/transport codes are selected; exception text and other fields stay out of logs.
+const SIGN_IN_SYSTEM_ERROR_CODES = new Set([
+  'EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'EDQUOT', 'ENOENT', 'ENOTDIR', 'EISDIR',
+  'EMFILE', 'ENFILE', 'EIO', 'EADDRINUSE', 'EADDRNOTAVAIL', 'EAFNOSUPPORT',
+  'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT',
+  'ENETUNREACH', 'EHOSTUNREACH', 'ENETDOWN', 'EPIPE',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET',
+  'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+function signInSystemErrorCode(error: unknown): string | undefined {
+  const candidates = [error];
+  if (error instanceof Error) candidates.push(error.cause);
+  // Node fetch can wrap per-address connection failures in an AggregateError cause.
+  for (const candidate of [...candidates]) {
+    if (candidate instanceof AggregateError) candidates.push(...candidate.errors);
+  }
+  for (const candidate of candidates) {
+    if (
+      candidate instanceof Error
+      && 'code' in candidate
+      && typeof candidate.code === 'string'
+      && SIGN_IN_SYSTEM_ERROR_CODES.has(candidate.code)
+    ) return candidate.code;
+  }
+  return undefined;
 }
 
 function signedIn(

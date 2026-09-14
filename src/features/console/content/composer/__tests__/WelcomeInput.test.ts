@@ -57,6 +57,8 @@ vi.mock('../../../data/session', () => ({
 }));
 
 const selectFolder = vi.fn();
+const getPathForFile = vi.fn();
+const clipboardAttachments = vi.fn();
 const revokeObjectURL = vi.fn();
 const onStart = vi.fn<WelcomeInputStart>();
 type WelcomeInputStart = React.ComponentProps<typeof WelcomeInput>['onStart'];
@@ -110,6 +112,7 @@ async function fillDraft(): Promise<void> {
       }],
       getData: () => '',
     },
+    currentTarget: document.createElement('textarea'),
     preventDefault: vi.fn(),
   } as unknown as React.ClipboardEvent));
   const image = composer().images[0]!;
@@ -146,6 +149,8 @@ beforeEach(async () => {
   useUIStore.setState({ consoleSelection: null, expandedWorkspaceGroups: [] });
   useComposerDraftStore.setState({ defaults: DEFAULT_COMPOSER_SETTINGS });
   selectFolder.mockReset().mockResolvedValue(['/tmp/sample-workspace']);
+  getPathForFile.mockReset().mockReturnValue('');
+  clipboardAttachments.mockReset();
   onStart.mockReset().mockResolvedValue({ kind: 'failed' });
   runtime.agentCommands.setApprovalMode.mockReset().mockResolvedValue({ ok: true });
   runtime.agentCommands.setSubagentApprovalMode.mockReset().mockResolvedValue({ ok: true });
@@ -154,7 +159,10 @@ beforeEach(async () => {
   Object.defineProperty(window, 'piskie', {
     configurable: true,
     value: {
-      desktop: { files: { select: selectFolder } },
+      desktop: {
+        files: { getPathForFile, select: selectFolder },
+        system: { clipboardAttachments, platform: 'linux' },
+      },
       capabilities: { mcp: { prewarm: vi.fn().mockResolvedValue(null) } },
     },
   });
@@ -422,6 +430,31 @@ describe('selected skill send boundaries', () => {
     expect(composer().skills).toEqual([]);
   });
 
+  it('starts attachment-only sessions and preserves original whitespace at the start boundary', async () => {
+    runtime.agentCommands.start.mockResolvedValue({ ok: true, value: 'sample-session' });
+    const files = [{ name: 'sample.csv', path: '/workspace/sample.csv' }];
+    for (const text of ['', '  Sample body\nSecond line.  ']) {
+      await act(async () => { await startRef.current!.startQuickChat(text, { files }); });
+      expect(runtime.agentCommands.start).toHaveBeenLastCalledWith(expect.objectContaining({
+        input: text, launchOptions: expect.objectContaining({ files }),
+      }));
+    }
+  });
+
+  it.each(['main', 'worker'] as const)('preserves structured files for %s approval and question feedback', async (kind) => {
+    const target = { agentId: 'sample-main', ...(kind === 'worker' ? { workerId: 'sample-worker' } : {}) };
+    const files = [{ name: 'sample.csv', path: '/workspace/sample.csv' }];
+    runtime.agentCommands.respondToApproval.mockResolvedValue({ ok: true });
+    await act(async () => { await actionsRef.current!.decide(target, { kind: 'deny', callId: 'sample-call', feedback: '', files }); });
+    expect(runtime.agentCommands.respondToApproval).toHaveBeenLastCalledWith('sample-main', target.workerId, expect.objectContaining({ feedback: '', files }));
+    const command = kind === 'worker' ? runtime.agentCommands.injectSubagent : runtime.agentCommands.inject;
+    command.mockResolvedValue({ ok: true });
+    await act(async () => { await actionsRef.current!.decide(target, { kind: 'answer', callId: 'sample-call', answer: 'Sample answer', answers: ['Sample answer'], files }); });
+    expect(command.mock.calls.at(-1)!.at(-1)).toMatchObject({
+      content: 'Sample answer', files, uiSubmission: { kind: 'ask_user_answer', answers: ['Sample answer'] },
+    });
+  });
+
   it.each(['main', 'worker'] as const)('preserves selected skills in the %s inject request alongside attachments', async (kind) => {
     const target = { agentId: 'session-example', ...(kind === 'worker' ? { workerId: 'worker-example' } : {}) };
     const command = kind === 'worker' ? runtime.agentCommands.injectSubagent : runtime.agentCommands.inject;
@@ -429,13 +462,17 @@ describe('selected skill send boundaries', () => {
     await act(async () => {
       await actionsRef.current!.send(target, {
         text: '', skills: ['sample-guide', 'sample-table'],
-        files: [{ name: 'sample.txt', path: '/workspace/sample.txt' }],
+        files: [{ name: 'sample.pdf', path: '/sample files/sample.pdf' }, { name: 'example.zip', path: '/sample files/example.zip' }],
         images: [{ data: 'c2FtcGxl', media_type: 'image/png' }],
       });
     });
     const event = command.mock.calls.at(-1)!.at(-1);
     expect(event).toMatchObject({ source: 'user', skills: ['sample-guide', 'sample-table'], images: [{ data: 'c2FtcGxl', media_type: 'image/png' }] });
-    expect(event.content).toContain('/workspace/sample.txt');
+    expect(event.content).toBe('');
+    expect(event.files).toEqual([
+      { name: 'sample.pdf', path: '/sample files/sample.pdf' },
+      { name: 'example.zip', path: '/sample files/example.zip' },
+    ]);
     await act(async () => { await actionsRef.current!.send(target, { text: '/sample-guide' }); });
     expect(command.mock.calls.at(-1)!.at(-1)).toMatchObject({ content: '/sample-guide', skills: undefined });
   });

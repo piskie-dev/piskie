@@ -10,17 +10,20 @@ const OVERSCAN = 5;
 export function ContextLedger({
   rows,
   selectedKey,
+  selectionRequest,
   timelineFocusKeys = null,
   onSelect,
 }: {
   readonly rows: readonly ContextLedgerRow[];
   readonly selectedKey: string | null;
+  readonly selectionRequest: number;
   readonly timelineFocusKeys?: ReadonlySet<string> | null;
   readonly onSelect: (row: ContextLedgerRow) => void;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const viewportRef = useRef<HTMLDivElement>(null);
+  const handledSelectionRequest = useRef<number>();
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
 
@@ -35,6 +38,9 @@ export function ContextLedger({
   }, []);
 
   useLayoutEffect(() => {
+    // Refreshing rows updates selection without requesting navigation.
+    if (handledSelectionRequest.current === selectionRequest) return;
+    handledSelectionRequest.current = selectionRequest;
     if (selectedKey === null) return;
     const index = rows.findIndex((row) => row.key === selectedKey);
     if (index < 0) return;
@@ -44,7 +50,7 @@ export function ContextLedger({
     const bottom = top + ROW_HEIGHT;
     if (top >= viewport.scrollTop && bottom <= viewport.scrollTop + viewport.clientHeight) return;
     scrollLedger(viewport, top - (viewport.clientHeight - ROW_HEIGHT) / 2);
-  }, [rows, selectedKey]);
+  }, [rows, selectedKey, selectionRequest]);
 
   useLayoutEffect(() => {
     if (timelineFocusKeys === null || timelineFocusKeys.size === 0) return;

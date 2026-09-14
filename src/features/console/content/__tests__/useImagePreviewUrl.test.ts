@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FilePreviewDescriptor } from '../../../../../shared/electron-contracts/desktop';
 import { deferred } from '../../attachments/__tests__/fixtures';
-import { useImagePreviewUrl } from '../useImagePreviewUrl';
+import { useImagePreviewUrl } from '@/hooks/useImagePreviewUrl';
 
 const preview = vi.fn();
 const releasePreview = vi.fn();
@@ -16,7 +16,7 @@ const image = (name: string): FilePreviewDescriptor => ({
   kind: 'image', url: `piskie-attachment://preview/${name}`, mediaType: 'image/png', size: 4,
 });
 function Probe({ sourcePath, version = 0 }: { sourcePath?: string; version?: number }) {
-  const url = useImagePreviewUrl(sourcePath, version);
+  const { url } = useImagePreviewUrl(sourcePath, version);
   useLayoutEffect(() => { committed.push(url); });
   return createElement('output', null, url);
 }

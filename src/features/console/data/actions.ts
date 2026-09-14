@@ -10,7 +10,7 @@
 
 import { useCallback, useMemo } from 'react';
 
-import type { AgentInputEvent, ToolApprovalDecision, UiSubmission } from '../../../../shared/types';
+import type { AgentInputEvent, ToolApprovalDecision, UiSubmission, UserMessageInput } from '../../../../shared/types';
 import { useRendererRuntime } from '../../../renderer-runtime/hooks';
 import {
   messageText,
@@ -19,7 +19,6 @@ import {
   type PresentationText,
 } from '../../../i18n/presentationText';
 import type { GateDecision } from '../content/gates/contract';
-import { composeAttachmentText } from '../attachments';
 
 export interface ActionTarget {
   readonly agentId: string;
@@ -34,24 +33,11 @@ export interface ActionResult {
 
 const OK: ActionResult = { ok: true };
 
-export interface MessagePayload {
-  readonly text: string;
+export interface MessagePayload extends UserMessageInput {
   readonly skills?: readonly string[];
   readonly images?: readonly { data: string; media_type: string }[];
-  readonly files?: readonly { name: string; path: string }[];
   /** 提交旁路：仅 QuestionGate 作答携带，普通 composer 不传 */
   readonly uiSubmission?: UiSubmission;
-}
-
-/**
- * 附件文件只把路径拼进正文，提示 AI 用读取工具打开，而不是把内容塞进消息。
- */
-function composeContent(payload: MessagePayload): string {
-  return composeAttachmentText(
-    payload.text,
-    payload.files ?? [],
-    (payload.images?.length ?? 0) > 0,
-  );
 }
 
 /** 事件 id 用时间戳即可：服务端不依赖它做去重 */
@@ -60,7 +46,8 @@ function buildEvent(payload: MessagePayload): AgentInputEvent {
     id: `evt-${Date.now()}`,
     timestamp: new Date(),
     source: 'user',
-    content: composeContent(payload),
+    content: payload.text,
+    files: payload.files?.length ? [...payload.files] : undefined,
     images:
       payload.images && payload.images.length > 0
         ? payload.images.map(({ data, media_type }) => ({ data, media_type }))
@@ -79,6 +66,7 @@ export interface ConsoleActions {
   readonly stop: (agentId: string) => Promise<ActionResult>;
   readonly openWorkspace: (workspace?: string) => Promise<ActionResult>;
   readonly openTrace: (agentId: string) => Promise<ActionResult>;
+  readonly renameAgentRun: (agentId: string, name: string) => Promise<ActionResult>;
   readonly deleteHistory: (agentId: string) => Promise<ActionResult>;
   readonly loadHistory: (agentId: string) => Promise<ActionResult>;
   readonly markRead: (agentId: string, throughIndex: number) => Promise<ActionResult>;
@@ -131,6 +119,7 @@ export function useConsoleActions(): ConsoleActions {
       if (decision.kind === 'answer') {
         return send(target, {
           text: decision.answer,
+          files: decision.files,
           images: decision.images,
           uiSubmission: { kind: 'ask_user_answer', answers: [...decision.answers] },
         });
@@ -147,6 +136,7 @@ export function useConsoleActions(): ConsoleActions {
               callId: decision.callId,
               decision: 'deny',
               feedback: decision.feedback,
+              files: decision.files?.length ? [...decision.files] : undefined,
               images: decision.images ? [...decision.images] : undefined,
             };
 
@@ -216,6 +206,24 @@ export function useConsoleActions(): ConsoleActions {
     [agentRuns],
   );
 
+  const renameAgentRun = useCallback(
+    async (agentId: string, name: string): Promise<ActionResult> => {
+      try {
+        await agentRuns.rename(agentId, name);
+        return OK;
+      } catch (error) {
+        return {
+          ok: false,
+          error: presentationFromError(
+            error,
+            messageText('sessionWorkbenchUi.action.renameFailed'),
+          ),
+        };
+      }
+    },
+    [agentRuns],
+  );
+
   const promoteToBackground = useCallback(async (callId: string): Promise<ActionResult> => {
     try {
       const result = await agentCommands.promoteToBackground(callId);
@@ -255,9 +263,9 @@ export function useConsoleActions(): ConsoleActions {
 
   return useMemo(
     () => ({
-      send, decide, pause, stop, openWorkspace, openTrace, deleteHistory, loadHistory, markRead,
+      send, decide, pause, stop, openWorkspace, openTrace, renameAgentRun, deleteHistory, loadHistory, markRead,
       promoteToBackground,
     }),
-    [decide, deleteHistory, loadHistory, markRead, openTrace, openWorkspace, pause, promoteToBackground, send, stop],
+    [decide, deleteHistory, loadHistory, markRead, openTrace, openWorkspace, pause, promoteToBackground, renameAgentRun, send, stop],
   );
 }

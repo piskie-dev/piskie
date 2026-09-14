@@ -39,7 +39,6 @@ export interface DockModeProps {
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
   readonly sessionsCollapsed: boolean;
   readonly onToggleSessions: () => void;
-  readonly devMode?: boolean;
   readonly onNewSession?: () => void;
   readonly onNewSessionIn?: (workspace?: string) => void;
   readonly renderTaskLauncher?: (trigger: React.ReactNode) => React.ReactNode;
@@ -64,7 +63,6 @@ export const DockMode = memo<DockModeProps>(
     menuSourceOf,
     sessionsCollapsed,
     onToggleSessions,
-    devMode,
     onNewSession,
     onNewSessionIn,
     renderTaskLauncher,
@@ -201,7 +199,6 @@ export const DockMode = memo<DockModeProps>(
                     <DockPanel
                       agentId={selectedAgentId}
                       fidelity="focused"
-                      devMode={devMode}
                       onPreviewImage={onPreviewImage}
                       onOpenWorker={setFocusWorkerId}
                       imageNodes={mainImageNodes}
@@ -218,7 +215,6 @@ export const DockMode = memo<DockModeProps>(
                           agentId={selectedAgentId}
                           workerId={worker.id}
                           fidelity="visible"
-                          devMode={devMode}
                           onPreviewImage={onPreviewImage}
                           onOpenWorker={setFocusWorkerId}
                           imageNodes={workerImageNodes}
@@ -254,7 +250,6 @@ export const DockMode = memo<DockModeProps>(
                     agentId={selectedAgentId}
                     workers={canvasWorkers}
                     stopping={agent.phase === 'stopping'}
-                    devMode={devMode}
                     onPreviewImage={onPreviewImage}
                     onOpenWorker={setFocusWorkerId}
                     onFullscreen={(target) => setFullscreen(target)}

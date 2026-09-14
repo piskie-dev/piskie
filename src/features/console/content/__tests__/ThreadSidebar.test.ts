@@ -7,11 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskDefinitionSnapshot } from '../../../../../shared/electron-contracts/task-definitions';
 import { useUIStore } from '../../../../store/uiStore';
 import type { PopoverProps } from '../../chrome/Popover';
+import type { ActionResult } from '../../data/actions';
 import type { HistoryRow } from '../../data/sessionRow';
 import { TaskDefinitionLauncher } from '../../shell/TaskDefinitionLauncher';
 import { ThreadSidebar, type ThreadSidebarProps } from '../ThreadSidebar';
 
 const historyState = vi.hoisted(() => ({ ready: true }));
+const consoleActions = vi.hoisted(() => ({
+  renameAgentRun: vi.fn(async (): Promise<ActionResult> => ({ ok: true })),
+}));
 vi.hoisted(() => {
   const values = new Map<string, string>();
   const storage = {
@@ -22,7 +26,7 @@ vi.hoisted(() => {
   vi.stubGlobal('window', { localStorage: storage });
 });
 vi.mock('../../data/session', () => ({ useHistoryRowsReady: () => historyState.ready }));
-vi.mock('../../data/actions', () => ({ useConsoleActions: () => ({}) }));
+vi.mock('../../data/actions', () => ({ useConsoleActions: () => consoleActions }));
 vi.mock('../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../../chrome/Popover', () => ({
   Popover: ({ trigger, open, children }: PopoverProps) => createElement('div', null, trigger, open ? children : null),
@@ -86,10 +90,30 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', dom.window.localStorage);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', { value: vi.fn() });
+  Object.defineProperties(dom.window.HTMLElement.prototype, {
+    attachEvent: { configurable: true, value: vi.fn() },
+    detachEvent: { configurable: true, value: vi.fn() },
+  });
+  Object.defineProperty(dom.window.HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+      this.querySelector<HTMLElement>('[autofocus]')?.focus();
+    },
+  });
+  Object.defineProperty(dom.window.HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      if (!this.open) return;
+      this.removeAttribute('open');
+      this.dispatchEvent(new dom.window.Event('close'));
+    },
+  });
   useUIStore.persist.setOptions({ storage: createJSONStorage(() => localStorage) });
   localStorage.clear();
   useUIStore.setState({ expandedWorkspaceGroups: [], workspaceGroupOrder: [], consoleSelection: null });
   historyState.ready = true;
+  consoleActions.renameAgentRun.mockReset().mockResolvedValue({ ok: true });
   props = {
     sessions: [], history: [history('alpha', '/sample/alpha', 3), history('beta', '/sample/beta', 2), history('default')],
     selectedAgentId: null, collapsed: false, onToggleCollapsed: vi.fn(),
@@ -221,5 +245,60 @@ describe('workspace navigation', () => {
       await click('在 alpha 新建会话');
       expect(props.onNewSessionIn).toHaveBeenCalledWith('/sample/alpha');
     }
+  });
+
+  it('renames from the row menu with trim, inline validation, and native dialog cancellation', async () => {
+    await render({ history: [history('alpha', '/sample/alpha')] });
+    await click('alpha');
+    const rowMenu = () => {
+      const result = container.querySelector<HTMLButtonElement>(
+        '[data-agent-id="alpha"] button[aria-haspopup="menu"]',
+      );
+      expect(result).not.toBeNull();
+      return result!;
+    };
+    await act(async () => rowMenu().click());
+    await click('重命名');
+
+    const dialog = container.querySelector('dialog')!;
+    const input = dialog.querySelector('input')!;
+    const form = dialog.querySelector('form')!;
+    expect(dialog.open).toBe(true);
+    expect(input.value).toBe('Sample alpha');
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+    expect(props.onSelectHistory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      input.value = '   ';
+      Simulate.change(input);
+    });
+    await act(async () => Simulate.submit(form));
+    expect(consoleActions.renameAgentRun).not.toHaveBeenCalled();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('请输入标题');
+
+    consoleActions.renameAgentRun.mockResolvedValueOnce({
+      ok: false,
+      error: { kind: 'raw', text: 'Example rename failure' },
+    });
+    await act(async () => {
+      input.value = '  Revised title  ';
+      Simulate.change(input);
+    });
+    await act(async () => Simulate.submit(form));
+    expect(consoleActions.renameAgentRun).toHaveBeenLastCalledWith('alpha', 'Revised title');
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('Example rename failure');
+
+    await act(async () => Simulate.submit(form));
+    expect(consoleActions.renameAgentRun).toHaveBeenCalledTimes(2);
+    expect(dialog.open).toBe(false);
+
+    await act(async () => rowMenu().click());
+    await click('重命名');
+    expect(dialog.open).toBe(true);
+    await act(async () => dialog.close());
+    expect(dialog.open).toBe(false);
+    expect(consoleActions.renameAgentRun).toHaveBeenCalledTimes(2);
   });
 });

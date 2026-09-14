@@ -64,8 +64,6 @@ export interface DockPanelProps {
   /** 有值即渲染该 worker 的面板（父 agent 为 `agentId`） */
   readonly workerId?: string;
   readonly fidelity?: Fidelity;
-  /** dev-mode 只开放上下文明细查看器；占用环始终可见 */
-  readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly onOpenWorker?: (workerId: string) => void;
   /** 头部右侧动作（暂停/停止/切模式由模式层给） */
@@ -79,7 +77,6 @@ export const DockPanel = memo<DockPanelProps>(
     agentId,
     workerId,
     fidelity = 'visible',
-    devMode,
     onPreviewImage,
     onOpenWorker,
     headerActions,
@@ -211,6 +208,7 @@ export const DockPanel = memo<DockPanelProps>(
         <ThreadCell
           cell={cell}
           conversationStatus={request?.status}
+          workspace={request?.workspace}
           workers={agent?.workers}
           onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
@@ -218,7 +216,7 @@ export const DockPanel = memo<DockPanelProps>(
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, runCellAction],
+      [agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, request?.workspace, runCellAction],
     );
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
@@ -308,7 +306,6 @@ export const DockPanel = memo<DockPanelProps>(
                 agentSpec={agent?.agentSpec}
                 contextUsage={request.contextUsage}
                 sourceVersion={request.conversationLength}
-                contextViewerEnabled={devMode}
                 canPause={request.canPause}
                 stopping={request.phase === 'stopping'}
                 onPreviewImage={onPreviewImage}
@@ -346,6 +343,7 @@ export const DockPanel = memo<DockPanelProps>(
               agentId={agentId}
               workerId={workerId}
               target={reviewTarget}
+              onPreviewImage={onPreviewImage}
             />
           )}
         </Dialog>

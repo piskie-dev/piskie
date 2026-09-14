@@ -13,10 +13,25 @@ import { createElectronPiskieClient } from '../piskie-client.js';
 import type { ElectronPreloadClient } from '../preload-client.js';
 
 describe('createElectronPiskieClient', () => {
+  it('resolves a DOM File synchronously in preload without passing it to IPC', () => {
+    const request = vi.fn();
+    const getPathForFile = vi.fn((file: File) => file === diskFile ? '/sample files/example.pdf' : '');
+    const diskFile = new File(['Sample'], 'example.pdf', { type: 'application/pdf' });
+    const memoryFile = new File(['Sample'], 'memory.pdf');
+    const client = createElectronPiskieClient({
+      transport: { request } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux', getPathForFile,
+    });
+    expect(client.desktop.files.getPathForFile(diskFile)).toBe('/sample files/example.pdf');
+    expect(client.desktop.files.getPathForFile(memoryFile)).toBe('');
+    expect(getPathForFile.mock.calls).toEqual([[diskFile], [memoryFile]]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('queries effective composer Skills for the requested workspace', async () => {
     const options = [{ name: 'sample-guide', description: 'Sample guide', scope: 'project' }];
     const request = vi.fn(async () => options);
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient,
       version: 'test', platform: 'linux',
     });
@@ -28,7 +43,7 @@ describe('createElectronPiskieClient', () => {
 
   it('forwards an explicit official model catalog refresh', async () => {
     const request = vi.fn(async () => ({ updated: true }));
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient,
       version: 'test',
       platform: 'linux',
@@ -44,7 +59,7 @@ describe('createElectronPiskieClient', () => {
       request,
       subscribe: vi.fn(),
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: 'test',
       platform: 'linux',
@@ -61,7 +76,7 @@ describe('createElectronPiskieClient', () => {
 
   it('forwards explicit attachment sources and preview release without rereading clipboard data', async () => {
     const request = vi.fn(async () => undefined);
-    const client = createElectronPiskieClient({ transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient, version: 'test', platform: 'linux' });
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(), transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient, version: 'test', platform: 'linux' });
     const sources = { kind: 'paths' as const, paths: ['/workspace/example.png'] };
     await client.desktop.system.clipboardAttachments(sources);
     await client.desktop.files.releasePreview('piskie-attachment://preview/example');
@@ -77,7 +92,7 @@ describe('createElectronPiskieClient', () => {
       request,
       subscribe: vi.fn(),
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: 'test',
       platform: 'linux',
@@ -96,7 +111,7 @@ describe('createElectronPiskieClient', () => {
       request,
       subscribe,
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: '0.1.0',
       platform: 'linux',
@@ -124,7 +139,7 @@ describe('createElectronPiskieClient', () => {
       request,
       subscribe: vi.fn(),
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: 'test',
       platform: 'linux',
@@ -141,7 +156,7 @@ describe('createElectronPiskieClient', () => {
 
   it('subscribes to preview snapshots and changes for an explicit target', () => {
     const subscribe = vi.fn(() => vi.fn());
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport: { subscribe } as unknown as ElectronPreloadClient,
       version: 'test', platform: 'linux',
     });
@@ -153,13 +168,31 @@ describe('createElectronPiskieClient', () => {
     });
   });
 
+  it.each(['linux', 'win32', 'darwin'])('lets system file launchers on %s finish independently of a transport deadline', async (platform) => {
+    const request = vi.fn(async () => undefined);
+    const client = createElectronPiskieClient({
+      getPathForFile: vi.fn(), transport: { request } as unknown as ElectronPreloadClient,
+      version: 'test', platform,
+    });
+
+    await client.desktop.system.openPath('/sample/document.txt');
+    await client.desktop.system.openWorkspace('/sample/workspace');
+    await client.desktop.system.openAgentRunTrace('sample-run');
+
+    expect(request.mock.calls).toEqual([
+      [DESKTOP_OPERATIONS.openPath, ['/sample/document.txt'], { timeoutMs: 0 }],
+      [DESKTOP_OPERATIONS.openWorkspace, ['/sample/workspace'], { timeoutMs: 0 }],
+      [DESKTOP_OPERATIONS.openAgentRunTrace, ['sample-run'], { timeoutMs: 0 }],
+    ]);
+  });
+
   it('does not impose a transport deadline on file and workspace selection', async () => {
     const request = vi.fn(async () => undefined);
     const transport = {
       request,
       subscribe: vi.fn(),
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: 'test',
       platform: 'win32',
@@ -181,7 +214,7 @@ describe('createElectronPiskieClient', () => {
       request: vi.fn(),
       subscribe,
     } as unknown as ElectronPreloadClient;
-    const client = createElectronPiskieClient({
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
       transport,
       version: 'test',
       platform: 'linux',

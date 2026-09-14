@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { skillSelectionSchema } from './skill-selection.js';
+import { userFileRefSchema } from './user-file-ref.js';
 
 const agentInputSourceSchema = z.enum([
   'user',
@@ -60,6 +61,7 @@ export const agentInputRequestSchema = z.object({
       }),
     )
     .optional(),
+  files: z.array(userFileRefSchema).optional(),
   uiSubmission: uiSubmissionSchema.optional(),
   skills: skillSelectionSchema.optional(),
 });

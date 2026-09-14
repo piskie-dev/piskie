@@ -6,6 +6,7 @@ import {
 } from '../../../shared/electron-contracts/agents.js';
 import { agentInputRequestSchema } from '../../../shared/schemas/agent-input.js';
 import { skillSelectionSchema } from '../../../shared/schemas/skill-selection.js';
+import { userFileRefSchema } from '../../../shared/schemas/user-file-ref.js';
 import type {
   ConversationAppendEvent,
   AgentInputEvent,
@@ -34,6 +35,7 @@ import {
 const launchSchema = z.object({
   initialModel: identifier.optional(),
   mcpPrewarmToken: identifier.optional(),
+  files: z.array(userFileRefSchema).optional(),
   images: z.array(z.object({
     data: z.string().min(1).max(64 * 1024 * 1024),
     media_type: identifier,
@@ -73,6 +75,7 @@ const decisionSchema = z.object({
   decision: z.enum(['allow', 'deny']),
   reason: z.string().max(8_192).optional(),
   feedback: z.string().max(64_000).optional(),
+  files: z.array(userFileRefSchema).optional(),
   changeToAuto: z.boolean().optional(),
   images: z.array(z.object({
     data: z.string().min(1).max(64 * 1024 * 1024),
@@ -253,7 +256,8 @@ export function createAgentController(
         agentId: identifier,
         nodeId: identifier,
         imageIds: z.array(identifier).max(128),
-        instruction: z.string().min(1).max(64_000),
+        instruction: z.string().max(64_000),
+        files: z.array(userFileRefSchema).optional(),
         target: modelTargetSchema.optional(),
         images: z.array(z.object({
           data: z.string().min(1).max(64 * 1024 * 1024),
@@ -267,6 +271,7 @@ export function createAgentController(
           input.instruction,
           input.target,
           input.images,
+          input.files,
         ));
       },
     ),

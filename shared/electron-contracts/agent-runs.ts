@@ -18,6 +18,7 @@ import type { AgentRunMessageState } from '../agent-run-messages.js';
 export const AGENT_RUN_OPERATIONS = Object.freeze({
   list: 'agent-runs.list',
   state: 'agent-runs.state',
+  rename: 'agent-runs.rename',
   delete: 'agent-runs.delete',
   markRead: 'agent-runs.markRead',
   readPlan: 'agent-runs.plan.read',
@@ -57,6 +58,7 @@ export interface AgentControlChangedEvent {
 interface AgentRunsClient {
   list(): Promise<AgentRunSnapshot[]>;
   state(agentId: string): Promise<AgentControlSnapshot | null>;
+  rename(agentId: string, name: string): Promise<AgentRunSnapshot>;
   delete(agentId: string): Promise<void>;
   markRead(agentId: string, throughIndex: number): Promise<AgentRunMessageState>;
   readPlan(agentId: string): Promise<{

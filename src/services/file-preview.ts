@@ -1,4 +1,4 @@
-import type { FilePreviewDescriptor } from '../../../../shared/electron-contracts/desktop';
+import type { FilePreviewDescriptor } from '../../shared/electron-contracts/desktop';
 
 const users = new Map<string, number>();
 

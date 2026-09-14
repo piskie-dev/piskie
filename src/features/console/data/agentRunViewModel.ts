@@ -25,7 +25,7 @@ export function projectActiveAgentRun(
   const interrupted = isInterrupted(state);
   return {
     agentId: state.agentId,
-    title: state.runConfig.name || unnamedTask,
+    title: state.runConfig.name.trim() || unnamedTask,
     description: state.runConfig.description || undefined,
     workspace: state.runConfig.workspace || undefined,
     phase: state.phase,
@@ -54,7 +54,7 @@ export function projectPersistedAgentRun(
 ): HistoryRow {
   return {
     agentId: snapshot.agentId,
-    title: snapshot.runConfig.name || snapshot.agentId,
+    title: snapshot.runConfig.name.trim() || snapshot.agentId,
     description: snapshot.runConfig.description || undefined,
     agentSpec: snapshot.agentSpec,
     taskDescription: resolveTaskDescription(snapshot),

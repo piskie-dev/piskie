@@ -226,6 +226,11 @@ export function targetFromHref(href: string): Pick<ContentTarget, 'kind' | 'valu
       return null;
     }
   }
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return null;
-  return { kind: 'path', value };
+  if (!isWindowsDrivePath(value, 0) && /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return null;
+  try {
+    return { kind: 'path', value: decodeURIComponent(value) };
+  } catch {
+    // A literal percent sign is valid in a local filename.
+    return { kind: 'path', value };
+  }
 }

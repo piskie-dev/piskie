@@ -33,6 +33,7 @@ function makeModule(
     approvalMode: 'confirm',
     currentTarget: { providerId: 'ai-main', modelId: 'chat-main' },
     getInference: () => inference,
+    addUserMessage: vi.fn(),
     emitStateChange: () => {},
   } as unknown as AgentHost;
   mod.init(host, {
@@ -44,10 +45,25 @@ function makeModule(
   ]);
   node.images[0].status = 'completed';   // 重生成的前置状态：已有成功候选
   node.status = 'pending_approval';
-  return { mod, generate, node, imageId: node.images[0].id };
+  return { mod, generate, host, node, imageId: node.images[0].id };
 }
 
 describe('动作循环 API：abort 中的 regenerate', () => {
+  it('records structured revision input and supplies file paths to the rewrite model', async () => {
+    const chat = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Sample revision' }] });
+    const { mod, host, node, imageId } = makeModule(chat);
+    const files = [{ name: 'sample.txt', path: '/workspace/sample.txt' }];
+    const images = [{ data: 'c2FtcGxl', media_type: 'image/png' }];
+    const pending = mod.waitForReviewAction(node.id);
+    expect(mod.submitReviewAction(node.id, { type: 'regenerate', imageIds: [imageId], instruction: '', files, images })).toEqual({ success: true });
+    const action = await pending;
+    if (action.type !== 'regenerate') throw new Error('Expected sample revision');
+    await mod.regenerate(node.id, action);
+    expect(host.addUserMessage).toHaveBeenCalledExactlyOnceWith({ text: '', files, images });
+    expect(JSON.stringify(chat.mock.calls[0][0].messages)).toContain('/workspace/sample.txt');
+    expect(node.images[0].userInstruction).toBe('');
+  });
+
   it('prompt 优化 chat 被 abort → 取消上抛、不发起新 generate（裸 catch 不得吞 abort）', async () => {
     const controller = new AbortController();
     const chat = vi.fn().mockImplementation(async (_req: unknown, opts: { signal?: AbortSignal }) => {

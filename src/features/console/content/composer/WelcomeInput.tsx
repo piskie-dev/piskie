@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatModelReference, useInferenceStore } from '../../../../store/inferenceStore';
-import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
+import { useAttachmentDraft } from '../../attachments';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 import {
   submitComposerDraft,
@@ -74,12 +74,11 @@ export const WelcomeInput: React.FC<{
     setSubmitError(undefined);
     try {
       const ok = await submitComposerDraft(WELCOME_DRAFT_KEY, async (snapshot, images, files) => {
-        const text = composeAttachmentText(snapshot.text, files, Boolean(images?.length));
         const mcpPrewarmToken = prewarm.claim();
         let started = false;
         try {
-          const outcome = await onStart(text, {
-            ...settings, model: resolvedModel, images,
+          const outcome = await onStart(snapshot.text, {
+            ...settings, model: resolvedModel, images, files,
             skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
             mcpPrewarmToken,
           });
@@ -111,6 +110,8 @@ export const WelcomeInput: React.FC<{
       draftIdentity={`${WELCOME_DRAFT_KEY}:${version}`}
       onSubmit={submit}
       onPaste={attachments.handlePaste}
+      onDragOver={attachments.handleDragOver}
+      onDrop={attachments.handleDrop}
       placeholder={modeId === 'browser-skill'
         ? t('sessionWorkbenchUi.shell.describeWebsiteSkill')
         : t('sessionWorkbenchUi.shell.describeTask')}

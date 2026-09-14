@@ -18,6 +18,7 @@ import { DockPanel } from '../dock/DockPanel';
 
 const h = vi.hoisted(() => ({
   useAgentVM: vi.fn(), useWorkerVM: vi.fn(),
+  getPathForFile: vi.fn(), clipboardAttachments: vi.fn(),
   agentCommands: {
     cancelPlanApprovalCountdown: vi.fn(), respondToApproval: vi.fn(),
     interrupt: vi.fn(), interruptSubagent: vi.fn(), stop: vi.fn(),
@@ -81,6 +82,14 @@ const setPending = (subagentId: string | undefined, pendingToolCall?: PendingToo
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  h.getPathForFile.mockReset().mockReturnValue('');
+  h.clipboardAttachments.mockReset();
+  Object.defineProperty(window, 'piskie', { configurable: true, value: {
+    desktop: {
+      files: { getPathForFile: h.getPathForFile },
+      system: { clipboardAttachments: h.clipboardAttachments, platform: 'linux' },
+    },
+  } });
   clearAllComposerDrafts();
   useViews.setState({ main: view(mainId), worker: view(workerId) });
   h.useAgentVM.mockImplementation(() => useViews((state) => state.main));
@@ -145,7 +154,10 @@ describe.each(['thread', 'dock'] as const)('%s plan actions', (layout) => {
       expect(container.querySelector('[role="timer"]')).not.toBeNull();
       await act(async () => button('取消倒计时').click());
       const file = new File(['Sample'], 'sample.md', { type: 'text/markdown' });
-      Object.defineProperty(file, 'path', { value: '/workspace/sample.md' });
+      h.getPathForFile.mockReturnValue('/workspace/sample.md');
+      h.clipboardAttachments.mockResolvedValueOnce([
+        { kind: 'file', name: file.name, path: '/workspace/sample.md', size: file.size },
+      ]);
       const event = new Event('paste', { bubbles: true, cancelable: true });
       Object.defineProperty(event, 'clipboardData', { value: {
         items: [{ kind: 'file', getAsFile: () => file }], types: ['Files'],
@@ -155,9 +167,9 @@ describe.each(['thread', 'dock'] as const)('%s plan actions', (layout) => {
       h.agentCommands.respondToApproval.mockResolvedValueOnce({ ok: false, error: 'Sample feedback failure' });
       await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="发送"]')!.click());
       expect(h.agentCommands.respondToApproval).toHaveBeenCalledExactlyOnceWith(mainId, subagentId, expect.objectContaining({
-        callId: `${subagentId ?? mainId}-plan`, decision: 'deny', feedback: expect.stringContaining('Sample modification'),
+        callId: `${subagentId ?? mainId}-plan`, decision: 'deny', feedback: 'Sample modification',
+        files: [{ name: 'sample.md', path: '/workspace/sample.md' }],
       }));
-      expect(h.agentCommands.respondToApproval.mock.calls[0]![2].feedback).toContain('/workspace/sample.md');
       expect(container.textContent).toContain('Sample feedback failure');
       expect(container.textContent).toContain('sample.md');
       expect(container.querySelector('input')?.value).toBe('Sample modification');

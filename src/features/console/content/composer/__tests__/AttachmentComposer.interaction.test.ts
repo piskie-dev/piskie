@@ -35,6 +35,8 @@ let root: Root;
 let container: HTMLDivElement;
 let kind: 'main' | 'worker' | 'welcome';
 const deliver = vi.fn();
+const getPathForFile = vi.fn();
+const clipboardAttachments = vi.fn();
 const draftKey = () => kind === 'welcome' ? WELCOME_DRAFT_KEY : composerDraftKey('example-session', kind === 'worker' ? 'example-worker' : undefined);
 const input = () => container.querySelector('textarea')!;
 const snapshot = () => useComposerDraftStore.getState().drafts[draftKey()];
@@ -48,6 +50,20 @@ async function paste(plain = '', invalid = false) {
   } });
   await act(async () => input().dispatchEvent(event));
   return event;
+}
+async function addDocument(kind: 'paste' | 'drop') {
+  const file = new File(['Example PDF'], 'example.pdf', { type: 'application/pdf' });
+  const transfer = { files: [file], items: [{ kind: 'file', getAsFile: () => file }], types: ['Files'], getData: () => '' };
+  if (kind === 'drop') {
+    const over = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(over, 'dataTransfer', { value: transfer });
+    await act(async () => input().dispatchEvent(over));
+    expect(over.defaultPrevented).toBe(true);
+  }
+  const event = new Event(kind, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, kind === 'paste' ? 'clipboardData' : 'dataTransfer', { value: transfer });
+  await act(async () => input().dispatchEvent(event));
+  expect(event.defaultPrevented).toBe(true);
 }
 async function prepared() {
   const pending = snapshot()?.attachments.images.flatMap((image) => image.status === 'capturing' ? [image.capture.done] : []) ?? [];
@@ -69,10 +85,13 @@ beforeEach(() => {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:example-thumbnail');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   Object.defineProperty(window, 'piskie', { configurable: true, value: {
+    desktop: { files: { getPathForFile }, system: { clipboardAttachments } },
     capabilities: { market: { availableSkills: vi.fn().mockResolvedValue([]), observeChanges: () => () => {} } },
     modes: { listAvailable: vi.fn().mockResolvedValue([]) },
   } });
   deliver.mockReset().mockResolvedValue(true);
+  getPathForFile.mockReset().mockReturnValue('/sample files/example.pdf');
+  clipboardAttachments.mockReset().mockResolvedValue([{ kind: 'file', name: 'example.pdf', path: '/sample files/example.pdf', size: 11 }]);
   clearAllComposerDrafts();
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
 });
@@ -88,6 +107,29 @@ describe.each(['main', 'worker', 'welcome'] as const)('%s attachment submission'
     await act(async () => root.render(kind === 'welcome'
       ? React.createElement(WelcomeInput, { sending: false, onStart: async (text, options) => (await deliver({ text, ...options })) ? { kind: 'started', agentId: 'example-session' } : { kind: 'failed' } })
       : React.createElement(ConversationComposer, { agentId: 'example-session', workerId: kind === 'worker' ? 'example-worker' : undefined, targetName: 'Example', model: 'example-model', reasoningOverride: { kind: 'provider-default' }, approvalMode: 'confirm', sourceVersion: 0, canPause: false, onSubmit: deliver, onInterrupt: async () => undefined })));
+  });
+
+  it.each(['paste', 'drop'] as const)('shows and submits an ordinary file added by %s, waiting for its path', async (method) => {
+    const discovery = deferred<unknown[]>();
+    clipboardAttachments.mockReturnValue(discovery.promise);
+    await addDocument(method);
+    await send();
+    expect(deliver).not.toHaveBeenCalled();
+    await act(async () => discovery.resolve([{ kind: 'file', name: 'example.pdf', path: '/sample files/example.pdf', size: 11 }]));
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledOnce());
+    expect(deliver.mock.calls[0]![0]).toMatchObject({ text: '', files: [{ name: 'example.pdf', path: '/sample files/example.pdf' }] });
+    expect(deliver.mock.calls[0]![0].files).toEqual([{ name: 'example.pdf', path: '/sample files/example.pdf' }]);
+    await vi.waitFor(() => expect(snapshot()).toBeUndefined());
+  });
+
+  it('keeps a file chip and path after failed delivery and allows removal', async () => {
+    deliver.mockResolvedValue(false);
+    await addDocument('drop'); await prepared();
+    expect(container.textContent).toContain('example.pdf');
+    await send();
+    expect(snapshot()?.attachments.files[0]?.path).toBe('/sample files/example.pdf');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="移除文件"], [aria-label="Remove file"], [aria-label="移除"], [aria-label="Remove"]')!.click());
+    expect(snapshot()?.attachments.files ?? []).toHaveLength(0);
   });
 
   it.each(['click', 'enter'])('submits mixed text and the original image with %s', async (trigger) => {

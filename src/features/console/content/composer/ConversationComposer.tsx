@@ -180,7 +180,6 @@ export interface ConversationComposerProps {
   readonly agentSpec?: string;
   readonly contextUsage?: ContextUsage;
   readonly sourceVersion: number;
-  readonly contextViewerEnabled?: boolean;
   readonly canPause: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly stopping?: boolean;
@@ -202,7 +201,6 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     agentSpec,
     contextUsage,
     sourceVersion,
-    contextViewerEnabled,
     canPause,
     onPreviewImage,
     stopping = false,
@@ -360,6 +358,8 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
             onPaste={(event) => { skillComposer.onPasteOrDrop(); attachments.handlePaste(event); }}
+            onDragOver={attachments.handleDragOver}
+            onDrop={(event) => { skillComposer.onPasteOrDrop(); attachments.handleDrop(event); }}
             placeholder={t('sessionWorkbenchUi.composer.instructionPlaceholder', { name: targetName })}
             rows={1}
             disabled={stopping}
@@ -408,7 +408,6 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             usage={contextUsage}
             agentId={workerId ?? agentId}
             sourceVersion={sourceVersion}
-            viewerEnabled={contextViewerEnabled}
           />
 
           <Tooltip

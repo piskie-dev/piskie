@@ -1,0 +1,29 @@
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-inline-size: 0;
+  max-inline-size: min(320px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: start;
+  cursor: pointer;
+}
+
+.file:hover { background: var(--surface-3); }
+.file:focus-visible { outline: 2px solid var(--cyber-primary); outline-offset: 2px; }
+.file svg { flex-shrink: 0; color: var(--cyber-text-muted); }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

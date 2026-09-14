@@ -1,6 +1,6 @@
 import type { PiskieDesktopApi } from '@shared/electron-contracts/api';
 import { clearAgentComposerDrafts, clearAllComposerDrafts } from '../features/console/data/composer-drafts';
-import { clearFilePreviews } from '../features/console/content/file-preview';
+import { clearFilePreviews } from '../services/file-preview';
 import type { AgentLiveContentDelta } from '@shared/electron-contracts/agents';
 import type { AgentControlChangedEvent } from '@shared/electron-contracts/agent-runs';
 import {

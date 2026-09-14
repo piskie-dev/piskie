@@ -71,7 +71,7 @@ beforeEach(async () => {
     const operation = operations.find(({ id }) => id === operationId)!;
     return operation.execute(context, operation.input.parse(args));
   });
-  const client = createElectronPiskieClient({
+  const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
     transport: { request, subscribe: vi.fn() } as unknown as ElectronPreloadClient,
     version: 'sample', platform: 'linux',
   });

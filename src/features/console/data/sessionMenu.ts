@@ -10,7 +10,7 @@
 import type { AgentPhase } from '../../../../shared/types/agent-control';
 import { canPause, canStop } from '../../../../shared/types/agent-control';
 
-export type SessionMenuKey = 'workspace' | 'trace' | 'pause' | 'stop';
+export type SessionMenuKey = 'workspace' | 'trace' | 'rename' | 'pause' | 'stop';
 
 export interface SessionMenuItem {
   readonly key: SessionMenuKey;
@@ -23,12 +23,14 @@ export interface SessionMenuSource {
   readonly pendingQuestion?: unknown;
   readonly children?: ReadonlyArray<{ phase: AgentPhase; pendingQuestion?: unknown }>;
   readonly agentId?: string;
+  readonly renamable?: boolean;
 }
 
 export function buildSessionMenu(source: SessionMenuSource): readonly SessionMenuItem[] {
   const items: SessionMenuItem[] = [{ key: 'workspace' }];
 
   if (source.agentId) items.push({ key: 'trace' });
+  if (source.renamable) items.push({ key: 'rename' });
   if (canPause(source)) items.push({ key: 'pause' });
   if (canStop(source)) items.push({ key: 'stop', danger: true });
 
@@ -36,7 +38,7 @@ export function buildSessionMenu(source: SessionMenuSource): readonly SessionMen
 }
 
 export interface HistoryMenuItem {
-  readonly key: 'open' | 'trace' | 'delete';
+  readonly key: 'open' | 'trace' | 'rename' | 'delete';
   readonly danger?: boolean;
 }
 
@@ -44,6 +46,7 @@ export function buildHistoryMenu(options: { readonly deletable: boolean }): read
   const items: HistoryMenuItem[] = [
     { key: 'open' },
     { key: 'trace' },
+    { key: 'rename' },
   ];
   if (options.deletable) items.push({ key: 'delete', danger: true });
   return items;

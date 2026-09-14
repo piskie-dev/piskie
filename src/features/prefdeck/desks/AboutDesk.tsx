@@ -8,7 +8,7 @@ import { Globe2, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
 
 import type { PiskieUpdateStatus } from '@shared/electron-contracts/updates';
 import styles from '../deck.module.css';
-import logo128 from '/logo-128.png';
+import logo128 from '/logo-on-dark-128.png';
 
 const ABOUT_TITLE_ID = 'piskie-about-title';
 
