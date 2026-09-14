@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentControlStateChanged } from '../../agent/observations.js';
 
 const h = vi.hoisted(() => {
   let sequence = 0;
@@ -11,6 +12,7 @@ const h = vi.hoisted(() => {
     prepareCalls = 0;
     startCalls = 0;
     destroyCalls = 0;
+    setRunNameCalls = 0;
 
     constructor(config: any) {
       this.config = config;
@@ -36,6 +38,12 @@ const h = vi.hoisted(() => {
     addDurableUserMessage(): void {}
     listChildAgents(): unknown[] { return []; }
     getModule(): undefined { return undefined; }
+
+    setRunName(name: string): void {
+      this.setRunNameCalls += 1;
+      this.config.options.runConfig.name = name;
+      this.config.observer?.stateChanged(this.getControlState());
+    }
 
     buildHeader() {
       return header(
@@ -81,6 +89,13 @@ const h = vi.hoisted(() => {
       return value ? structuredClone(value) : null;
     }
     scanHeaders() { return structuredClone([...this.headers.values()]); }
+    updateHeaderName(mainAgentId: string, name: string) {
+      const header = this.readHeader(mainAgentId);
+      if (!header) return null;
+      const updated = { ...header, runConfig: { ...header.runConfig, name } };
+      this.writeHeader(mainAgentId, updated);
+      return updated;
+    }
     findMainAgentId(agentId: string) { return this.headers.has(agentId) ? agentId : null; }
     hasAgentId(agentId: string) { return this.findMainAgentId(agentId) !== null; }
     read(): unknown[] { return []; }
@@ -300,6 +315,53 @@ describe('AgentService AgentRun start and resume', () => {
   it('returns null when no AgentRun Header exists', async () => {
     await expect(agentService.resumeAgent('missing')).resolves.toBeNull();
     expect(h.instances).toHaveLength(0);
+  });
+});
+
+describe('AgentService AgentRun rename', () => {
+  it('persists first, then synchronizes the active runtime through the existing observation channel', async () => {
+    service.createAgentCandidate = () => 'AAAAAA';
+    const state = await agentService.startAgent(launch('Original title'));
+    const changes: AgentControlStateChanged[] = [];
+    const unsubscribe = agentService.observations.controlStateChanges.subscribe((change) => {
+      changes.push(change);
+    });
+
+    try {
+      const renamed = await agentService.renameAgentRun(state.agentId, 'Revised title');
+
+      expect(renamed?.runConfig).toEqual({
+        name: 'Revised title',
+        description: 'Original title description',
+        promptTemplate: 'Original title prompt',
+        workspace: '/workspace',
+      });
+      expect(service.conversationStore.readHeader(state.agentId).runConfig).toEqual(
+        renamed?.runConfig,
+      );
+      expect(h.instances[0]!.setRunNameCalls).toBe(1);
+      expect(agentService.getControlState(state.agentId)?.runConfig.name).toBe('Revised title');
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({
+        agentId: state.agentId,
+        state: { runConfig: { name: 'Revised title' } },
+      });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('updates persisted-only runs and returns null for an unknown run', async () => {
+    service.conversationStore.writeHeader(
+      'sample-history',
+      header('sample-history', runConfig('Original history title')),
+    );
+
+    await expect(agentService.renameAgentRun('sample-history', 'Revised history title'))
+      .resolves.toMatchObject({ runConfig: { name: 'Revised history title' } });
+    expect(h.instances).toHaveLength(0);
+    await expect(agentService.renameAgentRun('missing-history', 'Available title'))
+      .resolves.toBeNull();
   });
 });
 

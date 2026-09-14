@@ -7,7 +7,7 @@
  * 门的种类是**判别联合**：互斥由类型保证，不是由四个 `&&` 条件的书写顺序保证。
  */
 
-import type { AIQuestionItem, PendingToolCall } from '../../../../../shared/types';
+import type { AIQuestionItem, PendingToolCall, UserFileRef } from '../../../../../shared/types';
 
 export type GateImage = { readonly data: string; readonly media_type: string };
 
@@ -33,6 +33,7 @@ export type GateDecision =
       readonly callId: string;
       readonly feedback: string;
       readonly images?: readonly GateImage[];
+      readonly files?: readonly UserFileRef[];
     }
   | {
       readonly kind: 'answer';
@@ -45,6 +46,7 @@ export type GateDecision =
        */
       readonly answers: readonly string[];
       readonly images?: readonly GateImage[];
+      readonly files?: readonly UserFileRef[];
     };
 
 /** 各门共用的入参（`request` 由各门自己收窄） */

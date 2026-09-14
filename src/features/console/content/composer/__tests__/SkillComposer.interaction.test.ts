@@ -55,7 +55,7 @@ function Harness() {
   });
   return createElement(WelcomeComposer, {
     value: text, onChange: setText, skills, onSkillsChange: setSkills, draftIdentity: 'welcome:example',
-    onSubmit: submit, onPaste: vi.fn(), placeholder: 'Example task', images: [], files: [],
+    onSubmit: submit, onPaste: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), placeholder: 'Example task', images: [], files: [],
     onRemoveAttachment: vi.fn(), onModelChange: vi.fn(), modeId: 'normal', onModeChange: vi.fn(),
     approvalMode: 'confirm', onApprovalModeChange: vi.fn(), workspaceLabel: 'Example workspace',
     workspacePath: workspace, onSelectWorkspace: vi.fn(), onUseDefaultWorkspace: vi.fn(),

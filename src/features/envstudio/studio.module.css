@@ -318,7 +318,7 @@
 .switchboard {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr clamp(240px, 18vw, 300px);
+  grid-template-columns: clamp(240px, 18vw, 300px) 1fr;
   gap: 18px;
   padding-block-start: 20px;
   align-items: stretch;

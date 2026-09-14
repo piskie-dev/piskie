@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Download, PackageOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +38,8 @@ const KernelDownloadIndicator = () => {
   const [status, setStatus] = useState<KernelStatus | null>(null);
   const [progress, setProgress] = useState<KernelProgress | null>(null);
   const [showReady, setShowReady] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const retryInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
     const nextStatus = await window.piskie.pilot.environments.kernelStatus();
@@ -80,6 +82,35 @@ const KernelDownloadIndicator = () => {
     || progress?.phase === 'extract'
     || (status != null && !status.installed && status.hasAsset && !failed);
   const visible = showReady || failed || active;
+
+  const retry = async (): Promise<void> => {
+    if (retryInFlight.current || progress?.phase !== 'error' || unsupported) return;
+    retryInFlight.current = true;
+    setInstalling(true);
+    setShowReady(false);
+    const pending: KernelProgress = { hostKey: progress.hostKey, phase: 'download' };
+    setProgress(pending);
+    setStatus((current) => current ? { ...current, progress: pending } : current);
+
+    try {
+      const nextStatus = await window.piskie.pilot.environments.installKernel();
+      setStatus(nextStatus);
+      setProgress(nextStatus.installed ? null : nextStatus.progress ?? {
+        hostKey: nextStatus.hostKey,
+        phase: 'error',
+      });
+      setShowReady(nextStatus.installed);
+    } catch (error) {
+      setProgress((current) => current?.phase === 'error' ? current : {
+        hostKey: pending.hostKey,
+        phase: 'error',
+        message: error instanceof Error ? error.message : typeof error === 'string' ? error : undefined,
+      });
+    } finally {
+      retryInFlight.current = false;
+      setInstalling(false);
+    }
+  };
 
   const copy = useMemo(() => {
     if (showReady) {
@@ -129,24 +160,27 @@ const KernelDownloadIndicator = () => {
   return (
     <AnimatePresence initial={false}>
       {visible && (
-        <motion.button
-          type="button"
+        <motion.div
           initial={{ opacity: 0, y: -6, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -4, scale: 0.98 }}
           transition={{ duration: 0.2 }}
-          onClick={() => navigate('/preferences?sect=kernel')}
-          title={progress?.message || copy.title}
-          className={`relative h-9 w-[230px] shrink-0 overflow-hidden rounded-xl border px-3 text-left transition-colors ${
+          className={`relative h-9 w-[230px] shrink-0 overflow-hidden rounded-xl border transition-colors ${
             failed
               ? 'border-status-error/35 bg-status-error/10 hover:bg-status-error/15'
               : showReady
                 ? 'border-status-running/35 bg-status-running/10'
                 : 'border-cyber-primary/35 bg-cyber-primary/10 hover:bg-cyber-primary/15'
           }`}
-          aria-label={`${copy.title}${copy.detail ? `, ${copy.detail}` : ''}`}
         >
-          <span className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/preferences?sect=kernel')}
+            title={progress?.message || copy.title}
+            className="absolute inset-0 z-0 block h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyber-primary"
+            aria-label={`${copy.title}${copy.detail ? `, ${copy.detail}` : ''}`}
+          />
+          <span className="pointer-events-none relative z-10 flex h-full w-full min-w-0 items-center gap-2 px-3">
             {failed ? (
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-error" />
             ) : showReady ? (
@@ -160,15 +194,27 @@ const KernelDownloadIndicator = () => {
               <span className="block truncate text-[11px] font-medium text-cyber-text">
                 {copy.title}
               </span>
-              {copy.detail && (
+              {progress?.phase === 'error' && !unsupported ? (
+                <span className="block truncate text-[10px] text-cyber-text-muted">
+                  {t('browserRuntime.retryPrompt', 'Click')}
+                  <button
+                    type="button"
+                    disabled={installing}
+                    onClick={() => void retry()}
+                    className="pointer-events-auto ml-0.5 inline cursor-pointer border-0 bg-transparent p-0 font-medium text-status-error underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-status-error disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t('browserRuntime.retryDownload', 'Download again')}
+                  </button>
+                </span>
+              ) : copy.detail ? (
                 <span className="block truncate text-[10px] tabular-nums text-cyber-text-muted">
                   {copy.detail}
                 </span>
-              )}
+              ) : null}
             </span>
           </span>
 
-          <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-white/5">
+          <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-white/5">
             {determinateWidth > 0 ? (
               <motion.span
                 className={`block h-full ${showReady ? 'bg-status-running' : 'bg-cyber-primary'}`}
@@ -183,7 +229,7 @@ const KernelDownloadIndicator = () => {
               />
             ) : null}
           </span>
-        </motion.button>
+        </motion.div>
       )}
     </AnimatePresence>
   );

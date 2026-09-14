@@ -62,6 +62,7 @@ export function ContextInspector({
   }, [open]);
   const [filter, setFilter] = useState<LedgerFilter>('all');
   const [query, setQuery] = useState('');
+  const [selectionRequest, setSelectionRequest] = useState(0);
   const [selection, setSelection] = useState<{
     readonly agentId: string;
     readonly row: ContextLedgerRow;
@@ -111,6 +112,22 @@ export function ContextInspector({
     ? resolveContextLedgerSelection(visibleRows, selection.row)
     : null;
   const selected = intendedSelection ?? visibleRows[0] ?? null;
+  const [detailSelection, setDetailSelection] = useState({
+    agentId,
+    row: selected,
+    key: selected?.key ?? 'empty',
+  });
+  // Preserve the detail instance across refreshes, including automatic selections.
+  if (detailSelection.agentId !== agentId || detailSelection.row !== selected) {
+    const sameRow = detailSelection.agentId === agentId
+      && selected !== null
+      && resolveContextLedgerSelection([selected], detailSelection.row) !== null;
+    setDetailSelection({
+      agentId,
+      row: selected,
+      key: sameRow ? detailSelection.key : selected?.key ?? 'empty',
+    });
+  }
   const selectedIndex = selected
     ? visibleRows.findIndex((row) => row.key === selected.key)
     : -1;
@@ -133,7 +150,10 @@ export function ContextInspector({
     [projection, timelineRange],
   );
   const usage = snapshot?.usage;
-  const selectRow = (row: ContextLedgerRow) => setSelection({ agentId, row });
+  const selectRow = (row: ContextLedgerRow) => {
+    setSelection({ agentId, row });
+    setSelectionRequest((request) => request + 1);
+  };
 
   const moveSelection = (direction: -1 | 1) => {
     if (visibleRows.length === 0) return;
@@ -191,7 +211,10 @@ export function ContextInspector({
                 key={value}
                 type="button"
                 data-active={filter === value || undefined}
-                onClick={() => setFilter(value)}
+                onClick={() => {
+                  setFilter(value);
+                  setSelectionRequest((request) => request + 1);
+                }}
               >
                 {t(labelKey)}
               </button>
@@ -201,7 +224,10 @@ export function ContextInspector({
             <Search size={15} />
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelectionRequest((request) => request + 1);
+              }}
               placeholder={t('contextUi.search')}
             />
             <span>{visibleRows.length}</span>
@@ -254,8 +280,10 @@ export function ContextInspector({
                   </div>
                 )}
                 <ContextLedger
+                  key={agentId}
                   rows={visibleRows}
                   selectedKey={selected?.key ?? null}
+                  selectionRequest={selectionRequest}
                   timelineFocusKeys={timelineFocusKeys}
                   onSelect={(row) => {
                     if (timelineFocusKeys !== null && !timelineFocusKeys.has(row.key)) {
@@ -278,9 +306,7 @@ export function ContextInspector({
                 />
               </div>
               <LocalInspector
-                key={`${agentId}:${intendedSelection && selection
-                  ? selection.row.key
-                  : selected?.key ?? 'empty'}`}
+                key={`${agentId}:${detailSelection.key}`}
                 paneRef={inspectorRef}
                 row={selected}
                 agentId={agentId}

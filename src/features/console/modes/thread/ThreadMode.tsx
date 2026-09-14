@@ -46,7 +46,6 @@ export interface ThreadModeProps {
   readonly onSelectSession: (agentId: string) => void;
   readonly onSelectHistory: (row: HistoryRow) => void;
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
-  readonly devMode?: boolean;
   readonly onNewSession?: () => void;
   readonly onNewSessionIn?: (workspace?: string) => void;
   readonly renderTaskLauncher?: (trigger: React.ReactNode) => React.ReactNode;
@@ -71,7 +70,6 @@ export const ThreadMode = memo<ThreadModeProps>(
     onSelectSession,
     onSelectHistory,
     menuSourceOf,
-    devMode,
     onNewSession,
     onNewSessionIn,
     renderTaskLauncher,
@@ -312,7 +310,6 @@ export const ThreadMode = memo<ThreadModeProps>(
                 agentId={selectedAgentId}
                 workerId={activeWorkerId}
                 fidelity="focused"
-                devMode={devMode}
                 onPreviewImage={onPreviewImage}
                 imageNodes={imageNodes}
                 menuItems={threadMenu}
@@ -352,6 +349,7 @@ export const ThreadMode = memo<ThreadModeProps>(
               wanted={panelView.wanted}
               onPick={panelView.pick}
               reviewTarget={panelView.reviewTarget}
+              onPreviewImage={onPreviewImage}
               browserState={browserState}
               browserTarget={browserTarget}
               topRailActions={railActions}

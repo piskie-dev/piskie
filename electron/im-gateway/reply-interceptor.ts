@@ -3,6 +3,8 @@ import type { IMReplyForwardConfig } from '@shared/types/im-gateway.js';
 import { DEFAULT_REPLY_FORWARD_CONFIG } from './reply-forward-policy.js';
 import type { DispatchYieldOutcome, ReplyDispatcher } from './core/channel-connector.js';
 import type { AgentContentEvent } from '../tools/types.js';
+import type { ToolEntry } from '../../shared/types/agent-control.js';
+import { toolImagePaths } from '../../shared/tool-images.js';
 
 export type { DispatchYieldOutcome } from './core/channel-connector.js';
 
@@ -121,33 +123,6 @@ export class ReplyInterceptor {
     return true;
   }
 
-  /**
-   * 对象身份 CAS 原位替换 dispatcher（飞书 queue 收尾后的 lateSink 切换专用，同步）。
-   * binding 已删除或 dispatcher 已被新消息替换时返回 false；绝不创建 binding。
-   */
-  replaceDispatcherIfCurrent(
-    agentId: string,
-    ownerBotId: string,
-    expectedDispatcher: ReplyDispatcher,
-    nextDispatcher: ReplyDispatcher,
-    config?: IMReplyForwardConfig
-  ): boolean {
-    const binding = this.bindings.get(agentId);
-    if (
-      !binding ||
-      binding.ownerBotId !== ownerBotId ||
-      binding.dispatcher !== expectedDispatcher
-    ) {
-      return false;
-    }
-    if (binding.dispatcher !== nextDispatcher) {
-      this.closeOpenTools(binding.dispatcher, agentId);
-    }
-    binding.dispatcher = nextDispatcher;
-    binding.config = config ?? DEFAULT_REPLY_FORWARD_CONFIG;
-    return true;
-  }
-
   /** Bot 停止路径：按 ownerBotId 扫描唯一 bindings 表并释放该 Bot 的全部运输引用（幂等） */
   removeBindingsByOwner(ownerBotId: string): void {
     for (const [agentId, binding] of [...this.bindings]) {
@@ -188,6 +163,15 @@ export class ReplyInterceptor {
         error,
       });
     }
+  }
+
+  processToolImages(agentId: string, entry: ToolEntry, resolveToolName: () => string | undefined): void {
+    const binding = this.bindings.get(agentId);
+    if (!binding || binding.config.forwardToolImages === false || entry.metadata?.userInput) return;
+    const toolName = resolveToolName();
+    if (!toolName || toolName === 'ask_user' || !this.shouldForwardTool(toolName, binding.config)) return;
+    const paths = toolImagePaths(toolName, entry);
+    if (paths.length > 0) binding.dispatcher.sendToolResult({ mediaUrls: paths });
   }
 
   /**

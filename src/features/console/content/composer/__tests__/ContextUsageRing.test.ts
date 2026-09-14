@@ -45,7 +45,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeAll(() => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://piskie.test' });
+  dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://example.test' });
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('HTMLElement', dom.window.HTMLElement);
@@ -101,22 +101,26 @@ describe('ContextUsageRing', () => {
     expect(render({ limit: 128_000 })).toContain('上下文 — / 128,000 tokens');
   });
 
-  it('resets the inspector lease when the target agent changes', async () => {
+  it('opens details without a feature flag and resets them when the target agent changes', async () => {
     await act(async () => {
       root.render(createElement(ContextUsageRing, {
         agentId: 'agent-a',
         sourceVersion: 1,
-        viewerEnabled: true,
       }));
     });
-    await act(async () => container.querySelector('button')?.click());
+    const button = container.querySelector('button');
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    expect(contextInspector.open).not.toHaveBeenCalled();
+
+    await act(async () => button?.click());
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
     expect(contextInspector.open).toHaveBeenLastCalledWith('agent-a');
 
     await act(async () => {
       root.render(createElement(ContextUsageRing, {
         agentId: 'agent-b',
         sourceVersion: 1,
-        viewerEnabled: true,
       }));
     });
     expect(contextInspector.close).toHaveBeenCalledWith('agent-a');

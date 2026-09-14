@@ -79,7 +79,7 @@ describe('capture budget and batch ownership', () => {
     expect(composerImageUsage().originalBytes).toBe(24);
   });
 
-  it('reserves unknown B before discovery and shrinks only after all sources release', async () => {
+  it('reserves discovered image sources before reading and holds bytes until all sources release', async () => {
     await importFile('one', 4);
     const discover = deferred<never[]>();
     const release = deferred<void>();
@@ -87,13 +87,28 @@ describe('capture budget and batch ownership', () => {
     const descriptors = [{ kind: 'image' as const, name: 'source.png', path: '/workspace/source.png', size: 1, previewUrl: 'piskie-attachment://preview/example' }];
     captureComposerImages('one', [file(1)], () => discover.promise);
     const capture = batch('one');
-    expect(composerImageUsage()).toMatchObject({ originalBytes: 12, captureBytes: 8 });
+    expect(composerImageUsage()).toMatchObject({ originalBytes: 5, captureBytes: 1 });
     expect(ports.file).toHaveBeenCalledTimes(2);
     discover.resolve(descriptors as never[]); await ticks();
     expect(ports.source).toHaveBeenCalledWith(descriptors[0]!.previewUrl, 7, expect.any(AbortSignal));
     expect(composerImageUsage()).toMatchObject({ originalBytes: 12, captureBytes: 8 });
     release.resolve(); await capture.done;
     expect(composerImageUsage()).toMatchObject({ originalBytes: 8, captureBytes: 0 });
+  });
+
+  it('imports large ordinary files while the draft image budget is full', async () => {
+    await importFile('one', 8); await importFile('one', 4);
+    captureComposerImages('one', [], async () => [
+      { kind: 'file', name: 'sample.pdf', path: '/sample/sample.pdf', size: 1024 * 1024 * 1024 },
+      { kind: 'file', name: 'sample.zip', path: '/sample/sample.zip', size: 2048 * 1024 * 1024 },
+    ]);
+    const capture = batch('one');
+    expect(composerImageUsage().captureBytes).toBe(0);
+    await capture.done;
+    expect(getComposerAttachments('one').files.map((file) => file.path)).toEqual(['/sample/sample.pdf', '/sample/sample.zip']);
+    expect(getComposerAttachments('one').images.every((image) => image.status === 'ready')).toBe(true);
+    expect(ports.source).not.toHaveBeenCalled();
+    expect(composerImageUsage().originalBytes).toBe(12);
   });
 
   it('keeps the batch reservation until every source release settles even when one release fails', async () => {
@@ -150,7 +165,7 @@ describe('capture budget and batch ownership', () => {
     await ticks();
     expect(ports.source).not.toHaveBeenCalled();
     expect(ports.release).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/example');
-    expect(composerImageUsage().captureBytes).toBe(12);
+    expect(composerImageUsage().captureBytes).toBe(0);
     delayed.reject(new Error('Example release failure'));
     await expect(capture.done).rejects.toBe(cancelled);
     expect(state().drafts.one).toBeUndefined();

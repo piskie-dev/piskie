@@ -11,12 +11,16 @@ import { readFrameworkAllowFromList } from "../auth/pairing.js";
 import { downloadRemoteImageToTemp } from "../cdn/upload.js";
 import { downloadMediaFromItem } from "../media/media-download.js";
 import { logger } from "../util/logger.js";
-import { redactBody, redactToken } from "../util/redact.js";
+import { redactToken } from "../util/redact.js";
 import { isDebugMode } from "./debug-mode.js";
 import { sendWeixinErrorNotice } from "./error-notice.js";
 import { applyWeixinMessageSendingHook, emitWeixinMessageSent } from "./outbound-hooks.js";
 import { setContextToken, weixinMessageToMsgContext, getContextTokenFromMsgContext, isMediaItem, } from "./inbound.js";
 import { sendWeixinMediaFile } from "./send-media.js";
+import { sendImageBatch, localMediaPath, imageDeliveryErrorText } from "../../../../../core/media-io.js";
+import { MAX_IM_IMAGE_COUNT } from "../../../../../core/inbound-media.js";
+import { uploadFileToWeixin } from "../cdn/upload.js";
+import { sendImageMessageWeixin } from "./send.js";
 import { StreamingMarkdownFilter } from "./markdown-filter.js";
 import { sendMessageItemWeixin, sendMessageWeixin } from "./send.js";
 import { handleSlashCommand } from "./slash-commands.js";
@@ -168,46 +172,42 @@ export async function processOneMessage(full, deps) {
         const itemTypes = full.item_list?.map((i) => i.type).join(",") ?? "none";
         debugTrace.push("── 收消息 ──", `│ seq=${full.seq ?? "?"} msgId=${full.message_id ?? "?"} from=${full.from_user_id ?? "?"}`, `│ body="${textBody.slice(0, 40)}${textBody.length > 40 ? "…" : ""}" (len=${textBody.length}) itemTypes=[${itemTypes}]`, `│ sessionId=${full.session_id ?? "?"} contextToken=${full.context_token ? "present" : "none"}`);
     }
-    const mediaOpts = {};
-    // Find the first downloadable media item (priority: IMAGE > VIDEO > FILE > VOICE).
-    // When none found in the main item_list, fall back to media referenced via a quoted message.
-    const hasDownloadableMedia = (m) => m?.encrypt_query_param || m?.full_url;
-    const mainMediaItem = full.item_list?.find((i) => i.type === MessageItemType.IMAGE && hasDownloadableMedia(i.image_item?.media)) ??
-        full.item_list?.find((i) => i.type === MessageItemType.VIDEO && hasDownloadableMedia(i.video_item?.media)) ??
-        full.item_list?.find((i) => i.type === MessageItemType.FILE && hasDownloadableMedia(i.file_item?.media)) ??
-        full.item_list?.find((i) => i.type === MessageItemType.VOICE &&
-            hasDownloadableMedia(i.voice_item?.media) &&
-            !i.voice_item?.text);
-    const refMediaItem = !mainMediaItem
-        ? full.item_list?.find((i) => i.type === MessageItemType.TEXT &&
-            i.ref_msg?.message_item &&
-            isMediaItem(i.ref_msg.message_item))?.ref_msg?.message_item
-        : undefined;
+    const downloadedMedia = [];
+    let mediaHandedOff = false;
+    try {
+    const mainMediaItems = (full.item_list ?? []).filter((item) => isMediaItem(item) &&
+        !(item.type === MessageItemType.VOICE && item.voice_item?.text));
+    const mediaItems = mainMediaItems.length ? mainMediaItems : (full.item_list ?? [])
+        .flatMap((item) => item.ref_msg?.message_item && isMediaItem(item.ref_msg.message_item)
+            ? [item.ref_msg.message_item] : []);
     const mediaDownloadStart = Date.now();
-    const mediaItem = mainMediaItem ?? refMediaItem;
-    if (mediaItem) {
-        const label = refMediaItem ? "ref" : "inbound";
-        const downloaded = await downloadMediaFromItem(mediaItem, {
+    // Keep over-count messages rejectable by the common pipeline without downloading them.
+    for (const mediaItem of mediaItems) {
+        deps.abortSignal?.throwIfAborted();
+        const downloaded = mediaItems.length > MAX_IM_IMAGE_COUNT
+            ? { decryptedPicPath: 'download-failed://image-count-limit' }
+            : await downloadMediaFromItem(mediaItem, {
             cdnBaseUrl: deps.cdnBaseUrl,
             saveMedia: deps.channelRuntime.media.saveMediaBuffer,
             log: deps.log,
             errLog: deps.errLog,
-            label,
+            label: mainMediaItems.length ? "inbound" : "ref",
             abortSignal: deps.abortSignal,
         });
-        Object.assign(mediaOpts, downloaded);
+        downloadedMedia.push(downloaded);
     }
     const mediaDownloadMs = Date.now() - mediaDownloadStart;
     if (debug) {
-        debugTrace.push(mediaItem
-            ? `│ mediaDownload: type=${mediaItem.type} cost=${mediaDownloadMs}ms`
+        debugTrace.push(mediaItems.length
+            ? `│ mediaDownload: count=${mediaItems.length} cost=${mediaDownloadMs}ms`
             : "│ mediaDownload: none");
     }
-    let mediaHandedOff = false;
-    try {
     if (deps.abortSignal?.aborted)
         return;
-    const ctx = weixinMessageToMsgContext(full, deps.accountId, mediaOpts);
+    const ctx = weixinMessageToMsgContext(full, deps.accountId, downloadedMedia[0]);
+    const mediaContexts = downloadedMedia.map((opts) => weixinMessageToMsgContext(full, deps.accountId, opts));
+    ctx.MediaPaths = mediaContexts.flatMap((item) => item.MediaPath ? [item.MediaPath] : []);
+    ctx.MediaTypes = mediaContexts.flatMap((item) => item.MediaPath ? [item.MediaType] : []);
     // --- Framework command authorization ---
     const rawBody = ctx.Body?.trim() ?? "";
     ctx.CommandBody = rawBody;
@@ -269,7 +269,7 @@ export async function processOneMessage(full, deps) {
     });
     const finalized = deps.channelRuntime.reply.finalizeInboundContext(ctx);
     logger.info(`inbound: from=${finalized.From} to=${finalized.To} bodyLen=${(finalized.Body ?? "").length} hasMedia=${Boolean(finalized.MediaPath ?? finalized.MediaUrl)}`);
-    logger.debug(`inbound context: ${redactBody(JSON.stringify(finalized))}`);
+    logger.debug(`inbound context: textLength=${String(finalized.BodyForAgent ?? '').length} mediaCount=${finalized.MediaPaths?.length ?? 0}`);
     await deps.channelRuntime.session.recordInboundSession({
         storePath,
         sessionKey: route.sessionKey,
@@ -325,7 +325,8 @@ export async function processOneMessage(full, deps) {
     const { dispatcher, replyOptions, markDispatchIdle } = deps.channelRuntime.reply.createReplyDispatcherWithTyping({
         humanDelay,
         typingCallbacks,
-        deliver: async (payload) => {
+        deliver: async (payload, info) => {
+            deps.abortSignal?.throwIfAborted();
             if (payload.toolProgress) {
                 const frame = payload.toolProgress;
                 try {
@@ -358,8 +359,9 @@ export async function processOneMessage(full, deps) {
                 const f = new StreamingMarkdownFilter();
                 return f.feed(rawText) + f.flush();
             })();
-            const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0];
-            logger.debug(`outbound payload: ${redactBody(JSON.stringify(payload))}`);
+            const mediaUrls = payload.mediaUrls?.length ? payload.mediaUrls : payload.mediaUrl ? [payload.mediaUrl] : [];
+            const mediaUrl = mediaUrls[0];
+            logger.debug(`outbound payload: textLength=${text.length} mediaCount=${mediaUrls.length}`);
             logger.info(`outbound: to=${ctx.To} contextToken=${redactToken(contextToken)} textLen=${text.length} mediaUrl=${mediaUrl ? "present" : "none"}`);
             if (debug) {
                 debugDeliveries.push({
@@ -381,39 +383,31 @@ export async function processOneMessage(full, deps) {
                 return;
             }
             text = sendingResult.text;
+            let temporaryFile;
             try {
-                if (mediaUrl) {
+                if (info?.kind === "tool" && mediaUrls.length) {
+                    await sendImageBatch(mediaUrls, async (filePath, buffer, index) => {
+                        const opts = { baseUrl: deps.baseUrl, token: deps.token, contextToken, runId, abortSignal: deps.abortSignal };
+                        const uploaded = await uploadFileToWeixin({ filePath, toUserId: ctx.To, opts, cdnBaseUrl: deps.cdnBaseUrl }, buffer);
+                        deps.abortSignal?.throwIfAborted();
+                        await sendImageMessageWeixin({ to: ctx.To, text: index === 0 ? text : "", uploaded, opts });
+                        emitWeixinMessageSent({ to: ctx.To, content: "", success: true, accountId: deps.accountId, runId });
+                    }, deps.abortSignal);
+                    return;
+                }
+                if (mediaUrls.length) {
+                  for (const source of mediaUrls) {
+                    deps.abortSignal?.throwIfAborted();
                     let filePath;
-                    if (!mediaUrl.includes("://") || mediaUrl.startsWith("file://")) {
-                        if (mediaUrl.startsWith("file://")) {
-                            filePath = new URL(mediaUrl).pathname;
-                        }
-                        else if (!path.isAbsolute(mediaUrl)) {
-                            filePath = path.resolve(mediaUrl);
-                            logger.debug(`outbound: resolved relative path ${mediaUrl} -> ${filePath}`);
-                        }
-                        else {
-                            filePath = mediaUrl;
-                        }
-                        logger.debug(`outbound: local file path resolved filePath=${filePath}`);
+                    if (!source.includes("://") || source.startsWith("file://")) {
+                        filePath = path.resolve(localMediaPath(source));
                     }
-                    else if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) {
-                        logger.debug(`outbound: downloading remote mediaUrl=${mediaUrl.slice(0, 80)}...`);
-                        filePath = await downloadRemoteImageToTemp(mediaUrl, MEDIA_OUTBOUND_TEMP_DIR, deps.abortSignal);
-                        logger.debug(`outbound: remote image downloaded to filePath=${filePath}`);
+                    else if (source.startsWith("http://") || source.startsWith("https://")) {
+                        filePath = await downloadRemoteImageToTemp(source, MEDIA_OUTBOUND_TEMP_DIR, deps.abortSignal);
+                        temporaryFile = filePath;
                     }
                     else {
-                        logger.warn(`outbound: unrecognized mediaUrl scheme, sending text only mediaUrl=${mediaUrl.slice(0, 80)}`);
-                        await sendMessageWeixin({ to: ctx.To, text, opts: {
-                                baseUrl: deps.baseUrl,
-                                token: deps.token,
-                                contextToken,
-                                runId,
-                                abortSignal: deps.abortSignal,
-                            } });
-                        emitWeixinMessageSent({ to: ctx.To, content: text, success: true, accountId: deps.accountId, runId });
-                        logger.info(`outbound: text sent to=${ctx.To}`);
-                        return;
+                        throw new Error('Unsupported media URL scheme');
                     }
                     await sendWeixinMediaFile({
                         filePath,
@@ -424,6 +418,12 @@ export async function processOneMessage(full, deps) {
                     });
                     emitWeixinMessageSent({ to: ctx.To, content: text, success: true, accountId: deps.accountId, runId });
                     logger.info(`outbound: media sent OK to=${ctx.To}`);
+                    text = "";
+                    if (temporaryFile) {
+                        await fs.promises.unlink(temporaryFile).catch(() => {});
+                        temporaryFile = undefined;
+                    }
+                  }
                 }
                 else {
                     logger.debug(`outbound: sending text message to=${ctx.To}`);
@@ -440,13 +440,16 @@ export async function processOneMessage(full, deps) {
             }
             catch (err) {
                 emitWeixinMessageSent({ to: ctx.To, content: text, success: false, error: String(err), accountId: deps.accountId, runId });
-                logger.error(`outbound: FAILED to=${ctx.To} mediaUrl=${mediaUrl ?? "none"} err=${String(err)} stack=${err.stack ?? ""}`);
+                logger.error(`outbound: FAILED to=${ctx.To} mediaCount=${mediaUrls.length} err=${String(err)}`);
                 throw err;
             }
+            finally {
+                if (temporaryFile) await fs.promises.unlink(temporaryFile).catch(() => {});
+            }
         },
-        onError: (err, info) => {
+        onError: async (err, info) => {
             deps.errLog(`weixin reply ${info.kind}: ${String(err)}`);
-            if (err?.code === "WEIXIN_TOOL_PROGRESS_SEND_FAILED")
+            if (deps.abortSignal?.aborted || err?.code === "WEIXIN_TOOL_PROGRESS_SEND_FAILED")
                 return;
             const errMsg = err instanceof Error ? err.message : String(err);
             let notice;
@@ -459,9 +462,9 @@ export async function processOneMessage(full, deps) {
                 notice = `⚠️ 媒体文件上传失败，请稍后重试。`;
             }
             else {
-                notice = `⚠️ 消息发送失败：${errMsg}`;
+                notice = `⚠️ ${imageDeliveryErrorText(err)}`;
             }
-            void sendWeixinErrorNotice({
+            await sendWeixinErrorNotice({
                 to: ctx.To,
                 contextToken,
                 message: notice,
@@ -535,6 +538,6 @@ export async function processOneMessage(full, deps) {
     }
     finally {
         if (!mediaHandedOff)
-            cleanupDownloadedMediaOpts(mediaOpts);
+            downloadedMedia.forEach(cleanupDownloadedMediaOpts);
     }
 }

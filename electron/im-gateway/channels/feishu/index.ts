@@ -11,7 +11,6 @@
 
 import { monitorFeishuProvider } from './vendor/src/channel/monitor.js';
 import { LarkClient } from './vendor/src/core/lark-client.js';
-import { sendMessageFeishu } from './vendor/src/messaging/outbound/send.js';
 import { feishuRuntimeHost } from './runtime-adapter.js';
 import type { ChannelConnector, ConnectorFactory } from '../../core/channel-connector.js';
 
@@ -27,19 +26,8 @@ export const createFeishuConnector: ConnectorFactory = (_bot): ChannelConnector 
     LarkClient.setRuntime(feishuRuntimeHost.buildRuntime());
     feishuRuntimeHost.register(ctx);
 
-    // 迟到帧兜底：飞书流式卡片 dispatcher 在分发窗口关闭后丢弃迟到帧，
-    // agent 多回合工作产出的最终答案改走主动发送（见 core LateSink 说明）
-    ctx.setLateSink(async (payload, peer) => {
-      if (!payload.text) return;
-      await sendMessageFeishu({
-        cfg: feishuRuntimeHost.loadConfig(),
-        to: peer.id,
-        text: payload.text,
-        accountId: ctx.bot.id,
-      });
-    });
-
     const runtime = {
+      abortSignal: ctx.signal,
       log: (...args: unknown[]) => ctx.log.info(...args),
       error: (...args: unknown[]) => ctx.log.error(...args),
     };
@@ -54,7 +42,6 @@ export const createFeishuConnector: ConnectorFactory = (_bot): ChannelConnector 
         accountId: ctx.bot.id,
       });
     } finally {
-      ctx.setLateSink(null);
       feishuRuntimeHost.unregister(ctx.bot.id);
       await LarkClient.clearCache(ctx.bot.id).catch(() => {});
     }

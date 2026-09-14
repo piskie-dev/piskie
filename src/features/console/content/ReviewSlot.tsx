@@ -9,6 +9,7 @@
  */
 
 import { memo, useMemo } from 'react';
+import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 
 import { fileChangeOf, readOpOf } from '../data/review';
 import { useTranscript } from '../data/useTranscript';
@@ -19,9 +20,10 @@ export interface ReviewSlotProps {
   readonly agentId: string;
   readonly workerId?: string;
   readonly target?: FileReviewTarget;
+  readonly onPreviewImage?: ImagePreviewHandler;
 }
 
-export const ReviewSlot = memo<ReviewSlotProps>(({ agentId, workerId, target }) => {
+export const ReviewSlot = memo<ReviewSlotProps>(({ agentId, workerId, target, onPreviewImage }) => {
   const transcript = useTranscript(workerId ?? agentId, {
     active: target?.kind === 'cell',
   });
@@ -45,6 +47,7 @@ export const ReviewSlot = memo<ReviewSlotProps>(({ agentId, workerId, target }) 
       change={change}
       read={read}
       preview={preview}
+      onPreviewImage={onPreviewImage}
       onOpenPath={(path) => void window.piskie.desktop.system.openPath(path)}
       onRevealPath={(path) => void window.piskie.desktop.system.revealPath(path)}
     />

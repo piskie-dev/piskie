@@ -2,7 +2,7 @@
  * 生图成品路径解析的单测。钉三条：
  * 1. 只认结果文本的 `- [成功] <path>` 行（partial 时失败路径不混进来）
  * 2. 带备注（`（覆盖已有文件)`）的行剥掉备注
- * 3. 非 ok / 非 generate_image 一律 undefined
+ * 3. 非 generate_image 不解析；部分成功仍展示成功图片
  */
 
 import { describe, expect, it } from 'vitest';
@@ -35,8 +35,8 @@ function build(over: { tool?: string; text: string; ok?: boolean }) {
 
 const OK_TEXT = [
   '图片生成完成：2 张已写入最终路径。',
-  '- [成功] /out/a.png',
-  '- [成功] /out/b.png（覆盖已有文件）',
+  '- [成功] "/out/a.png"',
+  '- [成功] "/out/b.png"（覆盖已有文件）',
 ].join('\n');
 
 describe('generatedImages', () => {
@@ -45,8 +45,8 @@ describe('generatedImages', () => {
   });
 
   it('partial：只收成功行', () => {
-    const text = ['部分成功。', '- [成功] /out/a.png', '- [失败] /out/c.png（写入失败）'].join('\n');
-    expect(build({ text }).generatedImages).toEqual(['/out/a.png']);
+    const text = ['部分成功。', '- [成功] "/out/a.png"', '- [失败] "/out/c.png"（写入失败）'].join('\n');
+    expect(build({ text, ok: false }).generatedImages).toEqual(['/out/a.png']);
   });
 
   it('失败结果不给缩略图', () => {

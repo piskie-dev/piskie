@@ -35,6 +35,10 @@ function client(overrides: Partial<AgentRunClient> = {}): AgentRunClient {
   return {
     list: vi.fn(async () => []),
     state: vi.fn(async () => null),
+    rename: vi.fn(async (agentId, name) => ({
+      ...run(agentId),
+      runConfig: { ...run(agentId).runConfig, name },
+    })),
     delete: vi.fn(async () => undefined),
     readPlan: vi.fn(),
     listCompactions: vi.fn(),
@@ -142,6 +146,125 @@ describe('AgentRunRepository', () => {
     expect(repository.previewState.getState()).toMatchObject({
       phase: 'ready',
       agentId: 'history',
+    });
+  });
+
+  it('applies the canonical renamed snapshot immediately to the list and ready preview', async () => {
+    const original = run('sample-main');
+    const rename = vi.fn(async () => ({
+      ...original,
+      runConfig: { ...original.runConfig, name: 'Revised title' },
+    }));
+    const list = vi.fn(async () => [original]);
+    const repository = createAgentRunRepository(client({
+      list,
+      rename,
+      state: vi.fn(async () => control('sample-main')),
+    }));
+    await repository.refresh();
+    await repository.loadPreview('sample-main');
+    repository.applyConversation({
+      agentId: 'sample-main',
+      index: 4,
+      entry: {
+        t: 'msg', role: 'assistant', id: 'sample-reply', ts: 4000, content: 'Example reply',
+      },
+      messages: {
+        latestMessage: { index: 4, timestamp: 4000 },
+        latestAssistantIndex: 4,
+        readThroughIndex: -1,
+      },
+    });
+
+    await repository.rename('sample-main', 'Revised title');
+
+    expect(rename).toHaveBeenCalledExactlyOnceWith('sample-main', 'Revised title');
+    expect(list).toHaveBeenCalledOnce();
+    expect(repository.listState.getState().runs[0]).toMatchObject({
+      runConfig: { name: 'Revised title' },
+      messages: { latestMessage: { index: 4 } },
+    });
+    expect(repository.previewState.getState()).toMatchObject({
+      phase: 'ready',
+      state: { runConfig: { name: 'Revised title' } },
+    });
+  });
+
+  it('fences an older list response after a rename succeeds', async () => {
+    const original = run('sample-main');
+    let finishRefresh!: (runs: AgentRunSnapshot[]) => void;
+    const list = vi.fn()
+      .mockResolvedValueOnce([original])
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        finishRefresh = resolve;
+      }));
+    const repository = createAgentRunRepository(client({
+      list,
+      rename: vi.fn(async () => ({
+        ...original,
+        runConfig: { ...original.runConfig, name: 'Revised title' },
+      })),
+    }));
+    await repository.refresh();
+
+    const refreshing = repository.refresh();
+    await repository.rename('sample-main', 'Revised title');
+    finishRefresh([original]);
+    await refreshing;
+
+    expect(repository.listState.getState()).toMatchObject({
+      phase: 'ready',
+      runs: [{ runConfig: { name: 'Revised title' } }],
+    });
+  });
+
+  it('keeps an initial list request usable when an active-only row is renamed', async () => {
+    const original = run('sample-main');
+    let finishList!: (runs: AgentRunSnapshot[]) => void;
+    const repository = createAgentRunRepository(client({
+      list: vi.fn(() => new Promise<AgentRunSnapshot[]>((resolve) => {
+        finishList = resolve;
+      })),
+      rename: vi.fn(async () => ({
+        ...original,
+        runConfig: { ...original.runConfig, name: 'Revised title' },
+      })),
+    }));
+
+    const listing = repository.refresh();
+    await repository.rename('sample-main', 'Revised title');
+    finishList([original]);
+    await listing;
+
+    expect(repository.listState.getState()).toMatchObject({
+      phase: 'ready',
+      runs: [{ runConfig: { name: 'Revised title' } }],
+    });
+  });
+
+  it('uses the renamed list title when an older preview response arrives later', async () => {
+    const original = run('sample-main');
+    let finishPreview!: (state: AgentControlSnapshot) => void;
+    const repository = createAgentRunRepository(client({
+      list: vi.fn(async () => [original]),
+      state: vi.fn(() => new Promise<AgentControlSnapshot | null>((resolve) => {
+        finishPreview = resolve;
+      })),
+      rename: vi.fn(async () => ({
+        ...original,
+        runConfig: { ...original.runConfig, name: 'Revised title' },
+      })),
+    }));
+    await repository.refresh();
+
+    const preview = repository.loadPreview('sample-main');
+    await repository.rename('sample-main', 'Revised title');
+    finishPreview(control('sample-main'));
+    await preview;
+
+    expect(repository.previewState.getState()).toMatchObject({
+      phase: 'ready',
+      state: { runConfig: { name: 'Revised title' } },
     });
   });
 });

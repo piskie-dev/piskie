@@ -58,7 +58,6 @@ export interface DockCanvasProps {
   readonly workers: readonly CanvasWorker[];
   /** 主 agent 是否在停止中 —— 决定屏幕流是否订阅实时 */
   readonly stopping: boolean;
-  readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly onOpenWorker?: (workerId: string) => void;
   readonly onFullscreen?: (target: ScreenFullscreenTarget) => void;
@@ -92,7 +91,6 @@ const Inner = memo<DockCanvasProps>(
     agentId,
     workers,
     stopping,
-    devMode,
     onPreviewImage,
     onOpenWorker,
     onFullscreen,
@@ -143,7 +141,6 @@ const Inner = memo<DockCanvasProps>(
             data: {
               agentId,
               workerId: node.kind === 'worker' ? node.ownerId : undefined,
-              devMode,
               onPreviewImage,
               onOpenWorker,
             },
@@ -170,7 +167,7 @@ const Inner = memo<DockCanvasProps>(
           },
         };
       },
-      [agentId, byId, devMode, onFullscreen, onOpenWorker, onPreviewImage, stopping],
+      [agentId, byId, onFullscreen, onOpenWorker, onPreviewImage, stopping],
     );
 
     const computedNodes = useMemo(

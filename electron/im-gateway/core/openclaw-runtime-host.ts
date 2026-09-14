@@ -17,7 +17,8 @@ import { appLog } from '@electron/observability/logging/app-log.js';
 import { chunkText } from './text-utils.js';
 import { normalizeAccountId } from './openclaw-compat/account-id.js';
 import { createHash } from 'node:crypto';
-import { MEDIA_READ_FAILED_REPLY, cleanupInboundMedia } from './inbound-media.js';
+import { MEDIA_READ_FAILED_REPLY, MEDIA_LIMIT_REPLY, MAX_IM_IMAGE_COUNT, MAX_IM_IMAGE_TOTAL_BYTES, cleanupInboundMedia } from './inbound-media.js';
+import { readMediaResponse } from './media-io.js';
 import { deliverDirectFinalReply } from './direct-reply-delivery.js';
 import { createDeliveryQueue, type DeliveryQueue } from './outbound.js';
 import type {
@@ -233,10 +234,11 @@ export class OpenClawRuntimeHost {
               ? [String(inboundCtx.MediaUrl)]
               : [];
         const knownPaths = new Set(mediaPaths);
-        const remoteUrls: string[] = [];
+        const remoteIndexes: number[] = [];
         for (const entry of mediaUrls) {
           if (/^https?:\/\//i.test(entry)) {
-            remoteUrls.push(entry);
+            remoteIndexes.push(media.length);
+            media.push({ path: entry });
           } else if (!knownPaths.has(entry)) {
             knownPaths.add(entry);
             media.push({ path: entry, declaredMediaType: undefined });
@@ -273,16 +275,21 @@ export class OpenClawRuntimeHost {
           const direct = await deliverDirectFinalReply({ text: reply }, dispatcher);
           return { queuedFinal: direct.counts.final > 0, counts: direct.counts };
         };
+        if (media.length > MAX_IM_IMAGE_COUNT) return failWholeMessage(MEDIA_LIMIT_REPLY);
         // 远程 MediaUrl(s) 必须先由当前渠道下载落到受管目录再 dispatch；
         // 下载失败返回明确错误回执，不把带媒体的消息降级为无附件文本
-        for (const url of remoteUrls) {
+        let downloadedBytes = 0;
+        for (const index of remoteIndexes) {
           try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const buffer = Buffer.from(await res.arrayBuffer());
+            const res = await fetch(media[index].path, {
+              signal: AbortSignal.any([connectorCtx.signal, AbortSignal.timeout(30_000)]),
+            });
+            const buffer = await readMediaResponse(res);
+            downloadedBytes += buffer.length;
+            if (downloadedBytes > MAX_IM_IMAGE_TOTAL_BYTES) return failWholeMessage(MEDIA_LIMIT_REPLY);
             const contentType = res.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
             const saved = await connectorCtx.media.saveBuffer(buffer, contentType, 'inbound');
-            media.push({ path: saved.path, declaredMediaType: saved.contentType ?? contentType });
+            media[index] = { path: saved.path, declaredMediaType: saved.contentType ?? contentType };
           } catch (error) {
             appLog.error({
               event: 'messaging.inbound_media.fetch.failed',
@@ -290,7 +297,7 @@ export class OpenClawRuntimeHost {
               context: { scope: 'messaging.inbound_media', accountId: connectorCtx.bot.id },
               error,
             });
-            return failWholeMessage(MEDIA_READ_FAILED_REPLY);
+            return failWholeMessage(error instanceof Error && error.message === MEDIA_LIMIT_REPLY ? MEDIA_LIMIT_REPLY : MEDIA_READ_FAILED_REPLY);
           }
         }
         // 受管目录之外的本地路径（含 download-failed:// 哨兵）核心层绝不
@@ -562,7 +569,7 @@ type GroupMentionInput = GroupPolicyInput & {
 type DispatcherOptions = {
   deliver?: (payload: DeliverPayload, info: { kind: DeliverKind }) => Promise<void> | void;
   onReplyStart?: () => Promise<void> | void;
-  onError?: (err: unknown, info: { kind: string }) => void;
+  onError?: (err: unknown, info: { kind: string }) => void | Promise<void>;
   onIdle?: () => void;
   onCleanup?: () => void;
 };

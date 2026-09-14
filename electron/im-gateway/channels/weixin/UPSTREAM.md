@@ -23,7 +23,9 @@
 | 配置 reload | `auth/accounts.js` | `triggerWeixinChannelReload()` 固定 no-op；账号映射由 PISKIE `BotConfig.pluginAccountId` 持久化 |
 | Runtime | `index.ts`、`runtime-adapter.ts` | `register -> buildRuntime -> startAccount(runtime, channelRuntime)`；pre-abort 零网络；finally 有界 stop 后 unregister |
 | Sender 身份 | `messaging/process-message.js` | 设置真实 `ctx.SenderId`，供核心发送者校验使用 |
-| 入站媒体安全 | `media/media-download.js`、`cdn/pic-decrypt.js`、`messaging/process-message.js` | 20 MiB 上限、120 秒 CDN 上限、四类 `download-failed://` 哨兵、dispatch 前清理/调用后 handoff |
+| 入站媒体安全 | `media/media-download.js`、`cdn/pic-decrypt.js`、`messaging/process-message.js` | 按原序下载全部媒体；单图 5 MiB（密文允许 padding）、120 秒 CDN 上限、`download-failed://` 哨兵、dispatch 前清理/调用后 handoff；公共层校验 10 张/合计 20 MiB |
+| 工具图片发送 | `messaging/process-message.js`、`cdn/upload.js`、`cdn/cdn-upload.js` | 原 `deliver` 完整消费 `mediaUrls`，复用公共 `sendImageBatch` 的预算和有界读取，传 Buffer 给现有原生上传；逐图加密上传/发图，沿用账号、context token 和 run；等待失败通知，取消与上传超时生效，清理远程媒体临时文件 |
+| 媒体日志 | `messaging/process-message.js`、`media/media-download.js`、`cdn/pic-decrypt.js` | 媒体上下文改记数量、大小和阶段，不打印整份 payload、媒体 URL 或 AES key |
 | Connector abort | `api/*`、`monitor/*`、`messaging/*`、`cdn/*` | 统一字段 `abortSignal`；取消长轮询、配置请求、发送、上传下载和退避；abort 后不再 dispatch 剩余消息 |
 | 发送正确性 | `api/api.js`、`messaging/send.js` | 不设置 `Content-Length`；校验 HTTP 与 `ret/errmsg`；网络/超时/408/425/429/5xx 按 1/3/10 秒重试，同一次重试复用 `client_id/run_id` |
 | 原生工具进度 | `messaging/process-message.js` | 不使用上游 `onItemEvent/WeixinReplyProgressSender`；由 PISKIE dispatcher 的同一 sendChain 发送 type 11/12 |

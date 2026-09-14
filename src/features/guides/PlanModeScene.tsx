@@ -24,7 +24,7 @@ import gateStyles from '../console/content/gates/gates.module.css';
 import threadStyles from '../console/content/thread.module.css';
 import business from './businessScenes.module.css';
 import styles from './guides.module.css';
-import logo from '/logo-64.png';
+import logo from '/logo-on-dark-128.png';
 
 function Mark() {
   return <img src={logo} alt="" className={`${styles.mark} app-logo-adaptive`} />;

@@ -17,6 +17,7 @@ const botSchema = z.object({
     forwardAssistantText: z.boolean(),
     forwardToolCalls: z.boolean(),
     forwardToolResults: z.boolean(),
+    forwardToolImages: z.boolean().default(true),
     toolFilter: z.object({
       mode: z.enum(['include', 'exclude']),
       tools: z.array(identifier).max(1_000),

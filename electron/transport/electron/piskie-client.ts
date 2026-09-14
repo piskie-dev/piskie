@@ -30,6 +30,7 @@ export function createElectronPiskieClient(options: {
   transport: ElectronPreloadClient;
   version: string;
   platform: string;
+  getPathForFile: (file: File) => string;
 }): PiskieDesktopApi {
   const { transport } = options;
   const request = <T>(operation: string, ...args: unknown[]): Promise<T> => (
@@ -165,6 +166,7 @@ export function createElectronPiskieClient(options: {
     agentRuns: {
       list: () => request(AGENT_RUN_OPERATIONS.list),
       state: (agentId) => request(AGENT_RUN_OPERATIONS.state, agentId),
+      rename: (agentId, name) => request(AGENT_RUN_OPERATIONS.rename, agentId, name),
       delete: (agentId) => request(AGENT_RUN_OPERATIONS.delete, agentId),
       markRead: (agentId, throughIndex) => request(AGENT_RUN_OPERATIONS.markRead, agentId, throughIndex),
       readPlan: (agentId) => request(AGENT_RUN_OPERATIONS.readPlan, agentId),
@@ -266,7 +268,8 @@ export function createElectronPiskieClient(options: {
           request(PILOT_OPERATIONS.captureEnvironmentLoginTrail, environmentId)
         ),
         kernelStatus: () => request(PILOT_OPERATIONS.kernelStatus),
-        installKernel: () => request(PILOT_OPERATIONS.installKernel),
+        // Keep waiting until the downloader reports success or failure.
+        installKernel: () => transport.request(PILOT_OPERATIONS.installKernel, [], { timeoutMs: 0 }),
         observeKernel: (listener) => observe(PILOT_TOPICS.kernel, listener),
       },
       screen: {
@@ -366,10 +369,11 @@ export function createElectronPiskieClient(options: {
         info: () => request(DESKTOP_OPERATIONS.info),
         openDevTools: () => request(DESKTOP_OPERATIONS.openDevTools),
         openExternal: (url) => request(DESKTOP_OPERATIONS.openExternal, url),
-        openPath: (path) => request(DESKTOP_OPERATIONS.openPath, path),
+        // System launchers may wait for an application chooser or the viewer to close.
+        openPath: (path) => waitForUser(DESKTOP_OPERATIONS.openPath, path),
         revealPath: (path) => request(DESKTOP_OPERATIONS.revealPath, path),
-        openWorkspace: (workspace) => request(DESKTOP_OPERATIONS.openWorkspace, workspace),
-        openAgentRunTrace: (agentId) => request(
+        openWorkspace: (workspace) => waitForUser(DESKTOP_OPERATIONS.openWorkspace, workspace),
+        openAgentRunTrace: (agentId) => waitForUser(
           DESKTOP_OPERATIONS.openAgentRunTrace,
           agentId,
         ),
@@ -377,6 +381,7 @@ export function createElectronPiskieClient(options: {
         observeNetwork: (listener) => observe(DESKTOP_TOPICS.network, listener),
       },
       files: {
+        getPathForFile: (file) => options.getPathForFile(file),
         preview: (path) => request(DESKTOP_OPERATIONS.previewFile, path),
         releasePreview: (url) => request(DESKTOP_OPERATIONS.releasePreview, url),
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),

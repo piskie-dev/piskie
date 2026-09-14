@@ -8,7 +8,7 @@ import type { BusinessFrameProps } from './SceneStage';
 import deck from '../prefdeck/deck.module.css';
 import task from '../../components/task-definition/taskDefinitionModal.module.css';
 import s from './businessScenes.module.css';
-import logo from '/logo-128.png';
+import logo from '/logo-on-dark-128.png';
 
 function Field({
   label,
@@ -328,7 +328,7 @@ export function ModelGuideFrame({
               </div>
               {gateway === 'image' && time > 4800 && (
                 <div className={`${deck.probeShot} ${s.imageResult}`}>
-                  <img src={logo} alt="" />
+                  <img src={logo} alt="" className="app-logo-adaptive" />
                   <span className={deck.fieldNote}>{t('guides.workflows.image.result')}</span>
                 </div>
               )}

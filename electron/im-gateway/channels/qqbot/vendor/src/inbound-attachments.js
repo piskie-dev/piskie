@@ -8,6 +8,7 @@ import { downloadFile, downloadFileToBuffer } from "./image-server.js";
 import { convertSilkToWav, isVoiceAttachment, formatDuration } from "./utils/audio-convert.js";
 import { transcribeAudio, resolveSTTConfig } from "./stt.js";
 import { getQQBotMediaDir } from "./utils/platform.js";
+import { MAX_IM_IMAGE_BYTES, MAX_IM_IMAGE_COUNT } from '../../../../core/inbound-media.js';
 // ============ 空结果常量 ============
 const EMPTY_RESULT = {
     attachmentInfo: "",
@@ -50,13 +51,13 @@ export async function processAttachments(attachments, ctx) {
     // PISKIE 本地改动（49号 §4.3.5/§4.3.8）：非图片附件与下载失败附件以媒体条目
     // 上报核心层（整条明确拒绝/失败），不再把本地路径或失败提示拼进正文
     const otherMediaPaths = [];
-    // 入站附件下载：限制 2 分钟，不限大小
+    // 入站附件下载：限制 2 分钟，非语音附件按公共图片预算读取。
     const INBOUND_DOWNLOAD_TIMEOUT_MS = 2 * 60 * 1000; // 2 分钟
     // PISKIE 本地改动（49号 §4.3.1）：将移交核心层的非语音附件（图片/文件）经
     // ctx.saveMedia（→ ConnectorContext.media.saveBuffer）直接落受管目录
-    // （piskie-media），内存缓冲上限 20MiB（对齐核心单条消息总上限，连接器可更严格）；
+    // （piskie-media），单文件内存缓冲上限 5 MiB，核心校验整条消息的合计预算；
     // 语音附件仅供 vendor 本地 SILK→WAV + STT 消费、路径不移交核心，保持 vendor 目录
-    const INBOUND_NONVOICE_MAX_BYTES = 20 * 1024 * 1024;
+    const INBOUND_NONVOICE_MAX_BYTES = MAX_IM_IMAGE_BYTES;
     // Phase 1: 并行下载所有附件
     const downloadTasks = attachments.map(async (att) => {
         const attUrl = att.url?.startsWith("//") ? `https:${att.url}` : att.url;
@@ -67,6 +68,9 @@ export async function processAttachments(attachments, ctx) {
         let localPath = null;
         let audioPath = null;
         let dlError;
+        if (attachments.length > MAX_IM_IMAGE_COUNT || ctx.abortSignal?.aborted) {
+            return { att, attUrl: 'download-failed://media', isVoice, localPath, audioPath, dlError: 'Media limit or cancelled' };
+        }
         if (isVoice && wavUrl) {
             const wavResult = await downloadFile(wavUrl, undefined, { destDir: downloadDir, timeoutMs: INBOUND_DOWNLOAD_TIMEOUT_MS });
             if (wavResult.filePath) {
@@ -79,7 +83,7 @@ export async function processAttachments(attachments, ctx) {
             }
         }
         if (!localPath && !isVoice && ctx.saveMedia) {
-            const dl = await downloadFileToBuffer(attUrl, { timeoutMs: INBOUND_DOWNLOAD_TIMEOUT_MS, maxSizeBytes: INBOUND_NONVOICE_MAX_BYTES });
+            const dl = await downloadFileToBuffer(attUrl, { timeoutMs: INBOUND_DOWNLOAD_TIMEOUT_MS, maxSizeBytes: INBOUND_NONVOICE_MAX_BYTES, signal: ctx.abortSignal });
             if (dl.buffer) {
                 try {
                     localPath = await ctx.saveMedia(dl.buffer, att.content_type || dl.contentType);
@@ -126,7 +130,7 @@ export async function processAttachments(attachments, ctx) {
             }
         }
         else {
-            log?.error(`${prefix} Failed to download: ${attUrl}`);
+            log?.error(`${prefix} Attachment download failed (${att.content_type ?? 'unknown type'})`);
             if (att.content_type?.startsWith("image/")) {
                 return { localPath: null, type: "image-fallback", attUrl, contentType: att.content_type, dlError, meta };
             }

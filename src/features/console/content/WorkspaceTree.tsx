@@ -14,7 +14,7 @@
 
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, FolderOpen, History, Pause, Plus, Square, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, FolderOpen, History, Pause, Pencil, Plus, Square, Trash2 } from 'lucide-react';
 import { hasUnreadMessages } from '@shared/agent-run-messages';
 
 import { useUIStore } from '../../../store/uiStore';
@@ -37,6 +37,7 @@ import styles from './threads.module.css';
 const LIVE_MENU_ICON = {
   workspace: <FolderOpen size={12} />,
   trace: <History size={12} />,
+  rename: <Pencil size={12} />,
   pause: <Pause size={12} />,
   stop: <Square size={12} />,
 } as const;
@@ -44,6 +45,7 @@ const LIVE_MENU_ICON = {
 const HISTORY_MENU_ICON = {
   open: <FolderOpen size={12} />,
   trace: <History size={12} />,
+  rename: <Pencil size={12} />,
   delete: <Trash2 size={12} />,
 } as const;
 
@@ -84,7 +86,7 @@ const Row = memo<{
     : undefined;
 
   const items: MenuItemDescriptor[] = live
-    ? buildSessionMenu(menuSourceOf(row.agentId)).map((item) => ({
+    ? buildSessionMenu({ ...menuSourceOf(row.agentId), renamable: true }).map((item) => ({
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'workspace' ? 'openWorkspace' : item.key === 'trace' ? 'viewTrace' : item.key}`),
         icon: LIVE_MENU_ICON[item.key],

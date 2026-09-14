@@ -6,6 +6,7 @@
  * 2. sendPlainReply — 处理不含媒体标签的普通回复（markdown 图片/纯文本+图片）
  */
 import { sendC2CMessage, sendGroupMessage, sendChannelMessage, sendC2CImageMessage, sendGroupImageMessage, } from "./api.js";
+import { sendDmMessage } from './api.js';
 import { sendPhoto, sendMedia as sendMediaAuto, DEFAULT_MEDIA_SEND_ERROR, resolveUserFacingMediaError, } from "./outbound.js";
 import { chunkText, TEXT_CHUNK_LIMIT } from "./channel.js";
 import { getQQBotRuntime } from "./runtime.js";
@@ -55,28 +56,9 @@ export async function parseAndSendMediaTags(replyText, event, actx, sendWithRetr
  * 发送不含媒体标签的普通回复。
  * 处理 markdown 图片嵌入、Base64 富媒体、纯文本分块、本地媒体自动路由。
  */
-export async function sendPlainReply(payload, replyText, event, actx, sendWithRetry, consumeQuoteRef, toolMediaUrls) {
+export async function sendPlainReply(payload, replyText, event, actx, sendWithRetry, consumeQuoteRef) {
     const { account, qualifiedTarget, log } = actx;
     const prefix = `[qqbot:${account.accountId}]`;
-    // 预去重：把 payload 自带的媒体 URL 从 toolMediaUrls 中移除，
-    // 防止同一个文件既被 payload.mediaUrl/mediaUrls 发送，又被 toolMediaUrls 重复发送
-    if (toolMediaUrls.length > 0) {
-        const payloadUrls = new Set();
-        if (payload.mediaUrl)
-            payloadUrls.add(payload.mediaUrl);
-        if (payload.mediaUrls)
-            for (const u of payload.mediaUrls)
-                payloadUrls.add(u);
-        if (payloadUrls.size > 0) {
-            const before = toolMediaUrls.length;
-            const filtered = toolMediaUrls.filter(url => !payloadUrls.has(url));
-            if (filtered.length < before) {
-                log?.info(`${prefix} Pre-dedup: removed ${before - filtered.length} payload media URL(s) from toolMediaUrls`);
-                toolMediaUrls.length = 0;
-                toolMediaUrls.push(...filtered);
-            }
-        }
-    }
     const collectedImageUrls = [];
     const localMediaToSend = [];
     const collectImageUrl = (url) => {
@@ -166,37 +148,6 @@ export async function sendPlainReply(payload, replyText, event, actx, sendWithRe
             }
         }
     }
-    // 转发 tool 阶段收集的媒体（去重：跳过已在 localMediaToSend 或 collectedImageUrls 中发送过的路径）
-    if (toolMediaUrls.length > 0) {
-        const alreadySent = new Set([...localMediaToSend, ...collectedImageUrls]);
-        const dedupedToolMedia = toolMediaUrls.filter(url => !alreadySent.has(url));
-        if (dedupedToolMedia.length < toolMediaUrls.length) {
-            log?.info(`${prefix} Deduped tool media: ${toolMediaUrls.length} → ${dedupedToolMedia.length} (skipped ${toolMediaUrls.length - dedupedToolMedia.length} already sent via localMedia/collectedImages)`);
-        }
-        if (dedupedToolMedia.length > 0) {
-            log?.info(`${prefix} Forwarding ${dedupedToolMedia.length} tool-collected media URL(s) after block deliver`);
-            for (const mediaUrl of dedupedToolMedia) {
-                try {
-                    const result = await sendMediaAuto({
-                        to: qualifiedTarget, text: "", mediaUrl,
-                        accountId: account.accountId, replyToId: event.messageId, account,
-                    });
-                    if (result.error) {
-                        log?.error(`${prefix} Tool media forward error: ${result.error}`);
-                        await sendTextChunks(resolveUserFacingMediaError(result), event, actx, sendWithRetry, consumeQuoteRef);
-                    }
-                    else {
-                        log?.info(`${prefix} Forwarded tool media: ${mediaUrl.slice(0, 80)}...`);
-                    }
-                }
-                catch (err) {
-                    log?.error(`${prefix} Tool media forward failed: ${err}`);
-                    await sendTextChunks(DEFAULT_MEDIA_SEND_ERROR, event, actx, sendWithRetry, consumeQuoteRef);
-                }
-            }
-        }
-        toolMediaUrls.length = 0;
-    }
 }
 // ============ 内部辅助函数 ============
 /** 发送文本分块（共用逻辑） */
@@ -213,6 +164,9 @@ async function sendTextChunks(text, event, actx, sendWithRetry, consumeQuoteRef)
                 }
                 else if (event.type === "group" && event.groupOpenid) {
                     return await sendGroupMessage(token, event.groupOpenid, chunk, event.messageId);
+                }
+                else if (event.type === 'dm') {
+                    return await sendDmMessage(token, event.guildId, chunk, event.messageId);
                 }
                 else if (event.channelId) {
                     return await sendChannelMessage(token, event.channelId, chunk, event.messageId);
@@ -318,6 +272,9 @@ async function sendMarkdownReply(textWithoutImages, imageUrls, mdMatches, bareUr
                     else if (event.type === "group" && event.groupOpenid) {
                         return await sendGroupMessage(token, event.groupOpenid, chunk, event.messageId);
                     }
+                    else if (event.type === 'dm') {
+                        return await sendDmMessage(token, event.guildId, chunk, event.messageId);
+                    }
                     else if (event.channelId) {
                         return await sendChannelMessage(token, event.channelId, chunk, event.messageId);
                     }
@@ -377,6 +334,9 @@ async function sendPlainTextReply(textWithoutImages, imageUrls, mdMatches, bareU
                     }
                     else if (event.type === "group" && event.groupOpenid) {
                         return await sendGroupMessage(token, event.groupOpenid, chunk, event.messageId);
+                    }
+                    else if (event.type === 'dm') {
+                        return await sendDmMessage(token, event.guildId, chunk, event.messageId);
                     }
                     else if (event.channelId) {
                         return await sendChannelMessage(token, event.channelId, chunk, event.messageId);

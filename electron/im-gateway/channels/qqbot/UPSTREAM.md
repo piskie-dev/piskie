@@ -26,15 +26,18 @@
 | 移除 `//# sourceMappingURL` 行 | 全部 | 未收编 .map |
 | `gateway.js` 取消当前消息的 `[发送者 (ID)]` 文本前缀（单条 `senderPrefix` 与合并消息 `lastPart` 两处） | 2 处 | 49号 §4.2/§11.3.23：群消息发送者身份由核心 InboundPipeline 统一加一次 `[IM_GROUP_MEMBER ...]` 信封；合并/引用历史中较早消息的成员标签保留 |
 | `inbound-attachments.js` 非图片附件与下载失败附件改为媒体条目上报（新增 `otherMediaPaths` 结果字段 + `download-failed://` 哨兵），不再拼 `[附件: 本地路径]`/失败提示进正文 | 1 文件 | 49号 §4.3.5/§4.3.8：本地路径不进正文；非图片/下载失败由核心层整条明确拒绝并固定回复。图片下载失败仍保留远程 URL 交核心层经受管目录下载 |
-| `gateway.js` `otherMediaPaths` 并入 `MediaPaths`；`connect()` 在 token/gateway URL await 后、建 WebSocket 前复查 abort；settle 前 `msgQueue.waitForIdle(5s)` 有界等待在途处理 | 3 处 | 49号 §3.2.1/§11.1.54：停止后不建新连接；渠道自有队列纳入 Connector settle barrier |
+| `gateway.js` 媒体按原序经 `MediaUrls` 移交；`connect()` 在 token/gateway URL await 后、建 WebSocket 前复查 abort；settle 前 `msgQueue.waitForIdle(5s)` 有界等待在途处理 | 3 处 | Host 在原下标回填补下载结果；停止后不建新连接；渠道自有队列纳入 Connector settle barrier |
 | `api.js` token fetch 加 `AbortSignal.timeout(30s)` | 1 处 | 49号 §3.2.1：在途 I/O 必须有固定上限（getGatewayUrl 走 apiRequest 已有超时） |
 | `message-queue.js` abort 后 `enqueue` 拒收新消息；drain/immediate 执行以 `activeWork` 集合追踪并暴露 `waitForIdle()` | 1 文件 | 49号 §3.2.1：fire-and-forget 队列处理纳入 settle barrier |
 | `image-server.js` 新增导出 `downloadFileToBuffer()`（内存 Buffer 下载，复用 SSRF 防护/重试/超时，流式累积超限即断） | 1 处 | 49号 §4.3.1（审2阻断1）：供入站附件直落受管目录，不再经 vendor 自有下载目录中转 |
-| `inbound-attachments.js` 非语音附件经 `ctx.saveMedia`（→ `ConnectorContext.media.saveBuffer`）直落受管目录（20MiB 上限）；语音仍留 vendor 目录（SILK→WAV+STT 本地消费，路径不移交核心） | 1 文件 | 49号 §4.3.1（审2阻断1）：渠道下载直接落 piskie-media；原始下载文件不在 vendor 目录永久保留 |
+| `inbound-attachments.js` 非语音附件经 `ctx.saveMedia`（→ `ConnectorContext.media.saveBuffer`）直落受管目录（单图 5 MiB，公共层合计 20 MiB）；语音仍留 vendor 目录（SILK→WAV+STT 本地消费，路径不移交核心） | 1 文件 | 渠道下载直接落 piskie-media；下载穿透账号取消信号；原始下载文件不在 vendor 目录永久保留 |
 | `gateway.js` `saveMedia` 闭包接 `pluginRuntime.channel.media.saveInboundMediaBuffer`；4 个 pre-dispatch 早退（群未放行/drop_other_mention/未授权命令/未 @）调 `cleanupInboundLocalMedia()` | 5 处 | 49号 §4.3 条款2（审2阻断1/3）：dispatch 前失败由 Connector 清理本次落盘媒体 |
 | `group-history.js` `formatAttachmentTags` 删 `MEDIA:${localPath}` 分支，全部改纯描述标签（`[图片: name]`/`[语音消息（内容: "…"）]` 等） | 1 处 | 49号 §4.3.5/§11.7（审2阻断2）：引用/历史/合并消息正文不含本地路径与占位符 |
 | `ref-index-store.js` `formatMessageReferenceForAgent` try/finally：引用附件格式化完成后立即清理落盘文件（哨兵跳过） | 1 处 | 49号 §4.3.2（审2阻断2）：被引用消息附件不移交 dispatch，无 ownership handoff 不得泄漏 |
 | `inbound-attachments.js` 新增导出 `buildInboundDynamicContext()`；`gateway.js` 动态上下文改用之——图片/语音不产生计数占位行，仅保留 ASR 参考转写行 | 2 处 | 49号 §11.3.14/§11.3.26（审3高5）：正文无媒体占位符；私聊纯图片保持空正文 `content: ''` + `ExternalEvent.images` |
+| `gateway.js` 原 `deliver` 完整消费图片，`outbound-deliver.js` 移除延后到文字的工具媒体暂存/去重 | 2 文件 | 公共 `sendImageBatch` 按现有路径加载；纯图清理响应定时器，首轮之后继续发送；相同文件的不同工具输出分别投递，失败摘要等待同目标发送 |
+| `api.js` `sendImageMessage` 与请求包装 | 1 文件 | 好友/群聊经 `file_data → file_info → msg_type:7`；频道及频道私信经 multipart `file_image`（含实际 MIME）；请求支持 FormData、账号取消和有限超时 |
+| `gateway.js`、`reply-dispatcher.js`、`outbound-deliver.js` 频道私信目标 | 3 文件 | 既有事件保留 `guildId`；图片、普通文字和错误摘要使用 `/dms/{guildId}/messages`，入站会话以该 guild 为 peer；好友输入状态只用于 c2c |
 
 ## 行为说明
 

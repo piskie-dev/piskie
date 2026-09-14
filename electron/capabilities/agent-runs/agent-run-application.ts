@@ -37,6 +37,19 @@ export class AgentRunApplication {
     return state ? agentControlSnapshot(state) : null;
   }
 
+  async rename(agentId: string, name: string): Promise<AgentRunSnapshot> {
+    const normalized = name.trim();
+    if (!normalized) {
+      throw new PublicOperationError('invalid-input', 'AgentRun title cannot be empty');
+    }
+    const header = await this.dependencies.agent.renameAgentRun(agentId, normalized);
+    if (!header) throw new PublicOperationError('not-found', 'AgentRun was not found');
+    return {
+      ...agentRunSnapshot(header),
+      messages: this.dependencies.agent.getConversationStore().readMessageState(agentId),
+    };
+  }
+
   markRead(agentId: string, throughIndex: number) {
     this.requireAgentRun(agentId);
     return this.dependencies.agent.getConversationStore().markRead(agentId, throughIndex);

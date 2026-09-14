@@ -94,6 +94,7 @@ export interface RuntimeOptions {
   initialModel?: string;
   initialReasoning?: ReasoningSelection;
   images?: Array<{ data: string; media_type: string }>;
+  files?: import('../../../shared/types/user-input.js').UserFileRef[];
   /** Composer prewarm 的一次性 owner token；只允许 Main 接管。 */
   mcpPrewarmToken?: string;
   /** Worker 只能收窄此 Main 能力快照，不得重新扫描磁盘扩张能力。 */

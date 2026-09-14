@@ -14,11 +14,17 @@ import i18n from 'i18next';
 import { clearAllComposerDrafts, useComposerDraftStore } from '../../../data/composer-drafts';
 import { pngBytes, deferred } from '../../../attachments/__tests__/fixtures';
 import { PlanGate, type PlanGateProps } from '../PlanGate';
-import type { GateDecision } from '../contract';
+import type { GateDecision, GateRequest } from '../contract';
+import { ToolGate } from '../ToolGate';
+import { DiffGate } from '../DiffGate';
+import { CommandGate } from '../CommandGate';
+import { QuestionGate } from '../QuestionGate';
 
 let root: Root;
 let container: HTMLDivElement;
 const onDecide = vi.fn<(decision: GateDecision) => Promise<boolean>>();
+const getPathForFile = vi.fn();
+const clipboardAttachments = vi.fn();
 const input = () => container.querySelector('input')!;
 const button = (key: string) => [...container.querySelectorAll('button')].find((item) =>
   item.textContent?.includes(i18n.t(`sessionWorkbenchUi.gate.${key}`)))!;
@@ -43,9 +49,9 @@ function typeFeedback(value: string) {
   });
 }
 
-async function paste(files: File[], text = '') {
-  const event = new Event('paste', { bubbles: true, cancelable: true });
-  Object.defineProperty(event, 'clipboardData', { value: {
+async function paste(files: File[], text = '', kind: 'paste' | 'drop' = 'paste') {
+  const event = new Event(kind, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, kind === 'paste' ? 'clipboardData' : 'dataTransfer', { value: {
     items: files.map((file) => ({ kind: 'file', getAsFile: () => file })), types: ['Files'],
     getData: (type: string) => type === 'text/plain' ? text : '',
   } });
@@ -67,6 +73,11 @@ beforeEach(() => {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   onDecide.mockReset().mockResolvedValue(true);
+  getPathForFile.mockReset().mockReturnValue('/sample/example.pdf');
+  clipboardAttachments.mockReset().mockResolvedValue([{ kind: 'file', name: 'example.pdf', path: '/sample/example.pdf', size: 6 }]);
+  Object.defineProperty(window, 'piskie', { configurable: true, value: {
+    desktop: { files: { getPathForFile }, system: { clipboardAttachments } },
+  } });
   clearAllComposerDrafts();
   container = document.createElement('div');
   document.body.append(container);
@@ -190,18 +201,45 @@ describe('plan review countdown display', () => {
   });
 });
 
+describe.each(['tool', 'diff', 'command', 'question'] as const)('%s file feedback', (kind) => {
+  it.each(['paste', 'drop'] as const)('submits the ordinary file path added by %s', async (method) => {
+    const call: Extract<GateRequest, { kind: 'tool' }>['call'] = {
+      id: 'sample-call', agentId: 'sample-agent', mainAgentId: 'sample-agent', toolName: 'sample-tool',
+      params: {}, timestamp: new Date(), description: 'Sample operation', category: 'system',
+    };
+    await act(async () => root.render(kind === 'question'
+      ? React.createElement(QuestionGate, { request: { kind, id: call.id, items: [{ question: 'Sample question?', multiSelect: false }] }, onDecide })
+      : kind === 'tool' ? React.createElement(ToolGate, { request: { kind, call }, onDecide })
+        : kind === 'diff' ? React.createElement(DiffGate, { request: { kind, call }, onDecide, onViewDiff: vi.fn() })
+          : React.createElement(CommandGate, { request: { kind, call }, onDecide })));
+    await paste([new File(['Sample'], 'example.pdf', { type: 'application/pdf' })], 'Sample feedback', method);
+    await prepareImages();
+    expect(container.textContent).toContain('example.pdf');
+    expect(input().value).toBe('Sample feedback');
+    await act(async () => send().click());
+    expect(onDecide).toHaveBeenCalledOnce();
+    const decision = onDecide.mock.calls[0]![0];
+    expect(decision).toMatchObject(kind === 'question'
+      ? { kind: 'answer', answer: expect.stringContaining('Sample feedback'), answers: ['Sample feedback'] }
+      : { kind: 'deny', feedback: 'Sample feedback' });
+    if (decision.kind !== 'answer' && decision.kind !== 'deny') throw new Error('Expected sample feedback');
+    expect(decision.files).toEqual([{ name: 'example.pdf', path: '/sample/example.pdf' }]);
+    expect(decision.kind === 'answer' ? decision.answer : decision.feedback).not.toContain('/sample/example.pdf');
+  });
+});
+
 describe('plan modification feedback', () => {
-  it('cancels on attachment-only paste and submits the file through feedback denial', async () => {
+  it.each(['paste', 'drop'] as const)('cancels on attachment-only %s and submits the file through feedback denial', async (kind) => {
     render(Date.now() + 60_000);
-    const file = new File(['Sample'], 'sample.md', { type: 'text/markdown' });
-    Object.defineProperty(file, 'path', { value: '/workspace/sample.md' });
-    await paste([file]);
+    const file = new File(['Sample'], 'example.pdf', { type: 'application/pdf' });
+    await paste([file], '', kind);
+    await prepareImages();
     expect(onDecide).toHaveBeenCalledExactlyOnceWith({ kind: 'cancel-plan-countdown', callId: 'plan-a' });
     render();
     expect(send().disabled).toBe(false);
     await act(async () => send().click());
-    expect(onDecide).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'deny', callId: 'plan-a', feedback: expect.stringContaining('/workspace/sample.md') }));
-    expect(container.textContent).not.toContain('sample.md');
+    expect(onDecide).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'deny', callId: 'plan-a', feedback: '', files: [{ name: 'example.pdf', path: '/sample/example.pdf' }] }));
+    expect(container.textContent).not.toContain('example.pdf');
   });
 
   it.each(['click', 'enter'])('preserves mixed text and images through %s feedback submission', async (trigger) => {
@@ -217,7 +255,7 @@ describe('plan modification feedback', () => {
       await vi.waitFor(() => expect(onDecide.mock.calls.at(-1)?.[0].kind).toBe('deny'));
     });
     expect(onDecide).toHaveBeenLastCalledWith({
-      kind: 'deny', callId: 'plan-a', feedback: 'Sample modification',
+      kind: 'deny', callId: 'plan-a', feedback: 'Sample modification', files: [],
       images: [{ data: Buffer.from(pngBytes()).toString('base64'), media_type: 'image/png' }],
     });
     expect(Object.values(useComposerDraftStore.getState().drafts).flatMap((draft) => draft.attachments.images)).toHaveLength(0);

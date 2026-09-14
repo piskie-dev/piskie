@@ -1,6 +1,7 @@
 import type {
   AgentRunConfig,
   TaskDefinition,
+  UserFileRef,
 } from '../../../shared/types/index.js';
 
 export function snapshotTaskDefinition(definition: TaskDefinition): AgentRunConfig {
@@ -22,10 +23,12 @@ export function snapshotTaskDefinition(definition: TaskDefinition): AgentRunConf
 export function createSystemChatRunConfig(
   input: string,
   workspace?: string,
+  files?: readonly UserFileRef[],
 ): AgentRunConfig {
+  const summary = input.trim() || files?.map((file) => file.name).join(', ') || '';
   return {
-    name: titleFromInput(input),
-    description: input,
+    name: titleFromInput(summary),
+    description: summary,
     promptTemplate: input,
     ...(workspace ? { workspace } : {}),
   };

@@ -11,11 +11,27 @@
  * - 搜索是本地过滤（无后端查询接口，AgentRun 历史一次读取后在本地筛选）
  */
 
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronsLeft, ChevronsRight, Play, Search, SquarePen } from 'lucide-react';
 
+import {
+  messageText,
+  resolvePresentationText,
+  type PresentationText,
+} from '../../../i18n/presentationText';
 import { useUIStore } from '../../../store/uiStore';
+import { Dialog } from '../chrome/Dialog';
 import { OrbIndicator } from './OrbIndicator';
 import { hasUnreadMessages } from '@shared/agent-run-messages';
 import { Tooltip } from '../chrome/Tooltip';
@@ -68,6 +84,13 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const { t } = useTranslation();
     const actions = useConsoleActions();
     const [query, setQuery] = useState('');
+    const [renameTarget, setRenameTarget] = useState<ThreadRow | null>(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [renameError, setRenameError] = useState<PresentationText | null>(null);
+    const [renaming, setRenaming] = useState(false);
+    const renameRequest = useRef(0);
+    const renameInput = useRef<HTMLInputElement>(null);
+    const renameErrorId = useId();
     const selection = useUIStore((state) => state.consoleSelection);
     useEffect(() => setQuery(''), [selection]);
     const historyReady = useHistoryRowsReady();
@@ -102,8 +125,59 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
       [onSelectHistory, onSelectSession],
     );
 
+    const openRename = useCallback((row: ThreadRow) => {
+      renameRequest.current += 1;
+      setRenameTarget(row);
+      setRenameValue(row.label);
+      setRenameError(null);
+      setRenaming(false);
+    }, []);
+
+    const closeRename = useCallback(() => {
+      renameRequest.current += 1;
+      setRenameTarget(null);
+      setRenameError(null);
+      setRenaming(false);
+    }, []);
+
+    useEffect(() => {
+      if (!renameTarget) return;
+      renameInput.current?.focus();
+      renameInput.current?.select();
+    }, [renameTarget]);
+
+    const submitRename = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!renameTarget || renaming) return;
+      const name = renameValue.trim();
+      if (!name) {
+        setRenameError(messageText('sessionWorkbenchUi.renameDialog.required'));
+        return;
+      }
+      if (name === renameTarget.label.trim()) {
+        closeRename();
+        return;
+      }
+
+      const request = ++renameRequest.current;
+      setRenameError(null);
+      setRenaming(true);
+      const result = await actions.renameAgentRun(renameTarget.agentId, name);
+      if (request !== renameRequest.current) return;
+      if (result.ok) {
+        closeRename();
+        return;
+      }
+      setRenaming(false);
+      setRenameError(result.error ?? messageText('sessionWorkbenchUi.action.renameFailed'));
+    }, [actions, closeRename, renameTarget, renameValue, renaming]);
+
     const onRowMenu = useCallback(
       (key: ThreadMenuKey, row: ThreadRow) => {
+        if (key === 'rename') {
+          openRename(row);
+          return;
+        }
         if (key === 'markRead' && row.messages?.latestMessage) {
           void actions.markRead(row.agentId, row.messages.latestMessage.index);
           return;
@@ -122,7 +196,7 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
         else if (key === 'trace') void actions.openTrace(record.agentId);
         else if (key === 'delete') void actions.deleteHistory(record.agentId);
       },
-      [actions, onSelectHistory],
+      [actions, onSelectHistory, openRename],
     );
 
     const taskTrigger = (
@@ -195,52 +269,104 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     }
 
     return (
-      <div className={styles.threads}>
-        <div className={styles.top}>
-          <span className={styles.search}>
-            <Search size={11} />
-            <input
-              className={styles.searchInput}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('sessionWorkbenchUi.sidebar.search')}
-              aria-label={t('sessionWorkbenchUi.sidebar.search')}
-            />
-          </span>
+      <>
+        <div className={styles.threads}>
+          <div className={styles.top}>
+            <span className={styles.search}>
+              <Search size={11} />
+              <input
+                className={styles.searchInput}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('sessionWorkbenchUi.sidebar.search')}
+                aria-label={t('sessionWorkbenchUi.sidebar.search')}
+              />
+            </span>
 
-          <Tooltip title={t('sessionWorkbenchUi.sidebar.collapse')}>
-            <button
-              type="button"
-              className={styles.collapseButton}
-              onClick={onToggleCollapsed}
-              aria-label={t('sessionWorkbenchUi.sidebar.collapse')}
-            >
-              <ChevronsLeft size={12} />
+            <Tooltip title={t('sessionWorkbenchUi.sidebar.collapse')}>
+              <button
+                type="button"
+                className={styles.collapseButton}
+                onClick={onToggleCollapsed}
+                aria-label={t('sessionWorkbenchUi.sidebar.collapse')}
+              >
+                <ChevronsLeft size={12} />
+              </button>
+            </Tooltip>
+          </div>
+
+          <div className={styles.actions}>
+            <button type="button" className={styles.actionButton} onClick={onNewSession}>
+              <SquarePen size={14} />
+              {t('sessionWorkbenchUi.sidebar.blankSession')}
             </button>
-          </Tooltip>
-        </div>
+            {taskLauncher}
+          </div>
 
-        <div className={styles.actions}>
-          <button type="button" className={styles.actionButton} onClick={onNewSession}>
-            <SquarePen size={14} />
-            {t('sessionWorkbenchUi.sidebar.blankSession')}
-          </button>
-          {taskLauncher}
+          <div className={styles.scroll}>
+            <WorkspaceTree
+              groups={groups}
+              searching={searching}
+              onMoveGroup={historyReady && !searching ? moveGroup : undefined}
+              selectedAgentId={selectedAgentId}
+              onSelect={onSelectRow}
+              menuSourceOf={menuSourceOf}
+              onMenuAction={onRowMenu}
+              onNewSessionIn={onNewSessionIn}
+            />
+          </div>
         </div>
-
-        <div className={styles.scroll}>
-          <WorkspaceTree
-            groups={groups}
-            searching={searching}
-            onMoveGroup={historyReady && !searching ? moveGroup : undefined}
-            selectedAgentId={selectedAgentId}
-            onSelect={onSelectRow}
-            menuSourceOf={menuSourceOf}
-            onMenuAction={onRowMenu}
-            onNewSessionIn={onNewSessionIn}
-          />
-        </div>
-      </div>
+        <Dialog
+          open={renameTarget !== null}
+          onClose={closeRename}
+          title={t('sessionWorkbenchUi.renameDialog.title')}
+          width={400}
+        >
+          {renameTarget && (
+            <form className={styles.renameForm} aria-busy={renaming} onSubmit={submitRename}>
+              <label className={styles.renameField}>
+                <span>{t('sessionWorkbenchUi.renameDialog.label')}</span>
+                <input
+                  ref={renameInput}
+                  autoFocus
+                  className={styles.renameInput}
+                  value={renameValue}
+                  disabled={renaming}
+                  aria-invalid={renameError ? 'true' : undefined}
+                  aria-describedby={renameError ? renameErrorId : undefined}
+                  placeholder={t('sessionWorkbenchUi.renameDialog.placeholder')}
+                  onChange={(event) => {
+                    setRenameValue(event.target.value);
+                    setRenameError(null);
+                  }}
+                />
+              </label>
+              {renameError && (
+                <p id={renameErrorId} className={styles.renameError} role="alert">
+                  {resolvePresentationText(renameError, (key, values) => t(key, values ?? {}))}
+                </p>
+              )}
+              <div className={styles.renameActions}>
+                <button
+                  type="button"
+                  className={styles.renameButton}
+                  disabled={renaming}
+                  onClick={closeRename}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className={`${styles.renameButton} ${styles.renamePrimary}`}
+                  disabled={renaming}
+                >
+                  {t(renaming ? 'sessionWorkbenchUi.renameDialog.saving' : 'common.save')}
+                </button>
+              </div>
+            </form>
+          )}
+        </Dialog>
+      </>
     );
   },
 );

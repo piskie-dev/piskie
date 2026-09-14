@@ -23,6 +23,20 @@ export const UNSUPPORTED_MEDIA_REPLY = '当前仅支持 PNG/JPEG/WEBP/GIF 图片
 export const MEDIA_LIMIT_REPLY = `图片超出限制：单条消息最多 ${MAX_IM_IMAGE_COUNT} 张、单张不超过 5 MiB、合计不超过 20 MiB`;
 export const MEDIA_READ_FAILED_REPLY = '媒体处理失败，请稍后重试';
 
+/** Limit actual bytes as well as the preflight stat: a file can change while queued. */
+export async function readMediaFile(filePath: string, maxBytes = MAX_IM_IMAGE_BYTES, signal?: AbortSignal): Promise<Buffer> {
+  signal?.throwIfAborted();
+  const stream = fs.createReadStream(filePath, { signal, highWaterMark: 64 * 1024 });
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of stream) {
+    size += chunk.length;
+    if (size > maxBytes) throw new Error(MEDIA_LIMIT_REPLY);
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks, size);
+}
+
 /** 受管临时目录：渠道 saveBuffer 落盘与 Pipeline realpath 校验共用同一根 */
 export function getManagedMediaDir(): string {
   const dir = path.join(os.tmpdir(), 'piskie-media');
@@ -44,7 +58,7 @@ export type MediaConversionResult =
 type SupportedImageMime = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
 /** 文件 magic 检测（现有图片链路支持的四种类型），不信任 declaredMediaType */
-function detectImageMime(buf: Buffer): SupportedImageMime | null {
+export function detectImageMime(buf: Buffer): SupportedImageMime | null {
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
     return 'image/png';
   }
@@ -115,12 +129,20 @@ export async function validateAndConvertInboundMedia(
 
   // 大小通过后按序读取 + magic 检测；任一非图片/未知格式整条拒绝
   const images: InboundImagePayload[] = [];
+  totalBytes = 0;
   for (let i = 0; i < resolved.length; i++) {
     let buf: Buffer;
     try {
-      buf = await fs.promises.readFile(resolved[i].realPath);
-    } catch {
+      buf = await readMediaFile(resolved[i].realPath);
+    } catch (error) {
+      if (error instanceof Error && error.message === MEDIA_LIMIT_REPLY) {
+        return { ok: false, reason: 'limit', reply: MEDIA_LIMIT_REPLY };
+      }
       return { ok: false, reason: 'read_failed', reply: MEDIA_READ_FAILED_REPLY };
+    }
+    totalBytes += buf.length;
+    if (totalBytes > MAX_IM_IMAGE_TOTAL_BYTES) {
+      return { ok: false, reason: 'limit', reply: MEDIA_LIMIT_REPLY };
     }
     const mime = detectImageMime(buf);
     if (!mime) {

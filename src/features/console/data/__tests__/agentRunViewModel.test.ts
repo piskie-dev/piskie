@@ -49,6 +49,26 @@ describe('AgentRun Renderer projection', () => {
     expect(projectPersistedAgentRun(persisted, controlSnapshot({ agentId: 'other' })).running)
       .toBe(false);
   });
+
+  it('trims editable titles without changing original task-description semantics', () => {
+    const persisted = runSnapshot();
+    persisted.runConfig.name = '  Revised title  ';
+    const active = controlSnapshot({
+      runConfig: {
+        ...controlSnapshot().runConfig,
+        name: '  Live revised title  ',
+      },
+    });
+
+    expect(projectPersistedAgentRun(persisted)).toMatchObject({
+      title: 'Revised title',
+      taskDescription: 'Persisted description',
+    });
+    expect(projectActiveAgentRun(active, 'Untitled task')).toMatchObject({
+      title: 'Live revised title',
+      description: 'Persisted description',
+    });
+  });
 });
 
 function runSnapshot(): AgentRunSnapshot {

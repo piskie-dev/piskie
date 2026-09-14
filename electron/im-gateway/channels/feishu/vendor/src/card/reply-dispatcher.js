@@ -20,7 +20,8 @@ const accounts_1 = require("../core/accounts.js");
 const footer_config_1 = require("../core/footer-config.js");
 const lark_client_1 = require("../core/lark-client.js");
 const lark_logger_1 = require("../core/lark-logger.js");
-const deliver_1 = require("../messaging/outbound/deliver.js");
+const media_1 = require("../messaging/outbound/media.js");
+const media_io = require("../../../../../core/media-io.js");
 const send_1 = require("../messaging/outbound/send.js");
 const typing_1 = require("../messaging/outbound/typing.js");
 const card_error_1 = require("./card-error.js");
@@ -173,6 +174,7 @@ function createFeishuReplyDispatcher(params) {
             await typingCallbacks.onReplyStart?.();
         },
         deliver: async (payload) => {
+            params.abortSignal?.throwIfAborted();
             log.debug('deliver called', {
                 textPreview: payload.text?.slice(0, 100),
             });
@@ -183,11 +185,6 @@ function createFeishuReplyDispatcher(params) {
             // creation_failed can still fallthrough to static delivery.
             if (staticAborted || controller?.isTerminated || controller?.isAborted) {
                 log.debug('deliver: skipped (aborted)');
-                return;
-            }
-            // ---- Post-dispatch guard ----
-            if (dispatchFullyComplete) {
-                log.debug('deliver: skipped (dispatch already complete)');
                 return;
             }
             // 提取文本和媒体 URL
@@ -201,8 +198,16 @@ function createFeishuReplyDispatcher(params) {
                 log.debug('deliver: empty text and no media, skipping');
                 return;
             }
+            if (payloadMediaUrls.length) {
+                await media_io.sendImageBatch(payloadMediaUrls, async (_source, image) => {
+                    const { imageKey } = await media_1.uploadImageLark({ cfg, image, accountId, signal: params.abortSignal });
+                    params.abortSignal?.throwIfAborted();
+                    await media_1.sendImageLark({ cfg, to: chatId, imageKey, accountId, replyToMessageId, replyInThread, signal: params.abortSignal });
+                }, params.abortSignal);
+            }
+            if (!text.trim()) return;
             // ---- Streaming card mode ----
-            if (controller) {
+            if (controller && !dispatchFullyComplete) {
                 await controller.ensureCardCreated();
                 if (controller.isTerminated)
                     return;
@@ -307,33 +312,17 @@ function createFeishuReplyDispatcher(params) {
                     }
                 }
             }
-            // ---- Static media delivery ----
-            for (const mediaUrl of payloadMediaUrls) {
-                if (!mediaUrl?.trim())
-                    continue;
-                try {
-                    log.info('deliver: sending media via static path', {
-                        mediaUrl: mediaUrl.slice(0, 80),
-                    });
-                    await (0, deliver_1.sendMediaLark)({
-                        cfg,
-                        to: chatId,
-                        mediaUrl,
-                        accountId,
-                        replyToMessageId,
-                        replyInThread,
-                    });
-                }
-                catch (mediaErr) {
-                    if (staticGuard?.terminate('deliver.media', mediaErr))
-                        return;
-                    log.error('deliver: static media send failed', {
-                        error: String(mediaErr),
-                    });
-                }
-            }
         },
         onError: async (err, info) => {
+            if (params.abortSignal?.aborted) return;
+            if (info.kind === 'tool') {
+                log.error('tool delivery failed', { error: String(err) });
+                await (0, send_1.sendMessageFeishu)({
+                    cfg, to: chatId, accountId, replyToMessageId, replyInThread,
+                    text: media_io.imageDeliveryErrorText(err),
+                });
+                return;
+            }
             if (controller) {
                 if (controller.terminateIfUnavailable('onError', err)) {
                     typingCallbacks.onIdle?.();

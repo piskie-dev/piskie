@@ -49,10 +49,7 @@ export interface TranscriptDetail {
 
 // ==================== 媒体与附件 ====================
 
-export interface TranscriptFileRef {
-  readonly name: string;
-  readonly path: string;
-}
+export type TranscriptFileRef = import('@shared/types/user-input').UserFileRef;
 
 // ==================== 动作描述符 ====================
 
@@ -188,6 +185,7 @@ export interface ToolNode extends TranscriptNodeBase {
   readonly state: ToolState;
   readonly badge?: TranscriptBadge;
   readonly media?: readonly CellMedia[];
+  readonly files?: readonly TranscriptFileRef[];
   readonly actions: readonly TranscriptAction[];
   /**
    * 文件操作载荷（只有 `read`/`write`/`edit` 有）。

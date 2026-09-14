@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,10 +91,21 @@ export class DesktopApplication {
 
   async openPath(targetPath: string): Promise<void> {
     const safePath = this.requireExistingPath(targetPath);
-    const result = await Promise.race([
-      shell.openPath(safePath),
-      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 5_000)),
-    ]);
+    // Electron 42's Linux openPath starts xdg-open without settling its callback.
+    // Observe the launcher directly; viewer stdio must not keep the request open.
+    const result = process.platform === 'linux'
+      ? await new Promise<string>((resolve) => {
+        const launcher = spawn('xdg-open', [safePath], {
+          cwd: path.dirname(safePath),
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env, MM_NOTTTY: '1' },
+        });
+        launcher.once('error', () => resolve('Failed to start the file launcher'));
+        launcher.once('exit', (code) => resolve(code === 0 ? '' : 'The file launcher failed'));
+        launcher.unref();
+      })
+      : await shell.openPath(safePath);
     if (result) throw new PublicOperationError('unavailable', 'The path could not be opened');
   }
 
@@ -312,7 +324,7 @@ async function resolveRegularFile(targetPath: string): Promise<{ path: string; s
 function readClipboardPathCandidates(): string[] {
   const candidates = new Set<string>();
   const addPath = (candidate: string): void => {
-    const clean = decodeXml(candidate).replaceAll('\0', '').trim();
+    const clean = candidate.replaceAll('\0', '').trim();
     if (path.isAbsolute(clean)) candidates.add(clean);
   };
   const parse = (raw: string): void => {
@@ -329,7 +341,6 @@ function readClipboardPathCandidates(): string[] {
         addPath(value);
       }
     }
-    for (const match of raw.matchAll(/<string>([\s\S]*?)<\/string>/g)) addPath(match[1] ?? '');
   };
 
   const formats: ReadonlyArray<readonly [string, BufferEncoding]> = [
@@ -341,7 +352,14 @@ function readClipboardPathCandidates(): string[] {
   for (const [format, encoding] of formats) {
     try {
       const buffer = clipboard.readBuffer(format);
-      if (buffer.byteLength <= MAX_CLIPBOARD_FORMAT_BYTES) parse(buffer.toString(encoding));
+      if (buffer.byteLength <= MAX_CLIPBOARD_FORMAT_BYTES) {
+        const raw = buffer.toString(encoding);
+        if (format === 'NSFilenamesPboardType') {
+          for (const match of raw.matchAll(/<string>([\s\S]*?)<\/string>/g)) addPath(decodeXml(match[1] ?? ''));
+        } else {
+          parse(raw);
+        }
+      }
     } catch {
       // Clipboard formats vary by platform.
     }
@@ -356,9 +374,9 @@ function readClipboardPathCandidates(): string[] {
 
 function decodeXml(value: string): string {
   return value
-    .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'");
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
 }

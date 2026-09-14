@@ -1,5 +1,5 @@
 /**
- * EnvStudio · 导播台编排：Program 主屏 + Preview 预监列。
+ * EnvStudio · 导播台编排：Preview 预监列 + Program 主屏。
  * 选中态归属页面（EnvStudio）持有，本组件纯装配。
  */
 
@@ -46,6 +46,14 @@ export const Switchboard: React.FC<SwitchboardProps> = ({
 
   return (
     <div className={styles.switchboard}>
+      <PreviewRack
+        envs={envs}
+        occupancies={occupancies}
+        selectedId={program.id}
+        onSelect={onSelect}
+        onForgeNew={() => onForge(null)}
+        onLapse={onLapse}
+      />
       <ProgramMonitor
         env={program}
         occupant={occupantOf(occupancies, program.id)}
@@ -56,14 +64,6 @@ export const Switchboard: React.FC<SwitchboardProps> = ({
         onSurface={() => onSurface(program.id)}
         onForge={() => onForge(program)}
         onScrap={() => onScrap(program.id)}
-        onLapse={onLapse}
-      />
-      <PreviewRack
-        envs={envs}
-        occupancies={occupancies}
-        selectedId={program.id}
-        onSelect={onSelect}
-        onForgeNew={() => onForge(null)}
         onLapse={onLapse}
       />
     </div>

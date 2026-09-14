@@ -1007,8 +1007,8 @@ export default {
       durationSeconds: '{{seconds}}s',
     },
     attachmentFailure: {
-      preparing: 'Preparing images…',
-      capture: 'Could not import this image batch. Remove it or paste the images again.',
+      preparing: 'Preparing attachments…',
+      capture: 'Could not import these attachments. Remove them or add the files again.',
       invalidImage: 'This batch contains an empty or unsupported image. Paste PNG, JPEG, GIF, WebP or BMP images again.',
       pixels: 'An image exceeds 32 million pixels. Reduce its dimensions and paste it again.',
       imageBytes: 'An image is {{bytes}} bytes, above the 32 MiB limit. Choose a smaller image and paste it again.',
@@ -1077,6 +1077,7 @@ export default {
       sendFailed: 'Could not send',
       openFailed: 'Could not open',
       deleteFailed: 'Could not delete',
+      renameFailed: 'Could not rename the session',
       promotionUnavailable: 'This call has ended or cannot be moved to the background',
       promotionFailed: 'Could not move the call to the background',
       historyLoadFailed: 'Could not load session history',
@@ -1089,8 +1090,16 @@ export default {
       pause: 'Pause',
       stop: 'Stop',
       openRecord: 'Open Session',
+      rename: 'Rename',
       markRead: 'Mark as read',
       delete: 'Delete',
+    },
+    renameDialog: {
+      title: 'Rename session',
+      label: 'Session title',
+      placeholder: 'Enter a session title',
+      required: 'Enter a title',
+      saving: 'Saving…',
     },
     taskGroup: {
       unassigned: 'Unassigned',
@@ -1189,6 +1198,12 @@ export default {
       unsupported: 'Unsupported',
       unknown: 'Unknown',
       stateAria: '{{name}}: {{state}}',
+    },
+    markdownImage: {
+      alt: 'Image',
+      loading: 'Loading image…',
+      failed: 'Could not load image',
+      preview: 'Enlarge image: {{description}}',
     },
     contentLink: {
       commandClick: '⌘ + click',
@@ -2072,6 +2087,8 @@ export default {
     forwardToolCallsHelp: 'Weixin shows native progress with the required completion state; other channels keep text output.',
     includeToolResults: 'Include Tool Results',
     forwardToolResultsHelp: 'Controls the additional result text (up to 500 characters), not the native Weixin completion state.',
+    forwardToolImages: 'Send tool images',
+    forwardToolImagesHelp: 'Automatically send images read by tools and confirmed generated images.',
 
     // Auth management
     approvedSenders: 'Approved Senders',
@@ -2199,6 +2216,8 @@ export default {
     platform: 'Platform',
     install: 'Install runtime',
     retry: 'Retry installation',
+    retryPrompt: 'Click',
+    retryDownload: 'Download again',
     unavailable: 'Unavailable on this platform',
     preparing: 'Preparing browser runtime...',
     downloading: 'Downloading browser runtime...',

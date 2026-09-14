@@ -1,4 +1,5 @@
 import { appLog } from '@electron/observability/logging/app-log.js';
+import type { UserMessageInput } from '../../../shared/types/user-input.js';
 import type { ConversationWriteEntry } from '../../../shared/types/agent-control.js';
 import type { ToolArtifact, ToolResultContentBlock } from '../../../shared/types/index.js';
 import type { ImageRef, ToolResult } from '../../tools/types.js';
@@ -24,6 +25,7 @@ export type LiveSettlement =
     }
   | {
       kind: 'answer';
+      userInput?: UserMessageInput;
       callId: string;
       toolName: string;
       text: string;
@@ -44,7 +46,8 @@ export interface SettlementConversation {
     callId: string,
     blocks: ToolResultContentBlock[],
     ok: boolean,
-    artifacts?: ToolArtifact[]
+    artifacts?: ToolArtifact[],
+    userInput?: UserMessageInput,
   ): void;
   appendRecoveryToolResult(callId: string, blocks: ToolResultContentBlock[], ok: boolean): void;
   appendSystemMessage(blocks: ToolResultContentBlock[]): void;
@@ -65,7 +68,8 @@ export class ContextSettlementConversation implements SettlementConversation {
     callId: string,
     blocks: ToolResultContentBlock[],
     ok: boolean,
-    artifacts?: ToolArtifact[]
+    artifacts?: ToolArtifact[],
+    userInput?: UserMessageInput,
   ): void {
     const result = this.context.prepareToolResultBlocks(blocks);
     const timestamp = Date.now();
@@ -78,6 +82,7 @@ export class ContextSettlementConversation implements SettlementConversation {
       result,
       ok,
       ...(artifacts?.length ? { artifacts } : {}),
+      ...(userInput ? { metadata: { userInput } } : {}),
     });
     this.context.appendToolResultProjection(callId, result, ok, timestamp);
   }
@@ -145,7 +150,8 @@ export class Settler {
         settlement.callId,
         asRuntimeBlocks(renderAnswer(settlement.text, settlement.images)),
         true,
-        settlement.artifacts
+        settlement.artifacts,
+        settlement.userInput
       );
     } else {
       const rendered = renderToolResult(

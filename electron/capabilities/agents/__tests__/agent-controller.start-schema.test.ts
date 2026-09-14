@@ -9,6 +9,26 @@ const startOperation = createAgentController({} as never, {} as never, () => [])
 if (!startOperation) throw new Error('agents.start operation missing');
 
 describe('agents.start public schema', () => {
+  it.each(['/workspace/sample.txt', 'C:\\Sample Files\\sample.zip', '\\\\sample-server\\share\\sample.csv'])(
+    'accepts structured file input at every user submission boundary: %s', (path) => {
+      const files = [{ name: 'sample attachment', path }];
+      const cases = [
+        [AGENT_OPERATIONS.start, [{ input: '', modeId: 'normal', launchOptions: { files } }]],
+        [AGENT_OPERATIONS.inject, ['sample-main', { source: 'user', content: '', files }]],
+        [AGENT_OPERATIONS.injectSubagent, ['sample-main', 'sample-worker', { source: 'user', content: '', files }]],
+        [AGENT_OPERATIONS.respondToApproval, ['sample-main', 'sample-worker', { callId: 'sample-call', decision: 'deny', feedback: '', files }]],
+        [AGENT_OPERATIONS.regenerateImages, [{ agentId: 'sample-main', nodeId: 'sample-node', imageIds: ['sample-image'], instruction: '', files }]],
+      ] as const;
+      const operations = createAgentController({} as never, {} as never, () => []).operations;
+      for (const [id, input] of cases) {
+        const operation = operations.find((item) => item.id === id)!;
+        expect(operation.input.parse(input)).toEqual(input);
+        const invalid = JSON.parse(JSON.stringify(input).replace('"name":"sample attachment"', '"name":"sample attachment","extra":"sample"'));
+        expect(operation.input.safeParse(invalid).success).toBe(false);
+      }
+    },
+  );
+
   it('selects exactly one launch shape by definitionId or input', () => {
     expect(startOperation.input.safeParse([{ definitionId: 'td-AAAAAA' }]).success).toBe(true);
     expect(startOperation.input.safeParse([{ input: 'One-off task', modeId: 'normal' }]).success)

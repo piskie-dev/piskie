@@ -188,10 +188,10 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
       const notes: string[] = [];
       if (img.userInstruction) notes.push(`用户在审核中要求修改：「${img.userInstruction}」，已按用户意愿应用`);
       if (img.revisedPrompt) notes.push(`优化后 prompt: ${img.revisedPrompt}`);
-      lines.push(`- [成功] ${img.outputPath}${notes.length > 0 ? `（${notes.join('；')}）` : ''}`);
+      lines.push(`- [成功] ${JSON.stringify(img.outputPath)}${notes.length > 0 ? `（${JSON.stringify(notes.join('；'))}）` : ''}`);
     }
     for (const err of outcome.errors) {
-      lines.push(`- [失败] ${err.outputPath}: ${err.error}`);
+      lines.push(`- [失败] ${JSON.stringify(err.outputPath)}: ${JSON.stringify(err.error)}`);
     }
     if (deletedCount > 0) {
       lines.push(`用户在审核中主动删除了 ${deletedCount} 张图片（不创建对应最终文件，无需补生成）。`);

@@ -6,7 +6,7 @@ import { interval } from './planTimeline';
 import { paintGuideClick } from './guideClick';
 import styles from './guides.module.css';
 import scene from './businessScenes.module.css';
-import logo from '/logo-64.png';
+import logo from '/logo-on-dark-128.png';
 
 export interface BusinessFrameProps {
   readonly phase: number;

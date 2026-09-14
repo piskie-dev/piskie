@@ -324,6 +324,18 @@ export class ConversationStore {
     }
   }
 
+  updateHeaderName(mainAgentId: string, name: string): AgentRunHeader | null {
+    const header = this.readHeader(mainAgentId);
+    if (!header) return null;
+
+    const updated = {
+      ...header,
+      runConfig: { ...header.runConfig, name },
+    };
+    this.writeHeader(mainAgentId, updated);
+    return updated;
+  }
+
   /**
    * 只扫描 agent-runs 的直接子目录；Worker 不形成独立 AgentRun。
    */
@@ -444,6 +456,7 @@ export class ConversationStore {
         toolUseId: entry.toolUseId,
         result: this.externalizeToolResultBlocks(mainAgentId, agentId, entry.result),
         ok: entry.ok,
+        ...(entry.metadata ? { metadata: entry.metadata } : {}),
         ...(entry.artifacts?.length ? { artifacts: entry.artifacts } : {}),
       };
     }

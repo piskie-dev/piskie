@@ -81,12 +81,12 @@ export function createDeliveryQueue(callbacks: DeliveryQueueOptions): DeliveryQu
         }
         await deliver(payload, { kind });
       })
-      .catch((err: unknown) => {
+      .catch(async (err: unknown) => {
         failedCounts[kind] += 1;
-        firstDeliveryError ??= err;
+        if (!deliveryFailureReported) firstDeliveryError ??= err;
         if (onError) {
           try {
-            onError(err, { kind });
+            await onError(err, { kind });
           } catch {
             /* 回调异常不上抛 */
           }
@@ -94,9 +94,6 @@ export function createDeliveryQueue(callbacks: DeliveryQueueOptions): DeliveryQu
       })
       .finally(() => {
         pending -= 1;
-        if (pending === 1 && completeCalled) {
-          pending -= 1;
-        }
         notifyIdle();
       });
 
@@ -107,10 +104,8 @@ export function createDeliveryQueue(callbacks: DeliveryQueueOptions): DeliveryQu
     if (completeCalled) return;
     completeCalled = true;
     void Promise.resolve().then(() => {
-      if (pending === 1 && completeCalled) {
-        pending -= 1;
-        notifyIdle();
-      }
+      pending -= 1;
+      notifyIdle();
     });
   };
 
@@ -123,7 +118,11 @@ export function createDeliveryQueue(callbacks: DeliveryQueueOptions): DeliveryQu
     },
     markComplete,
     waitForIdle: async () => {
-      await sendChain;
+      let observed: Promise<void>;
+      do {
+        observed = sendChain;
+        await observed;
+      } while (observed !== sendChain);
       const failedReplyCount = failedCounts.tool + failedCounts.block + failedCounts.final;
       if (failedReplyCount > 0 && !deliveryFailureReported) {
         deliveryFailureReported = true;
@@ -139,6 +138,7 @@ export function createDeliveryQueue(callbacks: DeliveryQueueOptions): DeliveryQu
           },
           error: firstDeliveryError,
         });
+        firstDeliveryError = undefined;
       }
     },
     getQueuedCounts: () => ({ ...queuedCounts }),

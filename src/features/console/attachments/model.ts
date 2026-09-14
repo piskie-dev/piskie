@@ -1,3 +1,4 @@
+import type { UserFileRef } from '../../../../shared/types/user-input';
 import type { PresentationText } from '../../../i18n/presentationText';
 
 export interface ImageCaptureTask {
@@ -17,10 +18,8 @@ export type AttachmentImage =
   | (ImageIdentity & { readonly status: 'capturing'; readonly capture: ImageCaptureTask })
   | (ImageIdentity & { readonly status: 'error'; readonly error: PresentationText });
 
-export interface AttachmentFile {
+export interface AttachmentFile extends UserFileRef {
   readonly id: string;
-  readonly name: string;
-  readonly path: string;
 }
 
 export interface ImagePayload {
@@ -45,21 +44,6 @@ const IMAGE_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = Object.freeze(
   bmp: 'image/bmp',
 });
 
-const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'json', 'xml', 'csv', 'log', 'yaml', 'yml', 'toml',
-  'js', 'ts', 'jsx', 'tsx', 'py', 'go', 'rs', 'java', 'c', 'cpp',
-  'h', 'hpp', 'css', 'scss', 'less', 'html', 'htm', 'sh', 'bash',
-  'zsh', 'sql', 'graphql', 'env', 'conf', 'ini', 'cfg',
-]);
-
-const TEXT_APPLICATION_TYPES = new Set([
-  'application/json',
-  'application/xml',
-  'application/javascript',
-  'application/typescript',
-  'application/x-yaml',
-]);
-
 function extensionOf(name: string): string {
   const separator = name.lastIndexOf('.');
   return separator < 0 ? '' : name.slice(separator + 1).toLowerCase();
@@ -70,25 +54,26 @@ export function supportedImageType(name: string, declaredType?: string): string 
   return IMAGE_TYPE_BY_EXTENSION[extensionOf(name)];
 }
 
-export function isTextAttachment(name: string, declaredType?: string): boolean {
-  const normalizedType = declaredType?.toLowerCase() ?? '';
-  return normalizedType.startsWith('text/')
-    || TEXT_APPLICATION_TYPES.has(normalizedType)
-    || TEXT_EXTENSIONS.has(extensionOf(name));
-}
-
 export function attachmentPathsFromUriList(raw: string): string[] {
   return raw.split(/\r?\n/).map((line) => line.trim()).filter((value) => {
     if (!value || value.startsWith('#')) return false;
     try {
       const url = new URL(value);
-      const name = decodeURIComponent(url.pathname.split('/').at(-1) ?? '');
-      return url.protocol === 'file:'
-        && (supportedImageType(name) !== undefined || isTextAttachment(name));
+      decodeURIComponent(url.pathname);
+      return url.protocol === 'file:';
     } catch {
       return false;
     }
   });
+}
+
+export function attachmentPathKey(source: string, platform: string): string {
+  if (!source.startsWith('file:')) return platform === 'win32' ? source.replaceAll('/', '\\') : source;
+  const url = new URL(source);
+  const path = decodeURIComponent(url.pathname);
+  if (platform !== 'win32') return url.hostname ? source : path;
+  const localPath = url.hostname ? `//${url.hostname}${path}` : path.replace(/^\/(?=[a-z]:)/i, '');
+  return localPath.replaceAll('/', '\\');
 }
 
 export function plainTextMayReferenceImage(raw: string): boolean {

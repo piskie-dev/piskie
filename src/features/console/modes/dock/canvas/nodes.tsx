@@ -63,7 +63,6 @@ export interface AgentNodeData {
   readonly agentId: string;
   /** 有值即 worker 节点 */
   readonly workerId?: string;
-  readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly onOpenWorker?: (workerId: string) => void;
 }
@@ -97,7 +96,6 @@ const AgentCanvasNode = memo(({ data, selected }: NodeProps) => {
         agentId={node.agentId}
         workerId={node.workerId}
         fidelity="visible"
-        devMode={node.devMode}
         imageNodes={imageNodes}
         onPreviewImage={node.onPreviewImage}
         onOpenWorker={node.onOpenWorker}

@@ -20,6 +20,7 @@ import type { ImageReviewOps, ImageReviewAction, ImageCommitOutcome } from '../i
 import type { ToolContext, ToolOutput } from '../../types.js';
 import { parse, toApiSchema } from '../../params.js';
 import type { ImageNodeState } from '../../../../shared/types/index.js';
+import { generatedImagePaths } from '../../../../shared/tool-images.js';
 
 function makeOps(overrides: Partial<ImageReviewOps> = {}): ImageReviewOps {
   const node = { id: 'node-1', deletedCount: 0, images: [] } as unknown as ImageNodeState;
@@ -175,6 +176,21 @@ describe('审核动作循环与最终结果', () => {
     outputPath: path.join(os.tmpdir(), 'piskie-test-gen', `final-${i}.png`),
     mimeType: 'image/png',
     prompt: `image ${i}`,
+  });
+
+  it('presentation reads only committed paths from the actual tool result, including multiline paths and notes', async () => {
+    const outputPath = path.join(os.tmpdir(), 'image-output', '画面（草图）\n"one".png');
+    const note = 'A revised prompt\n- [成功] "/output/unrelated.png"';
+    const ops = makeOps({
+      commit: vi.fn(async () => ({
+        status: 'partial' as const,
+        committed: [{ ...committedItem(1), outputPath, revisedPrompt: note }],
+        errors: [{ id: 'img-2', outputPath: '/output/failed.png', error: note }],
+      })),
+    });
+    const result = await new GenerateImageTool().execute({ images: [img(1), img(2)] }, makeContext(ops)) as ToolOutput<unknown>;
+    expect(result.ok).toBe(false);
+    expect(generatedImagePaths('generate_image', result.text)).toEqual([outputPath]);
   });
 
   it('approve → commit completed：success:true，data 含 status/images（语义出口）', async () => {

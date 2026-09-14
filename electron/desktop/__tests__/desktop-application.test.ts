@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,9 @@ const electron = vi.hoisted(() => ({
   readBuffer: vi.fn(() => Buffer.alloc(0)),
   readText: vi.fn(() => ''),
 }));
+
+const processes = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock('node:child_process', () => ({ spawn: processes.spawn }));
 
 vi.mock('electron', () => ({
   clipboard: { readBuffer: electron.readBuffer, readText: electron.readText },
@@ -27,6 +31,8 @@ import { DesktopApplication } from '../capabilities/desktop-application.js';
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
+  vi.useRealTimers();
+  processes.spawn.mockReset();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   electron.readBuffer.mockImplementation(() => Buffer.alloc(0));
@@ -70,7 +76,8 @@ describe('DesktopApplication file and URL handling', () => {
     expect(appearance.setColorScheme).toHaveBeenCalledWith('light');
   });
 
-  it('opens files and exposes image previews without reading Base64 in the application', async () => {
+  it.each(['win32', 'darwin'] as const)('opens files natively on %s and exposes image previews without reading Base64', async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
     const { application, presentation } = fixture();
     const external = fs.mkdtempSync(path.join(os.tmpdir(), 'piskie-external-file-'));
     temporaryDirectories.push(external);
@@ -87,6 +94,71 @@ describe('DesktopApplication file and URL handling', () => {
     expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(7, resolved, 'image/png');
     await expect(application.openPath(file)).resolves.toBeUndefined();
     expect(electron.openPath).toHaveBeenCalledWith(resolved);
+  });
+
+  it('finishes a Linux launch without waiting for inherited viewer streams to close', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const { application, userDataDirectory } = fixture();
+    const file = path.join(userDataDirectory, 'sample 资料 #1%.txt');
+    fs.writeFileSync(file, 'Fictional sample');
+    const launcher = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    processes.spawn.mockReturnValue(launcher);
+
+    const opening = application.openPath(file);
+    expect(processes.spawn).toHaveBeenCalledWith('xdg-open', [fs.realpathSync.native(file)], expect.objectContaining({
+      cwd: fs.realpathSync.native(userDataDirectory), detached: true, stdio: 'ignore',
+      env: expect.objectContaining({ MM_NOTTTY: '1' }),
+    }));
+    // A viewer can keep inherited descriptors alive after the launcher exits.
+    launcher.emit('exit', 0, null);
+    await expect(opening).resolves.toBeUndefined();
+    expect(electron.openPath).not.toHaveBeenCalled();
+  });
+
+  it.each(['linux', 'win32', 'darwin'] as const)('allows a slow system open on %s to succeed without a fabricated timeout', async (platform) => {
+    vi.useFakeTimers();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    const { application, userDataDirectory } = fixture();
+    const launcher = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    processes.spawn.mockReturnValue(launcher);
+    let finish!: (result: string) => void;
+    if (platform !== 'linux') electron.openPath.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const fulfilled = vi.fn();
+    const rejected = vi.fn();
+    const opening = application.openPath(userDataDirectory);
+    void opening.then(fulfilled, rejected);
+
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(fulfilled).not.toHaveBeenCalled();
+    expect(rejected).not.toHaveBeenCalled();
+    if (platform === 'linux') launcher.emit('exit', 0, null);
+    else finish('');
+    await expect(opening).resolves.toBeUndefined();
+    await vi.runAllTimersAsync();
+    expect(rejected).not.toHaveBeenCalled();
+  });
+
+  it.each(['ENOENT', 'EACCES', 'handler-failed'])('reports an actual Linux launch failure: %s', async (failure) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const { application, userDataDirectory } = fixture();
+    const launcher = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    processes.spawn.mockReturnValue(launcher);
+    const opening = application.openPath(userDataDirectory);
+    if (failure === 'handler-failed') launcher.emit('exit', 4, null);
+    else launcher.emit('error', Object.assign(new Error('Sample launcher unavailable'), { code: failure }));
+    await expect(opening).rejects.toMatchObject({
+      code: 'unavailable', message: 'The path could not be opened',
+    });
+  });
+
+  it.each(['win32', 'darwin'] as const)('preserves the native %s launch failure', async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    const { application, userDataDirectory } = fixture();
+    electron.openPath.mockResolvedValueOnce('Failed to open path');
+    await expect(application.openPath(userDataDirectory)).rejects.toMatchObject({
+      code: 'unavailable', message: 'The path could not be opened',
+    });
+    expect(processes.spawn).not.toHaveBeenCalled();
   });
 
   it('resolves explicit event paths without consulting the later clipboard', async () => {
@@ -119,6 +191,36 @@ describe('DesktopApplication file and URL handling', () => {
     expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(11, fs.realpathSync.native(image), 'image/png', true);
     expect(electron.readBuffer).not.toHaveBeenCalled();
     expect(electron.readText).not.toHaveBeenCalled();
+  });
+
+  it('returns ordinary document and archive paths without reading their contents', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const names = ['sample document.pdf', 'example.docx', 'sample.xlsx', 'example.zip', 'sample.bin'];
+    const paths = names.map((name) => path.join(userDataDirectory, name));
+    for (const file of paths) fs.writeFileSync(file, Buffer.from([0, 1, 2]));
+    const read = vi.spyOn(fs.promises, 'readFile');
+    await expect(application.clipboardAttachments(3, { kind: 'paths', paths })).resolves.toEqual(paths.map((file, index) => ({
+      kind: 'file', name: names[index], path: fs.realpathSync.native(file), size: 3,
+    })));
+    expect(read).not.toHaveBeenCalled();
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+    await expect(application.clipboardAttachments(3, { kind: 'paths', paths: [userDataDirectory] })).rejects.toThrow('A regular file is required');
+  });
+
+  it.each(['text/uri-list', 'public.file-url', 'NSFilenamesPboardType', 'FileNameW', 'text/plain'])('preserves an encoded Unicode filename from a %s buffer fixture', async (format) => {
+    const { application, userDataDirectory } = fixture();
+    const name = 'sample &lt; 资料 #1%25.pdf';
+    const file = path.join(userDataDirectory, name);
+    fs.writeFileSync(file, 'Sample');
+    const content = format === 'NSFilenamesPboardType' ? `<array><string>${file.replaceAll('&', '&amp;')}</string></array>`
+      : format === 'FileNameW' ? `${file}\0` : format === 'text/plain' ? file : pathToFileURL(file).toString();
+    electron.readBuffer.mockImplementation((candidate: string) => candidate === format
+      ? Buffer.from(content, format === 'FileNameW' ? 'utf16le' : 'utf8') : Buffer.alloc(0));
+    const text = format === 'text/plain' ? content : '';
+    electron.readText.mockReturnValue(text);
+    await expect(application.clipboardAttachments(3, {
+      kind: 'native', files: [{ name, size: 6 }], text,
+    })).resolves.toEqual([{ kind: 'file', name, path: fs.realpathSync.native(file), size: 6 }]);
   });
 
   it('matches native event metadata to the immediate clipboard snapshot', async () => {
@@ -234,6 +336,8 @@ describe('DesktopApplication file and URL handling', () => {
     await expect(application.previewFile(7, '/definitely/missing/piskie-path'))
       .rejects.toThrow('does not exist');
     await expect(application.openPath('relative/file.txt')).rejects.toThrow('absolute path');
+    await expect(application.openPath('/missing/sample-document.txt')).rejects.toThrow('does not exist');
+    expect(processes.spawn).not.toHaveBeenCalled();
     expect(electron.showItemInFolder).not.toHaveBeenCalled();
     expect(electron.openPath).not.toHaveBeenCalled();
   });

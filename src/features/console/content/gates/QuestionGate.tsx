@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AIQuestionItem } from '../../../../../shared/types';
 import { serializeAskUserAnswers } from '../../../../utils/askUserAnswer';
-import { composeAttachmentText, useAttachmentDraft } from '../../attachments';
+import { useAttachmentDraft } from '../../attachments';
 import { EMPTY_DRAFT, isComplete, resolveItemAnswer, toggleSelection, type ItemDraft } from './answer';
 import type { GateCommonProps, GateRequest } from './contract';
 import { GateAttachments, GateFeedback, GateHeader, GateOption } from './parts';
@@ -39,10 +39,12 @@ interface QuestionItemProps {
   /** 单题时输入行右侧出发送按钮 */
   readonly inlineSubmit?: { readonly enabled: boolean; readonly onSubmit: () => void };
   readonly onPaste: React.ClipboardEventHandler;
+  readonly onDragOver: React.DragEventHandler;
+  readonly onDrop: React.DragEventHandler;
 }
 
 const QuestionItem = memo<QuestionItemProps>(
-  ({ item, index, total, draft, disabled, onChange, onPickSubmit, onEnterSubmit, inlineSubmit, onPaste }) => {
+  ({ item, index, total, draft, disabled, onChange, onPickSubmit, onEnterSubmit, inlineSubmit, onPaste, onDragOver, onDrop }) => {
     const { t } = useTranslation();
     const options = item.options ?? [];
 
@@ -93,6 +95,8 @@ const QuestionItem = memo<QuestionItemProps>(
             onChange={(custom) => onChange({ ...draft, custom })}
             onSubmit={inlineSubmit ? inlineSubmit.onSubmit : onEnterSubmit}
             onPaste={onPaste}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
             placeholder={inputPlaceholder}
             canSubmit={inlineSubmit ? inlineSubmit.enabled : true}
             disabled={disabled}
@@ -124,11 +128,8 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
       const ok = await attachments.withImages(async (images, files) => onDecide({
         kind: 'answer',
         callId: id,
-        answer: composeAttachmentText(
-          serializeAskUserAnswers(items as AIQuestionItem[], final as string[]),
-          files,
-          Boolean(images?.length),
-        ),
+        answer: serializeAskUserAnswers(items as AIQuestionItem[], final as string[]),
+        files,
         answers: [...final],
         images,
       }));
@@ -163,6 +164,8 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
             onEnterSubmit={() => void submit()}
             inlineSubmit={single ? { enabled: allAnswered, onSubmit: () => void submit() } : undefined}
             onPaste={(event) => attachments.handlePaste(event, (custom) => updateDraft(index, { ...(drafts[index] ?? EMPTY_DRAFT), custom }))}
+            onDragOver={attachments.handleDragOver}
+            onDrop={(event) => attachments.handleDrop(event, (custom) => updateDraft(index, { ...(drafts[index] ?? EMPTY_DRAFT), custom }))}
           />
         ))}
       </div>

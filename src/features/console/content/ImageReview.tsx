@@ -26,7 +26,7 @@ import {
   resolvePresentationText,
   type PresentationText,
 } from '../../../i18n/presentationText';
-import { composeAttachmentText, useAttachmentDraft } from '../attachments';
+import { useAttachmentDraft } from '../attachments';
 import {
   formatModelReference,
   getAvailableModelOptions,
@@ -37,7 +37,7 @@ import { Select } from '../../../components/shared/Select';
 import { GateAttachments } from './gates/parts';
 import type { ActionTarget } from '../data/actions';
 import styles from './ImageReview.module.css';
-import { useImagePreviewUrl } from './useImagePreviewUrl';
+import { useImagePreviewUrl } from '@/hooks/useImagePreviewUrl';
 
 type NodeStatus = ImageNodePublicState['status'];
 
@@ -103,7 +103,7 @@ interface TileProps {
 const Tile = memo<TileProps>(
   ({ image, nodeStatus, selectable, selected, onToggle, onDelete, onPreview }) => {
     const { t } = useTranslation();
-    const dataUrl = useImagePreviewUrl(
+    const { url: dataUrl } = useImagePreviewUrl(
       previewSourcePath(nodeStatus, image),
       image.version,
     );
@@ -235,9 +235,10 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
    * 粘贴前校验：不支持 img2img 的模型禁止粘图（主进程仍二次校验）。
    * 不达标不弹 toast，回显到审核区的 notice 行。
    */
-  const onPaste = useCallback(
-    (event: React.ClipboardEvent) => {
-      const items = event.clipboardData?.items;
+  const onPasteOrDrop = useCallback(
+    (event: React.ClipboardEvent | React.DragEvent) => {
+      const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+      const items = transfer?.items;
       const hasImage =
         !!items &&
         Array.from(items).some((item) => item.kind === 'file' && item.type.startsWith('image/'));
@@ -247,7 +248,8 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
         setNotice(messageText('sessionWorkbenchUi.imageReview.editUnsupported'));
         return;
       }
-      attachments.handlePaste(event);
+      if ('clipboardData' in event) attachments.handlePaste(event);
+      else attachments.handleDrop(event);
     },
     [attachments, supportsEditing],
   );
@@ -310,11 +312,8 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
           agentId: runtimeId,
           nodeId,
           imageIds: [...selectedIds],
-          instruction: composeAttachmentText(
-            instruction,
-            files,
-            Boolean(payloads?.length),
-          ),
+          instruction,
+          files: [...files],
           target: selectedTarget,
           images: payloads,
         });
@@ -432,7 +431,9 @@ export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImag
               value={instruction}
               onChange={(event) => setInstruction(event.target.value)}
               onKeyDown={onInstructionKeyDown}
-              onPaste={onPaste}
+              onPaste={onPasteOrDrop}
+              onDragOver={attachments.handleDragOver}
+              onDrop={onPasteOrDrop}
               placeholder={
                 selectedIds.length === 0
                   ? t('sessionWorkbenchUi.imageReview.selectImagesFirst')

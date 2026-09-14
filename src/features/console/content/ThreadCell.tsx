@@ -53,8 +53,10 @@ import {
 } from 'lucide-react';
 
 import { LinkedMarkdown, LinkedText } from '@/components/content-links';
+import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { isMacOSPlatform } from '@/utils/platform';
 import { ImageThumbnail } from './ImageThumbnail';
+import { FileAttachments } from './FileAttachments';
 import { SkillTags } from './SkillTags';
 import { OrbIndicator } from './OrbIndicator';
 import type { QuestionAnswerItem, ToolCellArtifact } from '../data/toolArtifacts';
@@ -315,7 +317,7 @@ function noticeIcon(cell: NoticeNode): React.ReactNode {
 
 // ==================== 详情 format renderer registry ====================
 
-type DetailRenderer = (value: unknown, onPreviewImage?: (src: string) => void) => React.ReactNode;
+type DetailRenderer = (value: unknown, onPreviewImage?: ImagePreviewHandler, workspace?: string) => React.ReactNode;
 
 /** text/code/json 的既有形态：字符串原样、其余 JSON 序列化，经 LinkedText 输出 */
 function renderPlainValue(value: unknown): React.ReactNode {
@@ -328,11 +330,11 @@ function renderPlainValue(value: unknown): React.ReactNode {
   );
 }
 
-function renderMarkdownValue(value: unknown): React.ReactNode {
+function renderMarkdownValue(value: unknown, onPreviewImage?: ImagePreviewHandler, workspace?: string): React.ReactNode {
   if (typeof value !== 'string') return renderPlainValue(value);
   return (
     <div className="markdown-dark-theme">
-      <LinkedMarkdown>
+      <LinkedMarkdown baseDirectory={workspace} onPreviewImage={onPreviewImage}>
         {value}
       </LinkedMarkdown>
     </div>
@@ -381,12 +383,14 @@ const DETAIL_RENDERERS: Record<DetailFormat, DetailRenderer> = {
 
 const Detail = memo<{
   readonly cell: TranscriptNode;
-  readonly onPreviewImage?: (src: string) => void;
-}>(({ cell, onPreviewImage }) => {
+  readonly onPreviewImage?: ImagePreviewHandler;
+  readonly workspace?: string;
+}>(({ cell, onPreviewImage, workspace }) => {
   const { t } = useTranslation();
   const detail = useMemo(() => cell.detail?.(), [cell]);
   const images = cell.kind === 'notice' || cell.kind === 'user' ? cell.images : undefined;
-  if (!detail?.sections.length && !images?.length) return null;
+  const files = cell.kind === 'user' ? cell.files : undefined;
+  if (!detail?.sections.length && !images?.length && !files?.length) return null;
 
   const presentValue = (format: DetailFormat, value: unknown): unknown => (
     (format === 'text' || format === 'markdown') && isPresentationText(value)
@@ -401,9 +405,11 @@ const Detail = memo<{
           {DETAIL_RENDERERS[section.format](
             presentValue(section.format, section.value),
             onPreviewImage,
+            workspace,
           )}
         </div>
       ))}
+      {!!files?.length && <FileAttachments files={files} />}
       {!!images?.length && (
         <div className={styles.imageRow}>
           {images.map((image, index) => (
@@ -483,7 +489,11 @@ function latestLine(text: string): string {
 }
 
 /** Think stays a one-line disclosure while streaming; the full Markdown is opt-in. */
-const ThinkDisclosure = memo<{ readonly cell: ThinkNode }>(({ cell }) => {
+const ThinkDisclosure = memo<{
+  readonly cell: ThinkNode;
+  readonly workspace?: string;
+  readonly onPreviewImage?: ImagePreviewHandler;
+}>(({ cell, workspace, onPreviewImage }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
@@ -539,7 +549,7 @@ const ThinkDisclosure = memo<{ readonly cell: ThinkNode }>(({ cell }) => {
               data-follow-end={cell.live || undefined}
               data-think-summary=""
             >
-              <StreamingMarkdown markdown={summary} live={cell.live} />
+              <StreamingMarkdown markdown={summary} live={cell.live} baseDirectory={workspace} onPreviewImage={onPreviewImage} />
             </div>
           </>
         )}
@@ -548,7 +558,7 @@ const ThinkDisclosure = memo<{ readonly cell: ThinkNode }>(({ cell }) => {
       {open && (
         <div className={styles.thinkBody} data-think-body="">
           <div className={`${styles.thinkMarkdown} markdown-dark-theme`}>
-            <StreamingMarkdown markdown={cell.markdown} live={cell.live} />
+            <StreamingMarkdown markdown={cell.markdown} live={cell.live} baseDirectory={workspace} onPreviewImage={onPreviewImage} />
           </div>
         </div>
       )}
@@ -563,7 +573,8 @@ export interface ThreadCellProps {
   readonly conversationStatus?: StatusKey;
   readonly workers?: readonly WorkerRef[];
   readonly onOpenWorker?: (workerId: string) => void;
-  readonly onPreviewImage?: (src: string) => void;
+  readonly onPreviewImage?: ImagePreviewHandler;
+  readonly workspace?: string;
   /** 点文件操作条目 ⇒ 右栏审阅面板显示它；不传则退回就地展开 */
   readonly onOpenFileChange?: (cellId: string) => void;
   /**
@@ -579,6 +590,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
   workers,
   onOpenWorker,
   onPreviewImage,
+  workspace,
   onOpenFileChange,
   onAction,
 }) => {
@@ -600,7 +612,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
             summary={summary}
             tone={cell.tone}
             eventType="message"
-            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
             defaultOpen={cell.defaultExpanded}
           />
         );
@@ -621,10 +633,10 @@ export const ThreadCell = memo<ThreadCellProps>(({
 
       return (
         <div className={styles.cell}>
-          <div className={styles.userRow}>
+          {(cell.text || cell.skills?.length || cell.skillLoadErrors?.length) && <div className={styles.userRow}>
             <div className={styles.bubble}>
               {cell.skills && <SkillTags skills={cell.skills} />}
-              {(cell.text || summary) && <div>{cell.text || summary}</div>}
+              {cell.text && <div>{cell.text}</div>}
               {!!cell.skillLoadErrors?.length && (
                 <div className={styles.skillErrors}>
                   {cell.skillLoadErrors.map(({ name, error }) => (
@@ -633,8 +645,11 @@ export const ThreadCell = memo<ThreadCellProps>(({
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
+          {!!cell.files?.length && (
+            <div className={styles.userFiles}><FileAttachments files={cell.files} /></div>
+          )}
           {cell.images && cell.images.length > 0 && (
             <div className={styles.userMedia}>
               {cell.images.map((image, index) => {
@@ -658,12 +673,12 @@ export const ThreadCell = memo<ThreadCellProps>(({
     case 'assistant':
       return (
         <div className={`${styles.body} markdown-dark-theme`}>
-          <StreamingMarkdown markdown={cell.markdown} live={cell.live} />
+          <StreamingMarkdown markdown={cell.markdown} live={cell.live} baseDirectory={workspace} onPreviewImage={onPreviewImage} />
         </div>
       );
 
     case 'think':
-      return <ThinkDisclosure cell={cell} />;
+      return <ThinkDisclosure cell={cell} workspace={workspace} onPreviewImage={onPreviewImage} />;
 
     // 工具：一行灰字，可就地展开
     case 'tool': {
@@ -701,7 +716,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
             summary={summary}
             tone={cell.tone}
             badge={cell.badge}
-            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
             defaultOpen={cell.defaultExpanded}
             aside={backgroundAction}
           />
@@ -731,10 +746,11 @@ export const ThreadCell = memo<ThreadCellProps>(({
                   : undefined
             }
             onActivate={toReview}
-            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
             aside={backgroundAction}
           />
 
+          {!!cell.files?.length && <FileAttachments files={cell.files} />}
           {cell.generatedImages && (
             <div className={styles.imageRow}>
               {cell.generatedImages.map((path, index) => (
@@ -784,7 +800,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
         >
           {cell.body && (
             <div className={`${styles.cardBody} markdown-dark-theme`}>
-              <LinkedMarkdown>
+              <LinkedMarkdown baseDirectory={workspace} onPreviewImage={onPreviewImage}>
                 {cell.body}
               </LinkedMarkdown>
             </div>
@@ -832,7 +848,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
           <ActionLine
             icon={<FileText size={ICON} />}
             text={title}
-            detail={<Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            detail={<Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
           />
         </div>
       );
@@ -849,7 +865,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
             badge={cell.badge}
             eventType={cell.eventType}
             meta={meta}
-            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+            detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
             defaultOpen={cell.defaultExpanded}
           />
         );
@@ -863,7 +879,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
           summary={summary}
           tone={cell.tone}
           badge={cell.badge}
-          detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} />}
+          detail={cell.interaction === 'none' ? undefined : <Detail cell={cell} onPreviewImage={onPreviewImage} workspace={workspace} />}
           defaultOpen={cell.defaultExpanded}
         />
       );

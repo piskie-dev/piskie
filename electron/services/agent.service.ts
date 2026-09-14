@@ -433,6 +433,7 @@ export class AgentService {
           initialModel,
           mcpPrewarmToken: launch.launchOptions?.mcpPrewarmToken,
           images: launch.launchOptions?.images,
+          files: launch.launchOptions?.files,
           allocateAgentId: () => this.allocateAgentId(),
           resolveWorkerInference: this.resolveWorkerPreferences,
           createRuntimeObserver: (runtimeId) =>
@@ -695,6 +696,16 @@ export class AgentService {
           context: { scope: 'agent.session', agentId },
         });
       }
+    });
+  }
+
+  async renameAgentRun(agentId: string, name: string): Promise<AgentRunHeader | null> {
+    return this.withLifecycleLock(agentId, async () => {
+      const header = this.conversationStore.updateHeaderName(agentId, name);
+      if (!header) return null;
+
+      this.activeRuntimes.get(agentId)?.setRunName(name);
+      return header;
     });
   }
 

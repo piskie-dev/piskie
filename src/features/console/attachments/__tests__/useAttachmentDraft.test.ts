@@ -8,6 +8,7 @@ import { pngBytes, deferred } from './fixtures';
 
 const clipboardAttachments = vi.fn();
 const releasePreview = vi.fn();
+const getPathForFile = vi.fn();
 const onText = vi.fn();
 let root: Root;
 let dom: JSDOM;
@@ -26,6 +27,11 @@ function paste(files: readonly File[] = [], plain = '', uris = '') {
     getData: (type: string) => type === 'text/plain' ? plain : type === 'text/uri-list' ? uris : '', types: [],
   }, currentTarget: input, preventDefault: vi.fn() } as unknown as React.ClipboardEvent;
 }
+function drop(files: readonly File[] = [], plain = '', uris = '') {
+  const event = paste(files, plain, uris);
+  return { dataTransfer: { ...event.clipboardData, files, items: [] }, currentTarget: event.currentTarget,
+    preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.DragEvent;
+}
 async function settle() {
   const captures = new Set(draft().images.flatMap((image) => image.status === 'capturing' ? [image.capture] : []));
   await act(async () => { await Promise.all([...captures].map((capture) => capture.done.catch(() => undefined))); });
@@ -40,9 +46,10 @@ beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   clipboardAttachments.mockReset().mockResolvedValue([]);
   releasePreview.mockReset().mockResolvedValue(undefined);
+  getPathForFile.mockReset().mockReturnValue('');
   onText.mockReset();
   Object.defineProperty(window, 'piskie', { value: { desktop: {
-    system: { clipboardAttachments }, files: { releasePreview },
+    system: { clipboardAttachments, platform: 'linux' }, files: { releasePreview, getPathForFile },
   } } });
   clearAllComposerDrafts();
   root = createRoot(document.createElement('div'));
@@ -90,11 +97,11 @@ describe('paste event capture', () => {
     expect(draft().images).toHaveLength(1);
   });
 
-  it.each(['md', 'txt'])('imports an unresolved .%s alongside a direct image using the complete native identity', async (extension) => {
+  it.each(['md', 'pdf', 'docx', 'zip'])('imports an unresolved .%s alongside a direct image using the complete native identity', async (extension) => {
     const image = imageFile();
     const text = new File(['Example'], `sample.${extension}`, { type: 'text/plain' });
     const known = new File(['Known'], 'known.md', { type: 'text/markdown' });
-    Object.defineProperty(known, 'path', { value: '/workspace/known.md' });
+    getPathForFile.mockImplementation((file: File) => file === known ? '/workspace/known.md' : '');
     const other = new File(['Binary'], 'sample.bin', { type: 'application/octet-stream' });
     const files = [image, text, known, other];
     const discovery = deferred<unknown[]>();
@@ -113,13 +120,13 @@ describe('paste event capture', () => {
     ]);
     await settle();
     expect(draft().images.map((image) => image.status)).toEqual(['ready']);
-    expect(draft().files.map((file) => file.path)).toEqual(['/workspace/known.md', `/workspace/${text.name}`]);
+    expect(draft().files.map((file) => file.path)).toEqual([`/workspace/${text.name}`, '/workspace/known.md', '/workspace/sample.bin']);
     expect(fetch).not.toHaveBeenCalled();
     expect(releasePreview).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/duplicate');
     const send = vi.fn().mockResolvedValue(true);
     await act(async () => { expect(await draft().withImages(send)).toBe(true); });
     expect(send.mock.calls[0]![0]).toHaveLength(1);
-    expect(send.mock.calls[0]![1]).toHaveLength(2);
+    expect(send.mock.calls[0]![1]).toHaveLength(3);
   });
 
   it('keeps ordinary text when the image batch is rejected', () => {
@@ -169,12 +176,101 @@ describe('paste event capture', () => {
     expect(draft().images.map((image) => image.status)).toEqual(['ready']);
   });
 
-  it('retains filesystem text files as path references', () => {
-    const file = new File(['Example'], 'sample.md', { type: 'text/markdown' });
-    Object.defineProperty(file, 'path', { value: '/workspace/sample.md' });
-    act(() => draft().handlePaste(paste([file])));
-    expect(draft().files).toEqual([expect.objectContaining({ path: '/workspace/sample.md' })]);
-    expect(clipboardAttachments).not.toHaveBeenCalled();
+  describe.each(['paste', 'drop'] as const)('%s local files', (kind) => {
+    it.each(['md', 'pdf', 'docx', 'xlsx', 'zip', 'bin'])('imports .%s through its disk path without reading file bytes', async (extension) => {
+      const file = new File(['Example binary content'], `example.${extension}`);
+      const path = `/sample files/资料/${file.name}`;
+      getPathForFile.mockReturnValue(path);
+      clipboardAttachments.mockResolvedValue([{ kind: 'file', name: file.name, path, size: file.size }]);
+      const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+      const event = kind === 'paste' ? paste([file], 'Sample text') : drop([file], 'Sample text');
+      act(() => kind === 'paste' ? draft().handlePaste(event as React.ClipboardEvent) : draft().handleDrop(event as React.DragEvent));
+      expect(getPathForFile).toHaveBeenCalledExactlyOnceWith(file);
+      expect(clipboardAttachments).toHaveBeenCalledExactlyOnceWith({ kind: 'paths', paths: [path] });
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(onText).toHaveBeenCalledExactlyOnceWith('Before Sample textafter');
+      await settle();
+      expect(draft().files).toEqual([expect.objectContaining({ name: file.name, path })]);
+      expect(draft().images).toHaveLength(0);
+      expect(read).not.toHaveBeenCalled();
+      const send = vi.fn().mockResolvedValue(true);
+      await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+      expect(send).toHaveBeenCalledWith(undefined, [expect.objectContaining({ path })]);
+    });
+  });
+
+  it.each([
+    ['linux', '/sample files/资料 #1%25.pdf', 'file:///sample%20files/%E8%B5%84%E6%96%99%20%231%2525.pdf'],
+    ['darwin', '/sample files/资料 #1%25.pdf', 'file:///sample%20files/%E8%B5%84%E6%96%99%20%231%2525.pdf'],
+    ['win32', 'C:\\Sample Files\\资料 #1%25.pdf', 'file:///C:/Sample%20Files/%E8%B5%84%E6%96%99%20%231%2525.pdf'],
+    ['win32', '\\\\example-server\\share\\资料 #1%25.pdf', 'file://example-server/share/%E8%B5%84%E6%96%99%20%231%2525.pdf'],
+  ])('preserves and deduplicates %s file paths across paste and drop fixtures', async (platform, path, uri) => {
+    Object.assign(window.piskie.desktop.system, { platform });
+    const file = new File(['Sample'], '资料 #1%25.pdf');
+    getPathForFile.mockReturnValue(path);
+    clipboardAttachments.mockResolvedValue([{ kind: 'file', name: file.name, path, size: file.size }]);
+    act(() => {
+      draft().handlePaste(paste([file], '', uri));
+      draft().handleDrop(drop([file], '', uri));
+    });
+    await settle();
+    expect(clipboardAttachments).toHaveBeenCalledTimes(2);
+    expect(clipboardAttachments).toHaveBeenNthCalledWith(1, { kind: 'paths', paths: [path] });
+    expect(clipboardAttachments).toHaveBeenNthCalledWith(2, { kind: 'paths', paths: [path] });
+    expect(draft().files).toHaveLength(1);
+    const send = vi.fn().mockResolvedValue(true);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    expect(send).toHaveBeenCalledWith(undefined, [expect.objectContaining({ name: file.name, path })]);
+  });
+
+  it('deduplicates files represented by both a File and URI, including concurrent drops', async () => {
+    const file = new File(['Sample'], 'sample.pdf');
+    getPathForFile.mockReturnValue('/sample/sample.pdf');
+    clipboardAttachments.mockResolvedValue([{ kind: 'file', name: file.name, path: '/sample/sample.pdf', size: file.size }]);
+    act(() => {
+      draft().handleDrop(drop([file], '', 'file:///sample/sample.pdf'));
+      draft().handleDrop(drop([file]));
+    });
+    await settle();
+    expect(draft().files).toHaveLength(1);
+    expect(clipboardAttachments).toHaveBeenNthCalledWith(1, { kind: 'paths', paths: ['/sample/sample.pdf'] });
+  });
+
+  it('sends the clicked file when a later duplicate drop finishes first', async () => {
+    const file = new File(['Sample'], 'sample.pdf');
+    getPathForFile.mockReturnValue('/sample/sample.pdf');
+    const first = deferred<unknown[]>();
+    clipboardAttachments.mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce([{ kind: 'file', name: file.name, path: '/sample/sample.pdf', size: file.size }]);
+    act(() => draft().handleDrop(drop([file])));
+    const send = vi.fn().mockResolvedValue(true);
+    let sent!: Promise<boolean>;
+    act(() => { sent = draft().withImages(send); });
+    await act(async () => draft().handleDrop(drop([file])));
+    await act(async () => {
+      first.resolve([{ kind: 'file', name: file.name, path: '/sample/sample.pdf', size: file.size }]);
+      expect(await sent).toBe(true);
+    });
+    expect(send).toHaveBeenCalledWith(undefined, [expect.objectContaining({ path: '/sample/sample.pdf' })]);
+    expect(draft().files).toHaveLength(1);
+  });
+
+  it('accepts file drags, keeps ordinary text drags native, and captures dropped images', async () => {
+    const over = drop();
+    Object.assign(over.dataTransfer, { types: ['Files'] });
+    draft().handleDragOver(over);
+    expect(over.preventDefault).toHaveBeenCalledOnce();
+    expect(over.dataTransfer.dropEffect).toBe('copy');
+    const text = drop([], 'Example text');
+    Object.assign(text.dataTransfer, { types: ['text/plain'] });
+    draft().handleDragOver(text);
+    draft().handleDrop(text);
+    expect(text.preventDefault).not.toHaveBeenCalled();
+    const image = drop([imageFile()]);
+    act(() => draft().handleDrop(image));
+    await settle();
+    expect(draft().images[0]?.status).toBe('ready');
+    expect(image.stopPropagation).toHaveBeenCalledOnce();
   });
 
   it('keeps keyed attachments across switching and unmount', async () => {

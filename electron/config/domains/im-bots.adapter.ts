@@ -33,6 +33,7 @@ const replyForwardShape = {
   forwardAssistantText: forwardAssistantTextSchema,
   forwardToolCalls: z.boolean().describe('Whether tool calls are forwarded to the conversation.'),
   forwardToolResults: z.boolean().describe('Whether tool results are forwarded to the conversation.'),
+  forwardToolImages: z.boolean().default(true).describe('Whether tool images are sent to the conversation.'),
   toolFilter: z.strictObject(toolFilterFields)
     .describe('Optional tool forwarding filter.')
     .optional(),

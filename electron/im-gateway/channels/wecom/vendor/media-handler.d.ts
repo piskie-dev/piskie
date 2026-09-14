@@ -6,13 +6,14 @@
 import type { RuntimeEnv } from "./compat-types.js";
 import type { WSClient } from "@wecom/aibot-node-sdk";
 import type { ResolvedWeComAccount } from "./compat-types.js";
-import type { MediaApi } from "../../core/channel-connector.js";
+import type { MediaApi } from "../../../core/channel-connector.js";
 /**
  * 下载并保存所有图片到本地，每张图片的下载带超时保护
  */
 export declare function downloadAndSaveImages(params: {
     imageUrls: string[];
     imageAesKeys?: Map<string, string>;
+    abortSignal?: AbortSignal;
     account: ResolvedWeComAccount;
     media: MediaApi;
     runtime: RuntimeEnv;
@@ -27,6 +28,7 @@ export declare function downloadAndSaveImages(params: {
 export declare function downloadAndSaveFiles(params: {
     fileUrls: string[];
     fileAesKeys?: Map<string, string>;
+    abortSignal?: AbortSignal;
     account: ResolvedWeComAccount;
     media: MediaApi;
     runtime: RuntimeEnv;

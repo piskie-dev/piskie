@@ -15,6 +15,7 @@ import path from 'path';
 
 import type { AgentModule } from './module.js';
 import type { AgentHost } from '../agent-host.js';
+import { userInputModelText } from '../conversation/user-input.js';
 import type { ToolContextBuilder } from '../tool-context.js';
 import type {
   ImageApplicationOutput,
@@ -230,6 +231,9 @@ export class ImageModule implements AgentModule, ImageReviewOps {
     signal?: AbortSignal
   ): Promise<void> {
     const node = this.mustGetNode(nodeId);
+    signal?.throwIfAborted();
+    await this.host.addUserMessage({ text: action.instruction, files: action.files, images: action.images });
+    const instruction = userInputModelText({ text: action.instruction, files: action.files });
     const targets = node.images.filter((img) => action.imageIds.includes(img.id));
     const prevStatus = new Map(targets.map((img) => [img.id, img.status]));
 
@@ -245,7 +249,7 @@ export class ImageModule implements AgentModule, ImageReviewOps {
 
     for (const img of targets) {
       signal?.throwIfAborted();
-      const newPrompt = await this.rewritePrompt(img.prompt, action.instruction, signal);
+      const newPrompt = await this.rewritePrompt(img.prompt, instruction, signal);
 
       signal?.throwIfAborted();
       try {
@@ -441,7 +445,7 @@ export class ImageModule implements AgentModule, ImageReviewOps {
       if (missing.length > 0) {
         return { success: false, error: `图片不存在: ${missing.join(', ')}` };
       }
-      if (typeof action.instruction !== 'string' || action.instruction.trim() === '') {
+      if (!action.instruction.trim() && !action.files?.length && !action.images?.length) {
         return { success: false, error: '请输入修改指令' };
       }
       if (action.images && action.images.length > 0) {

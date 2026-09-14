@@ -1007,8 +1007,8 @@ export default {
       durationSeconds: '{{seconds}}秒',
     },
     attachmentFailure: {
-      preparing: '正在准备图片…',
-      capture: '这批图片导入失败，请移除失败项或重新粘贴图片。',
+      preparing: '正在准备附件…',
+      capture: '这批附件导入失败，请移除失败项或重新添加文件。',
       invalidImage: '这批附件包含空图片或不支持的图片，请重新粘贴 PNG、JPEG、GIF、WebP 或 BMP 图片。',
       pixels: '单张图片超过 3200 万像素，请降低尺寸后重新粘贴。',
       imageBytes: '单张图片为 {{bytes}} 字节，超过 32 MiB 上限，请选用较小的图片重新粘贴。',
@@ -1077,6 +1077,7 @@ export default {
       sendFailed: '发送失败',
       openFailed: '打开失败',
       deleteFailed: '删除失败',
+      renameFailed: '会话重命名失败',
       promotionUnavailable: '该调用已经结束或不支持转入后台',
       promotionFailed: '转入后台失败',
       historyLoadFailed: '历史记录加载失败',
@@ -1089,8 +1090,16 @@ export default {
       pause: '暂停',
       stop: '停止',
       openRecord: '打开记录',
+      rename: '重命名',
       markRead: '标记为已读',
       delete: '删除',
+    },
+    renameDialog: {
+      title: '重命名会话',
+      label: '会话标题',
+      placeholder: '输入会话标题',
+      required: '请输入标题',
+      saving: '正在保存…',
     },
     taskGroup: {
       unassigned: '未分配',
@@ -1189,6 +1198,12 @@ export default {
       unsupported: '不支持',
       unknown: '未知',
       stateAria: '{{name}}：{{state}}',
+    },
+    markdownImage: {
+      alt: '图片',
+      loading: '图片加载中…',
+      failed: '图片加载失败',
+      preview: '查看大图：{{description}}',
     },
     contentLink: {
       commandClick: '⌘ + 点击',
@@ -2071,6 +2086,8 @@ export default {
     forwardToolCallsHelp: '微信渠道会显示原生执行进度，并自动发送必要的完成状态；其他渠道继续显示文本。',
     includeToolResults: '附带工具结果',
     forwardToolResultsHelp: '控制是否额外发送最多 500 字的结果正文，不影响微信原生完成状态。',
+    forwardToolImages: '发送工具图片',
+    forwardToolImagesHelp: '自动发送工具读取的图片和已确认的生成图片。',
 
     // 授权管理
     approvedSenders: '已放行用户',
@@ -2198,6 +2215,8 @@ export default {
     platform: '当前平台',
     install: '安装内核',
     retry: '重试安装',
+    retryPrompt: '点击',
+    retryDownload: '重新下载',
     unavailable: '当前平台不可用',
     preparing: '正在准备浏览器内核...',
     downloading: '正在下载浏览器内核...',

@@ -53,6 +53,7 @@ import type {
 import type { ReasoningSelection } from '../../shared/types/reasoning.js';
 
 import type { AgentHost, AgentUserInput } from './agent-host.js';
+import { userInputModelText } from './conversation/user-input.js';
 import type { AgentSpec } from './specs/spec.js';
 import { specRegistry } from './specs/index.js';
 import type { AgentModule } from './modules/module.js';
@@ -220,23 +221,34 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   // emitStateChange 不覆写：基类实现带 disposed 守卫（世代唯一性）。
 
   addUserMessage(input: AgentUserInput): void | Promise<void> {
-    let content: string | ContentBlock[] = input.text;
+    const text = userInputModelText(input);
+    const userInput = !input.subtype || input.subtype === 'user_input' || input.subtype === 'system_task'
+      ? { text: input.text, ...(input.files?.length ? { files: input.files } : {}) }
+      : undefined;
+    let content: string | ContentBlock[] = text;
     if (input.images?.length) {
       content = input.images.map((image) => ({
         type: 'image',
         source: { type: 'base64', media_type: image.media_type, data: image.data },
       }));
-      if (input.text) content.push({ type: 'text', text: input.text });
+      if (text) content.push({ type: 'text', text });
     }
     if (input.skills?.length) {
       return loadSelectedSkills(this.getSkillCatalog(), input.skills, {
         workspace: this.getEffectiveWorkspace(),
         defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
       }).then((selection) => {
-        this.context.addUserMessage(content, input.subtype, selection);
+        this.context.addUserMessage(content, input.subtype, {
+          ...selection,
+          metadata: { ...selection.metadata, ...(userInput ? { userInput } : {}) },
+        });
+        if (userInput) this.context.flush();
       });
     }
-    this.context.addUserMessage(content, input.subtype);
+    this.context.addUserMessage(content, input.subtype, {
+      ...(userInput ? { metadata: { userInput } } : {}),
+    });
+    if (userInput) this.context.flush();
   }
 
   addDurableUserMessage(text: string, tag?: MessageSubtype, messageId?: string): void {
@@ -430,6 +442,13 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     };
   }
 
+  setRunName(name: string): void {
+    const runConfig = this.options.runConfig;
+    if (!runConfig) throw new Error('AgentRun config is unavailable');
+    runConfig.name = name;
+    this.emitStateChange();
+  }
+
   /**
    * 应用一批 Mailbox 事件到上下文。
    * 只由 engine 的 applyEventBatch 调用，由该入口统一包装错误并附上本批 event ids；
@@ -512,6 +531,13 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       return false;
     }
 
+    if (event.files?.length || event.images?.length) {
+      this.addUserMessage({
+        text: typeof event.content === 'string' ? event.content : JSON.stringify(event.content),
+        files: event.files,
+        images: event.images,
+      });
+    }
     pending.answers = answers;
     this.emitStateChange();
 
@@ -522,7 +548,11 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     const pending = getValidPendingAskUser(this.context.getAllMessages());
     if (!pending) return false;
 
-    const text = typeof event.content === 'string' ? event.content : JSON.stringify(event.content);
+    const userInput = {
+      text: typeof event.content === 'string' ? event.content : JSON.stringify(event.content),
+      ...(event.files?.length ? { files: event.files } : {}),
+    };
+    const text = userInputModelText(userInput);
     const images = event.images
       ?.filter((image) =>
         ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.media_type)
@@ -562,6 +592,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       kind: 'answer',
       callId: pending.toolUseId,
       toolName: 'ask_user',
+      userInput,
       text,
       images,
       artifacts,
@@ -1172,7 +1203,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   private defaultProcessEvent(event: AgentInputEvent): void | Promise<void> {
     const skills = event.source === 'user' && !event.uiSubmission ? event.skills : undefined;
     const hasImages = (event.images?.length ?? 0) > 0;
-    if (!event.content && !hasImages && !skills?.length) return;
+    if (!event.content && !hasImages && !event.files?.length && !skills?.length) return;
 
     // 系统事件（postSystemEvent factory）：
     // start 是纯触发器（初始上下文已由 role.onStart 注入，不重复落痕）；
@@ -1199,7 +1230,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         ? contentStr
         : `<agent_input source="${event.source}"${event.priority === 'high' ? ' priority="high"' : ''} ts="${ts}">\n${neutralizeClosing('agent_input', contentStr)}\n</agent_input>`;
 
-    return this.addUserMessage({ text: messageText, images: event.images, skills, subtype });
+    return this.addUserMessage({ text: messageText, files: event.files, images: event.images, skills, subtype });
   }
 
   // ============================================================
@@ -1422,7 +1453,8 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     imageIds: string[],
     instruction: string,
     target?: import('../inference/execution/contracts.js').ModelTarget,
-    images?: Array<{ data: string; media_type: string }>
+    images?: Array<{ data: string; media_type: string }>,
+    files?: import('../../shared/types/user-input.js').UserFileRef[],
   ): { success: boolean; error?: string } {
     const mod = this.getImageModule();
     return (
@@ -1432,6 +1464,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         instruction,
         target,
         images,
+        files,
       }) ?? { success: false, error: '图片模块未启用' }
     );
   }

@@ -1,17 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { messageText, presentationFromError, type PresentationText } from '../../../i18n/presentationText';
 import type { ClipboardAttachmentRequest } from '../../../../shared/electron-contracts/desktop';
+import type { UserFileRef } from '../../../../shared/types/user-input';
 import {
-  attachmentId, captureComposerImages, getComposerAttachments, useComposerAttachments,
-  useComposerDraftStore, withAttachmentSubmission,
+  attachmentId, captureComposerImages, useComposerAttachments, useComposerDraftStore,
+  withAttachmentSubmission,
 } from '../data/composer-drafts';
 import {
-  attachmentPathsFromUriList, isTextAttachment, plainTextMayReferenceImage, supportedImageType,
+  attachmentPathKey, attachmentPathsFromUriList, plainTextMayReferenceImage, supportedImageType,
   type AttachmentFile, type AttachmentImage, type ImagePayload,
 } from './model';
 
-function fileSystemPath(file: File): string | undefined {
-  return (file as File & { readonly path?: string }).path || undefined;
+const NATIVE_FILE_TYPES = new Set(['public.file-url', 'NSFilenamesPboardType', 'FileNameW']);
+
+function transferFiles(transfer: DataTransfer): File[] {
+  const files = transfer.files ? Array.from(transfer.files) : [];
+  for (const item of Array.from(transfer.items ?? [])) {
+    const file = item.kind === 'file' ? item.getAsFile() : null;
+    if (file && !files.includes(file)) files.push(file);
+  }
+  return files;
+}
+
+function sourceName(source: string): string {
+  if (source.startsWith('file:')) {
+    return decodeURIComponent(new URL(source).pathname.split('/').at(-1) ?? '');
+  }
+  return source.replaceAll('\\', '/').split('/').at(-1) ?? '';
 }
 
 export interface AttachmentDraft {
@@ -19,11 +34,13 @@ export interface AttachmentDraft {
   readonly files: readonly AttachmentFile[];
   readonly hasAttachments: boolean;
   readonly handlePaste: (event: React.ClipboardEvent, insertText?: (value: string) => void) => void;
+  readonly handleDragOver: (event: React.DragEvent) => void;
+  readonly handleDrop: (event: React.DragEvent, insertText?: (value: string) => void) => void;
   readonly remove: (id: string) => void;
   readonly clear: () => void;
   readonly error?: PresentationText;
   readonly submitting: boolean;
-  readonly withImages: (submit: (images: ImagePayload[] | undefined, files: readonly AttachmentFile[]) => Promise<unknown>) => Promise<boolean>;
+  readonly withImages: (submit: (images: ImagePayload[] | undefined, files: readonly UserFileRef[]) => Promise<unknown>) => Promise<boolean>;
 }
 
 /** Keyed drafts survive layout changes; local feedback drafts end with their input. */
@@ -41,29 +58,46 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
     return () => useComposerDraftStore.getState().resetDraft(draftKey);
   }, [draftKey, key]);
 
-  const handlePaste = useCallback((event: React.ClipboardEvent, insertText = onTextChange) => {
-    const transfer = event.clipboardData;
+  const handleTransfer = useCallback((
+    event: React.ClipboardEvent | React.DragEvent,
+    transfer: DataTransfer,
+    insertText = onTextChange,
+  ) => {
     if (!transfer) return;
     // Extract all event data before any asynchronous work or input update.
-    const files = Array.from(transfer.items).flatMap((item) => {
-      const file = item.kind === 'file' ? item.getAsFile() : null;
-      return file ? [file] : [];
-    });
+    const files = transferFiles(transfer);
     const plain = transfer.getData('text/plain');
     const plainIsSource = plainTextMayReferenceImage(plain);
-    const paths = [...new Set([...attachmentPathsFromUriList(transfer.getData('text/uri-list')), ...(plainIsSource ? [plain.trim()] : [])])];
     const imageFiles = files.filter((file) => supportedImageType(file.name, file.type));
-    const textFiles = files.filter((file) => !supportedImageType(file.name, file.type) && isTextAttachment(file.name, file.type));
-    const unresolved = textFiles.filter((file) => !fileSystemPath(file));
-    const native = paths.length === 0 && (unresolved.length > 0
-      || (imageFiles.length === 0 && Array.from(transfer.types ?? []).some((type) => ['public.file-url', 'NSFilenamesPboardType', 'FileNameW'].includes(type))));
-    const sourcePaths = paths.filter((source) => {
-      const name = source.startsWith('file:') ? decodeURIComponent(new URL(source).pathname.split('/').at(-1) ?? '')
-        : source.replaceAll('\\', '/').split('/').at(-1) ?? '';
-      return !(supportedImageType(name) && imageFiles.some((file) => file.name === name || fileSystemPath(file) === source));
+    const filePaths = new Map(files.map((file) => [file, window.piskie.desktop.files.getPathForFile(file)]));
+    const unresolvedFiles = files.filter((file) => !supportedImageType(file.name, file.type) && !filePaths.get(file));
+    const native = unresolvedFiles.length > 0 || (files.length === 0
+      && Array.from(transfer.types ?? []).some((type) => NATIVE_FILE_TYPES.has(type)));
+    const candidates = [
+      ...files.flatMap((file) => filePaths.get(file) || []),
+      ...attachmentPathsFromUriList(transfer.getData('text/uri-list')),
+      ...(plainIsSource ? [plain.trim()] : []),
+    ];
+    const paths = new Map<string, string>();
+    for (const source of candidates) {
+      const key = attachmentPathKey(source, window.piskie.desktop.system.platform);
+      if (!paths.has(key)) paths.set(key, source);
+    }
+    const imagePathKeys = new Set(imageFiles.flatMap((file) => {
+      const path = filePaths.get(file);
+      return path ? [attachmentPathKey(path, window.piskie.desktop.system.platform)] : [];
+    }));
+    const sourcePaths = [...paths.entries()].flatMap(([key, source]) => {
+      const name = sourceName(source);
+      return imagePathKeys.has(key) || (supportedImageType(name) && imageFiles.some((file) => file.name === name))
+        ? [] : [source];
     });
-    if (imageFiles.length === 0 && textFiles.length === 0 && paths.length === 0 && !native) return;
+    const request: ClipboardAttachmentRequest | undefined = native
+      ? { kind: 'native', files: files.map((file) => ({ name: file.name, size: file.size })), text: plain }
+      : sourcePaths.length > 0 ? { kind: 'paths', paths: sourcePaths } : undefined;
+    if (imageFiles.length === 0 && !request) return;
     event.preventDefault();
+    if ('dataTransfer' in event) event.stopPropagation();
     if (plain && !plainIsSource && insertText) {
       const input = event.currentTarget as HTMLInputElement | HTMLTextAreaElement;
       const start = input.selectionStart ?? input.value.length;
@@ -73,21 +107,24 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
       // Restore the caret after React has committed the controlled text.
       queueMicrotask(() => { if (input.isConnected) input.setSelectionRange(start + plain.length, start + plain.length); });
     }
-    const knownPaths = new Set(getComposerAttachments(draftKey).files.map((file) => file.path));
-    const additions = textFiles.flatMap((file) => {
-      const path = fileSystemPath(file);
-      if (!path || knownPaths.has(path)) return [];
-      knownPaths.add(path);
-      return [{ id: attachmentId(), name: file.name, path }];
-    });
-    useComposerDraftStore.getState().appendFiles(draftKey, additions);
-    const request: ClipboardAttachmentRequest | undefined = sourcePaths.length > 0 ? { kind: 'paths', paths: sourcePaths }
-      : native ? { kind: 'native', files: files.map((file) => ({ name: file.name, size: file.size })), text: plain } : undefined;
-    if (imageFiles.length > 0 || request) captureComposerImages(draftKey, imageFiles,
+    captureComposerImages(draftKey, imageFiles,
       request ? () => window.piskie.desktop.system.clipboardAttachments(request) : undefined);
   }, [draftKey, onTextChange]);
 
-  const withImages = useCallback(async (submit: (images: ImagePayload[] | undefined, files: readonly AttachmentFile[]) => Promise<unknown>) => {
+  const handlePaste = useCallback((event: React.ClipboardEvent, insertText = onTextChange) => {
+    handleTransfer(event, event.clipboardData, insertText);
+  }, [handleTransfer, onTextChange]);
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    const transfer = event.dataTransfer;
+    if (!Array.from(transfer.types ?? []).includes('Files') && transfer.files.length === 0) return;
+    event.preventDefault();
+    transfer.dropEffect = 'copy';
+  }, []);
+  const handleDrop = useCallback((event: React.DragEvent, insertText = onTextChange) => {
+    handleTransfer(event, event.dataTransfer, insertText);
+  }, [handleTransfer, onTextChange]);
+
+  const withImages = useCallback(async (submit: (images: ImagePayload[] | undefined, files: readonly UserFileRef[]) => Promise<unknown>) => {
     if (busy.current) return false;
     busy.current = true;
     setSubmitting(true);
@@ -105,6 +142,6 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
   return useMemo(() => ({
     images: attachments.images, files: attachments.files, error, submitting,
     hasAttachments: attachments.images.length > 0 || attachments.files.length > 0,
-    handlePaste, remove, clear, withImages,
-  }), [attachments, clear, error, handlePaste, remove, submitting, withImages]);
+    handlePaste, handleDragOver, handleDrop, remove, clear, withImages,
+  }), [attachments, clear, error, handleDragOver, handleDrop, handlePaste, remove, submitting, withImages]);
 }

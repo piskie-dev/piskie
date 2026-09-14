@@ -40,6 +40,8 @@ export interface WelcomeComposerProps {
   readonly onChange: (value: string) => void;
   readonly onSubmit: () => void;
   readonly onPaste: React.ClipboardEventHandler;
+  readonly onDragOver: React.DragEventHandler;
+  readonly onDrop: React.DragEventHandler;
   readonly placeholder: string;
   readonly sending?: boolean;
   readonly error?: PresentationText;
@@ -72,6 +74,8 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     onChange,
     onSubmit,
     onPaste,
+    onDragOver,
+    onDrop,
     placeholder,
     sending,
     error,
@@ -199,6 +203,8 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 onChange={(event) => onChange(event.target.value)}
                 onKeyDown={onKeyDown}
                 onPaste={(event) => { skillComposer.onPasteOrDrop(); onPaste(event); }}
+                onDragOver={onDragOver}
+                onDrop={(event) => { skillComposer.onPasteOrDrop(); onDrop(event); }}
                 placeholder={placeholder}
                 rows={1}
               />

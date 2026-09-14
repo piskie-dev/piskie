@@ -44,7 +44,6 @@ import { resolveToolTitle } from '@/features/console/data/cells/toolTitle';
 import type {
   AssistantNode,
   TranscriptNode,
-  TranscriptFileRef,
   NoticeNode,
   PlanNode,
   SummaryNode,
@@ -60,10 +59,6 @@ import {
 } from '@/features/console/data/presentationText';
 
 // ==================== 常量 ====================
-
-/** 附件文件标记（与发送侧 Composer 的拼接格式对偶） */
-// i18n-ignore -- model attachment protocol marker
-const ATTACHMENT_MARKER = '附件文件（使用 read 读取）:\n';
 
 /** 成功时抑制：状态已由常驻任务栏承载，时间线里再展示清单是重复噪音 */
 const SUPPRESSED_TOOLS = new Set(['task']);
@@ -90,36 +85,6 @@ function attachmentSummary(imageCount: number, fileCount: number): PresentationT
 }
 
 // ==================== 用户消息 ====================
-
-interface ParsedUserContent {
-  readonly text?: string;
-  readonly files?: readonly TranscriptFileRef[];
-}
-
-/** 剥离附件文件标记，正文与文件清单分开 */
-function splitAttachmentMarker(content: string): ParsedUserContent {
-  const markerIdx = content.indexOf(ATTACHMENT_MARKER);
-  if (markerIdx === -1) {
-    return { text: content || undefined };
-  }
-
-  const before = content.substring(0, markerIdx).trim();
-  const after = content.substring(markerIdx + ATTACHMENT_MARKER.length);
-  const paths = after
-    .split('\n')
-    .map((line) => line.replace(/^-\s*/, '').trim())
-    .filter(Boolean);
-
-  const files: TranscriptFileRef[] = paths.map((path) => {
-    const parts = path.split('/');
-    return { name: parts[parts.length - 1] ?? '', path };
-  });
-
-  return {
-    text: before || undefined,
-    files: files.length > 0 ? files : undefined,
-  };
-}
 
 function readableMessageText(content: MsgEntry['content']): string {
   if (typeof content === 'string') return content;
@@ -152,7 +117,9 @@ function buildUserNode(
   const assignment = origin === 'assignment' ? parseAssignment(rawText) : undefined;
   const body = assignment ? assignment.prompt : rawText;
 
-  const { text, files } = splitAttachmentMarker(body);
+  const userInput = entry.role === 'user' ? entry.metadata?.userInput : undefined;
+  const text = userInput ? userInput.text : body;
+  const files = userInput?.files;
 
   const meta: PresentationText[] = [];
   if (images?.length) {
@@ -164,7 +131,7 @@ function buildUserNode(
 
   const summary = rawSummary(text, 120) ?? attachmentSummary(images?.length ?? 0, files?.length ?? 0);
 
-  const hasDetail = !!text || !!assignment?.taskBoard || !!images?.length;
+  const hasDetail = !!text || !!assignment?.taskBoard || !!images?.length || !!files?.length;
   const interaction = resolveInteraction({ kind: 'user', sections: [], hasDetail });
 
   return {

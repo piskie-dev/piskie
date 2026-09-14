@@ -23,7 +23,7 @@ import { absorbTargets, sessionTokenTally } from './tally';
 import { AccountControl } from './AccountControl';
 import styles from './skybar.module.css';
 
-import logo64 from '/logo-64.png';
+import logo from '/logo-on-dark-128.png';
 
 function formatTokens(total: number): string {
   if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(2)}M`;
@@ -105,7 +105,7 @@ export const SkyBar: React.FC = () => {
   return (
     <header className={styles.bar} data-mac={isMacOSPlatform() ? 'true' : undefined}>
       <div className={styles.brand}>
-        <img src={logo64} alt="Piskie" className="app-logo-adaptive" />
+        <img src={logo} alt="Piskie" className="app-logo-adaptive" />
         <b>Piskie</b>
       </div>
 

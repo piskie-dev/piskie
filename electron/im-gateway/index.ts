@@ -137,6 +137,19 @@ export class IMGateway {
     });
 
     this.agentObservationBindings.push(
+      deps.observations.conversationAppends.subscribe(({ agentId, entry }) => {
+        if (entry.t !== 'tool' || entry.metadata?.userInput || !this.agentService?.hasAgentInMemory(agentId)) return;
+        this.replyInterceptor.processToolImages(agentId, entry, () => {
+          const entries = this.agentService!.getConversationStore().read(agentId, agentId);
+          for (let index = entries.length - 1; index >= 0; index--) {
+            const message = entries[index];
+            if (message.t !== 'msg' || message.role !== 'assistant' || typeof message.content === 'string') continue;
+            const call = message.content.find((block) => block.type === 'tool_use' && block.id === entry.toolUseId);
+            if (call?.type === 'tool_use') return call.name;
+          }
+          return undefined;
+        });
+      }),
       deps.observations.outputs.subscribe((event) => {
         // 顶层主 Agent 必须存在才转发——子 Agent 内容不直接发往 IM
         if (!this.agentService?.hasAgentInMemory(event.agentId)) return;

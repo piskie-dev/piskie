@@ -56,6 +56,7 @@ function makeHost(approvalMode: 'auto' | 'confirm' = 'confirm'): AgentHost {
     currentTarget: { providerId: 'ai-main', modelId: 'chat-main' },
     emitStateChange: vi.fn(),
     getInference: () => inference,
+    addUserMessage: vi.fn(),
   } as unknown as AgentHost;
 }
 

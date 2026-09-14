@@ -89,6 +89,8 @@ export interface GateFeedbackProps {
   readonly onFocus?: () => void;
   readonly onSubmit: () => void;
   readonly onPaste: React.ClipboardEventHandler;
+  readonly onDragOver?: React.DragEventHandler;
+  readonly onDrop?: React.DragEventHandler;
   readonly placeholder: string;
   readonly canSubmit: boolean;
   readonly disabled?: boolean;
@@ -97,7 +99,7 @@ export interface GateFeedbackProps {
 }
 
 export const GateFeedback = memo<GateFeedbackProps>(
-  ({ ordinal, value, onChange, onFocus, onSubmit, onPaste, placeholder, canSubmit, disabled, hideSend }) => {
+  ({ ordinal, value, onChange, onFocus, onSubmit, onPaste, onDragOver, onDrop, placeholder, canSubmit, disabled, hideSend }) => {
     const { t } = useTranslation();
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -121,6 +123,8 @@ export const GateFeedback = memo<GateFeedbackProps>(
           onFocus={onFocus}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
           placeholder={placeholder}
           disabled={disabled}
         />

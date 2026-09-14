@@ -17,9 +17,15 @@ const MAX_IMAGE_SOURCE_BYTES = Math.floor(5 * 1024 * 1024 * 3 / 4);
 const readSchema = z.object({
   file_path: z.string().min(1).describe('Absolute path to the file to read.'),
   offset: int(z.positive()).default(1)
-    .describe('1-based line number to start reading from.'),
+    .describe(
+      '1-based line number to start reading from. Only provide if the file is too large to '
+      + 'read at once or you already know which part you need.',
+    ),
   limit: int(z.positive()).default(DEFAULT_LINE_LIMIT)
-    .describe('Maximum number of lines to return. Defaults to 2000.'),
+    .describe(
+      'Number of lines to read. Only provide if the file is too large to read at once or you '
+      + 'already know which part you need. Defaults to 2000.',
+    ),
 });
 
 type ReadParams = z.infer<typeof readSchema>;
@@ -33,7 +39,7 @@ type ReadData = Readonly<{
 
 const DESCRIPTION = `Read a file from an absolute path.
 
-Text output is numbered with a 1-based line number and a tab. Use offset and limit when only a section is needed. A call reads at most 2000 lines and 384KB by default, and tells you exactly how to continue when more lines exist. Do not copy the line-number prefix into edit old_string or new_string. Files you just changed with write or edit do not need to be reread merely to verify the change.
+Text output is numbered with a 1-based line number and a tab. Without offset and limit a call returns the whole file, up to 2000 lines; if the file is longer, the result says how to continue. When you already know which part of the file you need, only read that part. This can be important for larger files. Independent reads, including several sections of one file, can be requested in the same response. Do not copy the line-number prefix into edit old_string or new_string. Files you just changed with write or edit do not need to be reread merely to verify the change.
 
 PNG, JPEG, GIF, and WEBP images are returned as images. PDF, audio, video, and unsupported binary formats are reported honestly; convert them with shell before reading.`;
 
@@ -84,10 +90,14 @@ export class ReadTool extends BaseTool<ReadParams, ReadData> {
         );
       } else if (result.nextOffset !== undefined) {
         const shownEnd = params.offset + result.lines.length - 1;
-        notes.push(
-          `已显示 ${params.offset}-${shownEnd} 行（共 ${result.totalLines} 行）。`
-          + `继续读：read({"file_path":${JSON.stringify(params.file_path)},"offset":${result.nextOffset}})`,
-        );
+        const shown = `已显示 ${params.offset}-${shownEnd} 行（共 ${result.totalLines} 行）。`;
+        // 模型自己传的 limit 截住了读取：只报事实，整读还是再读一段由它判断。
+        // 工具上限（默认 2000 行或字节预算）截住了读取：给出续读方式。
+        const stoppedByOwnLimit = result.lines.length >= params.limit
+          && params.limit < DEFAULT_LINE_LIMIT;
+        notes.push(stoppedByOwnLimit
+          ? shown
+          : `${shown}继续读：read({"file_path":${JSON.stringify(params.file_path)},"offset":${result.nextOffset}})`);
       }
       if (!result.stable) {
         notes.push('该文件正在被并发修改；本次内容仍返回，但写入前必须重新 read。');

@@ -4,7 +4,7 @@
  * IPC 只提交审核动作，所有耗时操作（生成/重生成/commit）都在工具 Promise 内执行。
  */
 
-import type { ImageNodeState } from '../../../shared/types/index.js';
+import type { ImageNodeState, UserFileRef } from '../../../shared/types/index.js';
 import type { ModelTarget } from '../../inference/execution/contracts.js';
 
 /** 预检归一化后的单张图片输入 */
@@ -24,6 +24,7 @@ export type ImageReviewAction =
       type: 'regenerate';
       imageIds: string[];
       instruction: string;
+      files?: UserFileRef[];
       target?: ModelTarget;
       /** 用户粘贴的参考图；是否支持由所选模型的真实调用结果决定。 */
       images?: Array<{ data: string; media_type: string }>;

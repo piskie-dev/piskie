@@ -14,7 +14,7 @@
  * 共享的只有数据层与功能块：`useTranscript` / `Transcript`（滚动容器，布局中立）/
  * `Gate` / `ImageReview` / `data/actions`。
  *
- * 上下文环固定在会话输入器主动作左侧；dev mode 只控制明细查看器入口。
+ * 上下文环固定在会话输入器主动作左侧，点击可查看明细。
  */
 
 import { memo, useCallback, useMemo, useState } from 'react';
@@ -56,7 +56,6 @@ export interface ThreadViewProps {
   /** 有值即渲染该 worker 的 thread（父 agent 为 `agentId`） */
   readonly workerId?: string;
   readonly fidelity?: Fidelity;
-  readonly devMode?: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly imageNodes?: readonly ImageNodePublicState[];
   /** 头部 `···` 菜单（暂停 / 停止 / 打开工作区…），由模式层给 */
@@ -72,7 +71,6 @@ export const ThreadView = memo<ThreadViewProps>(
     agentId,
     workerId,
     fidelity = 'focused',
-    devMode,
     onPreviewImage,
     imageNodes,
     menuItems,
@@ -177,6 +175,7 @@ export const ThreadView = memo<ThreadViewProps>(
         <ThreadCell
           cell={cell}
           conversationStatus={request?.status}
+          workspace={request?.workspace}
           workers={agent?.workers}
           onOpenWorker={onOpenWorker}
           onPreviewImage={onPreviewImage}
@@ -184,7 +183,7 @@ export const ThreadView = memo<ThreadViewProps>(
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, runCellAction],
+      [agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, request?.workspace, runCellAction],
     );
 
 
@@ -299,7 +298,6 @@ export const ThreadView = memo<ThreadViewProps>(
             agentSpec={agent?.agentSpec}
             contextUsage={request.contextUsage}
             sourceVersion={request.conversationLength}
-            contextViewerEnabled={devMode}
             canPause={request.canPause}
             stopping={request.phase === 'stopping'}
             onPreviewImage={onPreviewImage}

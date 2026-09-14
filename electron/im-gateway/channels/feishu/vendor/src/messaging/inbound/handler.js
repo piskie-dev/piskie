@@ -99,7 +99,7 @@ async function handleFeishuMessage(params) {
     // 已落盘的受管文件——Promise.all 会丢弃已成功的 mediaResult，改用 allSettled
     // 保住清理句柄；dispatch 一经调用即移交所有权（Pipeline finally 负责删除，
     // 此处 catch 内的兜底 unlink 幂等无害）。
-    const enrichParams = { ctx, accountScopedCfg, account, log };
+    const enrichParams = { ctx, accountScopedCfg, account, log, signal: runtime?.abortSignal };
     const [mediaSettled, quotedSettled] = await Promise.allSettled([
         (0, enrich_1.resolveMedia)(enrichParams),
         (0, enrich_1.resolveQuotedContent)(enrichParams),

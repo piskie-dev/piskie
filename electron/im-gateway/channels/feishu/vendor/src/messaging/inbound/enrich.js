@@ -129,6 +129,7 @@ async function resolveMedia(params) {
         cfg: accountScopedCfg,
         messageId: ctx.messageId,
         resources: ctx.resources,
+        signal: params.signal,
         maxBytes: mediaMaxBytes,
         log,
         accountId: account.accountId,

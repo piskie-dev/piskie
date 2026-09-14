@@ -200,6 +200,7 @@ describe('ContextLedger timeline navigation', () => {
       root.render(createElement(ContextLedger, {
         rows,
         selectedKey: rows[4]?.key ?? null,
+        selectionRequest: 0,
         onSelect: vi.fn(),
       }));
     });
@@ -210,6 +211,7 @@ describe('ContextLedger timeline navigation', () => {
       root.render(createElement(ContextLedger, {
         rows,
         selectedKey: null,
+        selectionRequest: 0,
         timelineFocusKeys: new Set([rows[3]?.key ?? '', rows[4]?.key ?? '']),
         onSelect: vi.fn(),
       }));

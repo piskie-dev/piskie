@@ -18,6 +18,7 @@
  */
 
 import type { PersistedToolResultBlock, ToolEntry } from '../../../../../shared/types/agent-control';
+import { generatedImagePaths } from '../../../../../shared/tool-images';
 import {
   isJsonLikeString,
   parseMaybeJson,
@@ -64,15 +65,8 @@ interface UnpackedResult {
 }
 
 
-/** `- [成功] /path/to.png（备注）` → 路径；行首格式来自 generate-image.tool.ts:197 */
-const COMMITTED_IMAGE = /^- \[成功\] (.+?)(?:（.*)?$/;
-
-function extractGeneratedImages(tool: string, state: ToolState, text: string | undefined): readonly string[] | undefined {
-  if (tool !== 'generate_image' || state.phase !== 'ok' || !text) return undefined;
-  const paths = text
-    .split('\n')
-    .map((line) => COMMITTED_IMAGE.exec(line.trim())?.[1]?.trim())
-    .filter((path): path is string => !!path);
+function extractGeneratedImages(tool: string, text: string | undefined): readonly string[] | undefined {
+  const paths = generatedImagePaths(tool, text);
   return paths.length > 0 ? paths : undefined;
 }
 
@@ -280,7 +274,7 @@ export function buildToolNode(input: BuildToolNodeInput): ToolNode {
   const view: ToolDetailInput = {
     tool: input.tool,
     params: input.params,
-    result: carriesResult ? unpacked?.result : undefined,
+    result: carriesResult ? (input.entry?.metadata?.userInput?.text ?? unpacked?.result) : undefined,
     state,
     questionAnswers: carriesResult ? questionContribution?.items : undefined,
     mcpAudio: carriesResult && audioContributions && audioContributions.length > 0
@@ -331,8 +325,9 @@ export function buildToolNode(input: BuildToolNodeInput): ToolNode {
     badge: toolBadge(state),
     state,
     media: unpacked?.media,
+    files: input.entry?.metadata?.userInput?.files,
     actions: resolveActions(input.toolUseId, state),
-    generatedImages: extractGeneratedImages(input.tool, state, unpacked?.text),
+    generatedImages: extractGeneratedImages(input.tool, unpacked?.text),
     interaction,
     fileOp,
     artifacts,

@@ -2,6 +2,7 @@ import type { AgentObservationSource } from '../agent/observations.js';
 import type { AgentControlState } from '../../shared/types/agent-control.js';
 import type { AgentInputEvent } from '../../shared/types/index.js';
 import type { ResolvedAgentLaunch } from '../agent/launch/resolved-agent-launch.js';
+import type { ConversationStore } from '../agent-runs/conversation-store.js';
 
 export interface IMAgentCommands {
   startAgent(launch: ResolvedAgentLaunch): Promise<AgentControlState>;
@@ -12,9 +13,10 @@ export interface IMAgentCommands {
   stopAgent(agentId: string): Promise<void>;
   injectEventToAgent(agentId: string, event: AgentInputEvent): Promise<boolean>;
   hasAgentInMemory(agentId: string): boolean;
+  getConversationStore(): Pick<ConversationStore, 'read'>;
 }
 
 export type IMAgentObservations = Pick<
   AgentObservationSource,
-  'outputs' | 'runtimeReleases'
+  'outputs' | 'runtimeReleases' | 'conversationAppends'
 >;

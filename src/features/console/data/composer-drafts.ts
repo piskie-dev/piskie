@@ -5,7 +5,7 @@
 
 import { useCallback } from 'react';
 import { create } from 'zustand';
-import type { ApprovalMode } from '../../../../shared/types';
+import type { ApprovalMode, UserFileRef } from '../../../../shared/types';
 
 import type {
   AttachmentFile,
@@ -21,7 +21,6 @@ import { captureFile, captureSource } from '../attachments/capture';
 import { attachmentError, IMAGE_LIMITS } from '../attachments/image-format';
 import { createImageThumbnail } from '../attachments/thumbnail';
 import { blobToImagePayload } from '../attachments/submission';
-import { isTextAttachment } from '../attachments/model';
 
 export interface ComposerAttachmentState {
   readonly images: readonly AttachmentImage[];
@@ -288,7 +287,7 @@ export function attachmentId(): string { return `attachment-${++nextAttachment}`
 
 interface CaptureReservation extends ImageCaptureTask {
   readonly key: string;
-  readonly bytes: number;
+  bytes: number;
 }
 const captures = new Set<CaptureReservation>();
 // Consumers hold the same resource as the draft; byte accounting deduplicates that identity.
@@ -339,7 +338,7 @@ export function captureComposerImages(
   const known = files.reduce((sum, file) => sum + file.size, 0);
   let reservation: number;
   try {
-    if (previous.length + files.length + (discover ? 1 : 0) > IMAGE_LIMITS.count) throw attachmentError('count');
+    if (files.length > 0 && previous.length + files.length > IMAGE_LIMITS.count) throw attachmentError('count');
     const oversized = files.find((file) => file.size > IMAGE_LIMITS.imageBytes);
     if (oversized) throw attachmentError('imageBytes', { bytes: oversized.size });
     const global = composerImageUsage();
@@ -348,8 +347,8 @@ export function captureComposerImages(
       IMAGE_LIMITS.totalBytes - global.originalBytes,
       IMAGE_LIMITS.captureBytes - global.captureBytes,
     );
-    reservation = discover ? available : known;
-    if (available <= 0 || reservation > available || known > reservation) {
+    reservation = known;
+    if (known > 0 && known > available) {
       throw attachmentError(global.captureBytes > 0 ? 'captureBusy' : 'budget');
     }
   } catch (error) { fail(error); return; }
@@ -387,9 +386,22 @@ export function captureComposerImages(
       controller.signal.throwIfAborted();
       const imageSources = descriptors.filter((item) => item.kind === 'image')
         .filter((item) => !files.some((file) => file.name === item.name && file.size === item.size));
-      if (previous.length + directItems.length + imageSources.length > IMAGE_LIMITS.count) throw attachmentError('count');
+      const otherImages = getComposerAttachments(key).images.filter((image) => image.status === 'ready'
+        || (image.status === 'capturing' && image.capture !== batch));
+      if (imageSources.length > 0 && otherImages.length + directItems.length + imageSources.length > IMAGE_LIMITS.count) throw attachmentError('count');
       const oversized = imageSources.find((item) => item.size > IMAGE_LIMITS.imageBytes);
       if (oversized) throw attachmentError('imageBytes', { bytes: oversized.size });
+      // Path-only attachments consume no image storage. Reserve source bytes once discovery identifies images.
+      if (imageSources.length > 0) {
+        const available = Math.min(
+          IMAGE_LIMITS.draftBytes - composerImageUsage(key).originalBytes,
+          IMAGE_LIMITS.totalBytes - composerImageUsage().originalBytes,
+          IMAGE_LIMITS.captureBytes - composerImageUsage().captureBytes,
+        );
+        if (available <= 0) throw attachmentError('budget');
+        reservation += available;
+        batch.bytes = reservation;
+      }
       if (known + imageSources.reduce((sum, item) => sum + item.size, 0) > reservation) throw attachmentError('batchBytes');
       const sourceItems = imageSources.map((item, index) => ({ id: index === 0 ? discoveryId : attachmentId(), name: item.name }));
       if (discover && sourceItems.length > 0) {
@@ -404,15 +416,14 @@ export function captureComposerImages(
         images.push({ ...sourceItems[index]!, status: 'ready', blob });
         remaining -= blob.size;
       }
-      const paths = new Set(getComposerAttachments(key).files.map((file) => file.path));
-      const textFiles: AttachmentFile[] = [];
+      const paths = new Set<string>();
+      const importedFiles: AttachmentFile[] = [];
       for (const descriptor of descriptors) {
-        if (descriptor.kind !== 'file' || !isTextAttachment(descriptor.name) || paths.has(descriptor.path)) continue;
-        if (paths.size >= IMAGE_LIMITS.count) throw attachmentError('count');
+        if (descriptor.kind !== 'file' || paths.has(descriptor.path)) continue;
         paths.add(descriptor.path);
-        textFiles.push({ id: attachmentId(), name: descriptor.name, path: descriptor.path });
+        importedFiles.push({ id: attachmentId(), name: descriptor.name, path: descriptor.path });
       }
-      return { images, files: textFiles };
+      return { images, files: importedFiles };
     })()]);
     const releases = await Promise.allSettled(descriptors.map((descriptor) => descriptor.kind === 'image'
       ? window.piskie.desktop.files.releasePreview(descriptor.previewUrl) : undefined));
@@ -446,6 +457,8 @@ export function captureComposerImages(
     const images = [...captured, ...imported.images];
     const live = getComposerAttachments(key);
     const replacements = new Map(images.map((image) => [image.id, image]));
+    const liveFiles = new Map(live.files.map((file) => [file.path, file]));
+    const importedFiles = imported.files.filter((file) => !liveFiles.has(file.path));
     // Transfer selected batches at publication, including batches finishing out of order.
     // The completion Promise carries no original bytes after this handoff.
     for (const consumer of consumers) {
@@ -458,13 +471,17 @@ export function captureComposerImages(
       });
       if (replaced) {
         consumer.images.splice(0, consumer.images.length, ...selection);
-        consumer.files?.push(...imported.files);
+        for (const file of imported.files) {
+          if (!consumer.files?.some((selected) => selected.path === file.path)) {
+            consumer.files?.push(liveFiles.get(file.path) ?? file);
+          }
+        }
       }
     }
     updateAttachments(key, {
       images: live.images.flatMap((image) => image.status === 'capturing' && image.capture === batch
         ? (replacements.get(image.id) ? [replacements.get(image.id)!] : []) : [image]),
-      files: [...live.files, ...imported.files],
+      files: [...live.files, ...importedFiles],
     });
     resolve();
   })();
@@ -476,7 +493,7 @@ const submittingDrafts = new Set<string>();
 /** Keeps original-image ownership and the renderer send channel until delivery settles. */
 export async function withAttachmentSubmission<T>(
   key: string,
-  submit: (images: ImagePayload[] | undefined, files: readonly AttachmentFile[]) => Promise<T>,
+  submit: (images: ImagePayload[] | undefined, files: readonly UserFileRef[]) => Promise<T>,
 ): Promise<T> {
   if (submittingDrafts.has(key)) throw attachmentError('preparing');
   submittingDrafts.add(key);
@@ -516,7 +533,7 @@ export async function withAttachmentSubmission<T>(
     controller.signal.throwIfAborted();
     if (selected.length === 0) {
       delivering = true;
-      return await submit(undefined, selectedFiles);
+      return await submit(undefined, selectedFiles.map(({ name, path }) => ({ name, path })));
     }
     const operation = sendTail.then(async () => {
       check();
@@ -529,7 +546,7 @@ export async function withAttachmentSubmission<T>(
         check();
         controller.signal.throwIfAborted();
         delivering = true;
-        return await submit(payloads, selectedFiles);
+        return await submit(payloads, selectedFiles.map(({ name, path }) => ({ name, path })));
       } finally { payloads = undefined; }
     });
     sendTail = operation.then(() => undefined, () => undefined);
@@ -544,7 +561,7 @@ export async function withAttachmentSubmission<T>(
 
 export async function submitComposerDraft(
   key: string,
-  submit: (draft: ComposerDraftValue, images: ImagePayload[] | undefined, files: readonly AttachmentFile[]) => Promise<boolean>,
+  submit: (draft: ComposerDraftValue, images: ImagePayload[] | undefined, files: readonly UserFileRef[]) => Promise<boolean>,
 ): Promise<boolean> {
   const draft = useComposerDraftStore.getState().drafts[key] ?? emptyDraft();
   const version = getComposerDraftVersion(key);

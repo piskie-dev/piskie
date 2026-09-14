@@ -31,10 +31,13 @@
 | `monitor.js` | ① `buildMessageContext`（组装 openclaw InboundContext + resolveAgentRoute）改写为 `buildInboundMessage`（框架 InboundMessage）；② `routeAndDispatchMessage` 由 `core.channel.reply.dispatchReplyWithBufferedBlockDispatcher` 改为框架 `dispatch(msg, callbacks)`（onReplyStart/deliver/onError 语义不变）；③ `monitorWeComProvider`/`processWeComMessage` 参数去 config，增 media/pairing/dispatch |
 | `dm-policy.js` | `core.channel.pairing.{readAllowFromStore,upsertPairingRequest,buildPairingReply}` → 框架 `pairing.{getAllowedSenders,request,buildReply}` |
 | `group-policy.js` | 配置读取由 `config.channels.wecom` 改为 `account.config`（两者原本即同一对象） |
-| `media-handler.js` | `core.channel.media.{saveMediaBuffer,fetchRemoteMedia}` → 框架 `media.saveBuffer` + media-compat `fetchRemoteMedia`（顺带修复原 fallback 期望 buffer 而 PISKIE 旧 adapter 返回 path 的隐性 bug）；下载失败改推 `download-failed://` 哨兵条目（49号 §4.3.8：整条明确失败，不静默丢弃伪装成无附件文本） |
-| `media-uploader.js` | import `./openclaw-compat.js` → `./media-compat.js` |
+| `media-handler.js` | 公共有界下载 → SDK 公开 `decryptFile` → 框架 `media.saveBuffer`；重试仍使用每张图片对应的密钥，按序保留全部媒体与失败哨兵；单图 5 MiB、10 张/合计 20 MiB，下载响应账号取消信号 |
+| `media-uploader.js` | import 指向 `./media-compat.js`；可接收公共层按本次图片路径读取的 Buffer，复用 `uploadMedia → sendMediaMessage`，上传后复查取消状态；不扩大账号目录授权 |
+| `monitor.js` 原有媒体回调 | `sendImageBatch` 完整发送当前图片数组，失败返回原队列，`onError` 等待同聊天摘要；思考流结束后的图片和文字保留在原回调中发送 |
 | 各配套 `.d.ts` | 同步以上签名变化；openclaw 类型引用替换为 `compat-types.d.ts` 本地替身 |
 | 全部 `.js` | 移除 `//# sourceMappingURL` 行（未收编 .map） |
+
+图片发送沿用 SDK 的分片与确认超时（当前 `replyAckTimeout` 为 5 秒）。SDK 上传没有逐调用 AbortSignal，账号停止关闭 WebSocket，并在上传返回后复查信号，阻止后续消息请求。
 
 ## re-vendor 流程
 

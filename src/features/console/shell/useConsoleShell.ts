@@ -20,7 +20,7 @@ import { useHistoryRows, useSessionRows, type HistoryRow } from '../data/session
 import type { SessionMenuSource } from '../data/sessionMenu';
 import { useComposerDraftStore, WELCOME_DRAFT_KEY } from '../data/composer-drafts';
 import { resolveConsoleSelectedAgentId } from './selection';
-import { retainFilePreviews } from '../content/file-preview';
+import { retainFilePreviews } from '@/services/file-preview';
 
 export type { ConsoleMode };
 
