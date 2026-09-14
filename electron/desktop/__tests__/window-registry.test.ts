@@ -65,8 +65,13 @@ const electron = vi.hoisted(() => {
     private readonly contents = new FakeWebContents();
     readonly contentView = { addChildView: vi.fn(), removeChildView: vi.fn() };
     readonly show = vi.fn();
+    readonly hide = vi.fn();
     readonly focus = vi.fn();
-    readonly close = vi.fn(() => this.destroy());
+    readonly close = vi.fn(() => {
+      const event = { preventDefault: vi.fn() };
+      this.emit('close', event);
+      if (event.preventDefault.mock.calls.length === 0) this.destroy();
+    });
     readonly restore = vi.fn();
     readonly setIcon = vi.fn();
     readonly setMenu = vi.fn();
@@ -87,6 +92,9 @@ const electron = vi.hoisted(() => {
       return this.destroyed;
     }
     isMinimized(): boolean {
+      return false;
+    }
+    isFullScreen(): boolean {
       return false;
     }
     getBounds(): { x: number; y: number; width: number; height: number } {
@@ -152,6 +160,21 @@ import { createAgentObservations } from '../../agent/observations.js';
 beforeEach(() => {
   electron.FakeBrowserWindow.reset();
   vi.clearAllMocks();
+});
+
+it('hides a normal main-window close but allows updater closure after markQuitting', async () => {
+  const { registry, session } = await registryFixture();
+  const window = session.window;
+
+  window.close();
+  expect(window.hide).toHaveBeenCalledOnce();
+  expect(window.isDestroyed()).toBe(false);
+
+  registry.markQuitting();
+  window.close();
+  expect(window.hide).toHaveBeenCalledOnce();
+  expect(window.isDestroyed()).toBe(true);
+  await registry.stop('test-complete');
 });
 
 it('releases previews through agent lifetime observations and detaches on shutdown', async () => {

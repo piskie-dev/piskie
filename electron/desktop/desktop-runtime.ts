@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron';
+import { app, autoUpdater, dialog } from 'electron';
 import type { BackendComposition } from '../runtime/backend-composition.js';
 import { ShutdownCoordinator } from '../runtime/lifecycle/shutdown-coordinator.js';
 import type { ShutdownReport } from '../runtime/lifecycle/runtime-state.js';
@@ -76,11 +76,15 @@ export class DesktopRuntime implements DesktopAppearancePort {
   }
 
   requestQuit(reason: string): Promise<DesktopShutdownResult> {
+    this.prepareToQuit();
+    return this.shutdown.request(reason, (firstReason) => this.stopNow(firstReason));
+  }
+
+  private prepareToQuit(): void {
     this.quitting = true;
     this.ready = false;
     // 解除主窗口的隐藏拦截:真正退出时窗口要能关掉
     this.options.windows.markQuitting();
-    return this.shutdown.request(reason, (firstReason) => this.stopNow(firstReason));
   }
 
   setColorScheme(colorScheme: DesktopColorScheme): void {
@@ -219,6 +223,11 @@ export class DesktopRuntime implements DesktopAppearancePort {
   }
 
   private installAppLifecycle(): void {
+    autoUpdater.on('before-quit-for-update', () => {
+      // macOS closes windows before app.before-quit, so unblock close-to-tray now.
+      // Defer shutdown until before-quit so Squirrel can arrange the relaunch first.
+      this.prepareToQuit();
+    });
     app.on('activate', () => {
       this.summonMainWindow();
     });

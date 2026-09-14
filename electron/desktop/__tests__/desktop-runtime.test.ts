@@ -33,6 +33,7 @@ const harness = vi.hoisted(() => {
     exit: vi.fn(),
     dock: { setIcon: vi.fn() },
   });
+  const autoUpdater = new MiniEmitter();
   const getAllWindows = vi.fn((): unknown[] => []);
   const showErrorBox = vi.fn();
 
@@ -71,6 +72,7 @@ const harness = vi.hoisted(() => {
 
   return {
     app,
+    autoUpdater,
     getAllWindows,
     showErrorBox,
     FakePortServer,
@@ -82,6 +84,7 @@ const harness = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   app: harness.app,
+  autoUpdater: harness.autoUpdater,
   BrowserWindow: { getAllWindows: harness.getAllWindows },
   dialog: { showErrorBox: harness.showErrorBox },
 }));
@@ -102,6 +105,7 @@ import { DesktopRuntime } from '../desktop-runtime.js';
 
 beforeEach(() => {
   harness.app.reset();
+  harness.autoUpdater.reset();
   harness.FakePortServer.reset();
   vi.clearAllMocks();
   harness.app.whenReady.mockResolvedValue(undefined);
@@ -289,6 +293,52 @@ describe('DesktopRuntime', () => {
     expect(harness.configServer.stop).toHaveBeenCalledOnce();
     expect(harness.app.exit).toHaveBeenCalledOnce();
     expect(harness.app.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('allows update window closure before macOS emits before-quit, then drains the backend', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { runtime, backend, windows } = fixture({
+      platform: 'darwin',
+      stopBackend: async (reason) => {
+        await gate;
+        return shutdownReport(reason);
+      },
+    });
+    await runtime.run();
+
+    // Electron closes windows before app.before-quit during a native update.
+    harness.autoUpdater.emit('before-quit-for-update');
+    expect(windows.markQuitting).toHaveBeenCalledOnce();
+    expect(runtime.snapshot()).toMatchObject({ ready: false, quitting: true });
+
+    harness.app.emit('window-all-closed');
+    harness.app.emit('activate');
+    harness.app.emit('second-instance');
+    // The native updater emits this again once the last window has closed.
+    harness.autoUpdater.emit('before-quit-for-update');
+    await Promise.resolve();
+    expect(windows.createMainWindow).toHaveBeenCalledOnce();
+    expect(windows.stop).not.toHaveBeenCalled();
+    expect(backend.stop).not.toHaveBeenCalled();
+    expect(harness.app.exit).not.toHaveBeenCalled();
+
+    // Squirrel must finish arranging the relaunch before shutdown can exit.
+    const event = { preventDefault: vi.fn() };
+    harness.app.emit('before-quit', event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(backend.stop).toHaveBeenCalledOnce());
+    expect(harness.app.exit).not.toHaveBeenCalled();
+
+    const quit = runtime.requestQuit('concurrent-quit');
+    release();
+    await expect(quit).resolves.toMatchObject({ exitCode: 0 });
+    expect(backend.stop).toHaveBeenCalledOnce();
+    expect(backend.stop).toHaveBeenCalledWith('electron-before-quit');
+    expect(windows.stop).toHaveBeenCalledOnce();
+    expect(harness.configServer.stop).toHaveBeenCalledOnce();
+    expect(harness.FakePortServer.instances[0]!.stop).toHaveBeenCalledOnce();
+    expect(harness.app.exit).toHaveBeenCalledExactlyOnceWith(0);
   });
 
   it('shuts the ready backend down and exits non-zero when window startup fails', async () => {
