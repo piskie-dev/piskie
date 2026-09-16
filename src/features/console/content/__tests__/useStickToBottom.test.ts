@@ -80,6 +80,39 @@ function setDimensions(
 }
 
 describe('useStickToBottom', () => {
+  it('keeps a clicked disclosure header in place and pauses following while its content is read', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    const hookHost = document.createElement('div');
+    const scroll = document.createElement('div');
+    const content = document.createElement('div');
+    const anchor = document.createElement('button');
+    content.append(anchor);
+    scroll.append(content);
+    container.append(hookHost, scroll);
+    let stick: ReturnType<typeof useStickToBottom> | undefined;
+    const onReady = (value: ReturnType<typeof useStickToBottom>) => { stick = value; };
+    const renderHarness = (revision: number) => createElement(Harness, {
+      revision, scrollRef: { current: scroll }, contentRef: { current: content }, onReady,
+    });
+    root = createRoot(hookHost);
+    await act(async () => root.render(renderHarness(0)));
+    setDimensions(scroll, { scrollHeight: 500, clientHeight: 100, scrollTop: 400 });
+    anchor.getBoundingClientRect = () => ({ top: 480 - scroll.scrollTop }) as DOMRect;
+    stick?.preserveAnchor(anchor);
+
+    // The browser may anchor later content when an earlier disclosure grows.
+    setDimensions(scroll, { scrollHeight: 1000, clientHeight: 100, scrollTop: 800 });
+    await act(async () => root.render(renderHarness(1)));
+    expect(anchor.getBoundingClientRect().top).toBe(80);
+    expect(scroll.scrollTop).toBe(400);
+    expect(stick?.atBottom).toBe(false);
+    await act(async () => resizeCallback?.([], {} as ResizeObserver));
+    expect(scroll.scrollTop).toBe(400);
+    await act(async () => stick?.scrollToBottom());
+    expect(scroll.scrollTop).toBe(1000);
+  });
+
   it('follows real content growth at the bottom and preserves an upward reading position', async () => {
     disconnectSpy = vi.fn();
     container = document.createElement('div');

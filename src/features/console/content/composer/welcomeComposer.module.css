@@ -315,33 +315,6 @@
 }
 
 
-.workspaceButton {
-  gap: 8px;
-  max-width: 164px;
-  padding-inline: var(--welcome-control-padding-x);
-  cursor: pointer;
-}
-
-.workspaceButton:focus,
-.workspaceButton:focus-visible,
-.workspaceButton:active {
-  background: var(--surface-2);
-  outline: none;
-  box-shadow: none;
-}
-
-.workspaceIcon {
-  flex: 0 0 auto;
-  color: var(--welcome-composer-text-muted);
-}
-
-.workspaceButtonText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .attachmentPill {
   gap: 6px;
   padding-inline: var(--welcome-control-padding-x);
@@ -419,12 +392,7 @@
     flex-wrap: wrap;
   }
 
-  .modelReasoningSlot,
-  .workspaceButton {
-    max-width: 100%;
-  }
-
-  .workspaceButtonText {
+  .modelReasoningSlot {
     max-width: 100%;
   }
 }
@@ -450,37 +418,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-}
-
-/* 工作区菜单用原生 popover */
-.workspaceMenu {
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  border: 1px solid var(--welcome-composer-border);
-  border-radius: 18px;
-  background: var(--welcome-composer-bg);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
-}
-
-.workspaceMenuItem {
-  min-width: 220px;
-  min-height: 40px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--cyber-text);
-  font-size: 13px;
-  text-align: start;
-  cursor: pointer;
-  transition: background-color 160ms ease;
-}
-
-.workspaceMenuItem:hover,
-.workspaceMenuItem:focus-visible {
-  background: var(--surface-2);
-  outline: none;
 }
 
 /* 自增高交给原生 */

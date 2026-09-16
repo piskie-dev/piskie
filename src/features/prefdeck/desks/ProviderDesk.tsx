@@ -11,6 +11,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { copyText } from '@/services/clipboard';
 import { Copy, Eye, EyeOff, Pencil, Plug2, Plus, Star } from 'lucide-react';
 
 import type {
@@ -362,8 +363,10 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
                   onClick={() => {
                     const text = keyDraft ?? storedKey;
                     if (!text) return;
-                    void navigator.clipboard.writeText(text);
-                    onFlash(messageText('settings.provider.copied'));
+                    void copyText(text).then(
+                      () => onFlash(messageText('settings.provider.copied')),
+                      () => onFlash(messageText('clipboardUi.copyFailed'), 'halt'),
+                    );
                   }}
                 >
                   <Copy size={13} />
@@ -528,8 +531,10 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
                           type="button"
                           className={`${styles.btn} ${styles.btnQuiet} ${styles.btnRisk}`}
                           onClick={() => {
-                            void navigator.clipboard.writeText(outcome.failure!.rawText);
-                            onFlash(messageText('settings.provider.copiedUpstreamError'));
+                            void copyText(outcome.failure!.rawText).then(
+                              () => onFlash(messageText('settings.provider.copiedUpstreamError')),
+                              () => onFlash(messageText('clipboardUi.copyFailed'), 'halt'),
+                            );
                           }}
                         >
                           {t('settings.provider.copyError')}

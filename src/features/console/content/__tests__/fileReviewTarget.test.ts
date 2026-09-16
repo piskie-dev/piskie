@@ -15,6 +15,7 @@ vi.stubGlobal('window', {
 
 afterEach(() => {
   preview.mockReset();
+  releasePreview.mockClear();
 });
 
 afterAll(() => {
@@ -38,16 +39,40 @@ describe('reviewTargetForPath', () => {
     });
   });
 
-  it('sends images to the lightbox instead of opening ReviewPanel', async () => {
+  it.each(['/workspace/sample folder', '/workspace/.示例目录.png', '~/sample folder/.示例目录'])(
+    'keeps the complete directory path %s as a review target', async (path) => {
+      const onPreviewImage = vi.fn();
+      preview.mockResolvedValue({ kind: 'directory' });
+
+      await expect(reviewTargetForPath(path, onPreviewImage)).resolves.toEqual({
+        kind: 'path', path, preview: { kind: 'directory' },
+      });
+      expect(preview).toHaveBeenCalledExactlyOnceWith(path);
+      expect(onPreviewImage).not.toHaveBeenCalled();
+      expect(releasePreview).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves a missing-path error without creating a review target', async () => {
+    const error = new Error('The requested path does not exist');
+    preview.mockRejectedValue(error);
+    await expect(reviewTargetForPath('/workspace/missing folder')).rejects.toBe(error);
+  });
+
+  it.each([
+    ['/workspace/vector.svg', 'image/svg+xml'],
+    ['/workspace/photo.avif', 'image/avif'],
+    ['/workspace/favicon.ico', 'image/vnd.microsoft.icon'],
+  ])('sends %s to the lightbox instead of opening ReviewPanel', async (path, mediaType) => {
     const onPreviewImage = vi.fn();
     preview.mockResolvedValue({
       kind: 'image',
       url: 'piskie-attachment://preview/image',
-      mediaType: 'image/png',
+      mediaType,
       size: 10,
     });
 
-    await expect(reviewTargetForPath('/workspace/image.png', onPreviewImage)).resolves.toBeNull();
+    await expect(reviewTargetForPath(path, onPreviewImage)).resolves.toBeNull();
     expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image', undefined, undefined, expect.any(Function));
     expect(releasePreview).not.toHaveBeenCalled();
     onPreviewImage.mock.calls[0]![3]();

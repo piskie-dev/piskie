@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '../../attachments/__tests__/fixtures';
 
 let dom: JSDOM;
 let container: HTMLDivElement;
@@ -52,6 +53,27 @@ function displayedSourceLines(): string[] {
 }
 
 describe('ReviewPanel path preview', () => {
+  it('shows text copy failure only after the clipboard rejects, then permits retry', async () => {
+    const pending = deferred<void>();
+    const copy = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
+    await act(async () => root.render(createElement(ReviewPanel, {
+      change: null, preview: null,
+      read: { kind: 'read', path: '/workspace/sample.txt', content: 'first\n  second', startLine: 1 },
+      onOpenPath: noop, onRevealPath: noop,
+    })));
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="复制内容"]')!;
+    await act(async () => button.click());
+    expect(copy).toHaveBeenCalledExactlyOnceWith('first\n  second');
+    expect(button.disabled).toBe(true);
+    expect(button.title).toBe('复制中…');
+    await act(async () => pending.reject(new Error('denied')));
+    expect(button.disabled).toBe(false);
+    expect(button.title).toBe('复制失败');
+    await act(async () => button.click());
+    expect(button.title).toBe('已复制');
+  });
+
   it('renders a Markdown path as a document', async () => {
     await act(async () => {
       root.render(createElement(ReviewPanel, {
@@ -181,7 +203,44 @@ describe('ReviewPanel path preview', () => {
     expect(container.textContent).toContain('仅显示前 384KB');
   });
 
-  it('shows unsupported local files as an actionable file card', async () => {
+  it.each(['/workspace/sample folder', '/workspace/.示例目录.png', '~/sample folder/.示例目录'])(
+    'shows %s as a directory card with full-path system actions', async (path) => {
+      const open = vi.fn();
+      const reveal = vi.fn();
+      await act(async () => root.render(createElement(ReviewPanel, {
+        change: null,
+        read: null,
+        preview: { path, descriptor: { kind: 'directory' } },
+        onOpenPath: open,
+        onRevealPath: reveal,
+      })));
+
+      const card = container.querySelector('[class*="cardMain"]')!;
+      expect(card.textContent).toContain('目录内容不在应用内预览');
+      expect(container.querySelector('[class*="cardIcon"] .lucide-folder-open')).not.toBeNull();
+      expect(container.querySelector('[class*="cardName"]')?.getAttribute('title')).toBe(path);
+      expect(container.querySelector('[data-source-start]')).toBeNull();
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('button[aria-label="复制内容"]')).toBeNull();
+      expect(card.textContent).not.toContain('0 B');
+      expect(card.textContent).not.toContain('二进制文件');
+
+      const buttons = [...card.querySelectorAll<HTMLButtonElement>('button')];
+      const openButton = buttons.find((button) => button.textContent?.includes('打开目录'));
+      const revealButton = buttons.find((button) => button.textContent?.includes('在文件夹中显示'));
+      expect(openButton).toBeDefined();
+      expect(revealButton).toBeDefined();
+      await act(async () => openButton!.click());
+      await act(async () => revealButton!.click());
+      expect(open).toHaveBeenCalledExactlyOnceWith(path);
+      expect(reveal).toHaveBeenCalledExactlyOnceWith(path);
+    },
+  );
+
+  it.each([
+    { kind: 'file', mediaType: 'application/pdf', size: 2048 },
+    { kind: 'file', size: 2048 },
+  ] as const)('shows unsupported local files as an actionable file card: $mediaType', async (descriptor) => {
     const open = vi.fn();
     const reveal = vi.fn();
     await act(async () => {
@@ -190,7 +249,7 @@ describe('ReviewPanel path preview', () => {
         read: null,
         preview: {
           path: '/workspace/report.pdf',
-          descriptor: { kind: 'file', mediaType: 'application/pdf', size: 2048 },
+          descriptor,
         },
         onOpenPath: open,
         onRevealPath: reveal,
@@ -200,7 +259,8 @@ describe('ReviewPanel path preview', () => {
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('button')];
     const openButton = buttons.find((button) => button.textContent?.includes('用系统应用打开'));
     const revealButton = buttons.find((button) => button.textContent?.includes('在文件夹中显示'));
-    expect(container.textContent).toContain('application/pdf');
+    expect(container.textContent).toContain('mediaType' in descriptor ? descriptor.mediaType : '二进制文件');
+    expect(container.textContent).toContain('2.0 KB');
 
     await act(async () => openButton?.click());
     await act(async () => revealButton?.click());

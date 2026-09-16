@@ -1,73 +1,15 @@
 /**
- * 上游：openclaw src/plugin-sdk/file-lock.ts + src/infra/tmp-openclaw-dir.ts +
- * src/shared/pid-alive.ts（MIT）
- * 消费方：weixin vendor（auth/pairing.ts 配对存储锁、channel/process-message/logger 的临时目录）
+ * 上游：openclaw src/plugin-sdk/file-lock.ts + src/shared/pid-alive.ts（MIT）
+ * 消费方：weixin vendor（auth/pairing.ts 配对存储锁）
  *
- * resolvePreferredOpenClawTmpDir 为 PISKIE 简化版：保留"POSIX /tmp/openclaw 可信则用、
- * 否则 tmpdir()/openclaw-{uid}"的路径语义（与上游产出路径一致，本机实测 fallback 路径
- * 为 $TMPDIR/openclaw-501）；省略多用户安全告警细节。仅存放可丢弃数据（出站媒体临时
- * 文件、日志），路径漂移不影响登录态（凭证在 ~/.openclaw，见渠道 UPSTREAM.md）。
+ * PISKIE 本地改动：原 src/infra/tmp-openclaw-dir.ts 的 resolvePreferredOpenClawTmpDir
+ * 已移除——微信出站临时文件与日志不再落在 /tmp/openclaw 或 $TMPDIR/openclaw-{uid}，
+ * 而是由宿主注入的 <tmpdir>/piskie-im/weixin 与 Piskie 应用日志承接（见 core/channel-storage.ts）。
  */
 
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-
-// ── tmp dir ────────────────────────────────────────────────────────────────
-
-const POSIX_OPENCLAW_TMP_DIR = '/tmp/openclaw';
-
-function getUid(): number | undefined {
-  try {
-    return typeof process.getuid === 'function' ? process.getuid() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function resolvePreferredOpenClawTmpDir(): string {
-  const uid = getUid();
-  const fallback = path.join(os.tmpdir(), uid === undefined ? 'openclaw' : `openclaw-${uid}`);
-
-  if (process.platform === 'win32') {
-    ensureDir(fallback);
-    return fallback;
-  }
-
-  try {
-    const st = fsSync.lstatSync(POSIX_OPENCLAW_TMP_DIR);
-    const secure =
-      st.isDirectory() &&
-      !st.isSymbolicLink() &&
-      (uid === undefined || st.uid === uid) &&
-      (st.mode & 0o022) === 0;
-    if (secure) {
-      fsSync.accessSync(POSIX_OPENCLAW_TMP_DIR, fsSync.constants.W_OK | fsSync.constants.X_OK);
-      return POSIX_OPENCLAW_TMP_DIR;
-    }
-  } catch (err) {
-    if ((err as { code?: string }).code === 'ENOENT') {
-      try {
-        fsSync.mkdirSync(POSIX_OPENCLAW_TMP_DIR, { recursive: true, mode: 0o700 });
-        return POSIX_OPENCLAW_TMP_DIR;
-      } catch {
-        // 落到 fallback
-      }
-    }
-  }
-
-  ensureDir(fallback);
-  return fallback;
-}
-
-function ensureDir(dir: string): void {
-  try {
-    fsSync.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  } catch {
-    // 已存在或不可创建——消费方自行处理后续 IO 失败
-  }
-}
 
 // ── file lock（上游逐字移植；process-scoped map 简化为模块级 Map）────────────
 

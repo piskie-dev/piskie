@@ -14,11 +14,15 @@
  * 不要对首屏元素用 `auto`（会让浏览器先评估可见性边界，反而更慢）。
  */
 
-import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { TranscriptNode } from '@/domains/transcript/nodes';
+import type { TranscriptResponse } from '@/domains/transcript/types';
+import { buildTranscriptRows, type TranscriptProcessBoundaries } from '../data/transcriptRows';
+import type { WorkerRef } from '../data/vm';
+import { TranscriptRow } from './TranscriptRow';
 import { useStickToBottom } from './useStickToBottom';
 import { readScrollMemory, saveScrollMemory } from './scrollMemory';
 import { AgentActivityRow } from './AgentActivityRow';
@@ -26,6 +30,7 @@ import styles from './Transcript.module.css';
 
 /** 尾部这么多条不做 defer */
 const NEAR_VIEWPORT_COUNT = 30;
+const NO_RESPONSES: readonly TranscriptResponse[] = [];
 
 /**
  * react-flow 的行为豁免标记（**全局类名，不是 CSS module**，项目里无任何样式规则命中）。
@@ -41,6 +46,11 @@ const RF_SCROLL = 'nodrag nopan nowheel';
 
 export interface TranscriptProps {
   readonly nodes: readonly TranscriptNode[];
+  readonly responses?: readonly TranscriptResponse[];
+  /** Current activity has ended without interruption or a pending user decision. */
+  readonly processSettled?: boolean;
+  readonly toolsActive?: boolean;
+  readonly workers?: readonly WorkerRef[];
   readonly renderNode: (node: TranscriptNode) => React.ReactNode;
   readonly hasEarlier?: boolean;
   readonly onLoadEarlier?: () => void;
@@ -63,6 +73,10 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
   (
     {
       nodes,
+      responses = NO_RESPONSES,
+      processSettled = false,
+      toolsActive = false,
+      workers,
       renderNode,
       hasEarlier,
       onLoadEarlier,
@@ -76,16 +90,53 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
     const { t } = useTranslation();
     const scrollRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    const processBoundaries = useRef<TranscriptProcessBoundaries>(new Map());
+    const { rows, boundaries } = useMemo(
+      () => buildTranscriptRows(nodes, responses, processSettled && activeStartedAt === undefined, processBoundaries.current),
+      [nodes, responses, processSettled, activeStartedAt],
+    );
+    // Retain only boundaries from committed renders; rows always use the current transcript nodes.
+    useLayoutEffect(() => {
+      processBoundaries.current = boundaries;
+    }, [boundaries]);
+    const activeToolGroupId = useMemo(() => {
+      if (!toolsActive) return undefined;
+      // A visible reply, user turn, or inline worker card ends the active tool interval.
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        const row = rows[index]!;
+        if (row.kind === 'tools') return row.id;
+        if (row.kind === 'process' || row.node.kind === 'assistant'
+          || row.node.kind === 'user' || row.node.kind === 'worker') {
+          return undefined;
+        }
+      }
+      return undefined;
+    }, [rows, toolsActive]);
+    const deferredNodeIds = useMemo(
+      () => new Set(nodes.slice(0, Math.max(0, nodes.length - NEAR_VIEWPORT_COUNT)).map((node) => node.id)),
+      [nodes],
+    );
+    // Call IDs survive text streaming and canonical replacement, as well as outer process folding.
+    const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
     // 外部要拿滚动容器（thread 的"回到底部"浮钮），但粘底仍由本组件持有
     useImperativeHandle(forwardedRef, () => scrollRef.current as HTMLDivElement, []);
     // 渲染期读驻留(模块内存,纯读):决定初始粘底与否;组件按 memoryKey 重挂,挂载期内不变
     const remembered = memoryKey ? readScrollMemory(memoryKey) : undefined;
-    const { onScroll, scrollToBottom, atBottom } = useStickToBottom(
+    const { onScroll, scrollToBottom, preserveAnchor, atBottom } = useStickToBottom(
       scrollRef,
       contentRef,
-      [nodes, activeStartedAt],
+      [rows, activeStartedAt, openGroups],
       { initialStick: remembered ? remembered.atBottom : true },
     );
+    const toggleGroup = useCallback((id: string, anchor: HTMLElement) => {
+      preserveAnchor(anchor);
+      setOpenGroups((previous) => {
+        const next = new Set(previous);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }, [preserveAnchor]);
 
     /**
      * 滚动位置驻留:挂载时若该目标记过"非贴底"位置就原样恢复
@@ -133,7 +184,7 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
       };
     }, []);
 
-    const deferBefore = Math.max(0, nodes.length - NEAR_VIEWPORT_COUNT);
+    const deferBefore = Math.max(0, rows.length - NEAR_VIEWPORT_COUNT);
 
     return (
       <div className={styles.viewport}>
@@ -149,14 +200,22 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
               </button>
             )}
 
-            {nodes.map((node, index) => (
+            {rows.map((row, index) => (
               <div
-                key={node.id}
+                key={row.id}
                 className={styles.cell}
                 data-deferred={index < deferBefore ? 'true' : undefined}
-                data-node-id={node.id}
+                data-node-id={row.kind === 'node' ? row.node.id : undefined}
               >
-                {renderNode(node)}
+                <TranscriptRow
+                  row={row}
+                  renderNode={renderNode}
+                  openGroups={openGroups}
+                  deferredNodeIds={deferredNodeIds}
+                  onToggle={toggleGroup}
+                  toolsActive={row.id === activeToolGroupId}
+                  workers={workers}
+                />
               </div>
             ))}
 

@@ -6,9 +6,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getQQBotDataDir } from "./utils/platform.js";
-// 存储文件路径
-const KNOWN_USERS_DIR = getQQBotDataDir("data");
-const KNOWN_USERS_FILE = path.join(KNOWN_USERS_DIR, "known-users.json");
+// 存储文件路径（PISKIE：惰性解析，避免模块导入期触碰未注入的存储根）
+function getKnownUsersDir() {
+    return getQQBotDataDir("data");
+}
+function getKnownUsersFile() {
+    return path.join(getKnownUsersDir(), "known-users.json");
+}
 // 内存缓存
 let usersCache = null;
 // 写入节流配置
@@ -19,8 +23,8 @@ let isDirty = false;
  * 确保目录存在
  */
 function ensureDir() {
-    if (!fs.existsSync(KNOWN_USERS_DIR)) {
-        fs.mkdirSync(KNOWN_USERS_DIR, { recursive: true });
+    if (!fs.existsSync(getKnownUsersDir())) {
+        fs.mkdirSync(getKnownUsersDir(), { recursive: true });
     }
 }
 /**
@@ -32,8 +36,8 @@ function loadUsersFromFile() {
     }
     usersCache = new Map();
     try {
-        if (fs.existsSync(KNOWN_USERS_FILE)) {
-            const data = fs.readFileSync(KNOWN_USERS_FILE, "utf-8");
+        if (fs.existsSync(getKnownUsersFile())) {
+            const data = fs.readFileSync(getKnownUsersFile(), "utf-8");
             const users = JSON.parse(data);
             for (const user of users) {
                 // 使用复合键：accountId + type + openid（群组还要加 groupOpenid）
@@ -72,7 +76,7 @@ function doSaveUsersToFile() {
     try {
         ensureDir();
         const users = Array.from(usersCache.values());
-        fs.writeFileSync(KNOWN_USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+        fs.writeFileSync(getKnownUsersFile(), JSON.stringify(users, null, 2), "utf-8");
         isDirty = false;
     }
     catch (err) {

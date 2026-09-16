@@ -33,7 +33,7 @@ import {
 import { useUIStore } from '../../../store/uiStore';
 import { Dialog } from '../chrome/Dialog';
 import { OrbIndicator } from './OrbIndicator';
-import { hasUnreadMessages } from '@shared/agent-run-messages';
+import { useAgentRunList } from '@/renderer-runtime/hooks';
 import { Tooltip } from '../chrome/Tooltip';
 import { useConsoleActions } from '../data/actions';
 import { useHistoryRowsReady } from '../data/session';
@@ -94,14 +94,15 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const selection = useUIStore((state) => state.consoleSelection);
     useEffect(() => setQuery(''), [selection]);
     const historyReady = useHistoryRowsReady();
+    const attentionByAgentId = useAgentRunList((state) => state.attentionByAgentId);
     const savedOrder = useUIStore((state) => state.workspaceGroupOrder);
     const setOrder = useUIStore((state) => state.setWorkspaceGroupOrder);
     const searching = query.trim().length > 0;
 
     const allGroups = useMemo(() => groupByWorkspace(
-      buildThreadRows({ sessions, history }),
+      buildThreadRows({ sessions, history, attentionByAgentId }),
       t('sessionWorkbenchUi.shell.defaultWorkspace'),
-    ), [history, sessions, t]);
+    ), [history, sessions, attentionByAgentId, t]);
     const order = useMemo(() => reconcileWorkspaceOrder(savedOrder, allGroups), [savedOrder, allGroups]);
     useEffect(() => {
       if (historyReady && order !== savedOrder) setOrder([...order]);
@@ -178,8 +179,8 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
           openRename(row);
           return;
         }
-        if (key === 'markRead' && row.messages?.latestMessage) {
-          void actions.markRead(row.agentId, row.messages.latestMessage.index);
+        if (key === 'markRead') {
+          void actions.markRead(row.agentId, row.messages?.latestMessage?.index ?? -1);
           return;
         }
         if (row.live) {
@@ -254,11 +255,14 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
                       className={styles.iconButton}
                       data-selected={row.agentId === selectedAgentId ? 'true' : undefined}
                       onClick={() => onSelectSession(row.agentId)}
-                      aria-label={row.label}
+                      aria-label={[row.label, row.unread ? t('sessionWorkbenchUi.sidebar.unread') : ''].filter(Boolean).join(', ')}
                     >
-                      {row.live!.working
-                        ? <OrbIndicator size={14} variant="expanding" />
-                        : <span className={styles.dotSlot} data-unread={hasUnreadMessages(row.messages) || undefined} />}
+                      {row.live!.working && <OrbIndicator size={14} variant="expanding" />}
+                      <span
+                        className={`${styles.dotSlot} ${row.live!.working ? styles.runningUnread : ''}`}
+                        data-unread={row.unread || undefined}
+                        aria-hidden
+                      />
                     </button>
                   </Tooltip>
                 )),

@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { LinkedMarkdown } from '@/components/content-links';
 import type { TaskItem, TaskItemStatus } from '../../../../shared/types';
 import { Dialog } from '../chrome/Dialog';
+import { FileChangeSummary } from './FileChangeSummary';
+import type { FileChangeTotals } from '../data/fileChanges';
 import { hasActivity, type ActivityChips } from '../data/activity';
 import { groupTaskBoardItems, taskProgress, type WorkerLabel } from '../data/taskGroups';
 import { usePlanDocument } from '../data/usePlanDocument';
@@ -197,6 +199,9 @@ export interface TaskListProps {
   readonly agentId?: string;
   readonly chips?: ActivityChips;
   readonly taskChips?: ReadonlyMap<string, ActivityChips>;
+  readonly fileChanges?: FileChangeTotals;
+  readonly fileChangesOpen?: boolean;
+  readonly onToggleFileChanges?: () => void;
 }
 
 export const TaskList = memo<TaskListProps>(
@@ -209,6 +214,9 @@ export const TaskList = memo<TaskListProps>(
     agentId,
     chips,
     taskChips,
+    fileChanges,
+    fileChangesOpen,
+    onToggleFileChanges,
   }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
@@ -262,14 +270,17 @@ export const TaskList = memo<TaskListProps>(
                 <ChevronDown className={styles.headerChevron} size={14} />
               </span>
               <span className={styles.headerTitle}>{t('sessionWorkbenchUi.taskList.heading')}</span>
-              {chips && hasActivity(chips) && (
+              {chips && chips.images > 0 && (
                 <span className={styles.headerActivity}>
-                  <Chips chips={chips} compact />
+                  <Chips chips={{ ...chips, added: 0, removed: 0 }} compact />
                 </span>
               )}
               <span className={styles.headerCount}>{done}/{total}</span>
             </button>
 
+            {fileChanges && (
+              <FileChangeSummary changes={fileChanges} expanded={fileChangesOpen} onToggle={onToggleFileChanges} inline />
+            )}
             {scope === 'main' && (
               <button type="button" className={styles.planButton} onClick={viewPlan} aria-label={t('sessionWorkbenchUi.taskList.viewPlan')}>
                 <FileText size={12} />

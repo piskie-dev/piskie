@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Copy, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LinkedMarkdown } from '@/components/content-links';
+import { CopyActionButton } from '@/components/shared/CopyActionButton';
+import { useCopyAction } from '@/hooks/useCopyAction';
+import { copyImage, copyText } from '@/services/clipboard';
 import type { ContentBlock, Message, ToolResultContentBlock } from '@shared/types';
 import { safeJson } from './ledger-projection';
 import styles from './context-inspector.module.css';
@@ -131,28 +134,28 @@ function ImageBlock({ block, index }: {
   readonly index: number;
 }) {
   const { t } = useTranslation();
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ source: ContentBlock['source']; url: string } | null>(null);
   const source = block.source;
+  const previewUrl = preview?.source === source ? preview?.url : null;
   const metadata = source
     ? `${source.media_type} · ${formatBytes(Math.floor(source.data.length * 0.75))}`
     : t('contextUi.blocks.missingImageSource');
 
   useEffect(() => () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
+    if (preview) URL.revokeObjectURL(preview.url);
+  }, [preview]);
 
   const togglePreview = () => {
     if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
+      setPreview(null);
       return;
     }
     if (!source) return;
-    setPreviewUrl(createObjectUrl(source.data, source.media_type));
+    setPreview({ source, url: URL.createObjectURL(createImageBlob(source.data, source.media_type)) });
   };
 
   return (
-    <BlockFrame label="image" accent="image" index={index} copyValue={safeJson({
+    <BlockFrame label="image" accent="image" index={index} copyLabel={t('contextUi.blocks.copyImageMetadata')} copyValue={safeJson({
       type: 'image',
       media_type: source?.media_type,
       base64Chars: source?.data.length ?? 0,
@@ -160,6 +163,13 @@ function ImageBlock({ block, index }: {
       <div className={styles.imageMeta}>
         <ImageIcon size={16} />
         <span>{metadata}</span>
+        <CopyActionButton
+          className={styles.inlineAction}
+          contentKey={source}
+          label={t('clipboardUi.copyImage')}
+          disabled={!source}
+          onCopy={() => copyImage({ kind: 'blob', blob: createImageBlob(source!.data, source!.media_type) })}
+        />
         <button type="button" className={styles.inlineAction} onClick={togglePreview} disabled={!source}>
           {previewUrl ? <EyeOff size={14} /> : <Eye size={14} />}
           {previewUrl ? t('contextUi.blocks.hidePreview') : t('contextUi.blocks.showPreview')}
@@ -175,6 +185,7 @@ function BlockFrame({
   accent,
   index,
   copyValue,
+  copyLabel,
   nested,
   children,
 }: {
@@ -182,6 +193,7 @@ function BlockFrame({
   readonly accent: 'text' | 'call' | 'result' | 'error' | 'thinking' | 'image' | 'muted';
   readonly index?: number;
   readonly copyValue: string;
+  readonly copyLabel?: string;
   readonly nested?: boolean;
   readonly children: React.ReactNode;
 }) {
@@ -190,7 +202,7 @@ function BlockFrame({
     <article className={styles.block} data-accent={accent} data-nested={nested || undefined}>
       <header className={styles.blockHeader}>
         <span>{index === undefined ? label : `${String(index).padStart(2, '0')} / ${label}`}</span>
-        <CopyButton value={copyValue} label={t('contextUi.blocks.copyNamed', { name: label })} />
+        <CopyButton value={copyValue} label={copyLabel ?? t('contextUi.blocks.copyNamed', { name: label })} />
       </header>
       <div className={styles.blockBody}>{children}</div>
     </article>
@@ -202,22 +214,23 @@ export function CopyButton({ value, label }: {
   readonly label?: string;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
+  const { busy, status, run } = useCopyAction(value);
   const resolvedLabel = label ?? t('contextUi.blocks.copy');
+  const feedback = status === 'success' ? t('contextUi.blocks.copied')
+    : status === 'error' ? t('clipboardUi.copyFailed')
+      : status === 'copying' ? t('clipboardUi.copying') : t('contextUi.blocks.copy');
   return (
     <button
       type="button"
       className={styles.copyButton}
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1_200);
-        });
-      }}
+      onClick={() => { void run(() => copyText(value)); }}
+      disabled={busy}
+      aria-busy={busy}
       aria-label={resolvedLabel}
+      title={feedback}
     >
       <Copy size={13} />
-      {copied ? t('contextUi.blocks.copied') : t('contextUi.blocks.copy')}
+      <span aria-live="polite">{feedback}</span>
     </button>
   );
 }
@@ -247,13 +260,13 @@ function OpaqueLength({ label, value }: { readonly label: string; readonly value
   return <KeyValue label={label} value={t('contextUi.blocks.opaqueChars', { count })} mono />;
 }
 
-function createObjectUrl(base64: string, mediaType: string): string {
+function createImageBlob(base64: string, mediaType: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);
   }
-  return URL.createObjectURL(new Blob([bytes], { type: mediaType }));
+  return new Blob([bytes], { type: mediaType });
 }
 
 function formatBytes(value: number): string {

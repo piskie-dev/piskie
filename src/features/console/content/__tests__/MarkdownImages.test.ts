@@ -260,11 +260,13 @@ describe('conversation and document image preview', () => {
     expect(container.querySelector('dialog[open]')).not.toBeNull();
     const picture = () => container.querySelector('dialog img[alt^="第"]');
     expect(picture()?.getAttribute('src')).toBe('piskie-attachment://preview/sample-2');
-    expect(container.querySelector('dialog [aria-live="polite"]')?.textContent).toContain('2 / 2');
+    const currentCounter = () => container.querySelector('dialog [aria-label="当前会话中的图片"] [aria-live="polite"]')?.textContent;
+    expect(currentCounter()).toBe('2 / 2');
     await act(async () => root.render(createElement(Gallery, { showContent: false })));
     expect(releasePreview).not.toHaveBeenCalled();
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="上一张图片"]')!.click());
     expect(picture()?.getAttribute('src')).toBe('piskie-attachment://preview/sample-1');
+    expect(currentCounter()).toBe('1 / 2');
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="关闭预览"]')!.click());
     expect(releasePreview.mock.calls.map(([url]) => url).sort()).toEqual([
       'piskie-attachment://preview/sample-1', 'piskie-attachment://preview/sample-2',

@@ -34,7 +34,7 @@ import { buildSessionMenu, type SessionMenuSource } from '../../data/sessionMenu
 import { useGlobalBinding } from '../../data/useKeyboard';
 import { useAgentVM, useWorkerVM } from '../../data/vm';
 import { RightPanel } from './RightPanel';
-import { availablePanels, type PanelKey } from './panels';
+import { availablePanels, resolveSelectedPanel, type PanelKey } from './panels';
 import { useEmbeddedBrowserState } from './useEmbeddedBrowserState';
 import { useThreadPanels } from './useThreadPanels';
 import styles from './threadview.module.css';
@@ -223,10 +223,17 @@ export const ThreadMode = memo<ThreadModeProps>(
       if (target) showReviewTarget(target);
     }, [onPreviewImage, showReviewTarget]);
 
+    const reviewVisible = showPanel && resolveSelectedPanel(panelView.wanted, visiblePanels) === 'review';
+    const fileChangesOpen = reviewVisible && panelView.reviewTarget?.kind === 'collection';
+    const toggleFileChanges = useCallback(() => {
+      if (fileChangesOpen) closePanel('review');
+      else showReviewTarget({ kind: 'collection' });
+    }, [closePanel, fileChangesOpen, showReviewTarget]);
+    const closeReview = useCallback(() => closePanel('review'), [closePanel]);
     const backToMain = useCallback(() => setTabWorkerId(undefined), []);
 
-    // Esc 链的第三级：回到主会话 tab。未选中 worker 时不注册
-    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.backToMain'), backToMain, !!activeWorkerId);
+    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.closePanel', { name: t('sessionWorkbenchUi.panels.review') }), closeReview, reviewVisible);
+    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.backToMain'), backToMain, !!activeWorkerId && !reviewVisible);
 
     const railActions = (
       <>
@@ -315,6 +322,8 @@ export const ThreadMode = memo<ThreadModeProps>(
                 menuItems={threadMenu}
                 onMenuSelect={onThreadMenu}
                 onOpenFileChange={openFileChange}
+                fileChangesOpen={fileChangesOpen}
+                onToggleFileChanges={toggleFileChanges}
                 onOpenWorker={selectTab}
               />
             ) : emptyState}

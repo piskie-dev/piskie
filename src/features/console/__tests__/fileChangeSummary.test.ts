@@ -8,6 +8,8 @@ import type { TranscriptNode } from '@/domains/transcript/nodes';
 import type { AgentVM, WorkerVM } from '../data/vm';
 import { ThreadView } from '../modes/thread/ThreadView';
 import { DockPanel } from '../modes/dock/DockPanel';
+import { collectFileChanges } from '../data/fileChanges';
+import { createWorker, user } from '../data/__tests__/fileChanges.fixtures';
 
 vi.mock('../data/vm', async (importOriginal) => ({
   ...await importOriginal<typeof import('../data/vm')>(),
@@ -22,6 +24,9 @@ vi.mock('../data/useTranscript', () => ({
     loaded: true,
     hasEarlier: false,
   }),
+}));
+vi.mock('../data/useFileChanges', () => ({
+  useFileChanges: (agentId: string, includeWorkers: boolean) => collectFileChanges(agentId, nodesByAgent, includeWorkers),
 }));
 vi.mock('../content/Transcript', () => ({ Transcript: () => null }));
 vi.mock('../content/McpRuntimeCard', () => ({ McpRuntimeCard: () => null }));
@@ -154,7 +159,15 @@ describe.each(views)('%s file change summary', (_name, View) => {
 
     expect(html).toContain('aria-label="任务清单"');
     expect(html).toContain(workerId ? '>+2</span>' : '>+4</span>');
-    expect(html).not.toContain('个文件已更改');
+    expect(html).toContain(workerId ? '1 个文件已更改' : '2 个文件已更改');
+    expect(html.match(/aria-label="[^"]*个文件已更改[^"]*"/g)).toHaveLength(1);
+    expect(html.indexOf('个文件已更改')).toBeGreaterThan(html.indexOf('aria-label="任务清单"'));
+  });
+
+  it('shows a worker-only total on main even when the worker is not active', () => {
+    nodesByAgent.set(main.agentId, projectConversationNodes([user('sample-turn'), ...createWorker(worker.id)]));
+    expect(render()).toContain('1 个文件已更改');
+    expect(render()).toContain('>+2</span>');
   });
 
   it('hides the summary for a conversation without file changes', () => {

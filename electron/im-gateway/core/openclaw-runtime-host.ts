@@ -527,7 +527,7 @@ export class OpenClawRuntimeHost {
 
       // qqbot inbound-attachments 消费：入站附件下载后直接经
       // ConnectorContext.media.saveBuffer 落受管目录（os.tmpdir()/piskie-media），
-      // 不经 vendor 自有目录（~/.openclaw/media）——核心层绝不读取受管目录外的路径
+      // 不经 vendor 自有目录（qqbot 注入的 <userData>/im-gateway/qqbot/media）——核心层绝不读取受管目录外的路径
       saveInboundMediaBuffer: async (opts: {
         accountId?: string;
         buffer: Buffer;

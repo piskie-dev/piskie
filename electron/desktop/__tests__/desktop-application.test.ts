@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,14 +11,17 @@ const electron = vi.hoisted(() => ({
   openPath: vi.fn(async () => ''),
   showItemInFolder: vi.fn(),
   readBuffer: vi.fn(() => Buffer.alloc(0)),
+  writeBuffer: vi.fn(),
   readText: vi.fn(() => ''),
 }));
 
 const processes = vi.hoisted(() => ({ spawn: vi.fn() }));
-vi.mock('node:child_process', () => ({ spawn: processes.spawn }));
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:child_process')>(), spawn: processes.spawn,
+}));
 
 vi.mock('electron', () => ({
-  clipboard: { readBuffer: electron.readBuffer, readText: electron.readText },
+  clipboard: { readBuffer: electron.readBuffer, readText: electron.readText, writeBuffer: electron.writeBuffer },
   net: { isOnline: vi.fn(() => true) },
   shell: {
     openExternal: electron.openExternal,
@@ -26,7 +30,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+import { gifBytes } from '../../../src/features/console/attachments/__tests__/fixtures.js';
 import { DesktopApplication } from '../capabilities/desktop-application.js';
+import { createDesktopController } from '../capabilities/desktop-controller.js';
+import { DESKTOP_OPERATIONS, type WorkspaceInfo } from '../../../shared/electron-contracts/desktop.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -47,6 +54,7 @@ function fixture() {
   temporaryDirectories.push(userDataDirectory);
   const presentation = {
     releaseFilePreview: vi.fn(),
+    resolveFilePreviewPath: vi.fn<() => string | undefined>(),
     createFilePreviewUrl: vi.fn((_windowId: number, _filePath: string, _mediaType: string) => (
       'piskie-attachment://preview/opaque-token'
     )),
@@ -54,20 +62,101 @@ function fixture() {
   const appearance = {
     setColorScheme: vi.fn(),
   };
+  const defaultWorkspaceDirectory = path.join(userDataDirectory, 'runtime-default');
+  const paths = {
+    getDefaultWorkspaceDir: () => defaultWorkspaceDirectory,
+    ensureWorkspace: vi.fn(async () => { await fs.promises.mkdir(defaultWorkspaceDirectory, { recursive: true }); }),
+  };
   const application = new DesktopApplication({
     name: 'Piskie',
     version: '0.1.0',
     userDataDirectory,
+    paths,
     development: false,
     presentation: presentation as never,
     appearance,
     theme: {} as never,
     update: {} as never,
   });
-  return { application, appearance, presentation, userDataDirectory };
+  return { application, appearance, presentation, userDataDirectory, paths };
 }
 
 describe('DesktopApplication file and URL handling', () => {
+  it('captures a preview source before release and copies its existing original file', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const source = path.join(userDataDirectory, 'sample image.gif');
+    fs.writeFileSync(source, gifBytes());
+    electron.readBuffer.mockImplementation(() => electron.writeBuffer.mock.lastCall![1]);
+    presentation.resolveFilePreviewPath.mockReturnValue(source);
+    const url = 'piskie-attachment://preview/sample-token';
+    const copying = application.copyImage(7, { kind: 'preview', url });
+    expect(presentation.resolveFilePreviewPath).toHaveBeenCalledWith(7, url);
+    application.releasePreview(7, url);
+    presentation.resolveFilePreviewPath.mockReturnValue(undefined);
+    await copying;
+    expect(electron.writeBuffer).toHaveBeenCalledWith('text/uri-list', Buffer.from(pathToFileURL(fs.realpathSync.native(source)).href + '\r\n'));
+    expect(fs.readFileSync(source)).toEqual(Buffer.from(gifBytes()));
+    expect(fs.existsSync(source)).toBe(true);
+    await expect(application.copyImage(8, { kind: 'preview', url })).rejects.toThrow('no longer available');
+  });
+
+  it('rejects a missing or directory copy source before publishing', async () => {
+    const { application, userDataDirectory } = fixture();
+    await expect(application.copyImage(7, { kind: 'path', path: path.join(userDataDirectory, 'missing.png') })).rejects.toThrow('does not exist');
+    await expect(application.copyImage(7, { kind: 'path', path: userDataDirectory })).rejects.toThrow('image file');
+    expect(electron.writeBuffer).not.toHaveBeenCalled();
+  });
+
+  it.each(['implicit', 'recorded'] as const)('initializes the missing %s default workspace through its owner before describing it', async (selection) => {
+    const { application, paths } = fixture();
+    const workspace = paths.getDefaultWorkspaceDir();
+    expect(fs.existsSync(workspace)).toBe(false);
+    await expect(application.workspaceInfo(selection === 'implicit' ? undefined : workspace))
+      .resolves.toEqual({ path: workspace, git: null });
+    expect(paths.ensureWorkspace).toHaveBeenCalledExactlyOnceWith();
+    expect(fs.statSync(workspace).isDirectory()).toBe(true);
+  });
+
+  it('reports a missing explicit workspace without creating it or the default directory', async () => {
+    const { application, userDataDirectory, paths } = fixture();
+    const workspace = path.join(userDataDirectory, 'missing-project');
+    await expect(application.workspaceInfo(workspace)).resolves.toEqual({
+      path: workspace, git: null, error: expect.stringContaining('ENOENT'),
+    });
+    expect(paths.ensureWorkspace).not.toHaveBeenCalled();
+    expect(fs.existsSync(workspace)).toBe(false);
+    expect(fs.existsSync(paths.getDefaultWorkspaceDir())).toBe(false);
+  });
+
+  it('keeps the default path and exposes initialization errors when that path is occupied by a file', async () => {
+    const { application, paths } = fixture();
+    const workspace = paths.getDefaultWorkspaceDir();
+    fs.writeFileSync(workspace, 'Sample file');
+    await expect(application.workspaceInfo()).resolves.toEqual({
+      path: workspace, git: null, error: expect.stringContaining('EEXIST'),
+    });
+    expect(fs.readFileSync(workspace, 'utf8')).toBe('Sample file');
+  });
+
+  it('validates and routes branch creation from the public controller to real Git', async () => {
+    const { application, paths } = fixture();
+    const workspace = paths.getDefaultWorkspaceDir();
+    await paths.ensureWorkspace();
+    execFileSync('git', ['init', '--initial-branch=main'], { cwd: workspace });
+    const controller = createDesktopController(application);
+    const create = controller.operations.find((operation) => operation.id === DESKTOP_OPERATIONS.createWorkspaceBranch)!;
+    const context = { generation: 'sample-generation', connectionId: 'sample-connection', windowId: 1, signal: new AbortController().signal };
+    const base = { kind: 'unborn', name: 'main' };
+    expect(create.input.safeParse([workspace, 'feature/new']).success).toBe(false);
+    expect(create.input.safeParse([workspace, 'feature/new', { ...base, extra: true }]).success).toBe(false);
+    expect(create.input.safeParse([workspace, 'feature/new', { kind: 'detached', commit: '--invalid' }]).success).toBe(false);
+    const result = await create.execute(context, create.input.parse([workspace, 'feature/new', base])) as WorkspaceInfo;
+    expect(result.git).toMatchObject({ head: { kind: 'unborn', name: 'feature/new' }, dirtyFileCount: 0 });
+    await expect(create.execute(context, create.input.parse([workspace, 'invalid name', result.git!.head])))
+      .rejects.toThrow('not a valid branch name');
+    expect((await application.workspaceInfo(workspace)).git?.head).toEqual({ kind: 'unborn', name: 'feature/new' });
+  });
+
   it('applies the effective renderer color scheme to desktop presentation', () => {
     const { application, appearance } = fixture();
 
@@ -94,6 +183,28 @@ describe('DesktopApplication file and URL handling', () => {
     expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(7, resolved, 'image/png');
     await expect(application.openPath(file)).resolves.toBeUndefined();
     expect(electron.openPath).toHaveBeenCalledWith(resolved);
+  });
+
+  it.each([
+    ['vector.svg', 'image/svg+xml'],
+    ['photo.avif', 'image/avif'],
+    ['favicon.ico', 'image/vnd.microsoft.icon'],
+  ])('exposes %s as a direct image preview', async (name, mediaType) => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const file = path.join(userDataDirectory, name);
+    fs.writeFileSync(file, 'fictional image bytes');
+
+    await expect(application.previewFile(7, file)).resolves.toEqual({
+      kind: 'image',
+      url: 'piskie-attachment://preview/opaque-token',
+      mediaType,
+      size: Buffer.byteLength('fictional image bytes'),
+    });
+    expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(
+      7,
+      fs.realpathSync.native(file),
+      mediaType,
+    );
   });
 
   it('finishes a Linux launch without waiting for inherited viewer streams to close', async () => {
@@ -204,7 +315,38 @@ describe('DesktopApplication file and URL handling', () => {
     })));
     expect(read).not.toHaveBeenCalled();
     expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
-    await expect(application.clipboardAttachments(3, { kind: 'paths', paths: [userDataDirectory] })).rejects.toThrow('A regular file is required');
+  });
+
+  it('imports a directory path without reading it or treating its name as an image', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const directory = path.join(userDataDirectory, 'sample folder.png');
+    fs.mkdirSync(directory);
+
+    await expect(application.clipboardAttachments(3, { kind: 'paths', paths: [directory] })).resolves.toEqual([{
+      kind: 'file',
+      name: 'sample folder.png',
+      path: fs.realpathSync.native(directory),
+      size: 0,
+    }]);
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+    await expect(application.previewFile(3, directory)).resolves.toEqual({ kind: 'directory' });
+  });
+
+  it('keeps preview-only image formats out of model image attachments', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const names = ['vector.svg', 'photo.avif', 'favicon.ico'];
+    const paths = names.map((name) => path.join(userDataDirectory, name));
+    for (const file of paths) fs.writeFileSync(file, 'fictional image bytes');
+
+    await expect(application.clipboardAttachments(3, { kind: 'paths', paths })).resolves.toEqual(
+      paths.map((file, index) => ({
+        kind: 'file',
+        name: names[index],
+        path: fs.realpathSync.native(file),
+        size: Buffer.byteLength('fictional image bytes'),
+      })),
+    );
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
   });
 
   it.each(['text/uri-list', 'public.file-url', 'NSFilenamesPboardType', 'FileNameW', 'text/plain'])('preserves an encoded Unicode filename from a %s buffer fixture', async (format) => {
@@ -315,6 +457,92 @@ describe('DesktopApplication file and URL handling', () => {
     expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
   });
 
+  it.each(['sample folder', '.示例目录', 'sample folder.png', 'sample folder.md'])(
+    'describes the directory %s without reading its contents or creating an image preview', async (name) => {
+      const { application, presentation, userDataDirectory } = fixture();
+      const directory = path.join(userDataDirectory, name);
+      fs.mkdirSync(directory);
+      const open = vi.spyOn(fs.promises, 'open');
+      const read = vi.spyOn(fs.promises, 'readFile');
+      const list = vi.spyOn(fs.promises, 'readdir');
+
+      await expect(application.previewFile(7, directory)).resolves.toEqual({ kind: 'directory' });
+
+      expect(open).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+      expect(list).not.toHaveBeenCalled();
+      expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it('previews a complete home-relative file path with spaces and Unicode', async () => {
+    const { application, userDataDirectory } = fixture();
+    vi.spyOn(os, 'homedir').mockReturnValue(userDataDirectory);
+    const file = path.join(userDataDirectory, 'sample folder', '示例 notes.md');
+    fs.mkdirSync(path.dirname(file));
+    const content = '# Sample\n\nExample contents.\n';
+    fs.writeFileSync(file, content);
+
+    await expect(application.previewFile(7, '~/sample folder/示例 notes.md')).resolves.toEqual({
+      kind: 'text',
+      content,
+      truncated: false,
+      size: Buffer.byteLength(content),
+    });
+  });
+
+  it('reveals home-relative files, directories, and the home directory with canonical paths', () => {
+    const { application, userDataDirectory } = fixture();
+    vi.spyOn(os, 'homedir').mockReturnValue(userDataDirectory);
+    const directory = path.join(userDataDirectory, 'sample folder');
+    fs.mkdirSync(directory);
+    const file = path.join(directory, '示例 notes.md');
+    fs.writeFileSync(file, 'Sample contents');
+    fs.symlinkSync(directory, path.join(userDataDirectory, 'linked folder'), 'junction');
+
+    for (const [input, target] of [
+      ['~', userDataDirectory],
+      ['~/', userDataDirectory],
+      ['~/sample folder', directory],
+      ['~/sample folder/示例 notes.md', file],
+      ['~/linked folder/示例 notes.md', file],
+    ]) {
+      application.revealPath(input);
+      expect(electron.showItemInFolder).toHaveBeenLastCalledWith(fs.realpathSync.native(target));
+    }
+  });
+
+  it('describes home-relative directories and keeps missing paths as errors', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    vi.spyOn(os, 'homedir').mockReturnValue(userDataDirectory);
+    fs.mkdirSync(path.join(userDataDirectory, 'sample folder', '.示例目录.png'), { recursive: true });
+    const open = vi.spyOn(fs.promises, 'open');
+    const read = vi.spyOn(fs.promises, 'readFile');
+
+    for (const target of ['~', '~/', '~/sample folder', '~/sample folder/.示例目录.png']) {
+      await expect(application.previewFile(7, target)).resolves.toEqual({ kind: 'directory' });
+    }
+    expect(open).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
+    await expect(application.previewFile(7, '~/missing.txt')).rejects.toMatchObject({
+      code: 'not-found', message: 'The requested path does not exist',
+    });
+    expect(() => application.revealPath('~/missing.txt')).toThrow('The requested path does not exist');
+    expect(electron.showItemInFolder).not.toHaveBeenCalled();
+  });
+
+  it.each(['~sample/file.txt', '$HOME/file.txt'])('rejects unsupported shell path syntax: %s', async (target) => {
+    const { application } = fixture();
+
+    await expect(application.previewFile(7, target)).rejects.toThrow('absolute path');
+    expect(() => application.revealPath(target)).toThrow('absolute path');
+    await expect(application.openPath(target)).rejects.toThrow('absolute path');
+    expect(processes.spawn).not.toHaveBeenCalled();
+    expect(electron.showItemInFolder).not.toHaveBeenCalled();
+    expect(electron.openPath).not.toHaveBeenCalled();
+  });
+
   it('reveals any existing absolute file or directory', () => {
     const { application } = fixture();
     const external = fs.mkdtempSync(path.join(os.tmpdir(), 'piskie-reveal-path-'));
@@ -333,6 +561,7 @@ describe('DesktopApplication file and URL handling', () => {
     const { application } = fixture();
 
     expect(() => application.revealPath('relative/file.txt')).toThrow('absolute path');
+    await expect(application.previewFile(7, 'relative/file.txt')).rejects.toThrow('absolute path');
     await expect(application.previewFile(7, '/definitely/missing/piskie-path'))
       .rejects.toThrow('does not exist');
     await expect(application.openPath('relative/file.txt')).rejects.toThrow('absolute path');

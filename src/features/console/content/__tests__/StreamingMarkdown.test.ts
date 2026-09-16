@@ -127,6 +127,79 @@ describe('StreamingMarkdown', () => {
     ]);
   });
 
+  it.each([true, false])('keeps slash-separated prose unlinked while preserving file links (live=%s)', async (live) => {
+    const markdown = [
+      '处理步骤为采集/整理/展示。',
+      '',
+      '行内文本 `草稿/审核/归档`。',
+      '',
+      '查看 /sample/资料/说明.md。',
+      '',
+      '[示例文档](/sample/docs/guide.md)',
+    ].join('\n');
+
+    await render(markdown, live);
+
+    const targets = [...container!.querySelectorAll<HTMLElement>('[data-content-target="path"]')]
+      .map((node) => node.dataset.target);
+    expect(targets).toEqual(['/sample/资料/说明.md', '/sample/docs/guide.md']);
+    expect(container!.textContent).toContain('采集/整理/展示');
+    expect(container!.querySelector('code')?.textContent).toBe('草稿/审核/归档');
+    expect(container!.querySelector('code [data-content-target]')).toBeNull();
+  });
+
+  it.each([true, false])('preserves complete home-relative targets in prose and code (live=%s)', async (live) => {
+    const paths = [
+      '~/.sample/cache/items/',
+      '~/.sample',
+      '~/report.txt',
+      '~/资料/报告.md',
+      '~/资料/',
+    ];
+    const markdown = [
+      paths.join('\n\n'),
+      paths.map((path) => `\`${path}\``).join('\n\n'),
+      ['```text', ...paths, '```'].join('\n'),
+    ].join('\n\n');
+
+    await render(markdown, live);
+
+    const targets = [...container!.querySelectorAll<HTMLElement>('[data-content-target="path"]')];
+    expect(targets.map((node) => ({
+      target: node.dataset.target,
+      text: node.textContent,
+      context: node.closest('pre') ? 'fenced code' : node.closest('code') ? 'inline code' : 'prose',
+    }))).toEqual(['prose', 'inline code', 'fenced code'].flatMap((context) => (
+      paths.map((path) => ({ target: path, text: path, context }))
+    )));
+  });
+
+  it.each([true, false])('uses the file path while preserving explicit source-link labels (live=%s)', async (live) => {
+    await render([
+      '[示例源码](/sample/src/example.ts:12)',
+      '[`example.ts:12:3`](/sample/src/example.ts:12:3)',
+      '[示例网址](https://example.com:8443/src/example.ts:12#L3)',
+    ].join('\n\n'), live);
+
+    const targets = [...container!.querySelectorAll<HTMLElement>('[data-content-target="path"]')];
+    expect(targets.map((node) => ({ target: node.dataset.target, text: node.textContent }))).toEqual([
+      { target: '/sample/src/example.ts', text: '示例源码' },
+      { target: '/sample/src/example.ts', text: 'example.ts:12:3' },
+    ]);
+    expect(targets[1]?.querySelector('code')?.textContent).toBe('example.ts:12:3');
+    const url = container!.querySelector<HTMLAnchorElement>('[data-content-target="url"]');
+    expect(url?.getAttribute('href')).toBe('https://example.com:8443/src/example.ts:12#L3');
+    expect(url?.textContent).toBe('示例网址');
+  });
+
+  it('preserves explicit home-relative Markdown destinations and labels', async () => {
+    await render('[示例文档](~/资料/报告%20副本.md)', false);
+
+    const target = container!.querySelector<HTMLElement>('[data-content-target="path"]');
+    expect(target?.dataset.target).toBe('~/资料/报告 副本.md');
+    expect(target?.textContent).toBe('示例文档');
+  });
+
   it('linkifies targets in prose, inline code, and fenced code', async () => {
     const markdown = [
       '正文路径 /home/user/project/report.txt 与 https://example.com/docs',

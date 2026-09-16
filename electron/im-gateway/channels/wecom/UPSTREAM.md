@@ -39,6 +39,8 @@
 
 图片发送沿用 SDK 的分片与确认超时（当前 `replyAckTimeout` 为 5 秒）。SDK 上传没有逐调用 AbortSignal，账号停止关闭 WebSocket，并在上传返回后复查信号，阻止后续消息请求。
 
+存储：企业微信没有持久化存储需求（凭证来自 ConfigHost 快照，入站媒体经框架 `media.saveBuffer` 落 Piskie 受管目录），因此 `createWeComConnector(storage)` 接收与其它渠道相同的 `ChannelStoragePaths` 但忽略它。`state-dir-resolve.js`（`OPENCLAW_STATE_DIR`/`~/.openclaw`）与 `media-compat.js getDefaultMediaLocalRoots()` 在收编闭包内没有调用方，保持原样不改。
+
 ## re-vendor 流程
 
 1. `npm pack @wecom/wecom-openclaw-plugin@<新版本>` 并解包

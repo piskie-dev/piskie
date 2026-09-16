@@ -99,8 +99,7 @@ export const RightPanel = memo<RightPanelProps>(
      * 一并移除。
      *
      * **目标与 tab 同生共死** —— 活到 tab 被关掉为止（`closePanel` 负责清）。
-     * tab 记住自己在看什么本来就是预期行为；点另一条文件消息即切到那一次，
-     * 本会话级的整体改动现阶段不提供（改动多在子流程，整体审阅另议）。
+     * 点文件消息切到单次预览，点会话总计切到按轮次组织的文件记录。
      */
     const pick = useCallback(
       (key: PanelKey) => {

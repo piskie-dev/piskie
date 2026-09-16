@@ -1000,6 +1000,7 @@
 
 .imageMeta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   color: var(--cyber-text-muted);
@@ -1009,6 +1010,7 @@
 
 .inlineAction {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   min-block-size: 28px;
@@ -1020,6 +1022,10 @@
   color: var(--cyber-text-muted);
   font-size: 10px;
   cursor: pointer;
+}
+
+.inlineAction + .inlineAction {
+  margin-inline-start: 0;
 }
 
 .inlineAction:hover:not(:disabled) {

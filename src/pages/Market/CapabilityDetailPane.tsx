@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { copyText } from '@/services/clipboard';
 import {
   AlertTriangle,
   Boxes,
@@ -115,9 +116,10 @@ const SourceLink: React.FC<{
         if (isWebUrl) {
           void window.piskie.desktop.system.openExternal(url);
         } else {
-          void navigator.clipboard.writeText(url).then(() => (
-            onFlash(messageText('marketUi.detail.sourcePathCopied'))
-          ));
+          void copyText(url).then(
+            () => onFlash(messageText('marketUi.detail.sourcePathCopied')),
+            () => onFlash(messageText('clipboardUi.copyFailed')),
+          );
         }
       }}
     >

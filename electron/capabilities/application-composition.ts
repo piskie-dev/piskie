@@ -10,6 +10,7 @@ import { compactionArchive } from '../agent-runs/compaction-archive.js';
 import { planRepository } from '../agent-runs/plan-repository.js';
 import { screenService } from '../services/screen.service.js';
 import { themeService } from '../services/theme.service.js';
+import { pathsService } from '../services/paths.service.js';
 import { appConfigStore, taskDefinitionStore } from '../core/storage/index.js';
 import { browserControlPort } from '../core/pilot/pilot-manager.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
@@ -137,6 +138,7 @@ export function createApplicationComposition(options: {
     name: options.app.name,
     version: options.app.version,
     userDataDirectory: capabilities.userDataDirectory,
+    paths: pathsService,
     development: options.app.development,
     presentation: options.presentation,
     appearance: options.appearance,

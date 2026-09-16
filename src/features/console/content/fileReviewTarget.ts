@@ -3,6 +3,7 @@ import type { FilePreviewDescriptor } from '../../../../shared/electron-contract
 export type ReviewableFilePreview = Exclude<FilePreviewDescriptor, { readonly kind: 'image' }>;
 
 export type FileReviewTarget =
+  | { readonly kind: 'collection' }
   | { readonly kind: 'cell'; readonly cellId: string }
   | {
       readonly kind: 'path';

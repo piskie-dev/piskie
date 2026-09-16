@@ -37,6 +37,7 @@ import { Transcript } from '../../content/Transcript';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { useTranscript } from '../../data/useTranscript';
+import { useFileChanges } from '../../data/useFileChanges';
 import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import { activityChips, type ActivityChips } from '../../data/activity';
@@ -63,6 +64,8 @@ export interface ThreadViewProps {
   readonly onMenuSelect?: (key: string) => void;
   /** 点文件操作条目 ⇒ 右栏审阅面板（模式层持有右栏状态，故回调由它给） */
   readonly onOpenFileChange?: (cellId: string) => void;
+  readonly fileChangesOpen?: boolean;
+  readonly onToggleFileChanges?: () => void;
   readonly onOpenWorker?: (workerId: string) => void;
 }
 
@@ -76,6 +79,8 @@ export const ThreadView = memo<ThreadViewProps>(
     menuItems,
     onMenuSelect,
     onOpenFileChange,
+    fileChangesOpen,
+    onToggleFileChanges,
     onOpenWorker,
   }) => {
     const { t } = useTranslation();
@@ -95,6 +100,7 @@ export const ThreadView = memo<ThreadViewProps>(
       active,
     });
 
+    const fileChanges = useFileChanges(workerId ?? agentId, !workerId);
     useMarkSessionRead(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
@@ -230,6 +236,10 @@ export const ThreadView = memo<ThreadViewProps>(
               key={workerId ?? agentId}
               memoryKey={workerId ?? agentId}
               nodes={transcript.nodes}
+              responses={transcript.responses}
+              workers={agent?.workers}
+              processSettled={request.status === 'waiting' && !request.request && !gate}
+              toolsActive={(request.status === 'running' || request.status === 'thinking') && !gate}
               renderNode={renderNode}
               hasEarlier={transcript.hasEarlier}
               onLoadEarlier={transcript.loadEarlier}
@@ -270,11 +280,14 @@ export const ThreadView = memo<ThreadViewProps>(
             agentId={agentId}
             chips={chips}
             taskChips={taskChips}
+            fileChanges={fileChanges.totals}
+            fileChangesOpen={fileChangesOpen}
+            onToggleFileChanges={onToggleFileChanges}
           />
         )}
 
         <PendingEventQueue events={request.pendingEvents} />
-        {tasks.length === 0 && <FileChangeSummary changes={chips} />}
+        {tasks.length === 0 && <FileChangeSummary changes={fileChanges.totals} expanded={fileChangesOpen} onToggle={onToggleFileChanges} />}
 
         {/* 门与输入互斥：有待决策时输入让位（与 dock 同语义，不同外观） */}
         {gate ? (

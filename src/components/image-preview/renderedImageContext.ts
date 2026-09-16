@@ -2,6 +2,9 @@ export type ImagePreviewHandler = (
   url: string,
   contextUrls?: readonly string[],
   contextIndex?: number,
+  /** The preview owner releases the source on close, replacement or unmount. */
+  release?: () => void,
+  name?: string,
 ) => void;
 
 export function renderedImageContext(anchor: HTMLImageElement): {
@@ -13,7 +16,7 @@ export function renderedImageContext(anchor: HTMLImageElement): {
     ? Array.from(scope.querySelectorAll<HTMLImageElement>('img[src]'))
     : [anchor];
   const entries = images
-    .filter((image) => !image.hidden)
+    .filter((image) => !image.hidden && image.dataset.imagePreview !== 'display-only')
     .map((image) => ({
       image,
       url: image.currentSrc || image.getAttribute('src') || image.src,

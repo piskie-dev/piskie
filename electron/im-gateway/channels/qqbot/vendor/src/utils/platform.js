@@ -48,32 +48,59 @@ export function getHomeDir() {
     // 最后降级
     return os.tmpdir();
 }
+// ============ PISKIE：由宿主注入的存储根 ============
 /**
- * 获取 .openclaw/qqbot 下的子目录路径，并自动创建
- * 替代各文件中分散的 path.join(HOME, ".openclaw", "qqbot", ...)
+ * PISKIE 本地改动：QQ 数据/媒体目录不再推导为 `~/.openclaw/qqbot` 与 `~/.openclaw/media/qqbot`，
+ * 而是由 Piskie 渠道工厂在 Connector 创建时注入 `<userData>/im-gateway/qqbot` 与其 `media/` 子目录。
+ * 未注入即抛错，不回退到主目录或环境变量；各存储模块必须惰性调用，模块导入不得创建目录。
+ */
+let configuredStorage = null;
+export function configureQQBotStorage(next) {
+    const dataDir = typeof next?.dataDir === "string" ? next.dataDir.trim() : "";
+    const mediaDir = typeof next?.mediaDir === "string" ? next.mediaDir.trim() : "";
+    if (!dataDir || !mediaDir) {
+        throw new Error("qqbot: configureQQBotStorage requires dataDir and mediaDir");
+    }
+    configuredStorage = { dataDir, mediaDir };
+}
+function requireQQBotStorage() {
+    if (!configuredStorage) {
+        throw new Error("qqbot: storage location not configured — Piskie must call configureQQBotStorage() before use");
+    }
+    return configuredStorage;
+}
+/** 仅供测试：清除注入，验证未配置即拒绝访问。 */
+export function _resetQQBotStorageForTest() {
+    configuredStorage = null;
+}
+/**
+ * 获取 Piskie QQ 数据根下的子目录路径，并自动创建
+ * （sessions/、data/、images/ 等；替代上游 path.join(HOME, ".openclaw", "qqbot", ...)）
  */
 export function getQQBotDataDir(...subPaths) {
-    const dir = path.join(getHomeDir(), ".openclaw", "qqbot", ...subPaths);
+    const dir = path.join(requireQQBotStorage().dataDir, ...subPaths);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
     return dir;
 }
 /**
- * 获取 .openclaw/media/qqbot 下的子目录路径，并自动创建
+ * 获取 Piskie QQ 媒体根下的子目录路径，并自动创建
  *
- * 与 getQQBotDataDir 不同，此目录位于 OpenClaw 核心的媒体安全白名单
- * (~/.openclaw/media) 之下，下载到这里的文件可以被框架的 image/media
- * 工具直接访问，不会触发 "Local media path is not under an allowed directory" 错误。
- *
+ * 上游把它放在 OpenClaw 媒体白名单 (~/.openclaw/media/qqbot) 下；Piskie 的媒体读取
+ * 不依赖该白名单，故改为 `<userData>/im-gateway/qqbot/media`。
  * 用于存放从 QQ 下载的图片、语音等需要被框架处理的媒体文件。
  */
 export function getQQBotMediaDir(...subPaths) {
-    const dir = path.join(getHomeDir(), ".openclaw", "media", "qqbot", ...subPaths);
+    const dir = path.join(requireQQBotStorage().mediaDir, ...subPaths);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
     return dir;
+}
+/** 与 getQQBotMediaDir 同路径但不创建目录（用于清理/展示）。 */
+export function resolveQQBotMediaDir(...subPaths) {
+    return path.join(requireQQBotStorage().mediaDir, ...subPaths);
 }
 // ============ 临时目录 ============
 /**
@@ -357,7 +384,7 @@ export async function runDiagnostics() {
     if (isWindows()) {
         // 检查路径中是否有中文或空格（可能导致某些工具异常）
         if (/[\u4e00-\u9fa5]/.test(homeDir) || homeDir.includes(" ")) {
-            warnings.push(`⚠️ 用户目录包含中文或空格: ${homeDir}。某些工具可能无法正常工作，建议设置 QQBOT_DATA_DIR 环境变量指定纯英文路径`);
+            warnings.push(`⚠️ 用户目录包含中文或空格: ${homeDir}。某些工具可能无法正常工作`);
         }
     }
     const report = {

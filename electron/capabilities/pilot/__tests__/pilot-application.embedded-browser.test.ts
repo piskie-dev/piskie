@@ -13,6 +13,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.promises.rm(testDirectory, { recursive: true, force: true });
 });
 
@@ -42,6 +43,49 @@ describe('PilotApplication local HTML preview', () => {
     expect(embeddedBrowser).toHaveBeenCalledWith(42);
     expect(open).toHaveBeenCalledWith(owner);
     expect(openLocalHtml).toHaveBeenCalledWith(await fs.promises.realpath(target));
+  });
+
+  it.each(['html', 'HTM'])('opens a complete home-relative .%s path with spaces, Unicode, and a directory symlink', async (extension) => {
+    vi.spyOn(os, 'homedir').mockReturnValue(testDirectory);
+    const directory = path.join(testDirectory, 'sample folder');
+    await fs.promises.mkdir(directory);
+    const name = `示例 preview.${extension}`;
+    const file = path.join(directory, name);
+    await fs.promises.writeFile(file, '<!doctype html><title>Sample</title>');
+    await fs.promises.symlink(directory, path.join(testDirectory, 'linked folder'), 'junction');
+    const { application, embeddedBrowser, open, openLocalHtml } = fixture();
+
+    await application.openLocalHtmlInEmbeddedBrowser(42, owner, `~/linked folder/${name}`);
+
+    expect(embeddedBrowser).toHaveBeenCalledWith(42);
+    expect(open).toHaveBeenCalledWith(owner);
+    expect(openLocalHtml).toHaveBeenCalledExactlyOnceWith(await fs.promises.realpath(file));
+  });
+
+  it('retains existence, regular-file, and HTML checks for home-relative paths', async () => {
+    vi.spyOn(os, 'homedir').mockReturnValue(testDirectory);
+    await fs.promises.mkdir(path.join(testDirectory, 'sample.html'));
+    await fs.promises.writeFile(path.join(testDirectory, 'sample.txt'), 'Sample contents');
+    const { application, openLocalHtml } = fixture();
+
+    await expect(application.openLocalHtmlInEmbeddedBrowser(1, owner, '~/missing.html'))
+      .rejects.toMatchObject({ code: 'not-found' });
+    for (const target of ['~', '~/', '~/sample.html']) {
+      await expect(application.openLocalHtmlInEmbeddedBrowser(1, owner, target))
+        .rejects.toMatchObject({ code: 'invalid-input', message: 'A regular file is required' });
+    }
+    await expect(application.openLocalHtmlInEmbeddedBrowser(1, owner, '~/sample.txt'))
+      .rejects.toMatchObject({ code: 'unsupported' });
+    expect(openLocalHtml).not.toHaveBeenCalled();
+  });
+
+  it.each(['~sample/page.html', '$HOME/page.html'])('rejects unsupported shell path syntax: %s', async (target) => {
+    const { application, open, openLocalHtml } = fixture();
+
+    await expect(application.openLocalHtmlInEmbeddedBrowser(1, owner, target))
+      .rejects.toMatchObject({ code: 'invalid-input', message: 'An absolute path is required' });
+    expect(open).not.toHaveBeenCalled();
+    expect(openLocalHtml).not.toHaveBeenCalled();
   });
 
   it('rejects relative paths, missing files, directories, and non-HTML files', async () => {

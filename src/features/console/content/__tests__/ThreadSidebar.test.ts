@@ -1,4 +1,4 @@
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
@@ -9,12 +9,20 @@ import { useUIStore } from '../../../../store/uiStore';
 import type { PopoverProps } from '../../chrome/Popover';
 import type { ActionResult } from '../../data/actions';
 import type { HistoryRow } from '../../data/sessionRow';
+import type { AgentRunAttention } from '@/domains/agent-runs/agent-run-attention';
+import { projectActiveAgentRun } from '../../data/agentRunViewModel';
+import type { AgentControlSnapshot } from '@shared/electron-contracts/agent-runs';
 import { TaskDefinitionLauncher } from '../../shell/TaskDefinitionLauncher';
 import { ThreadSidebar, type ThreadSidebarProps } from '../ThreadSidebar';
 
 const historyState = vi.hoisted(() => ({ ready: true }));
+const attentionState = vi.hoisted(() => ({
+  attentionByAgentId: {} as Record<string, AgentRunAttention>,
+  listeners: new Set<() => void>(),
+}));
 const consoleActions = vi.hoisted(() => ({
   renameAgentRun: vi.fn(async (): Promise<ActionResult> => ({ ok: true })),
+  markRead: vi.fn(async (): Promise<ActionResult> => ({ ok: true })),
 }));
 vi.hoisted(() => {
   const values = new Map<string, string>();
@@ -26,6 +34,12 @@ vi.hoisted(() => {
   vi.stubGlobal('window', { localStorage: storage });
 });
 vi.mock('../../data/session', () => ({ useHistoryRowsReady: () => historyState.ready }));
+vi.mock('@/renderer-runtime/hooks', () => ({
+  useAgentRunList: (selector: (state: typeof attentionState) => unknown) => useSyncExternalStore(
+    (listener) => { attentionState.listeners.add(listener); return () => { attentionState.listeners.delete(listener); }; },
+    () => selector(attentionState),
+  ),
+}));
 vi.mock('../../data/actions', () => ({ useConsoleActions: () => consoleActions }));
 vi.mock('../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../../chrome/Popover', () => ({
@@ -90,6 +104,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', dom.window.localStorage);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', { value: vi.fn() });
+  Object.defineProperty(dom.window.HTMLElement.prototype, 'getAnimations', { value: () => [] });
   Object.defineProperties(dom.window.HTMLElement.prototype, {
     attachEvent: { configurable: true, value: vi.fn() },
     detachEvent: { configurable: true, value: vi.fn() },
@@ -113,6 +128,8 @@ beforeEach(() => {
   localStorage.clear();
   useUIStore.setState({ expandedWorkspaceGroups: [], workspaceGroupOrder: [], consoleSelection: null });
   historyState.ready = true;
+  attentionState.attentionByAgentId = {};
+  consoleActions.markRead.mockClear();
   consoleActions.renameAgentRun.mockReset().mockResolvedValue({ ok: true });
   props = {
     sessions: [], history: [history('alpha', '/sample/alpha', 3), history('beta', '/sample/beta', 2), history('default')],
@@ -132,6 +149,53 @@ afterEach(async () => {
 });
 
 describe('workspace navigation', () => {
+  it.each([false, true])('shows session attention beside the existing running indicator (collapsed=%s)', async (collapsed) => {
+    const live = projectActiveAgentRun({
+      agentId: 'sample-main', phase: 'thinking', children: [], runConfig: { name: 'Sample session' },
+    } as unknown as AgentControlSnapshot, 'Example');
+    attentionState.attentionByAgentId = { 'sample-main': { unread: true, unreadActionIds: ['sample-worker-approval'] } };
+    await render({ collapsed, sessions: [live], history: [] });
+    if (!collapsed) await click(defaultLabel);
+    expect(container.querySelector('[data-unread="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-orb-variant="expanding"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label*="未读"]')).not.toBeNull();
+
+    if (!collapsed) {
+      await act(async () => container.querySelector<HTMLButtonElement>('[data-agent-id="sample-main"] button[aria-haspopup="menu"]')!.click());
+      await click('标记为已读');
+      expect(consoleActions.markRead).toHaveBeenCalledWith('sample-main', -1);
+    }
+    await act(async () => {
+      attentionState.attentionByAgentId = { 'sample-main': { unread: false, unreadActionIds: [] } };
+      for (const listener of attentionState.listeners) listener();
+    });
+    expect(container.querySelector('[data-unread="true"]')).toBeNull();
+    expect(container.querySelector('[data-orb-variant="expanding"]')).not.toBeNull();
+  });
+
+  it('keeps omitted live and historical workspaces in the default group with the original new-session semantics', async () => {
+    const live = projectActiveAgentRun({
+      agentId: 'sample-main', phase: 'thinking', children: [],
+      runConfig: { name: 'Sample session' }, createdAt: '2026-01-04T00:00:00Z',
+    } as unknown as AgentControlSnapshot, 'Example');
+    await render({
+      sessions: [live],
+      history: [history('older'), history('sample-main'), history('project', '/sample/workspace')],
+    });
+
+    expect(groupNames()).toEqual([defaultLabel, 'workspace']);
+    await click(defaultLabel);
+    expect(rowCount()).toBe(2);
+    expect(container.querySelector('[data-agent-id="sample-main"][data-live="true"]')).not.toBeNull();
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['']);
+    expect(useUIStore.getState().workspaceGroupOrder).toEqual(['', '/sample/workspace']);
+
+    await click('在 默认工作区 新建会话');
+    expect(props.onNewSessionIn).toHaveBeenLastCalledWith(undefined);
+    await click('在 workspace 新建会话');
+    expect(props.onNewSessionIn).toHaveBeenLastCalledWith('/sample/workspace');
+  });
+
   it('waits for full history before saving the initial order, with all groups closed', async () => {
     historyState.ready = false;
     await render({ history: [history('beta', '/sample/beta')] });

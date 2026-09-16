@@ -95,6 +95,37 @@ describe('TranscriptSession', () => {
     ]);
   });
 
+  it('retains appends and repaired gaps while warming up an earlier chat page', async () => {
+    const warmup = deferred<ConversationPage>();
+    let warmupPending = false;
+    const session = createTranscriptSession('agent-1', { conversation: vi.fn(async (_id, page) => {
+      if (page.direction === 'tail') return { from: 4, entries: [message('recent', 'Recent sample.')], total: 5 };
+      if (page.direction === 'forward') return { from: 5, entries: [call('live-call')], total: 7 };
+      if (page.before === 4) return { from: 2, entries: [result('older-call'), message('middle', 'Sample context.')], total: 5 };
+      warmupPending = true;
+      return warmup.promise;
+    }) });
+    await session.start();
+    const earlier = session.loadEarlier();
+    await vi.waitFor(() => expect(warmupPending).toBe(true));
+    session.append(append(6, result('live-call')));
+    await vi.waitFor(() => expect(session.state.getState().projection.range.toExclusive).toBe(7));
+    warmup.resolve({ from: 0, entries: [message('first', 'Sample request.'), call('older-call')], total: 5 });
+    await earlier;
+    expect(session.state.getState()).toMatchObject({
+      total: 7, hasEarlier: true,
+      projection: {
+        range: { from: 2, toExclusive: 7 },
+        nodes: [
+          { id: 'older-call', kind: 'tool', sourceIndex: 2, state: { phase: 'ok' } },
+          { id: 'middle' }, { id: 'recent' },
+          { id: 'live-call', kind: 'tool', sourceIndex: 5, state: { phase: 'ok' } },
+        ],
+      },
+    });
+    session.close();
+  });
+
   it('publishes a newer attempt as a replacement live generation', () => {
     const source: ConversationPageSource = {
       conversation: vi.fn(async () => ({ from: 0, entries: [], total: 0 })),

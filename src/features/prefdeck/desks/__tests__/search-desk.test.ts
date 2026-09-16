@@ -47,6 +47,29 @@ async function click(text: string) {
 }
 
 describe('search settings presentation', () => {
+  it('reports API key copy only after completion and shows a translated failure', async () => {
+    const pending = deferred<void>();
+    const copy = vi.fn().mockReturnValueOnce(pending.promise).mockRejectedValueOnce(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
+    useWebSearchStore.setState({
+      config: { revision: 1, enabled: true, defaultProvider: 'sample-search', providers: {
+        'sample-search': { displayName: 'Sample search', enabled: true, authentication: 'api_key', apiKey: 'sample-key' },
+      } },
+      presets: [{ id: 'sample-search', label: 'Sample search', authentication: [{ kind: 'api_key', signupUrl: 'https://example.test' }],
+        defaults: { authentication: 'api_key', options: {} }, optionsSchema: {}, connectionCheck: true, oauth: { connected: false } }],
+    });
+    const onFlash = vi.fn();
+    await act(() => root.render(createElement(SearchDesk, { providerId: 'sample-search', sessionId: 'sample-session', onFlash })));
+    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${i18n.t('settings.provider.copyKey')}"]`)!;
+    await act(() => button.click());
+    expect(copy).toHaveBeenCalledExactlyOnceWith('sample-key');
+    expect(onFlash).not.toHaveBeenCalled();
+    await act(async () => pending.resolve());
+    expect(onFlash).toHaveBeenLastCalledWith({ kind: 'message', key: 'settings.provider.copied' });
+    await act(async () => button.click());
+    expect(onFlash).toHaveBeenLastCalledWith({ kind: 'message', key: 'clipboardUi.copyFailed' }, 'halt');
+  });
+
   it('places tools between models and network and keeps browsing separate from current selection', async () => {
     const onProvider = vi.fn();
     await act(() => root.render(createElement(CatalogPane, {

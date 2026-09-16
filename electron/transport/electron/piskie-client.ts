@@ -382,9 +382,15 @@ export function createElectronPiskieClient(options: {
       },
       files: {
         getPathForFile: (file) => options.getPathForFile(file),
+        copyImage: (input) => request(DESKTOP_OPERATIONS.copyImage, input),
         preview: (path) => request(DESKTOP_OPERATIONS.previewFile, path),
         releasePreview: (url) => request(DESKTOP_OPERATIONS.releasePreview, url),
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),
+      },
+      workspace: {
+        info: (workspace) => request(DESKTOP_OPERATIONS.workspaceInfo, workspace),
+        switchBranch: (workspace, branch) => request(DESKTOP_OPERATIONS.switchWorkspaceBranch, workspace, branch),
+        createBranch: (workspace, branch, base) => request(DESKTOP_OPERATIONS.createWorkspaceBranch, workspace, branch, base),
       },
       theme: {
         pickBackground: () => request(DESKTOP_OPERATIONS.pickBackground),

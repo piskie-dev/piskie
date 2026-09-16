@@ -15,6 +15,7 @@ const STATIC_TITLE_KEYS: Readonly<Record<string, string>> = Object.freeze({
   skill_call: 'transcript.tool.skillCall',
   load_skill: 'transcript.tool.loadSkill',
   tool_search: 'transcript.tool.searchCapabilities',
+  web_search: 'transcript.tool.searchWeb',
   read: 'transcript.tool.readFile',
   write: 'transcript.tool.writeFile',
   edit: 'transcript.tool.editFile',

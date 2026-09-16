@@ -37,6 +37,7 @@ export type MessagePresentation =
   | {
       readonly as: 'user';
       readonly origin: UserNode['origin'];
+      readonly parentSentAt?: number;
       /** 供 `buildUserCell` 使用的正文（信封已剥离；assignment 保持原文由其自行解包） */
       readonly text: string;
     }
@@ -154,7 +155,7 @@ const BY_SUBTYPE = {
 
 // ==================== 信封覆盖 ====================
 
-function readableParentEventText(body: string): string {
+export function readableParentEventText(body: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -180,15 +181,17 @@ function readableParentEventText(body: string): string {
 /**
  * 系统来源保留通知归属；父流程与外部发言只展示可读正文。
  */
-function externalOverride(source: string, body: string): MessagePresentation {
+function externalOverride(source: string, body: string, timestamp: string | undefined): MessagePresentation {
   if (source === 'system' || source === 'module' || source === 'browser' || source === 'subagent') {
     return systemNoticeOverride(body.trim()) ?? presentNotice({ source, text: body });
   }
   const fromParent = source.startsWith('parent');
+  const parentSentAt = fromParent ? Date.parse(timestamp ?? '') : NaN;
   return {
     as: 'user',
     origin: fromParent ? 'parent' : 'user',
     text: fromParent ? readableParentEventText(body) : body,
+    ...(Number.isFinite(parentSentAt) ? { parentSentAt } : {}),
   };
 }
 
@@ -251,6 +254,7 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
     return externalOverride(
       (externalXml[1] ?? '').match(/source="([^"]*)"/)?.[1] ?? '',
       externalXml[2] ?? text,
+      attribute(externalXml[1] ?? '', 'ts'),
     );
   }
 

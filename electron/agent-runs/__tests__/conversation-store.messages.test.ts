@@ -58,7 +58,7 @@ describe('main conversation message state', () => {
     expect(hasUnreadMessages(enabled.readMessageState(MAIN))).toBe(true);
   });
 
-  it('counts user input and assistant text including progress, filtering tool, system and worker messages', () => {
+  it('retains progress in the summary while only complete text-only main replies become unread', () => {
     const { store } = setup();
     const observed: Array<{ agentId: string }> = [];
     store.subscribeAppends((event) => { if (event.messages) observed.push(event); });
@@ -82,9 +82,17 @@ describe('main conversation message state', () => {
     store.append(MAIN, 'sample-worker', user(10000));
     expect(store.readMessageState(MAIN)).toEqual(expected);
     expect(observed.map((event) => event.agentId)).toEqual([MAIN, MAIN]);
-    expect(hasUnreadMessages(expected)).toBe(true);
+    expect(expected.latestMessage).toEqual({ index: 1, timestamp: 2000 });
+    expect(expected.latestAssistantIndex).toBe(-1);
+    expect(hasUnreadMessages(expected)).toBe(false);
     store.append(MAIN, MAIN, user(11000));
     expect(store.readMessageState(MAIN).latestMessage?.timestamp).toBe(11000);
+    expect(hasUnreadMessages(store.readMessageState(MAIN))).toBe(false);
+    const index = store.append(MAIN, MAIN, {
+      t: 'msg', role: 'assistant', id: 'final-reply', ts: 12000,
+      content: [{ type: 'thinking', thinking: 'Example thought' }, { type: 'text', text: 'Example final reply' }],
+    });
+    expect(store.readMessageState(MAIN).latestAssistantIndex).toBe(index);
     expect(hasUnreadMessages(store.readMessageState(MAIN))).toBe(true);
   });
 

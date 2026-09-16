@@ -27,6 +27,7 @@ import {
 } from '@/features/console/data/cells/toolCell';
 import {
   presentUserMessage,
+  readableParentEventText,
   type NoticeMessagePresentation,
 } from '@/features/console/data/cells/messagePresentation';
 import {
@@ -106,6 +107,7 @@ function buildUserNode(
   sourceIndex: number,
   origin: UserNode['origin'],
   rawText: string,
+  parentSentAt?: number,
 ): UserNode {
   const images = extractCellMedia(entry.content);
 
@@ -140,6 +142,7 @@ function buildUserNode(
     ts: entry.ts,
     sourceIndex,
     origin,
+    ...(parentSentAt !== undefined ? { parentSentAt } : {}),
     titleKey: USER_TITLE_KEYS[origin],
     summary,
     meta: meta.length > 0 ? meta : undefined,
@@ -284,12 +287,14 @@ function buildPlanNode(
   sourceIndex: number,
   params: Record<string, unknown>,
   pending: boolean,
+  running: boolean,
 ): PlanNode {
   const taskSummary = typeof params.taskSummary === 'string' ? params.taskSummary : '';
   const body = typeof params.planDocument === 'string' ? params.planDocument : undefined;
 
   return {
     kind: 'plan',
+    running,
     id: toolUseId,
     ts,
     sourceIndex,
@@ -384,7 +389,7 @@ export function projectEntryNodes(
     const presented = presentUserMessage(entry.subtype, readableMessageText(entry.content), entry.id);
     return [
       presented.as === 'user'
-        ? buildUserNode(entry, sourceIndex, presented.origin, presented.text)
+        ? buildUserNode(entry, sourceIndex, presented.origin, presented.text, presented.parentSentAt)
         : buildNoticeNode(entry, sourceIndex, presented),
     ];
   }
@@ -521,6 +526,7 @@ function buildToolUseNode(
       sourceIndex,
       params ?? {},
       pending,
+      outcome.state.phase === 'running',
     );
   }
 
@@ -534,7 +540,7 @@ function buildToolUseNode(
     );
   }
 
-  return buildToolNode({
+  const node = buildToolNode({
     toolUseId,
     tool: toolName,
     params,
@@ -545,4 +551,18 @@ function buildToolUseNode(
     outcome,
     titleSource: options.titleSource,
   });
+  if (toolName === 'send_event' && typeof params?.targetId === 'string' && typeof params.message === 'string') {
+    // Match the runtime's agent_input body before applying the readable-envelope projection.
+    const body = params.message.replaceAll('</agent_input>', '<\\/agent_input>');
+    return {
+      ...node,
+      workerMessage: {
+        targetId: params.targetId.trim(),
+        text: readableParentEventText(body).trim(),
+        callTs: entry.ts,
+        resultTs: matched?.entry.ts,
+      },
+    };
+  }
+  return node;
 }

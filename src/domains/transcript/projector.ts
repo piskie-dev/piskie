@@ -7,12 +7,13 @@ import {
   type IndexedToolResult,
 } from './project-entry';
 import type { NoticeNode } from './nodes';
-import type { TranscriptNode, TranscriptProjection } from './types';
+import type { TranscriptNode, TranscriptProjection, TranscriptResponse } from './types';
 import { messageText, rawText } from '@/features/console/data/presentationText';
 
 const EMPTY_PROJECTION: TranscriptProjection = Object.freeze({
   range: Object.freeze({ from: 0, toExclusive: 0 }),
   nodes: Object.freeze([]),
+  responses: Object.freeze([]),
   nodeIdsByEntry: new Map(),
   toolNodeByCallId: new Map(),
 });
@@ -77,9 +78,23 @@ export class TranscriptProjector {
     const nodes = ordered.flatMap((index) => this.nodesByEntry.get(index) ?? []);
     const nodeIdsByEntry = new Map<number, readonly string[]>();
     const toolNodeByCallId = new Map<string, string>();
+    const responses: TranscriptResponse[] = [];
+    let afterUserId: string | undefined;
     for (const index of ordered) {
       const entryNodes = this.nodesByEntry.get(index) ?? [];
       nodeIdsByEntry.set(index, entryNodes.map((node) => node.id));
+      const user = entryNodes.find((node) => node.kind === 'user');
+      if (user) afterUserId = user.id;
+      const entry = this.entries.get(index)!;
+      if (entry.t === 'msg' && entry.role === 'assistant') {
+        responses.push({
+          afterUserId,
+          ts: entry.ts,
+          hasToolUse: Array.isArray(entry.content)
+            && entry.content.some((block) => block.type === 'tool_use'),
+          textNodeIds: entryNodes.filter((node) => node.kind === 'assistant').map((node) => node.id),
+        });
+      }
       for (const node of entryNodes) {
         if (node.kind === 'tool' || node.kind === 'plan' || node.kind === 'worker') {
           toolNodeByCallId.set(node.id, node.id);
@@ -89,6 +104,7 @@ export class TranscriptProjector {
     return {
       range: this.range,
       nodes,
+      responses,
       nodeIdsByEntry,
       toolNodeByCallId,
     };

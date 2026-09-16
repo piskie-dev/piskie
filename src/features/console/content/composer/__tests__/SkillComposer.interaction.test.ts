@@ -22,6 +22,7 @@ vi.mock('../../../../../components/BrowserEnvironmentBindingPicker', () => ({ de
 vi.mock('../../../../../components/shared', () => ({ ModelReasoningControl: () => null }));
 vi.mock('../ModelPicker', () => ({ ModelPicker: () => null }));
 vi.mock('../ContextUsageRing', () => ({ ContextUsageRing: () => null }));
+vi.mock('../WorkspaceBar', () => ({ WorkspaceBar: () => null }));
 vi.mock('../useComposerSettings', () => ({ useComposerSettings: () => ({ modelGroups: [] }) }));
 vi.mock('../../../chrome/Popover', () => ({ Popover: ({ trigger }: { trigger: React.ReactNode }) => trigger }));
 vi.mock('../../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: React.ReactNode }) => children }));
@@ -57,7 +58,7 @@ function Harness() {
     value: text, onChange: setText, skills, onSkillsChange: setSkills, draftIdentity: 'welcome:example',
     onSubmit: submit, onPaste: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), placeholder: 'Example task', images: [], files: [],
     onRemoveAttachment: vi.fn(), onModelChange: vi.fn(), modeId: 'normal', onModeChange: vi.fn(),
-    approvalMode: 'confirm', onApprovalModeChange: vi.fn(), workspaceLabel: 'Example workspace',
+    approvalMode: 'confirm', onApprovalModeChange: vi.fn(),
     workspacePath: workspace, onSelectWorkspace: vi.fn(), onUseDefaultWorkspace: vi.fn(),
     environmentIds: [], onEnvironmentIdsChange: vi.fn(),
   });

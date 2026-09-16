@@ -1,4 +1,7 @@
+import i18n from 'i18next';
 import { describe, expect, it } from 'vitest';
+
+import '@/i18n';
 
 import { resolveToolTitle } from '../toolTitle';
 
@@ -31,5 +34,19 @@ describe('worker tool titles', () => {
       .toEqual({ titleKey: 'transcript.tool.createWorker' });
     expect(resolveToolTitle({ tool: 'subagent_stop', params: { subagentId: 'worker-a' } }))
       .toEqual({ titleKey: 'transcript.tool.stopWorker' });
+  });
+});
+
+describe('search tool titles', () => {
+  it('maps web search to its localized Chinese title', async () => {
+    expect(resolveToolTitle({ tool: 'tool_search' })).toEqual({
+      titleKey: 'transcript.tool.searchCapabilities',
+    });
+
+    const webSearch = resolveToolTitle({ tool: 'web_search' });
+    expect(webSearch).toEqual({ titleKey: 'transcript.tool.searchWeb' });
+
+    await i18n.changeLanguage('zh-CN');
+    expect(i18n.t(webSearch.titleKey, webSearch.titleArgs ?? {})).toBe('搜索网页');
   });
 });

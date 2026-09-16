@@ -11,7 +11,7 @@ import os from 'os';
 import path from 'path';
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/piskie-test' },
+  app: { getPath: () => '/tmp/sample-app-test' },
 }));
 
 
@@ -44,9 +44,20 @@ function makeContext(ops?: ImageReviewOps, signal?: AbortSignal): ToolContext {
   } as unknown as ToolContext;
 }
 
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+let outputDir: string;
+
+beforeEach(async () => {
+  outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-image-output-'));
+});
+
 const img = (i: number, extra: Record<string, unknown> = {}) => ({
   prompt: `image ${i}`,
-  outputPath: path.join(os.tmpdir(), 'piskie-test-gen', `out-${i}.png`),
+  outputPath: path.join(outputDir, `out-${i}.png`),
   ...extra,
 });
 
@@ -134,15 +145,15 @@ describe('预检发生在任何 Provider 请求之前', () => {
   });
 
   it('同批重复路径（含归一化后相同）在生成前失败', async () => {
-    const p = path.join(os.tmpdir(), 'piskie-test-gen', 'dup.png');
+    const p = path.join(outputDir, 'dup.png');
     await expectPreflightError(
-      { images: [{ prompt: 'a', outputPath: p }, { prompt: 'b', outputPath: path.join(os.tmpdir(), 'piskie-test-gen', '.', 'dup.png') }] },
+      { images: [{ prompt: 'a', outputPath: p }, { prompt: 'b', outputPath: path.join(outputDir, '.', 'dup.png') }] },
       '重复',
     );
   });
 
   it('overwrite=false 且目标已存在 → 生成前失败；overwrite=true 放行', async () => {
-    const existing = path.join(os.tmpdir(), `piskie-test-exist-${Date.now()}.png`);
+    const existing = path.join(outputDir, 'existing.png');
     await fs.writeFile(existing, 'old');
     try {
       await expectPreflightError({ images: [{ prompt: 'x', outputPath: existing }] }, '已存在');
@@ -173,18 +184,23 @@ describe('预检发生在任何 Provider 请求之前', () => {
 describe('审核动作循环与最终结果', () => {
   const committedItem = (i: number) => ({
     id: `img-${i}`,
-    outputPath: path.join(os.tmpdir(), 'piskie-test-gen', `final-${i}.png`),
+    outputPath: path.join(outputDir, `final-${i}.png`),
     mimeType: 'image/png',
     prompt: `image ${i}`,
   });
 
+  async function commitOutcome(outcome: ImageCommitOutcome, bytes = PNG): Promise<ImageCommitOutcome> {
+    await Promise.all(outcome.committed.map((item) => fs.writeFile(item.outputPath, bytes)));
+    return outcome;
+  }
+
   it('presentation reads only committed paths from the actual tool result, including multiline paths and notes', async () => {
-    const outputPath = path.join(os.tmpdir(), 'image-output', '画面（草图）\n"one".png');
-    const note = 'A revised prompt\n- [成功] "/output/unrelated.png"';
+    const outputPath = path.join(outputDir, '示例（图片）\n"one".png');
+    const note = 'A sample revision\n- [成功] "/output/unrelated.png"';
     const ops = makeOps({
-      commit: vi.fn(async () => ({
+      commit: vi.fn(async () => commitOutcome({
         status: 'partial' as const,
-        committed: [{ ...committedItem(1), outputPath, revisedPrompt: note }],
+        committed: [{ ...committedItem(1), outputPath, userInstruction: note }],
         errors: [{ id: 'img-2', outputPath: '/output/failed.png', error: note }],
       })),
     });
@@ -193,19 +209,51 @@ describe('审核动作循环与最终结果', () => {
     expect(generatedImagePaths('generate_image', result.text)).toEqual([outputPath]);
   });
 
-  it('approve → commit completed：success:true，data 含 status/images（语义出口）', async () => {
+  it('approve returns the committed image bytes and concise status/path text', async () => {
+    const committed = { ...committedItem(1), revisedPrompt: 'Sample optimized prompt' };
     const ops = makeOps({
-      commit: vi.fn(async () => ({ status: 'completed' as const, committed: [committedItem(1)], errors: [] })),
+      commit: vi.fn(async () => commitOutcome({ status: 'completed', committed: [committed], errors: [] })),
     });
-    const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops)) as ToolOutput<unknown>;
+    const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops));
     expect(result.ok).toBe(true);
-    expect((result.data as Record<string, unknown>).status).toBe('completed');
+    expect(result.text).toBe(`图片生成完成：1 张已写入最终路径。\n- [成功] ${JSON.stringify(committed.outputPath)}`);
+    expect(result.images).toEqual([{ base64: PNG.toString('base64'), mediaType: 'image/png' }]);
+    expect(result.data).toMatchObject({ status: 'completed', images: [committed] });
     expect(ops.commit).toHaveBeenCalledOnce();
+  });
+
+  it('returns every committed image in order with its actual MIME type', async () => {
+    const committed = [committedItem(1), { ...committedItem(2), mimeType: 'image/gif' }];
+    const ops = makeOps({
+      commit: vi.fn(async () => {
+        await fs.writeFile(committed[0].outputPath, PNG);
+        await fs.writeFile(committed[1].outputPath, GIF);
+        return { status: 'completed', committed, errors: [] };
+      }),
+    });
+    const result = await new GenerateImageTool().execute({ images: [img(1), img(2)] }, makeContext(ops));
+    expect(result.ok).toBe(true);
+    expect(result.images).toEqual([
+      { base64: PNG.toString('base64'), mediaType: 'image/png' },
+      { base64: GIF.toString('base64'), mediaType: 'image/gif' },
+    ]);
+    expect(generatedImagePaths('generate_image', result.text)).toEqual(committed.map((item) => item.outputPath));
+  });
+
+  it('returns images larger than the read tool limit without truncation', async () => {
+    const bytes = Buffer.concat([PNG, Buffer.alloc(4 * 1024 * 1024)]);
+    const ops = makeOps({
+      commit: vi.fn(async () => commitOutcome({ status: 'completed', committed: [committedItem(1)], errors: [] }, bytes)),
+    });
+    const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops));
+    expect(result.ok).toBe(true);
+    expect(result.images).toHaveLength(1);
+    expect(Buffer.from(result.images![0].base64, 'base64').equals(bytes)).toBe(true);
   });
 
   it('completed 结果回显用户审核干预，防止 AI 把用户改动当问题返工', async () => {
     const ops = makeOps({
-      commit: vi.fn(async () => ({
+      commit: vi.fn(async () => commitOutcome({
         status: 'completed' as const,
         committed: [{ ...committedItem(1), userInstruction: '把背景改成日落' }],
         errors: [],
@@ -213,9 +261,8 @@ describe('审核动作循环与最终结果', () => {
     });
     const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops)) as ToolOutput<unknown>;
     expect(result.ok).toBe(true);
-    // 结果为纯文本：不附图片内容块（已经用户人工审核，AI 无需视觉复检）
-    const text = result.text as string;
-    expect(text).toContain('用户在审核中要求修改：「把背景改成日落」');
+    expect(result.images).toEqual([{ base64: PNG.toString('base64'), mediaType: 'image/png' }]);
+    expect(result.text).toContain('用户在审核中要求修改：「把背景改成日落」');
   });
 
   it('regenerate 动作回到等待循环，最终 approve 只产生一个结果', async () => {
@@ -226,7 +273,7 @@ describe('审核动作循环与最终结果', () => {
     ];
     const ops = makeOps({
       waitForReviewAction: vi.fn(async () => actions.shift()!),
-      commit: vi.fn(async () => ({ status: 'completed' as const, committed: [committedItem(1)], errors: [] })),
+      commit: vi.fn(async () => commitOutcome({ status: 'completed' as const, committed: [committedItem(1)], errors: [] })),
     });
     const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops)) as ToolOutput<unknown>;
     expect(ops.regenerate).toHaveBeenCalledTimes(2);
@@ -254,7 +301,7 @@ describe('审核动作循环与最终结果', () => {
     } as ImageNodeState;
     const ops = makeOps({
       createReviewNode: vi.fn(() => failedNode),
-      commit: vi.fn(async () => ({
+      commit: vi.fn(async () => commitOutcome({
         status: 'failed' as const,
         committed: [],
         errors: [{ id: 'img-failed', outputPath, error: 'fetch failed' }],
@@ -269,31 +316,39 @@ describe('审核动作循环与最终结果', () => {
 
     expect(result.ok).toBe(false);
     expect((result.data as { status: string }).status).toBe('failed');
+    expect(result.images).toBeUndefined();
+    expect(result.text).toContain('fetch failed');
     expect(ops.commit).toHaveBeenCalledOnce();
     expect(ops.waitForReviewAction).not.toHaveBeenCalled();
   });
 
   it('partial：success:false，errors 列表完整、已成功路径回显、不回到 pending', async () => {
     const ops = makeOps({
-      commit: vi.fn(async () => ({
+      commit: vi.fn(async () => commitOutcome({
         status: 'partial' as const,
-        committed: [committedItem(1)],
-        errors: [{ id: 'img-2', outputPath: '/tmp/x.png', error: '目标文件已存在且未允许覆盖' }],
+        committed: [committedItem(1), committedItem(3)],
+        errors: [{ id: 'img-2', outputPath: img(2).outputPath, error: '目标文件已存在且未允许覆盖' }],
       })),
     });
-    const result = await new GenerateImageTool().execute({ images: [img(1), img(2)] }, makeContext(ops)) as ToolOutput<unknown>;
+    const result = await new GenerateImageTool().execute({ images: [img(1), img(2), img(3)] }, makeContext(ops));
     expect(result.ok).toBe(false);
     expect(result.text).toContain('部分');
+    expect(result.text).toContain('目标文件已存在且未允许覆盖');
+    expect(result.images).toEqual([
+      { base64: PNG.toString('base64'), mediaType: 'image/png' },
+      { base64: PNG.toString('base64'), mediaType: 'image/png' },
+    ]);
+    expect(generatedImagePaths('generate_image', result.text)).toEqual([committedItem(1).outputPath, committedItem(3).outputPath]);
     const data = result.data as { status: string; images: unknown[]; errors: unknown[] };
     expect(data.status).toBe('partial');
-    expect(data.images).toHaveLength(1);
+    expect(data.images).toHaveLength(2);
     expect(data.errors).toHaveLength(1);
     expect(ops.waitForReviewAction).toHaveBeenCalledOnce();   // 不回到 pending
   });
 
   it('failed：全部失败 → success:false 且 images 为空', async () => {
     const ops = makeOps({
-      commit: vi.fn(async () => ({
+      commit: vi.fn(async () => commitOutcome({
         status: 'failed' as const,
         committed: [],
         errors: [{ id: 'img-1', outputPath: '/tmp/x.png', error: '候选文件不可读取' }],
@@ -302,6 +357,8 @@ describe('审核动作循环与最终结果', () => {
     const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops)) as ToolOutput<unknown>;
     expect(result.ok).toBe(false);
     expect((result.data as { images: unknown[] }).images).toHaveLength(0);
+    expect(result.images).toBeUndefined();
+    expect(result.text).toContain('候选文件不可读取');
   });
 
   it('cancel：普通业务失败（Agent 继续），节点结算 cancelled、无文件操作', async () => {
@@ -311,9 +368,43 @@ describe('审核动作循环与最终结果', () => {
     const result = await new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops)) as ToolOutput<unknown>;
     expect(result.ok).toBe(false);
     expect((result.data as { status: string }).status).toBe('cancelled');
+    expect(result.images).toBeUndefined();
     expect(result.text).toBe('用户取消了本次图片生成（不需要了），未创建任何正式文件。');
     expect(ops.cancelReview).toHaveBeenCalledWith('node-1', '不需要了');
     expect(ops.commit).not.toHaveBeenCalled();
+  });
+
+  it('reports a file removed after commit while preserving saved paths and other images', async () => {
+    const committed = [committedItem(1), committedItem(2)];
+    const ops = makeOps({
+      commit: vi.fn(async () => {
+        const outcome = await commitOutcome({ status: 'completed', committed, errors: [] });
+        await fs.unlink(committed[0].outputPath);
+        return outcome;
+      }),
+    });
+    const result = await new GenerateImageTool().execute({ images: [img(1), img(2)] }, makeContext(ops));
+    expect(result.ok).toBe(false);
+    expect(result.data).toMatchObject({ status: 'completed', images: committed, errors: [] });
+    expect(result.text).toContain('2 张已写入最终路径');
+    expect(result.text).toContain(`- [图片回传失败] ${JSON.stringify(committed[0].outputPath)}:`);
+    expect(result.text).toContain('ENOENT');
+    expect(generatedImagePaths('generate_image', result.text)).toEqual(committed.map((item) => item.outputPath));
+    expect(result.images).toEqual([{ base64: PNG.toString('base64'), mediaType: 'image/png' }]);
+  });
+
+  it('propagates abort while reading committed images', async () => {
+    const controller = new AbortController();
+    const ops = makeOps({
+      commit: vi.fn(async () => commitOutcome({ status: 'completed', committed: [committedItem(1)], errors: [] })),
+    });
+    vi.spyOn(fs, 'readFile').mockImplementationOnce(async () => {
+      controller.abort(new Error('user stop'));
+      throw controller.signal.reason;
+    });
+    await expect(
+      new GenerateImageTool().execute({ images: [img(1)] }, makeContext(ops, controller.signal)),
+    ).rejects.toThrow('user stop');
   });
 
   it('审核动作返回后 signal 已 abort → 原样上抛，不构建业务结果（防御层）', async () => {
@@ -332,5 +423,6 @@ describe('审核动作循环与最终结果', () => {
 });
 
 afterEach(async () => {
-  await fs.rm(path.join(os.tmpdir(), 'piskie-test-gen'), { recursive: true, force: true }).catch(() => {});
+  vi.restoreAllMocks();
+  await fs.rm(outputDir, { recursive: true, force: true });
 });

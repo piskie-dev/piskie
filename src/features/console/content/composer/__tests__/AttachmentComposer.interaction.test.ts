@@ -22,6 +22,7 @@ vi.mock('../../../../../components/BrowserEnvironmentBindingPicker', () => ({ de
 vi.mock('../../../../../components/shared', () => ({ ModelReasoningControl: () => null }));
 vi.mock('../ModelPicker', () => ({ ModelPicker: () => null }));
 vi.mock('../ContextUsageRing', () => ({ ContextUsageRing: () => null }));
+vi.mock('../WorkspaceBar', () => ({ WorkspaceBar: () => null }));
 vi.mock('../useComposerSettings', () => ({ useComposerSettings: () => ({ modelGroups: [] }) }));
 vi.mock('../../../data/useMcpPrewarm', () => ({ useMcpPrewarm: () => ({ claim: () => undefined, settle: vi.fn() }) }));
 vi.mock('../../McpRuntimeCard', () => ({ McpRuntimeCard: () => null }));
@@ -51,9 +52,10 @@ async function paste(plain = '', invalid = false) {
   await act(async () => input().dispatchEvent(event));
   return event;
 }
-async function addDocument(kind: 'paste' | 'drop') {
-  const file = new File(['Example PDF'], 'example.pdf', { type: 'application/pdf' });
-  const transfer = { files: [file], items: [{ kind: 'file', getAsFile: () => file }], types: ['Files'], getData: () => '' };
+async function addDocument(kind: 'paste' | 'drop', directory = false) {
+  const file = directory ? new File([], 'sample folder.png') : new File(['Example PDF'], 'example.pdf', { type: 'application/pdf' });
+  const transfer = { files: [file], items: [{ kind: 'file', getAsFile: () => file,
+    webkitGetAsEntry: () => ({ isDirectory: directory }) }], types: ['Files'], getData: () => '' };
   if (kind === 'drop') {
     const over = new Event('dragover', { bubbles: true, cancelable: true });
     Object.defineProperty(over, 'dataTransfer', { value: transfer });
@@ -118,7 +120,7 @@ describe.each(['main', 'worker', 'welcome'] as const)('%s attachment submission'
     await act(async () => discovery.resolve([{ kind: 'file', name: 'example.pdf', path: '/sample files/example.pdf', size: 11 }]));
     await vi.waitFor(() => expect(deliver).toHaveBeenCalledOnce());
     expect(deliver.mock.calls[0]![0]).toMatchObject({ text: '', files: [{ name: 'example.pdf', path: '/sample files/example.pdf' }] });
-    expect(deliver.mock.calls[0]![0].files).toEqual([{ name: 'example.pdf', path: '/sample files/example.pdf' }]);
+    expect(deliver.mock.calls[0]![0].files).toStrictEqual([{ name: 'example.pdf', path: '/sample files/example.pdf' }]);
     await vi.waitFor(() => expect(snapshot()).toBeUndefined());
   });
 
@@ -126,10 +128,28 @@ describe.each(['main', 'worker', 'welcome'] as const)('%s attachment submission'
     deliver.mockResolvedValue(false);
     await addDocument('drop'); await prepared();
     expect(container.textContent).toContain('example.pdf');
+    expect(container.querySelector('.lucide-file-text')).not.toBeNull();
     await send();
     expect(snapshot()?.attachments.files[0]?.path).toBe('/sample files/example.pdf');
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="移除文件"], [aria-label="Remove file"], [aria-label="移除"], [aria-label="Remove"]')!.click());
     expect(snapshot()?.attachments.files ?? []).toHaveLength(0);
+  });
+
+  it.each([false, true])('shows a dropped directory icon and sends its marker with image=%s', async (withImage) => {
+    const file = { name: 'sample folder.png', path: '/sample workspace/sample folder.png', kind: 'directory' };
+    getPathForFile.mockReturnValue(file.path);
+    clipboardAttachments.mockResolvedValue([{ ...file, kind: 'file', size: 0 }]);
+    await addDocument('drop', true); await prepared();
+    expect(container.textContent).toContain(file.name);
+    expect(container.querySelector('.lucide-folder-open')).not.toBeNull();
+    expect(container.querySelector('.lucide-file-text')).toBeNull();
+    expect(snapshot()?.attachments.files).toEqual([expect.objectContaining(file)]);
+    if (withImage) { await paste(); await prepared(); }
+    await send();
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledOnce());
+    expect(deliver.mock.calls[0]![0].files).toStrictEqual([file]);
+    if (withImage) expect(deliver.mock.calls[0]![0].images).toHaveLength(1);
+    await vi.waitFor(() => expect(snapshot()).toBeUndefined());
   });
 
   it.each(['click', 'enter'])('submits mixed text and the original image with %s', async (trigger) => {

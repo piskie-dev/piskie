@@ -65,6 +65,8 @@ describe('Runtime instruction initialization', () => {
     await fs.writeFile(path.join(workspace, 'AGENTS.md'), 'Initial project rules.');
     const runtime = createRuntime(role, workspace, false, path.join(root, 'unused-fallback'));
     await runtime.prepare();
+    expect(runtime.getControlState().runConfig.workspace).toBe(workspace);
+    expect(runtime.buildHeader().runConfig.workspace).toBe(workspace);
     const initial = runtime.buildContextSnapshot();
     expect(initial.systemPrompt).toBe('System rules.');
     expect(initial.messages[0]).toMatchObject({ role: 'user', subtype: 'agent_instructions' });
@@ -86,11 +88,13 @@ describe('Runtime instruction initialization', () => {
     expect(restored.buildContextSnapshot().messages[1].content).toBe('Restored task');
   });
 
-  it.each(['runtime', 'default'])('uses the same %s workspace for instructions and tool configuration', async (source) => {
+  it.each([
+    ['director', 'runtime'], ['director', 'default'], ['worker', 'runtime'], ['worker', 'default'],
+  ] as const)('resolves the %s %s workspace for instructions and tools while preserving an omitted run workspace', async (role, source) => {
     const selected = source === 'runtime' ? path.join(root, 'selected-project') : environment.workspace;
     await fs.mkdir(selected, { recursive: true });
     await fs.writeFile(path.join(selected, 'AGENTS.md'), 'Selected workspace rules.');
-    const runtime = createRuntime('worker', undefined, false, source === 'runtime' ? selected : undefined);
+    const runtime = createRuntime(role, undefined, false, source === 'runtime' ? selected : undefined);
     await runtime.prepare();
     expect(runtime.buildContextSnapshot().messages[0].content).toContain('Selected workspace rules.');
     const activation = (runtime as unknown as {
@@ -98,5 +102,7 @@ describe('Runtime instruction initialization', () => {
     }).createToolContext();
     expect(activation.workspace.dir).toBe(selected);
     expect(activation.runConfig.workspace).toBe(selected);
+    expect(runtime.getControlState().runConfig.workspace).toBeUndefined();
+    expect(runtime.buildHeader().runConfig.workspace).toBeUndefined();
   });
 });

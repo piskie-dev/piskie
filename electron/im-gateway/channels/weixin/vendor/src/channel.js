@@ -1,6 +1,5 @@
 import path from "node:path";
 import { normalizeAccountId } from "../../../../core/openclaw-compat/account-id.js";
-import { resolvePreferredOpenClawTmpDir } from "../../../../core/openclaw-compat/infra-runtime.js";
 import { registerWeixinAccountId, loadWeixinAccount, saveWeixinAccount, listWeixinAccountIds, resolveWeixinAccount, triggerWeixinChannelReload, clearStaleAccountsForUserId, DEFAULT_BASE_URL, } from "./auth/accounts.js";
 import { notifyStop, notifyStart } from "./api/api.js";
 import { assertSessionActive } from "./api/session-guard.js";
@@ -22,7 +21,11 @@ function isLocalFilePath(mediaUrl) {
 function isRemoteUrl(mediaUrl) {
     return mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://");
 }
-const MEDIA_OUTBOUND_TEMP_DIR = path.join(resolvePreferredOpenClawTmpDir(), "weixin/media/outbound-temp");
+import { resolveWeixinTempDir } from "./storage/state-dir.js";
+/** PISKIE：出站媒体临时目录位于 <tmpdir>/piskie-im/weixin，惰性解析以确保注入已完成。 */
+function resolveMediaOutboundTempDir() {
+    return path.join(resolveWeixinTempDir(), "media", "outbound-temp");
+}
 /** Resolve any local path scheme to an absolute filesystem path. */
 function resolveLocalPath(mediaUrl) {
     if (mediaUrl.startsWith("file://"))
@@ -210,7 +213,7 @@ export const weixinPlugin = {
                 }
                 else {
                     aLog.debug(`sendMedia: downloading remote mediaUrl=${mediaUrl.slice(0, 80)}...`);
-                    filePath = await downloadRemoteImageToTemp(mediaUrl, MEDIA_OUTBOUND_TEMP_DIR);
+                    filePath = await downloadRemoteImageToTemp(mediaUrl, resolveMediaOutboundTempDir());
                     aLog.debug(`sendMedia: remote image downloaded to ${filePath}`);
                 }
                 const contextToken = getContextToken(account.accountId, ctx.to);
@@ -373,8 +376,7 @@ export const weixinPlugin = {
             catch (err) {
                 aLog.warn(`notifyStart failed during startup (ignored): ${String(err)}`);
             }
-            const logPath = aLog.getLogFilePath();
-            ctx.log?.info?.(`[${account.accountId}] weixin logs: ${logPath}`);
+            ctx.log?.info?.(`[${account.accountId}] weixin logs are forwarded to the Piskie app log`);
             // The gateway injects the channel runtime surface per-call (task-scoped). We require it:
             // it carries reply/routing/session/media/commands helpers used by processOneMessage.
             // Available on hosts >= 2026.2.19 (our peerDependency is >= 2026.3.22).

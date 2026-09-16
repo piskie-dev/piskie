@@ -27,6 +27,7 @@ import { StatusBadge } from '../../chrome/StatusBadge';
 import { statusOf } from '../../chrome/statusOf';
 import { useConsoleActions, type ActionTarget, type MessagePayload } from '../../data/actions';
 import { useTranscript } from '../../data/useTranscript';
+import { useFileChanges } from '../../data/useFileChanges';
 import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
@@ -56,6 +57,7 @@ import {
   type FileReviewTarget,
 } from '../../content/fileReviewTarget';
 import threadStyles from '../../content/thread.module.css';
+import reviewStyles from '../../content/FileChangesReview.module.css';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { activityChips, type ActivityChips } from '../../data/activity';
 
@@ -96,8 +98,12 @@ export const DockPanel = memo<DockPanelProps>(
       ? resolvePresentationText(notice, (key, values) => t(key, values))
       : null;
     /** 文件操作或正文路径进入同一个 ReviewSlot；dock 只把宿主换成 Dialog。 */
-    const [reviewOpen, setReviewOpen] = useState(false);
-    const [reviewTarget, setReviewTarget] = useState<FileReviewTarget | undefined>(undefined);
+    const reviewScope = workerId ?? agentId;
+    const [review, setReview] = useState<{ scope: string; target: FileReviewTarget } | null>(null);
+    const reviewTarget = review?.scope === reviewScope ? review.target : undefined;
+    const reviewOpen = reviewTarget !== undefined;
+    const fileChangesOpen = reviewTarget?.kind === 'collection';
+    const fileChanges = useFileChanges(reviewScope, !workerId);
 
     const transcript = useTranscript(workerId ?? agentId, {
       active,
@@ -154,16 +160,14 @@ export const DockPanel = memo<DockPanelProps>(
     }, [actions, target]);
 
     const openFileChange = useCallback((cellId: string) => {
-      setReviewTarget({ kind: 'cell', cellId });
-      setReviewOpen(true);
-    }, []);
+      setReview({ scope: reviewScope, target: { kind: 'cell', cellId } });
+    }, [reviewScope]);
 
     const openLocalFile = useCallback(async (targetPath: string) => {
       const target_ = await reviewTargetForPath(targetPath, onPreviewImage);
       if (!target_) return;
-      setReviewTarget(target_);
-      setReviewOpen(true);
-    }, [onPreviewImage]);
+      setReview({ scope: reviewScope, target: target_ });
+    }, [onPreviewImage, reviewScope]);
 
     /** 审批门的「查看详情」：callId 即 cell id，送审阅面板看单次改动 */
     const viewDiff = useCallback(() => {
@@ -195,9 +199,11 @@ export const DockPanel = memo<DockPanelProps>(
     });
 
     const closeReview = useCallback(() => {
-      setReviewOpen(false);
-      setReviewTarget(undefined);
+      setReview(null);
     }, []);
+    const toggleFileChanges = useCallback(() => {
+      setReview(fileChangesOpen ? null : { scope: reviewScope, target: { kind: 'collection' } });
+    }, [fileChangesOpen, reviewScope]);
 
     /**
      * cell 呈现与 thread 同一份 `ThreadCell`：dock 节点内部也是横条阅读流，
@@ -264,6 +270,9 @@ export const DockPanel = memo<DockPanelProps>(
               agentId={agentId}
               chips={chips}
               taskChips={taskChips}
+              fileChanges={fileChanges.totals}
+              fileChangesOpen={fileChangesOpen}
+              onToggleFileChanges={toggleFileChanges}
             />
           ) : undefined
         }
@@ -292,7 +301,7 @@ export const DockPanel = memo<DockPanelProps>(
         footer={
           <>
             <PendingEventQueue events={request.pendingEvents} />
-            {tasks.length === 0 && <FileChangeSummary changes={chips} />}
+            {tasks.length === 0 && <FileChangeSummary changes={fileChanges.totals} expanded={fileChangesOpen} onToggle={toggleFileChanges} />}
             {!gate && (
               <ConversationComposer
                 agentId={agentId}
@@ -326,6 +335,10 @@ export const DockPanel = memo<DockPanelProps>(
           key={workerId ?? agentId}
           memoryKey={workerId ?? agentId}
           nodes={transcript.nodes}
+          responses={transcript.responses}
+          workers={agent?.workers}
+          processSettled={request.status === 'waiting' && !request.request && !gate}
+          toolsActive={(request.status === 'running' || request.status === 'thinking') && !gate}
           renderNode={renderNode}
           hasEarlier={transcript.hasEarlier}
           onLoadEarlier={transcript.loadEarlier}
@@ -337,7 +350,14 @@ export const DockPanel = memo<DockPanelProps>(
         />
 
         {/* 统一文件审阅面；工具操作按需订阅流水，本地路径直接消费桌面预览结果。 */}
-        <Dialog open={reviewOpen} onClose={closeReview} title={t('sessionWorkbenchUi.panels.reviewPanel')} width={880}>
+        <Dialog
+          open={reviewOpen}
+          onClose={closeReview}
+          title={t('sessionWorkbenchUi.panels.reviewPanel')}
+          width={880}
+          className={fileChangesOpen ? reviewStyles.dialog : undefined}
+          bodyClassName={fileChangesOpen ? reviewStyles.dialogBody : undefined}
+        >
           {reviewOpen && (
             <ReviewSlot
               agentId={agentId}
