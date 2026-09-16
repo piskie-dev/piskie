@@ -76,10 +76,26 @@ describe('ThreadCell canonical image refs', () => {
     expect(chip.type).toBe('button');
     expect(chip.tabIndex).toBe(0);
     expect(chip.textContent).toBe(files[0].name);
+    expect(chip.querySelector('.lucide-file-text')).not.toBeNull();
     await act(async () => chip.click());
     expect(openPath).toHaveBeenCalledExactlyOnceWith(files[0].path);
     container.querySelector('img')!.click();
     expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image.png', expect.any(Array), 0);
+  });
+
+  it('renders a sent directory with a folder icon and opens its path', async () => {
+    const file = { name: 'sample folder.png', path: '/sample workspace/sample folder.png', kind: 'directory' } as const;
+    const [cell] = projectConversationNodes([{
+      t: 'msg', role: 'user', subtype: 'user_input', id: 'sample-directory', ts: 1, content: 'Sample message',
+      metadata: { userInput: { text: '', files: [file] } },
+    }]);
+    if (!cell) throw new Error('Expected a sample message');
+    await act(async () => root.render(createElement(ThreadCell, { cell })));
+    const chip = container.querySelector<HTMLButtonElement>('button[title="/sample workspace/sample folder.png"]')!;
+    expect(chip.textContent).toBe(file.name);
+    expect(chip.querySelector('.lucide-folder-open')).not.toBeNull();
+    await act(async () => chip.click());
+    expect(openPath).toHaveBeenCalledExactlyOnceWith(file.path);
   });
 
   it('keeps a paired question file visible and opens it with the same file action', async () => {

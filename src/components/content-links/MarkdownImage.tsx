@@ -1,20 +1,16 @@
 import type { ComponentProps } from '@ant-design/x-markdown';
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
+import { useContext, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useImagePreviewUrl } from '../../hooks/useImagePreviewUrl';
 import { resolveLocalPath } from '../../utils/localPath';
-import { renderedImageContext, type ImagePreviewHandler } from '../image-preview/renderedImageContext';
+import { renderedImageContext } from '../image-preview/renderedImageContext';
+import { MarkdownImageContext, type MarkdownImageOptions } from './markdownImageContext';
 import { ContentLink } from './ContentLinks';
 import { targetFromHref } from './scanTargets';
 import styles from './markdownImage.module.css';
 
-export interface MarkdownImageOptions {
-  readonly baseDirectory?: string;
-  readonly onPreviewImage?: ImagePreviewHandler;
-}
-
-const MarkdownImageContext = createContext<MarkdownImageOptions>({});
+export type { MarkdownImageOptions } from './markdownImageContext';
 
 export function MarkdownImageProvider({ options, children }: { options: MarkdownImageOptions; children: ReactNode }) {
   return <MarkdownImageContext.Provider value={options}>{children}</MarkdownImageContext.Provider>;

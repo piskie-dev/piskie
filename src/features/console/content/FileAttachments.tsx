@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, FolderOpen } from 'lucide-react';
 import type { UserFileRef } from '../../../../shared/types/user-input';
 import styles from './FileAttachments.module.css';
 
@@ -14,7 +14,7 @@ export const FileAttachments = memo<{ readonly files: readonly UserFileRef[] }>(
         title={file.path}
         onClick={() => { void window.piskie.desktop.system.openPath(file.path).catch(() => undefined); }}
       >
-        <FileText size={16} aria-hidden />
+        {file.kind === 'directory' ? <FolderOpen size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
         <span className={styles.name}>{file.name}</span>
       </button>
     ))}

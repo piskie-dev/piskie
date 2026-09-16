@@ -1,6 +1,7 @@
 import {
   XMarkdown,
   type ComponentProps,
+  type Tokens,
   type XMarkdownProps,
 } from '@ant-design/x-markdown';
 import {
@@ -13,12 +14,14 @@ import { ContentLink, LinkedText } from './ContentLinks';
 import { MarkdownImage, MarkdownImageProvider, type MarkdownImageOptions } from './MarkdownImage';
 import {
   scanContentTargets,
-  targetFromHref,
+  targetFromLinkHref,
   type ContentTargetKind,
 } from './scanTargets';
 import { markdownSourceBlocks, SOURCE_BLOCK_TAG } from './markdownSourceBlocks';
+import { MermaidBlock } from './MermaidBlock';
 
 const TARGET_TAG = 'piskie-content-target';
+const MERMAID_TAG = 'piskie-mermaid';
 let explicitLinkDepth = 0;
 
 function escapeHtml(value: string): string {
@@ -77,6 +80,21 @@ const linkedMarkdownConfig: NonNullable<XMarkdownProps['config']> = {
   },
 };
 
+/** Marked removes one terminal newline from fenced text; retain it for source copying. */
+function mermaidCode(token: Tokens.Code): { source: string; closed: boolean } {
+  const opening = /^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n|$)/.exec(token.raw);
+  const fence = opening?.[1];
+  if (!opening || !fence) return { source: token.text, closed: false };
+  const body = token.raw.slice(opening[0].length);
+  const closing = new RegExp(`(?:^|\\n) {0,3}${fence[0]}{${fence.length},}[ \\t]*(?:\\n)?$`).exec(body);
+  const inner = closing ? body.slice(0, closing.index + (closing[0].startsWith('\n') ? 1 : 0)) : body;
+  return { source: token.text + (inner.endsWith('\n') ? '\n' : ''), closed: !!closing };
+}
+
+function MarkdownMermaid(props: ComponentProps) {
+  return <MermaidBlock source={childrenToText(props.children) ?? ''} complete={props['data-complete'] === 'true'} />;
+}
+
 type TargetComponentProps = ComponentProps & {
   'data-kind'?: string;
   'data-target'?: string;
@@ -105,7 +123,7 @@ function MarkdownDetectedTarget(props: ComponentProps) {
 
 function MarkdownAnchor(props: ComponentProps) {
   const href = (props as ComponentProps & { href?: string }).href ?? '';
-  const target = targetFromHref(href);
+  const target = targetFromLinkHref(href);
   if (!target) return <>{props.children}</>;
   return (
     <ContentLink kind={target.kind} target={target.value}>
@@ -137,6 +155,7 @@ const linkedMarkdownComponents: NonNullable<XMarkdownProps['components']> = {
   img: MarkdownImage,
   code: MarkdownCode,
   [TARGET_TAG]: MarkdownDetectedTarget,
+  [MERMAID_TAG]: MarkdownMermaid,
 };
 
 export interface SourceBlockProps {
@@ -159,10 +178,21 @@ export function LinkedMarkdown({
   const imageOptions = useMemo(() => ({ baseDirectory, onPreviewImage }), [baseDirectory, onPreviewImage]);
   const startLine = sourceBlocks?.startLine;
   const SourceBlock = sourceBlocks?.component;
-  const config = useMemo(() => startLine === undefined ? linkedMarkdownConfig : {
+  const hasNextChunk = props.streaming?.hasNextChunk === true;
+  const config = useMemo<NonNullable<XMarkdownProps['config']>>(() => ({
     ...linkedMarkdownConfig,
-    ...markdownSourceBlocks(startLine),
-  }, [startLine]);
+    ...(startLine === undefined ? {} : markdownSourceBlocks(startLine)),
+    renderer: {
+      ...linkedMarkdownConfig.renderer,
+      code(token) {
+        if (token.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase() !== 'mermaid') return false;
+        const { source, closed } = mermaidCode(token);
+        // Dispatch the whole block so XMarkdown's ordinary pre/code styles stay on code only.
+        return `<${MERMAID_TAG} data-complete="${!hasNextChunk || closed}">`
+          + escapeHtml(source) + `</${MERMAID_TAG}>\n`;
+      },
+    },
+  }), [hasNextChunk, startLine]);
   const components = useMemo(() => !SourceBlock ? linkedMarkdownComponents : {
     ...linkedMarkdownComponents,
     [SOURCE_BLOCK_TAG]: function MarkdownSourceBlock(props: ComponentProps) {

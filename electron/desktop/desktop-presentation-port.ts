@@ -51,6 +51,7 @@ export interface DesktopPresentationPort {
 
   createFilePreviewUrl(windowId: number, filePath: string, mediaType: string, held?: boolean): string;
   releaseFilePreview(windowId: number, url: string): void;
+  resolveFilePreviewPath(windowId: number, url: string): string | undefined;
 
   chooseSavePath(
     windowId: number,

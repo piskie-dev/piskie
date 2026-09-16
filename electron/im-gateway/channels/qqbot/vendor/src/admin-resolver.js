@@ -18,40 +18,21 @@ function safeName(id) {
 function getAdminMarkerFile(accountId, appId) {
     return path.join(getQQBotDataDir("data"), `admin-${safeName(accountId)}-${safeName(appId)}.json`);
 }
-/** 旧版 admin 文件路径（仅按 accountId 区分，用于迁移兼容） */
-function getLegacyAdminMarkerFile(accountId) {
-    return path.join(getQQBotDataDir("data"), `admin-${accountId}.json`);
-}
 function getUpgradeGreetingTargetFile(accountId, appId) {
     return path.join(getQQBotDataDir("data"), `upgrade-greeting-target-${safeName(accountId)}-${safeName(appId)}.json`);
 }
 // ---- 管理员 openid 持久化 ----
 /**
  * 读取 admin openid（按 accountId + appId 区分）
- * 兼容策略：新路径优先 → fallback 旧路径 → 自动迁移
+ * PISKIE 本地改动：移除旧版 `admin-<accountId>.json` 的回退与自动迁移——Piskie 目录中没有旧文件。
  */
 export function loadAdminOpenId(accountId, appId) {
     try {
-        // 1. 先尝试新版路径
-        const newFile = getAdminMarkerFile(accountId, appId);
-        if (fs.existsSync(newFile)) {
-            const data = JSON.parse(fs.readFileSync(newFile, "utf8"));
+        const file = getAdminMarkerFile(accountId, appId);
+        if (fs.existsSync(file)) {
+            const data = JSON.parse(fs.readFileSync(file, "utf8"));
             if (data.openid)
                 return data.openid;
-        }
-        // 2. fallback 旧版路径（仅按 accountId）
-        const legacyFile = getLegacyAdminMarkerFile(accountId);
-        if (fs.existsSync(legacyFile)) {
-            const data = JSON.parse(fs.readFileSync(legacyFile, "utf8"));
-            if (data.openid) {
-                // 自动迁移：写到新路径，删除旧文件
-                saveAdminOpenId(accountId, appId, data.openid);
-                try {
-                    fs.unlinkSync(legacyFile);
-                }
-                catch { /* ignore */ }
-                return data.openid;
-            }
         }
     }
     catch { /* 文件损坏视为无 */ }

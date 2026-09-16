@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
 import {
   DESKTOP_OPERATIONS,
   DESKTOP_TOPICS,
@@ -12,6 +13,13 @@ import { args, identifier } from '../../capabilities/validation.js';
 import type { DesktopApplication } from './desktop-application.js';
 
 const pathSchema = z.string().trim().min(1).max(16_384);
+const branchNameSchema = z.string().min(1).max(1_024);
+const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+const branchBaseSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('branch'), name: branchNameSchema, commit: commitSchema }).strict(),
+  z.object({ kind: z.literal('unborn'), name: branchNameSchema }).strict(),
+  z.object({ kind: z.literal('detached'), commit: commitSchema }).strict(),
+]);
 
 export function createDesktopController(
   application: DesktopApplication,
@@ -44,6 +52,16 @@ export function createDesktopController(
         name: z.string().min(1).max(16_384), size: z.number().int().nonnegative(),
       }).strict()).max(32), text: z.string().max(256 * 1024) }).strict(),
     ])]), (context, [request]) => application.clipboardAttachments(context.windowId, request, context.signal)),
+    operation(DESKTOP_OPERATIONS.copyImage, args([z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('path'), path: z.string().min(1).max(16_384) }).strict(),
+      z.object({ kind: z.literal('preview'), url: z.string().min(1).max(16_384) }).strict(),
+      z.object({ kind: z.literal('url'), url: z.string().min(1).max(16_384), name: z.string().max(16_384).optional() }).strict(),
+      z.object({
+        kind: z.literal('bytes'),
+        bytes: z.instanceof(ArrayBuffer).refine((value) => value.byteLength <= MAX_IMAGE_BYTES, 'Image exceeds the 32 MiB copy limit'),
+        name: z.string().max(16_384).optional(),
+      }).strict(),
+    ])]), (context, [request]) => application.copyImage(context.windowId, request, context.signal)),
     operation(DESKTOP_OPERATIONS.releasePreview, args([z.string().max(16_384)]), (context, [url]) => (
       application.releasePreview(context.windowId, url)
     )),
@@ -54,6 +72,21 @@ export function createDesktopController(
       DESKTOP_OPERATIONS.selectFiles,
       args([z.object({ type: z.enum(['file', 'folder', 'any']).optional() }).strict().optional()]),
       (context, [input]) => application.selectFiles(context.windowId, input?.type),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.workspaceInfo,
+      args([z.string().min(1).max(16_384).optional()]),
+      (context, [workspace]) => application.workspaceInfo(workspace, context.signal),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.switchWorkspaceBranch,
+      args([z.string().min(1).max(16_384), z.string().min(1).max(1_024)]),
+      (context, [workspace, branch]) => application.switchWorkspaceBranch(workspace, branch, context.signal),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.createWorkspaceBranch,
+      args([z.string().min(1).max(16_384), branchNameSchema, branchBaseSchema]),
+      (context, [workspace, branch, base]) => application.createWorkspaceBranch(workspace, branch, base, context.signal),
     ),
     operation(DESKTOP_OPERATIONS.pickBackground, args([]), (context) => (
       application.pickBackground(context.windowId)

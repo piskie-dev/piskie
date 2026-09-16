@@ -4,14 +4,11 @@ import { withFileLock } from "../../../../../core/openclaw-compat/infra-runtime.
 import { resolveStateDir } from "../storage/state-dir.js";
 import { logger } from "../util/logger.js";
 /**
- * Resolve the framework credentials directory (mirrors core resolveOAuthDir).
- * Path: $OPENCLAW_OAUTH_DIR || $OPENCLAW_STATE_DIR/credentials || ~/.openclaw/credentials
+ * PISKIE 本地改动：allowFrom 授权文件与文件锁放在 Piskie 微信状态根下的 `authorization/`，
+ * 不再读取 `OPENCLAW_OAUTH_DIR` 或 OpenClaw 的 `credentials/` 目录。
  */
-function resolveCredentialsDir() {
-    const override = process.env.OPENCLAW_OAUTH_DIR?.trim();
-    if (override)
-        return override;
-    return path.join(resolveStateDir(), "credentials");
+function resolveAuthorizationDir() {
+    return path.join(resolveStateDir(), "authorization");
 }
 /**
  * Sanitize a channel/account key for safe use in filenames (mirrors core safeChannelKey).
@@ -26,14 +23,13 @@ function safeKey(raw) {
     return safe;
 }
 /**
- * Resolve the framework allowFrom file path for a given account.
- * Mirrors: `resolveAllowFromPath(channel, env, accountId)` from core.
- * Path: `<credDir>/openclaw-weixin-<accountId>-allowFrom.json`
+ * Resolve the allowFrom file path for a given account.
+ * Path: `<weixinStateDir>/authorization/<accountId>-allowFrom.json`
+ * (目录本身已经是微信专属，文件名不再带 `openclaw-weixin-` 前缀。)
  */
 export function resolveFrameworkAllowFromPath(accountId) {
-    const base = safeKey("openclaw-weixin");
     const safeAccount = safeKey(accountId);
-    return path.join(resolveCredentialsDir(), `${base}-${safeAccount}-allowFrom.json`);
+    return path.join(resolveAuthorizationDir(), `${safeAccount}-allowFrom.json`);
 }
 /**
  * Read the framework allowFrom list for an account (user IDs authorized via pairing).

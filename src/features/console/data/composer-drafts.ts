@@ -419,9 +419,10 @@ export function captureComposerImages(
       const paths = new Set<string>();
       const importedFiles: AttachmentFile[] = [];
       for (const descriptor of descriptors) {
-        if (descriptor.kind !== 'file' || paths.has(descriptor.path)) continue;
+        if (descriptor.kind === 'image' || paths.has(descriptor.path)) continue;
         paths.add(descriptor.path);
-        importedFiles.push({ id: attachmentId(), name: descriptor.name, path: descriptor.path });
+        importedFiles.push({ id: attachmentId(), name: descriptor.name, path: descriptor.path,
+          ...(descriptor.kind === 'directory' && { kind: 'directory' as const }) });
       }
       return { images, files: importedFiles };
     })()]);
@@ -533,7 +534,7 @@ export async function withAttachmentSubmission<T>(
     controller.signal.throwIfAborted();
     if (selected.length === 0) {
       delivering = true;
-      return await submit(undefined, selectedFiles.map(({ name, path }) => ({ name, path })));
+      return await submit(undefined, selectedFiles.map(({ name, path, kind }) => ({ name, path, ...(kind && { kind }) })));
     }
     const operation = sendTail.then(async () => {
       check();
@@ -546,7 +547,7 @@ export async function withAttachmentSubmission<T>(
         check();
         controller.signal.throwIfAborted();
         delivering = true;
-        return await submit(payloads, selectedFiles.map(({ name, path }) => ({ name, path })));
+        return await submit(payloads, selectedFiles.map(({ name, path, kind }) => ({ name, path, ...(kind && { kind }) })));
       } finally { payloads = undefined; }
     });
     sendTail = operation.then(() => undefined, () => undefined);
@@ -572,7 +573,7 @@ export async function submitComposerDraft(
   return ok;
 }
 
-export type AttachmentPreviewOpener = (url: string, contextUrls?: readonly string[], index?: number, release?: () => void) => void;
+export type AttachmentPreviewOpener = (url: string, contextUrls?: readonly string[], index?: number, release?: () => void, name?: string) => void;
 const imagePreviews = new Set<() => void>();
 
 export function openAttachmentImage(image: ReadyAttachmentImage, show: AttachmentPreviewOpener): void {
@@ -588,7 +589,7 @@ export function openAttachmentImage(image: ReadyAttachmentImage, show: Attachmen
     consumers.delete(consumer);
   };
   imagePreviews.add(release);
-  try { show(url, undefined, undefined, release); } catch (error) { release(); throw error; }
+  try { show(url, undefined, undefined, release, image.name); } catch (error) { release(); throw error; }
 }
 
 export type ThumbnailResult = { readonly kind: 'ready'; readonly blob: Blob; readonly url: string }

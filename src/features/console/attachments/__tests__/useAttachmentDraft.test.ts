@@ -87,6 +87,28 @@ describe('paste event capture', () => {
     expect(send).toHaveBeenCalledWith([{ data: Buffer.from(pngBytes()).toString('base64'), media_type: 'image/png' }], []);
   });
 
+  describe.each(['paste', 'drop'] as const)('%s image capture', (kind) => {
+    it.each([1, 2])('captures %i images once when files and items expose separate File objects', async (count) => {
+      const files = Array.from({ length: count }, () => new File([pngBytes()], 'sample.png', {
+        type: 'image/png', lastModified: 1_700_000_000_000,
+      }));
+      const event = kind === 'paste' ? paste(files) : drop(files);
+      const transfer = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+      Object.assign(transfer, { files, items: files.map((file) => ({
+        kind: 'file',
+        getAsFile: () => new File([file], file.name, { type: file.type, lastModified: file.lastModified }),
+      })) });
+      act(() => kind === 'paste' ? draft().handlePaste(event as React.ClipboardEvent) : draft().handleDrop(event as React.DragEvent));
+      await settle();
+      expect(draft().images.map((image) => image.status)).toEqual(Array(count).fill('ready'));
+      const send = vi.fn().mockResolvedValue(true);
+      await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+      expect(send).toHaveBeenCalledExactlyOnceWith(Array.from({ length: count }, () => ({
+        data: Buffer.from(pngBytes()).toString('base64'), media_type: 'image/png',
+      })), []);
+    });
+  });
+
   it('inserts mixed ordinary text once and does not rediscover a direct image', async () => {
     const event = paste([imageFile()], 'Example text', 'file:///workspace/sample.png');
     act(() => draft().handlePaste(event));
@@ -197,6 +219,114 @@ describe('paste event capture', () => {
       await act(async () => { expect(await draft().withImages(send)).toBe(true); });
       expect(send).toHaveBeenCalledWith(undefined, [expect.objectContaining({ path })]);
     });
+  });
+
+  it.each(['sample folder', 'sample folder.png'])('imports dropped directory %s from distinct files/items objects without reading it as an image', async (name) => {
+    const directory = new File([], name);
+    const itemFile = new File([], name);
+    const path = `/sample workspace/${name}`;
+    getPathForFile.mockReturnValue(path);
+    clipboardAttachments.mockResolvedValue([{ kind: 'file', name: directory.name, path, size: 0 }]);
+    const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+    const event = drop([directory]);
+    const entry = vi.fn(() => ({ isDirectory: true }));
+    Object.assign(event.dataTransfer, { items: [{ kind: 'file', getAsFile: () => itemFile, webkitGetAsEntry: entry }] });
+
+    act(() => draft().handleDrop(event));
+    expect(entry).toHaveBeenCalledOnce();
+    expect(clipboardAttachments).toHaveBeenCalledExactlyOnceWith({ kind: 'paths', paths: [path] });
+    await settle();
+    expect(draft().files).toEqual([expect.objectContaining({ name: directory.name, path, kind: 'directory' })]);
+    expect(draft().images).toHaveLength(0);
+    expect(read).not.toHaveBeenCalled();
+
+    const send = vi.fn().mockResolvedValue(true);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    expect(send).toHaveBeenCalledWith(undefined, [{ name: directory.name, path, kind: 'directory' }]);
+  });
+
+  it('keeps directory markers when a mixed drop resolves and deduplicates symlink paths', async () => {
+    const sources = ['/sample alias/folder', '/sample real/folder', '/sample real/notes.txt'];
+    const files = [new File([], 'folder'), new File([], 'folder'), new File(['Sample'], 'notes.txt')];
+    getPathForFile.mockImplementation((file: File) => sources[files.indexOf(file)] ?? '');
+    const directory = { kind: 'file', name: 'folder', path: '/sample real/folder', size: 0 };
+    const document = { kind: 'file', name: 'notes.txt', path: sources[2], size: 6 };
+    clipboardAttachments.mockResolvedValueOnce([directory, document]).mockResolvedValueOnce([directory]);
+    const event = drop(files);
+    Object.assign(event.dataTransfer, { items: files.map((file, index) => ({
+      kind: 'file', getAsFile: () => file, webkitGetAsEntry: () => ({ isDirectory: index < 2 }),
+    })) });
+    act(() => draft().handleDrop(event));
+    await settle();
+    expect(clipboardAttachments.mock.calls).toEqual([
+      [{ kind: 'paths', paths: sources }],
+      [{ kind: 'paths', paths: sources.slice(0, 2) }],
+    ]);
+    const send = vi.fn().mockResolvedValue(true);
+    await act(async () => { expect(await draft().withImages(send)).toBe(true); });
+    expect(send).toHaveBeenCalledWith(undefined, [
+      { name: 'folder', path: '/sample real/folder', kind: 'directory' },
+      { name: 'notes.txt', path: sources[2] },
+    ]);
+  });
+
+  it('preserves the complete native identity when a known directory is mixed with an unresolved file', async () => {
+    const directory = new File([], 'sample folder');
+    const document = new File(['Sample'], 'notes.txt');
+    const source = '/sample alias/sample folder';
+    getPathForFile.mockImplementation((file: File) => file === directory ? source : '');
+    const resolvedDirectory = { kind: 'file', name: directory.name, path: '/sample real/sample folder', size: 0 };
+    clipboardAttachments.mockResolvedValueOnce([
+      resolvedDirectory, { kind: 'file', name: document.name, path: '/sample real/notes.txt', size: document.size },
+    ]).mockResolvedValueOnce([resolvedDirectory]);
+    const event = drop([directory, document]);
+    Object.assign(event.dataTransfer, { items: [{ kind: 'file', getAsFile: () => directory, webkitGetAsEntry: () => ({ isDirectory: true }) }] });
+    act(() => draft().handleDrop(event));
+    await settle();
+    expect(clipboardAttachments.mock.calls).toEqual([
+      [{ kind: 'native', files: [directory, document].map(({ name, size }) => ({ name, size })), text: '' }],
+      [{ kind: 'paths', paths: [source] }],
+    ]);
+    expect(draft().files).toEqual([
+      expect.objectContaining({ name: directory.name, path: resolvedDirectory.path, kind: 'directory' }),
+      expect.objectContaining({ name: document.name, path: '/sample real/notes.txt' }),
+    ]);
+  });
+
+  it('keeps an oversized mixed batch intact for desktop validation and imports nothing on rejection', async () => {
+    const files = Array.from({ length: 33 }, (_, index) => new File([], `sample-${index}`));
+    const paths = files.map((file) => `/sample workspace/${file.name}`);
+    getPathForFile.mockImplementation((file: File) => `/sample workspace/${file.name}`);
+    clipboardAttachments.mockRejectedValueOnce(new Error('Paste between 1 and 32 supported files.'));
+    const event = drop(files);
+    Object.assign(event.dataTransfer, { items: files.map((file, index) => ({
+      kind: 'file', getAsFile: () => file, webkitGetAsEntry: () => ({ isDirectory: index < 16 }),
+    })) });
+    act(() => draft().handleDrop(event));
+    await settle();
+    expect(clipboardAttachments).toHaveBeenCalledExactlyOnceWith({ kind: 'paths', paths });
+    expect(draft().files).toHaveLength(0);
+    expect(draft().images[0]?.status).toBe('error');
+  });
+
+  it('releases batch previews and imports nothing when resolving the directory group fails', async () => {
+    const directory = new File([], 'sample folder');
+    const path = '/sample workspace/sample folder';
+    getPathForFile.mockReturnValue(path);
+    clipboardAttachments.mockResolvedValueOnce([
+      { kind: 'file', name: directory.name, path, size: 0 },
+      { kind: 'image', name: 'sample.png', path: '/sample workspace/sample.png', size: 1, previewUrl: 'piskie-attachment://preview/sample' },
+    ]).mockRejectedValueOnce(new Error('Sample directory unavailable'));
+    const event = drop([directory], '', 'file:///sample%20workspace/sample.png');
+    Object.assign(event.dataTransfer, { items: [{ kind: 'file', getAsFile: () => directory, webkitGetAsEntry: () => ({ isDirectory: true }) }] });
+    act(() => draft().handleDrop(event));
+    await settle();
+    expect(draft().files).toHaveLength(0);
+    expect(draft().images[0]?.status).toBe('error');
+    expect(releasePreview).toHaveBeenCalledExactlyOnceWith('piskie-attachment://preview/sample');
+    const send = vi.fn();
+    await act(async () => { expect(await draft().withImages(send)).toBe(false); });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it.each([

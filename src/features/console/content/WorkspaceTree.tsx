@@ -15,7 +15,6 @@
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronRight, FolderOpen, History, Pause, Pencil, Plus, Square, Trash2 } from 'lucide-react';
-import { hasUnreadMessages } from '@shared/agent-run-messages';
 
 import { useUIStore } from '../../../store/uiStore';
 
@@ -80,7 +79,7 @@ const Row = memo<{
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [selected, reveal]);
   const live = row.live;
-  const unread = hasUnreadMessages(row.messages);
+  const unread = row.unread;
   const activity = live
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
     : undefined;

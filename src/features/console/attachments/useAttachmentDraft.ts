@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { messageText, presentationFromError, type PresentationText } from '../../../i18n/presentationText';
-import type { ClipboardAttachmentRequest } from '../../../../shared/electron-contracts/desktop';
+import type { ClipboardAttachmentDescriptor, ClipboardAttachmentRequest } from '../../../../shared/electron-contracts/desktop';
 import type { UserFileRef } from '../../../../shared/types/user-input';
 import {
   attachmentId, captureComposerImages, useComposerAttachments, useComposerDraftStore,
@@ -15,11 +15,42 @@ const NATIVE_FILE_TYPES = new Set(['public.file-url', 'NSFilenamesPboardType', '
 
 function transferFiles(transfer: DataTransfer): File[] {
   const files = transfer.files ? Array.from(transfer.files) : [];
+  // files and items expose the same files, potentially through different File objects.
+  if (files.length > 0) return files;
   for (const item of Array.from(transfer.items ?? [])) {
     const file = item.kind === 'file' ? item.getAsFile() : null;
-    if (file && !files.includes(file)) files.push(file);
+    if (file) files.push(file);
   }
   return files;
+}
+
+async function discoverAttachments(
+  request: ClipboardAttachmentRequest,
+  directoryPaths: readonly string[],
+): Promise<ClipboardAttachmentDescriptor[]> {
+  const { system, files } = window.piskie.desktop;
+  // Keep the complete request so the desktop still validates the whole batch and its limit.
+  const descriptors = await system.clipboardAttachments(request);
+  if (directoryPaths.length === 0) return descriptors;
+  const directoryKeys = new Set(directoryPaths.map((path) => attachmentPathKey(path, system.platform)));
+  if (request.kind === 'paths' && request.paths.every((path) => directoryKeys.has(attachmentPathKey(path, system.platform)))) {
+    return descriptors.map((item) => item.kind === 'file' ? { ...item, kind: 'directory' } : item);
+  }
+  try {
+    // Resolve the known directory group separately; realpath and deduplication may change its paths and count.
+    const directories = await system.clipboardAttachments({ kind: 'paths', paths: directoryPaths });
+    const releases = await Promise.allSettled(directories.map((item) => item.kind === 'image'
+      ? files.releasePreview(item.previewUrl) : undefined));
+    const failed = releases.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    const paths = new Set(directories.filter((item) => item.kind === 'file').map((item) => item.path));
+    return descriptors.map((item) => item.kind === 'file' && paths.has(item.path)
+      ? { ...item, kind: 'directory' } : item);
+  } catch (error) {
+    await Promise.allSettled(descriptors.map((item) => item.kind === 'image'
+      ? files.releasePreview(item.previewUrl) : undefined));
+    throw error;
+  }
 }
 
 function sourceName(source: string): string {
@@ -68,9 +99,21 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
     const files = transferFiles(transfer);
     const plain = transfer.getData('text/plain');
     const plainIsSource = plainTextMayReferenceImage(plain);
-    const imageFiles = files.filter((file) => supportedImageType(file.name, file.type));
     const filePaths = new Map(files.map((file) => [file, window.piskie.desktop.files.getPathForFile(file)]));
-    const unresolvedFiles = files.filter((file) => !supportedImageType(file.name, file.type) && !filePaths.get(file));
+    const pathKey = (path: string) => attachmentPathKey(path, window.piskie.desktop.system.platform);
+    const directoryFiles = new Set<File>();
+    const directorySources = new Map<string, string>();
+    for (const item of Array.from(transfer.items ?? [])) {
+      if (item.kind !== 'file' || !item.webkitGetAsEntry?.()?.isDirectory) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      directoryFiles.add(file);
+      const path = filePaths.get(file) ?? window.piskie.desktop.files.getPathForFile(file);
+      if (path) directorySources.set(pathKey(path), path);
+    }
+    const imageFiles = files.filter((file) => !directoryFiles.has(file)
+      && !directorySources.has(pathKey(filePaths.get(file) ?? '')) && supportedImageType(file.name, file.type));
+    const unresolvedFiles = files.filter((file) => !imageFiles.includes(file) && !filePaths.get(file));
     const native = unresolvedFiles.length > 0 || (files.length === 0
       && Array.from(transfer.types ?? []).some((type) => NATIVE_FILE_TYPES.has(type)));
     const candidates = [
@@ -89,7 +132,7 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
     }));
     const sourcePaths = [...paths.entries()].flatMap(([key, source]) => {
       const name = sourceName(source);
-      return imagePathKeys.has(key) || (supportedImageType(name) && imageFiles.some((file) => file.name === name))
+      return !directorySources.has(key) && (imagePathKeys.has(key) || (supportedImageType(name) && imageFiles.some((file) => file.name === name)))
         ? [] : [source];
     });
     const request: ClipboardAttachmentRequest | undefined = native
@@ -108,7 +151,7 @@ export function useAttachmentDraft(key?: string, onTextChange?: (value: string) 
       queueMicrotask(() => { if (input.isConnected) input.setSelectionRange(start + plain.length, start + plain.length); });
     }
     captureComposerImages(draftKey, imageFiles,
-      request ? () => window.piskie.desktop.system.clipboardAttachments(request) : undefined);
+      request ? () => discoverAttachments(request, [...directorySources.values()]) : undefined);
   }, [draftKey, onTextChange]);
 
   const handlePaste = useCallback((event: React.ClipboardEvent, insertText = onTextChange) => {

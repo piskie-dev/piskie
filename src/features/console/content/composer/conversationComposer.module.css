@@ -74,6 +74,10 @@
   }
 }
 
+.workspaceBar {
+  margin: 8px 9px 0;
+}
+
 /* ── 附件（有才出现，贴容器顶部） ── */
 
 .attachments {

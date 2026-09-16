@@ -1,10 +1,6 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'weixin-qr-test-'));
-process.env.OPENCLAW_STATE_DIR = stateDir;
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   cancelWeixinLogin,
@@ -13,6 +9,13 @@ import {
   waitForWeixinLogin,
 } from '../vendor/src/auth/login-qr.js';
 import { weixinPlugin } from '../vendor/src/channel.js';
+import { createChannelStorageFixture } from '@electron/testing/im-channel-storage.fixture.js';
+
+// QR 登录读写的账号文件全部位于 Piskie 专属微信根（夹具注入），与 ~/.openclaw 无关
+const fixture = createChannelStorageFixture('weixin-qr-');
+fixture.bindAll();
+const stateDir = fixture.storage.weixinStateDir;
+afterAll(() => fixture.cleanup());
 
 function response(body: unknown, status = 200): Response {
   return {
@@ -24,7 +27,7 @@ function response(body: unknown, status = 200): Response {
 }
 
 function saveAccount(accountId: string, token: string): void {
-  const dir = path.join(stateDir, 'openclaw-weixin', 'accounts');
+  const dir = path.join(stateDir, 'accounts');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${accountId}.json`), JSON.stringify({ token }), 'utf8');
 }

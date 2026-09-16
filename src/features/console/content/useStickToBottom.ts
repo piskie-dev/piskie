@@ -9,7 +9,7 @@
  * "这次是不是程序触发的滚动"补丁。
  */
 
-import { useCallback, useEffect, useRef, useState, type RefObject, type UIEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type UIEvent } from 'react';
 
 /** 距底部 40px 内仍算"在底部" */
 const STICK_THRESHOLD = 40;
@@ -18,6 +18,8 @@ export interface StickToBottom {
   readonly onScroll: (event: UIEvent<HTMLElement>) => void;
   /** 强制贴底（发送消息后等场景） */
   readonly scrollToBottom: () => void;
+  /** Keep a clicked disclosure header in view across its height change. */
+  readonly preserveAnchor: (element: HTMLElement) => void;
   /**
    * 当前是否在底部附近。**只在跨越阈值时触发重渲染**（不是每次滚动事件），
    * 供"上翻时才出现的回到底部按钮"这类上下文 UI 用。
@@ -46,6 +48,25 @@ export function useStickToBottom(
   const initialStick = options?.initialStick ?? true;
   const stickRef = useRef(initialStick);
   const [atBottom, setAtBottom] = useState(initialStick);
+  const pendingAnchor = useRef<{ element: HTMLElement; top: number } | null>(null);
+
+  const preserveAnchor = useCallback((element: HTMLElement) => {
+    pendingAnchor.current = { element, top: element.getBoundingClientRect().top };
+    stickRef.current = false;
+  }, []);
+
+  useLayoutEffect(() => {
+    const anchor = pendingAnchor.current;
+    const el = scrollRef.current;
+    if (!anchor || !el) return;
+    pendingAnchor.current = null;
+    el.scrollTop += anchor.element.getBoundingClientRect().top - anchor.top;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD;
+    stickRef.current = near;
+    setAtBottom(near);
+    // Content dependencies include disclosure changes supplied by the caller.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRef, ...deps]);
 
   const onScroll = useCallback((event: UIEvent<HTMLElement>) => {
     const el = event.currentTarget;
@@ -83,5 +104,5 @@ export function useStickToBottom(
     return () => observer.disconnect();
   }, [scrollRef, contentRef]);
 
-  return { onScroll, scrollToBottom, atBottom };
+  return { onScroll, scrollToBottom, preserveAnchor, atBottom };
 }

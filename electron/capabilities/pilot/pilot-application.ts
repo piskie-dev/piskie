@@ -27,6 +27,7 @@ import type { ScreenStreamRequest } from '../../../shared/types/stream.js';
 import type { AgentTarget } from '../../../shared/types/agent-control.js';
 import type { ConfigPatchOperation } from '../../../shared/types/index.js';
 import { PublicOperationError } from '../public-errors.js';
+import { expandHomePath } from '../../utils/expand-home-path.js';
 export class PilotApplication {
   constructor(
     private readonly dependencies: {
@@ -209,7 +210,8 @@ export class PilotApplication {
   }
 
   async openLocalHtmlInEmbeddedBrowser(windowId: number, target: AgentTarget, targetPath: string): Promise<void> {
-    if (!path.isAbsolute(targetPath)) {
+    const expandedPath = expandHomePath(targetPath);
+    if (!path.isAbsolute(expandedPath)) {
       throw new PublicOperationError('invalid-input', 'An absolute path is required');
     }
 
@@ -218,7 +220,7 @@ export class PilotApplication {
     let resolved: string;
     let stats: fs.Stats;
     try {
-      resolved = await fs.promises.realpath(targetPath);
+      resolved = await fs.promises.realpath(expandedPath);
       stats = await fs.promises.stat(resolved);
     } catch {
       throw new PublicOperationError('not-found', 'The requested HTML file does not exist');

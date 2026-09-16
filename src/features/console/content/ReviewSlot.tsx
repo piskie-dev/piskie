@@ -15,6 +15,7 @@ import { fileChangeOf, readOpOf } from '../data/review';
 import { useTranscript } from '../data/useTranscript';
 import type { FileReviewTarget } from './fileReviewTarget';
 import { ReviewPanel } from './ReviewPanel';
+import { FileChangesReview } from './FileChangesReview';
 
 export interface ReviewSlotProps {
   readonly agentId: string;
@@ -41,6 +42,10 @@ export const ReviewSlot = memo<ReviewSlotProps>(({ agentId, workerId, target, on
   const preview = target?.kind === 'path'
     ? { path: target.path, descriptor: target.preview }
     : null;
+
+  if (target?.kind === 'collection') {
+    return <FileChangesReview key={workerId ?? agentId} agentId={workerId ?? agentId} includeWorkers={!workerId} />;
+  }
 
   return (
     <ReviewPanel

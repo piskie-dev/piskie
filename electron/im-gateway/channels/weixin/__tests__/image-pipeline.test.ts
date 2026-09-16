@@ -1,10 +1,16 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { processOneMessage } from '../vendor/src/messaging/process-message.js';
 import { OpenClawRuntimeHost } from '../../../core/openclaw-runtime-host.js';
+import { createChannelStorageFixture } from '@electron/testing/im-channel-storage.fixture.js';
 import type { ConnectorContext, ReplyDispatcher, InboundMessage } from '../../../core/channel-connector.js';
+
+// processOneMessage 读取账号文件 / 出站临时目录，都走夹具注入的 Piskie 专属根
+const storageFixture = createChannelStorageFixture('weixin-image-pipeline-');
+storageFixture.bindAll();
+afterAll(() => storageFixture.cleanup());
 
 vi.mock('../vendor/src/auth/pairing.js', () => ({ readFrameworkAllowFromList: () => ['sender-1'], registerUserInFrameworkStore: vi.fn() }));
 vi.mock('../vendor/src/messaging/debug-mode.js', () => ({ isDebugMode: () => false }));

@@ -1,18 +1,11 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { resolvePreferredOpenClawTmpDir } from "../../../../../core/openclaw-compat/infra-runtime.js";
 /**
- * Plugin logger — writes JSON lines to the main openclaw log file:
- *   <tmpDir>/openclaw-YYYY-MM-DD.log
- * Same file and format used by all other channels.
+ * PISKIE 本地改动：插件日志转发到 Piskie 应用日志（<userData>/logs/app），
+ * 不再向 OpenClaw 临时目录写 `openclaw-YYYY-MM-DD.log`，也不读取 `OPENCLAW_LOG_LEVEL`。
+ *
+ * 保留上游 logger 的调用面：info/debug/warn/error/withAccount/close 与 setLogLevel。
  */
-const MAIN_LOG_DIR = resolvePreferredOpenClawTmpDir();
+import { createVendorLogSink } from "../../../../../core/vendor-log.js";
 const SUBSYSTEM = "gateway/channels/openclaw-weixin";
-const RUNTIME = "node";
-const RUNTIME_VERSION = process.versions.node;
-const HOSTNAME = os.hostname() || "unknown";
-const PARENT_NAMES = ["openclaw"];
 /** tslog-compatible level IDs (higher = more severe). */
 const LEVEL_IDS = {
     TRACE: 1,
@@ -23,13 +16,7 @@ const LEVEL_IDS = {
     FATAL: 6,
 };
 const DEFAULT_LOG_LEVEL = "INFO";
-function resolveMinLevel() {
-    const env = process.env.OPENCLAW_LOG_LEVEL?.toUpperCase();
-    if (env && env in LEVEL_IDS)
-        return LEVEL_IDS[env];
-    return LEVEL_IDS[DEFAULT_LOG_LEVEL];
-}
-let minLevelId = resolveMinLevel();
+let minLevelId = LEVEL_IDS[DEFAULT_LOG_LEVEL];
 /** Dynamically change the minimum log level at runtime. */
 export function setLogLevel(level) {
     const upper = level.toUpperCase();
@@ -38,22 +25,20 @@ export function setLogLevel(level) {
     }
     minLevelId = LEVEL_IDS[upper];
 }
-/** Shift a Date into local time so toISOString() renders local clock digits. */
-function toLocalISO(now) {
-    const offsetMs = -now.getTimezoneOffset() * 60_000;
-    const sign = offsetMs >= 0 ? "+" : "-";
-    const abs = Math.abs(now.getTimezoneOffset());
-    const offStr = `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-    return new Date(now.getTime() + offsetMs).toISOString().replace("Z", offStr);
+const APP_LOG_LEVELS = {
+    TRACE: "debug",
+    DEBUG: "debug",
+    INFO: "info",
+    WARN: "warn",
+    ERROR: "error",
+    FATAL: "error",
+};
+let sink;
+function getSink() {
+    if (!sink)
+        sink = createVendorLogSink("openclaw-weixin");
+    return sink;
 }
-function localDateKey(now) {
-    return toLocalISO(now).slice(0, 10);
-}
-function resolveMainLogPath() {
-    const dateKey = localDateKey(new Date());
-    return path.join(MAIN_LOG_DIR, `openclaw-${dateKey}.log`);
-}
-let logDirEnsured = false;
 function buildLoggerName(accountId) {
     return accountId ? `${SUBSYSTEM}/${accountId}` : SUBSYSTEM;
 }
@@ -61,30 +46,12 @@ function writeLog(level, message, accountId) {
     const levelId = LEVEL_IDS[level] ?? LEVEL_IDS.INFO;
     if (levelId < minLevelId)
         return;
-    const now = new Date();
     const loggerName = buildLoggerName(accountId);
     const prefixedMessage = accountId ? `[${accountId}] ${message}` : message;
-    const entry = JSON.stringify({
-        "0": loggerName,
-        "1": prefixedMessage,
-        _meta: {
-            runtime: RUNTIME,
-            runtimeVersion: RUNTIME_VERSION,
-            hostname: HOSTNAME,
-            name: loggerName,
-            parentNames: PARENT_NAMES,
-            date: now.toISOString(),
-            logLevelId: LEVEL_IDS[level] ?? LEVEL_IDS.INFO,
-            logLevelName: level,
-        },
-        time: toLocalISO(now),
-    });
     try {
-        if (!logDirEnsured) {
-            fs.mkdirSync(MAIN_LOG_DIR, { recursive: true });
-            logDirEnsured = true;
-        }
-        fs.appendFileSync(resolveMainLogPath(), `${entry}\n`, "utf-8");
+        getSink()(APP_LOG_LEVELS[level] ?? "info", prefixedMessage, accountId
+            ? { logger: loggerName, accountId }
+            : { logger: loggerName });
     }
     catch {
         // Best-effort; never block on logging failures.
@@ -108,11 +75,8 @@ function createLogger(accountId) {
         withAccount(id) {
             return createLogger(id);
         },
-        getLogFilePath() {
-            return resolveMainLogPath();
-        },
         close() {
-            // No-op: appendFileSync has no persistent handle to close.
+            // No-op: the Piskie app log owns the sink lifecycle.
         },
     };
 }

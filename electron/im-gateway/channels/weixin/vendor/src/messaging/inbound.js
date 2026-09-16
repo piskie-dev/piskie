@@ -20,7 +20,7 @@ function contextTokenKey(accountId, userId) {
 // Disk persistence helpers
 // ---------------------------------------------------------------------------
 function resolveContextTokenFilePath(accountId) {
-    return path.join(resolveStateDir(), "openclaw-weixin", "accounts", `${accountId}.context-tokens.json`);
+    return path.join(resolveStateDir(), "accounts", `${accountId}.context-tokens.json`);
 }
 /** Persist all context tokens for a given account to disk. */
 function persistContextTokens(accountId) {

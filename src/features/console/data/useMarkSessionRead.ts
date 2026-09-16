@@ -10,16 +10,18 @@ export function useMarkSessionRead(agentId: string | undefined): void {
   const { agentRuns } = useRendererRuntime();
   const messages = useAgentRunList((state) => agentId
     ? state.runs.find((run) => run.agentId === agentId)?.messages : undefined);
+  const unreadActionIds = useAgentRunList((state) => agentId
+    ? state.attentionByAgentId[agentId]?.unreadActionIds : undefined);
   const pending = useRef(new Set<string>());
   useEffect(() => {
-    if (!agentId || !messages?.latestMessage) return;
-    const index = messages.latestMessage.index;
-    if (index <= messages.readThroughIndex) return;
-    const key = `${agentId}:${index}`;
+    if (!agentId) return;
+    const index = messages?.latestMessage?.index ?? -1;
+    if (index <= (messages?.readThroughIndex ?? -1) && !unreadActionIds?.length) return;
+    const key = JSON.stringify([agentId, index, unreadActionIds]);
     if (pending.current.has(key)) return;
     pending.current.add(key);
     void agentRuns.markRead(agentId, index)
       .catch((error) => console.error('Failed to save conversation read position:', error))
       .finally(() => pending.current.delete(key));
-  }, [agentId, agentRuns, messages]);
+  }, [agentId, agentRuns, messages, unreadActionIds]);
 }

@@ -56,12 +56,6 @@ export const WelcomeInput: React.FC<{
     return inferenceSelections?.ai ? formatModelReference(inferenceSelections.ai) : undefined;
   }, [inferenceSelections, model]);
 
-  const workspaceLabel = useMemo(() => {
-    if (!workspace) return t('sessionWorkbenchUi.shell.defaultWorkspace');
-    const segments = workspace.replace(/\\/g, '/').split('/').filter(Boolean);
-    return segments.at(-1) || workspace;
-  }, [t, workspace]);
-
   const selectWorkspace = useCallback(async () => {
     const paths = await window.piskie.desktop.files.select({ type: 'folder' });
     if (paths[0]) patchSettings({ workspace: paths[0] });
@@ -134,7 +128,6 @@ export const WelcomeInput: React.FC<{
         patchSettings({ approvalMode: next });
         selectApprovalMode(next);
       }}
-      workspaceLabel={workspaceLabel}
       workspacePath={workspace}
       onSelectWorkspace={() => void selectWorkspace()}
       onUseDefaultWorkspace={() => patchSettings({ workspace: undefined })}

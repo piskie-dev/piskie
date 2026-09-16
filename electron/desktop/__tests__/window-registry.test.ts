@@ -447,6 +447,21 @@ describe('WindowRegistry bootstrap authorization', () => {
     await expect(registry.stop('test')).resolves.toBeUndefined();
   });
 
+  it('resolves only registered preview sources belonging to the calling window', async () => {
+    const { registry, session } = await registryFixture();
+    const source = '/sample folder/original.gif';
+    const url = registry.createFilePreviewUrl(session.id, source, 'image/gif');
+    expect(registry.resolveFilePreviewPath(session.id, url)).toBe(source);
+    expect(registry.resolveFilePreviewPath(session.id + 1, url)).toBeUndefined();
+    expect(registry.resolveFilePreviewPath(session.id, 'piskie-attachment://preview/unknown')).toBeUndefined();
+    expect(registry.resolveFilePreviewPath(session.id, 'https://example.test/preview')).toBeUndefined();
+    registry.releaseFilePreview(session.id, url);
+    expect(registry.resolveFilePreviewPath(session.id, url)).toBeUndefined();
+    const held = registry.createFilePreviewUrl(session.id, source, 'image/gif', true);
+    await registry.stop('test');
+    expect(registry.resolveFilePreviewPath(session.id, held)).toBeUndefined();
+  });
+
   it('streams file previews through opaque per-window tokens', async () => {
     const { registry, session } = await registryFixture();
     const sourcePath = '/tmp/private folder/screenshot.png';
@@ -472,6 +487,29 @@ describe('WindowRegistry bootstrap authorization', () => {
     });
     await registry.stop('test');
     expect(contents.protocol.unhandle).toHaveBeenCalledWith('piskie-attachment');
+  });
+
+  it('serves SVG previews with a non-executable document policy', async () => {
+    const { registry, session } = await registryFixture();
+    const previewUrl = registry.createFilePreviewUrl(
+      session.id,
+      '/tmp/vector.svg',
+      'image/svg+xml',
+    );
+    const contents = session.window.webContents as unknown as InstanceType<
+      typeof electron.FakeBrowserWindow
+    >['webContents'];
+    const handler = contents.protocolHandlers.get('piskie-attachment')!;
+
+    const response = await handler(new Request(previewUrl));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/svg+xml');
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
+    );
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    await registry.stop('test');
   });
 
   it('retains 256 ordinary tokens while held captures survive pool eviction and release by owner', async () => {

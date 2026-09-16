@@ -59,7 +59,8 @@ function looksLikeTargetStart(text: string, index: number): boolean {
     || startsWithIgnoreCase(text, index, 'http://')
     || isWindowsDrivePath(text, index)
     || isUncPath(text, index)
-    || text[index] === '/';
+    || isHomePath(text, index)
+    || isUnixPathStart(text, index);
 }
 
 function tokenEndsWithFileExtension(text: string, start: number, end: number): boolean {
@@ -153,6 +154,16 @@ function isUncPath(text: string, index: number): boolean {
   return text[index] === '\\' && text[index + 1] === '\\';
 }
 
+function isHomePath(text: string, index: number): boolean {
+  return text[index] === '~' && text[index + 1] === '/';
+}
+
+function isUnixPathStart(text: string, index: number): boolean {
+  if (text[index] !== '/') return false;
+  const precedingText = text.slice(Math.max(0, index - 2), index);
+  return !/[\p{L}\p{N}\p{M}_]$/u.test(precedingText);
+}
+
 function isUnixPath(text: string, start: number, end: number): boolean {
   if (text[start] !== '/') return false;
   let segmentCount = 0;
@@ -182,8 +193,9 @@ function detectAt(text: string, index: number): ContentTarget | null {
 
   const drivePath = isWindowsDrivePath(text, index);
   const uncPath = isUncPath(text, index);
-  const unixCandidate = text[index] === '/';
-  if (!drivePath && !uncPath && !unixCandidate) return null;
+  const homePath = isHomePath(text, index);
+  const unixCandidate = isUnixPathStart(text, index);
+  if (!drivePath && !uncPath && !homePath && !unixCandidate) return null;
 
   let end = pathEnd(text, index, drivePath);
   end = trimTargetEnd(text, index, end);
@@ -193,7 +205,7 @@ function detectAt(text: string, index: number): ContentTarget | null {
   return { kind: 'path', value: text.slice(index, end), start: index, end };
 }
 
-/** Finds every URL and absolute file path without imposing a text-length or match-count cap. */
+/** Finds every URL and absolute or home-relative file path without a text-length or match-count cap. */
 export function scanContentTargets(text: string): ContentTarget[] {
   const targets: ContentTarget[] = [];
   let index = 0;
@@ -209,6 +221,16 @@ export function scanContentTargets(text: string): ContentTarget[] {
   }
 
   return targets;
+}
+
+/** Resolves a positive :line[:column] suffix on an explicit Markdown file link. */
+export function targetFromLinkHref(href: string): Pick<ContentTarget, 'kind' | 'value'> | null {
+  const target = targetFromHref(href);
+  if (target?.kind !== 'path') return target;
+  return {
+    ...target,
+    value: target.value.replace(/^((?:.*[/\\])?[^/\\:]+):[1-9]\d*(?::[1-9]\d*)?$/u, '$1'),
+  };
 }
 
 export function targetFromHref(href: string): Pick<ContentTarget, 'kind' | 'value'> | null {

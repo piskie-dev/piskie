@@ -23,6 +23,8 @@ vi.mock('electron', () => ({
 
 
 import { ImageModule } from '../image.module.js';
+import { GenerateImageTool } from '../../../tools/image/generate-image.tool.js';
+import type { ToolContext } from '../../../tools/types.js';
 
 const HOST_ID = 'agent-review-test';
 const OUT_DIR = path.join(os.tmpdir(), 'piskie-test-review-out');
@@ -76,11 +78,16 @@ function makeImageApplication(nextB64: () => string): ImageApplicationPort {
   };
 }
 
-function setup(opts: { approvalMode?: 'auto' | 'confirm'; b64?: () => string; items?: Array<{ outputPath: string; overwrite?: boolean }> } = {}) {
+function setupModule(opts: { approvalMode?: 'auto' | 'confirm'; b64?: () => string } = {}) {
   const mod = new ImageModule();
   const host = makeHost(opts.approvalMode ?? 'confirm');
   const gateway = makeImageApplication(opts.b64 ?? (() => PNG_A.toString('base64')));
   mod.init(host, { imageApplication: gateway, imageTarget: IMAGE_TARGET });
+  return { mod, gateway };
+}
+
+function setup(opts: { approvalMode?: 'auto' | 'confirm'; b64?: () => string; items?: Array<{ outputPath: string; overwrite?: boolean }> } = {}) {
+  const { mod, gateway } = setupModule(opts);
   const items = (opts.items ?? [{ outputPath: path.join(OUT_DIR, 'a.png') }]).map((it, i) => ({
     prompt: `image ${i}`,
     outputPath: it.outputPath,
@@ -92,6 +99,7 @@ function setup(opts: { approvalMode?: 'auto' | 'confirm'; b64?: () => string; it
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   await fs.rm(OUT_DIR, { recursive: true, force: true }).catch(() => {});
   await fs.rm(path.join(os.tmpdir(), 'piskie', HOST_ID), { recursive: true, force: true }).catch(() => {});
 });
@@ -132,39 +140,84 @@ describe('候选与提交文件语义', () => {
     expect(mod.getPublicState()).toHaveLength(0);
   });
 
-  it('重生成后最终路径对应新内容，不再指向旧图片', async () => {
-    const out = path.join(OUT_DIR, 'regen.png');
+  it('returns the final regenerated image only after approval and commit', async () => {
+    const out = path.join(OUT_DIR, 'sample-revision.png');
     let current = PNG_A;
-    const { mod, node } = setup({ b64: () => current.toString('base64'), items: [{ outputPath: out }] });
-    await mod.generateInitialCandidates(node.id);
-    const v1 = node.images[0].version;
+    const { mod, gateway } = setupModule({ b64: () => current.toString('base64') });
+    const waitForReviewAction = mod.waitForReviewAction.bind(mod);
+    let reviews = 0;
+    vi.spyOn(mod, 'waitForReviewAction').mockImplementation(async (nodeId) => {
+      const node = mod.getNode(nodeId)!;
+      await expect(fs.access(out)).rejects.toThrow();
+      await expect(fs.readFile(node.images[0].candidatePath!)).resolves.toEqual(current);
+      const pending = waitForReviewAction(nodeId);
+      if (reviews++ === 0) {
+        current = PNG_B;
+        expect(mod.submitReviewAction(nodeId, {
+          type: 'regenerate', imageIds: [node.images[0].id], instruction: 'Use a blue background',
+        }).success).toBe(true);
+      } else {
+        expect(node.images[0].version).toBe(2);
+        expect(node.images[0].userInstruction).toBe('Use a blue background');
+        expect(mod.submitReviewAction(nodeId, { type: 'approve' }).success).toBe(true);
+      }
+      return pending;
+    });
 
-    current = PNG_B;
-    await mod.regenerate(node.id, { type: 'regenerate', imageIds: [node.images[0].id], instruction: '更亮' });
-    expect(node.images[0].version).toBe(v1 + 1);
-    expect(node.images[0].userInstruction).toBe('更亮');   // 审核干预记录，随 commit 进入最终 tool result
-    expect(node.status).toBe('pending_approval');
-
-    const outcome = await mod.commit(node.id);
-    expect(outcome.status).toBe('completed');
+    const result = await new GenerateImageTool().execute(
+      { images: [{ prompt: 'Sample illustration', outputPath: out }] },
+      { imageOps: mod, signal: new AbortController().signal } as ToolContext,
+    );
+    expect(result.ok).toBe(true);
+    expect(gateway.execute).toHaveBeenCalledTimes(2);
+    expect(result.images).toEqual([{ base64: PNG_B.toString('base64'), mediaType: 'image/png' }]);
+    expect(result.text).toContain('Use a blue background');
     await expect(fs.readFile(out)).resolves.toEqual(PNG_B);
   });
 
-  it('删除图片后不创建该项最终文件，deletedCount 计入', async () => {
-    const outKeep = path.join(OUT_DIR, 'keep.png');
-    const outDrop = path.join(OUT_DIR, 'drop.png');
-    const { mod, node } = setup({ items: [{ outputPath: outKeep }, { outputPath: outDrop }] });
-    await mod.generateInitialCandidates(node.id);
+  it('deleted images are neither committed nor attached to the tool result', async () => {
+    const outKeep = path.join(OUT_DIR, 'sample-keep.png');
+    const outDrop = path.join(OUT_DIR, 'sample-drop.png');
+    const { mod } = setupModule();
+    const waitForReviewAction = mod.waitForReviewAction.bind(mod);
+    vi.spyOn(mod, 'waitForReviewAction').mockImplementation((nodeId) => {
+      const pending = waitForReviewAction(nodeId);
+      const node = mod.getNode(nodeId)!;
+      expect(mod.deleteImage(nodeId, node.images[1].id).success).toBe(true);
+      expect(mod.submitReviewAction(nodeId, { type: 'approve' }).success).toBe(true);
+      return pending;
+    });
 
-    node.status = 'pending_approval';   // deleteImage 仅在编辑态开放
-    const dropId = node.images[1].id;
-    expect(mod.deleteImage(node.id, dropId).success).toBe(true);
-    expect(node.deletedCount).toBe(1);
-
-    const outcome = await mod.commit(node.id);
-    expect(outcome.status).toBe('completed');
+    const result = await new GenerateImageTool().execute(
+      { images: [outKeep, outDrop].map((outputPath) => ({ prompt: 'Sample illustration', outputPath })) },
+      { imageOps: mod, signal: new AbortController().signal } as ToolContext,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({ status: 'completed', deletedCount: 1 });
+    expect(result.images).toEqual([{ base64: PNG_A.toString('base64'), mediaType: 'image/png' }]);
+    expect(result.text).toContain('主动删除了 1 张');
     await expect(fs.readFile(outKeep)).resolves.toEqual(PNG_A);
     await expect(fs.access(outDrop)).rejects.toThrow();
+  });
+
+  it('cancel after generation returns no images and creates no final file', async () => {
+    const out = path.join(OUT_DIR, 'sample-cancel.png');
+    const { mod } = setupModule();
+    const waitForReviewAction = mod.waitForReviewAction.bind(mod);
+    vi.spyOn(mod, 'waitForReviewAction').mockImplementation((nodeId) => {
+      const pending = waitForReviewAction(nodeId);
+      expect(mod.submitReviewAction(nodeId, { type: 'cancel' }).success).toBe(true);
+      return pending;
+    });
+
+    const result = await new GenerateImageTool().execute(
+      { images: [{ prompt: 'Sample illustration', outputPath: out }] },
+      { imageOps: mod, signal: new AbortController().signal } as ToolContext,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.data).toMatchObject({ status: 'cancelled' });
+    expect(result.images).toBeUndefined();
+    await expect(fs.access(out)).rejects.toThrow();
   });
 
   it('初次生成部分成功、部分失败时允许确认，提交成功项并返回 partial', async () => {
@@ -271,6 +324,27 @@ describe('候选与提交文件语义', () => {
 });
 
 describe('auto 预览倒计时', () => {
+  it('auto approval returns the committed image through the generate tool', async () => {
+    vi.useFakeTimers();
+    const out = path.join(OUT_DIR, 'sample-auto.png');
+    const { mod } = setupModule({ approvalMode: 'auto' });
+    const waitForReviewAction = mod.waitForReviewAction.bind(mod);
+    vi.spyOn(mod, 'waitForReviewAction').mockImplementation((nodeId) => {
+      const pending = waitForReviewAction(nodeId);
+      expect(mod.getNode(nodeId)!.status).toBe('preview');
+      vi.advanceTimersByTime(10_000);
+      return pending;
+    });
+
+    const result = await new GenerateImageTool().execute(
+      { images: [{ prompt: 'Sample illustration', outputPath: out }] },
+      { imageOps: mod, signal: new AbortController().signal } as ToolContext,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.images).toEqual([{ base64: PNG_A.toString('base64'), mediaType: 'image/png' }]);
+    await expect(fs.readFile(out)).resolves.toEqual(PNG_A);
+  });
+
   it('auto 首轮 10 秒后自动 approve（与手动确认同路）', async () => {
     vi.useFakeTimers();
     const { mod, node } = setup({ approvalMode: 'auto' });

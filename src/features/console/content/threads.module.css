@@ -380,6 +380,7 @@
 }
 
 .iconButton {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -393,6 +394,12 @@
   color: var(--cyber-text-muted);
   cursor: pointer;
   transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.runningUnread {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-end: 1px;
 }
 
 .iconButton:hover {

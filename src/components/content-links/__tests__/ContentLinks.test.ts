@@ -3,7 +3,8 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ContentLinkHost, ContentLinkUrlScope, LinkedText } from '../ContentLinks';
+import { ContentLink, ContentLinkHost, ContentLinkUrlScope, LinkedText } from '../ContentLinks';
+import { targetFromLinkHref } from '../scanTargets';
 
 let dom: JSDOM;
 let container: HTMLDivElement;
@@ -154,6 +155,70 @@ describe('content link activation', () => {
     path.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     expect(revealPath).toHaveBeenCalledWith(target);
     expect(openLocalFile).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { target: '~/.sample/cache/items/', opener: openLocalFile },
+    { target: '~/.sample', opener: openLocalFile },
+    { target: '~/资料/报告.md', opener: openLocalFile },
+    { target: '~/sample/index.html', opener: openLocalHtml },
+  ])('passes the original home-relative target to click actions: $target', async ({ target, opener }) => {
+    await act(async () => {
+      root.render(
+        createElement(
+          ContentLinkUrlScope,
+          { onOpenLocalHtml: openLocalHtml, onOpenLocalFile: openLocalFile },
+          createElement(LinkedText, null, target),
+        ),
+      );
+    });
+
+    const path = container.querySelector<HTMLElement>('[data-content-target="path"]');
+    expect(path?.dataset.target).toBe(target);
+    expect(path?.textContent).toBe(target);
+
+    await act(async () => path!.click());
+    expect(opener).toHaveBeenCalledWith(target);
+    expect(revealPath).not.toHaveBeenCalled();
+
+    await act(async () => {
+      path!.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    });
+    expect(revealPath).toHaveBeenCalledWith(target);
+    expect(opener).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { href: '/sample/src/example.ts:12', path: '/sample/src/example.ts', opener: openLocalFile },
+    { href: '~/sample/src/example.ts:12:3', path: '~/sample/src/example.ts', opener: openLocalFile },
+    { href: 'file:///sample/src/example%20file.ts:12:3', path: '/sample/src/example file.ts', opener: openLocalFile },
+    { href: 'C:/Sample/index.html:12:3', path: 'C:/Sample/index.html', opener: openLocalHtml },
+  ])('uses the resolved source path for preview and reveal: $href', async ({ href, path, opener }) => {
+    const target = targetFromLinkHref(href)!;
+    const label = '示例源码:12';
+    await act(async () => {
+      root.render(
+        createElement(
+          ContentLinkUrlScope,
+          { onOpenLocalHtml: openLocalHtml, onOpenLocalFile: openLocalFile },
+          createElement(ContentLink, { kind: target.kind, target: target.value }, label),
+        ),
+      );
+    });
+
+    const link = container.querySelector<HTMLElement>('[data-content-target="path"]')!;
+    expect(link.dataset.target).toBe(path);
+    expect(link.textContent).toBe(label);
+
+    await act(async () => link.click());
+    expect(opener).toHaveBeenCalledWith(path);
+    expect(revealPath).not.toHaveBeenCalled();
+
+    await act(async () => {
+      link.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    });
+    expect(revealPath).toHaveBeenCalledWith(path);
+    expect(opener).toHaveBeenCalledTimes(1);
   });
 
   it('prefers the HTML opener over the generic file preview', async () => {

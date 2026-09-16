@@ -11,7 +11,7 @@
  * |---|---|
  * | 一次 write/edit | 单个文件名 + 本次 diff（着色、带行号） |
  * | 读取的文本文件 | 带源文件行号的 Markdown 文档或只读代码视图 |
- * | 正文里的本地路径 | 当前磁盘快照，复用相同的文本预览与行号 |
+ * | 正文里的本地路径 | 文本展示当前磁盘快照；目录展示信息卡与系统动作 |
  * | 读不了的文件（二进制 / 超大 / 缺失） | **文件卡**：类型图标 + 原因 + 两个系统动作 |
  *
  * 二进制没有可读文本形态，硬渲染只会得到乱码。与其显示乱码，不如把它当**文件**呈现 ——
@@ -23,16 +23,19 @@
  * **不知道落在文件第几行**，于是行号槽显示 `·`。宁可空着也不画假行号。
  */
 
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, Video } from 'lucide-react';
+import React, { memo, useMemo } from 'react';
+import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, TriangleAlert, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { LinkedMarkdown, type SourceBlockProps } from '@/components/content-links';
+import { useCopyAction } from '@/hooks/useCopyAction';
+import { copyText } from '@/services/clipboard';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { localPathDirectory } from '@/utils/localPath';
 import { collapseContext, type DiffLine } from '../data/diffLines';
 import { grammarForPath, tokenize, MAX_HIGHLIGHT_LINES, type Token } from './diff/highlight';
-import { basename, type FileChange, type ReadOp } from '../data/review';
+import { basename, fileChangeOf, type FileChange, type ReadOp } from '../data/review';
+import type { RoundFileChanges } from '../data/fileChanges';
 import { resolvePresentationText } from '../data/presentationText';
 import type { ReviewableFilePreview } from './fileReviewTarget';
 import styles from './review.module.css';
@@ -50,40 +53,33 @@ function kindIcon(path: string): React.ReactNode {
 /**
  * 头部动作簇:复制内容 + 在文件夹中显示。
  * 复制源由调用侧给(read=文件内容原文;write/edit=本次 diff 文本);
- * 没有可复制文本(二进制/缺失)时不出复制钮。复制成功图标换勾 1.5s。
+ * 没有可复制文本(二进制/缺失)时不出复制钮。复制成功短暂显示勾选图标。
  */
 const HeaderActions = memo<{
   readonly copyText: string | null;
   readonly path: string;
   readonly onRevealPath: (path: string) => void;
-}>(({ copyText, path, onRevealPath }) => {
+}>(({ copyText: textToCopy, path, onRevealPath }) => {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
-
-  const copy = async (): Promise<void> => {
-    if (copyText === null) return;
-    await navigator.clipboard.writeText(copyText);
-    setCopied(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setCopied(false), 1500);
-  };
+  const contentKey = useMemo(() => ({ path, textToCopy }), [path, textToCopy]);
+  const { busy, status, run } = useCopyAction(contentKey);
+  const label = status === 'success' ? t('sessionWorkbenchUi.review.copied')
+    : status === 'error' ? t('clipboardUi.copyFailed')
+      : status === 'copying' ? t('clipboardUi.copying') : t('sessionWorkbenchUi.review.copyContent');
 
   return (
     <span className={styles.headerActions}>
-      {copyText !== null && (
+      {textToCopy !== null && (
         <button
           type="button"
           className={styles.headerButton}
-          onClick={() => void copy()}
-          title={copied ? t('sessionWorkbenchUi.review.copied') : t('sessionWorkbenchUi.review.copyContent')}
-          aria-label={t('sessionWorkbenchUi.review.copyContent')}
+          onClick={() => { void run(() => copyText(textToCopy)); }}
+          disabled={busy}
+          aria-busy={busy}
+          title={label}
+          aria-label={label}
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {status === 'success' ? <Check size={12} /> : status === 'error' ? <TriangleAlert size={12} /> : <Copy size={12} />}
         </button>
       )}
       <button
@@ -179,13 +175,14 @@ DiffBody.displayName = 'DiffBody';
 
 const FileCard = memo<{
   readonly path: string;
+  readonly kind?: 'file' | 'directory';
   readonly reason: string;
   readonly onOpenPath: (path: string) => void;
   readonly onRevealPath: (path: string) => void;
-}>(({ path, reason, onOpenPath, onRevealPath }) => {
+}>(({ path, kind = 'file', reason, onOpenPath, onRevealPath }) => {
   const { t } = useTranslation();
   return <div className={styles.card}>
-    <span className={styles.cardIcon}>{kindIcon(path)}</span>
+    <span className={styles.cardIcon}>{kind === 'directory' ? <FolderOpen size={18} /> : kindIcon(path)}</span>
     <div className={styles.cardMain}>
       <span className={styles.cardName} title={path}>
         {basename(path)}
@@ -194,7 +191,7 @@ const FileCard = memo<{
       <div className={styles.cardActions}>
         <button type="button" className={styles.cardButton} onClick={() => onOpenPath(path)}>
           <ExternalLink size={11} />
-          <span>{t('sessionWorkbenchUi.review.openWithSystem')}</span>
+          <span>{t(kind === 'directory' ? 'sessionWorkbenchUi.review.openDirectory' : 'sessionWorkbenchUi.review.openWithSystem')}</span>
         </button>
         <button type="button" className={styles.cardButton} onClick={() => onRevealPath(path)}>
           <FolderOpen size={11} />
@@ -302,6 +299,50 @@ const ReadView = memo<{
 
 ReadView.displayName = 'ReadView';
 
+/** One file in one turn, preserving the diff and line-number boundary of every call. */
+export const RecordedFileReview = memo<{
+  readonly file: RoundFileChanges;
+  readonly roundTitle: string;
+  readonly onRevealPath: (path: string) => void;
+}>(({ file, roundTitle, onRevealPath }) => {
+  const { t } = useTranslation();
+  const changes = useMemo(() => file.records.flatMap((record) => {
+    const change = fileChangeOf(record.node);
+    return change ? [{ id: record.id, change }] : [];
+  }), [file.records]);
+  const copyText = useMemo(() => changes.map(({ change }, index) => [
+    t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 }),
+    ...change.diff.lines.map((line) => (line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' ') + line.text),
+  ].join('\n')).join('\n\n'), [changes, t]);
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>
+        <span className={styles.headerTitle} title={file.path}>
+          {roundTitle && <span className={styles.roundTitle}>{roundTitle}</span>}
+          {basename(file.path)}
+        </span>
+        <StatText added={file.added} removed={file.removed} />
+        <HeaderActions copyText={copyText} path={file.path} onRevealPath={onRevealPath} />
+      </div>
+      <div className={styles.scroll}>
+        {changes.map(({ id, change }, index) => (
+          <section key={id} aria-label={t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 })}>
+            <div className={styles.callHeader}>
+              <span>{t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 })}</span>
+              <StatText added={change.stat.added} removed={change.stat.removed} />
+            </div>
+            {change.diff.degraded && <div className={styles.notice}>{t('sessionWorkbenchUi.review.oversizedDiff')}</div>}
+            <DiffBody lines={change.diff.lines} absoluteLines={change.absoluteLines} />
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+RecordedFileReview.displayName = 'RecordedFileReview';
+
 // ==================== 出口 ====================
 
 export interface PathPreview {
@@ -338,11 +379,12 @@ export const ReviewPanel = memo<ReviewPanelProps>(
       const type = descriptor.kind === 'file'
         ? (descriptor.mediaType ?? t('sessionWorkbenchUi.review.binaryFile'))
         : null;
-      const size = descriptor.size < 1024
-        ? `${descriptor.size} B`
-        : descriptor.size < 1024 * 1024
-          ? `${(descriptor.size / 1024).toFixed(1)} KB`
-          : `${(descriptor.size / 1024 / 1024).toFixed(2)} MB`;
+      const fileSize = descriptor.kind === 'file' ? descriptor.size : null;
+      const size = fileSize === null ? null : fileSize < 1024
+        ? `${fileSize} B`
+        : fileSize < 1024 * 1024
+          ? `${(fileSize / 1024).toFixed(1)} KB`
+          : `${(fileSize / 1024 / 1024).toFixed(2)} MB`;
 
       return (
         <div className={styles.panel}>
@@ -352,10 +394,13 @@ export const ReviewPanel = memo<ReviewPanelProps>(
             <HeaderActions copyText={text} path={path} onRevealPath={onRevealPath} />
           </div>
           <div className={styles.scroll}>
-            {descriptor.kind === 'file' ? (
+            {descriptor.kind !== 'text' ? (
               <FileCard
                 path={path}
-                reason={t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
+                kind={descriptor.kind}
+                reason={descriptor.kind === 'directory'
+                  ? t('sessionWorkbenchUi.review.directoryPreviewUnavailable')
+                  : t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
                 onOpenPath={onOpenPath}
                 onRevealPath={onRevealPath}
               />

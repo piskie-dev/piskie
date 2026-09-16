@@ -501,7 +501,7 @@ async function sendDocumentFromLocal(ctx, mediaPath, prefix, sourceUrl) {
 }
 /**
  * 通用辅助：下载远程文件到 fallback 目录
- * 目录结构：~/.openclaw/media/qqbot/downloads/{appId}/{targetId}/
+ * 目录结构：<qqbotMediaDir>/downloads/{appId}/{targetId}/（PISKIE：<userData>/im-gateway/qqbot/media）
  * 用于各 send* 函数的公网 URL 下载
  */
 async function downloadToFallbackDir(httpUrl, prefix, caller, appId, targetId) {

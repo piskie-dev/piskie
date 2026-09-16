@@ -25,6 +25,7 @@ import {
   Check,
   ChevronDown,
   FileText,
+  FolderOpen,
   Loader2,
   ShieldAlert,
   ShieldCheck,
@@ -52,6 +53,7 @@ import { useComposerSettings } from './useComposerSettings';
 import { SkillTags } from '../SkillTags';
 import { SkillPicker } from './SkillPicker';
 import { useSkillComposer } from './useSkillComposer';
+import { WorkspaceBar } from './WorkspaceBar';
 import styles from './conversationComposer.module.css';
 
 // ==================== 通用的药丸下拉（计划 / 审批共用） ====================
@@ -249,7 +251,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           text: snapshot.text,
           skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
           images,
-          files: files.map(({ name, path }) => ({ name, path })),
+          files: files.map(({ name, path, kind }) => ({ name, path, ...(kind && { kind }) })),
         }));
         if (!ok) setSubmitError(messageText('sessionWorkbenchUi.attachmentFailure.delivery'));
       } catch (error) {
@@ -303,6 +305,8 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     return (
       <div ref={anchorRef} className={styles.composer}>
         <SkillPicker controller={skillComposer} />
+        <WorkspaceBar workspace={workerId && workspace === undefined ? null : workspace}
+          className={styles.workspaceBar} disabled={controlsDisabled} />
         <AttachmentError error={submitError} />
         {skills.length > 0 && (
           <div className={styles.attachments}>
@@ -332,7 +336,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             ))}
             {attachments.files.map((file) => (
               <div key={file.id} className={styles.fileChip} title={file.path}>
-                <FileText size={12} />
+                {file.kind === 'directory' ? <FolderOpen size={12} /> : <FileText size={12} />}
                 <span className={styles.fileName}>{file.name}</span>
                 <button
                   type="button"

@@ -13,6 +13,25 @@ import { createElectronPiskieClient } from '../piskie-client.js';
 import type { ElectronPreloadClient } from '../preload-client.js';
 
 describe('createElectronPiskieClient', () => {
+  it('routes workspace information, switches and branch creation through desktop operations', async () => {
+    const request = vi.fn(async () => ({ path: '/sample/project', git: null }));
+    const client = createElectronPiskieClient({
+      transport: { request } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux', getPathForFile: vi.fn(),
+    });
+    await client.desktop.workspace.info();
+    await client.desktop.workspace.info('/sample/project');
+    await client.desktop.workspace.switchBranch('/sample/project', 'feature/sample');
+    const base = { kind: 'branch' as const, name: 'main', commit: 'a'.repeat(40) };
+    await client.desktop.workspace.createBranch('/sample/project', 'feature/new', base);
+    expect(request.mock.calls).toEqual([
+      [DESKTOP_OPERATIONS.workspaceInfo, [undefined]],
+      [DESKTOP_OPERATIONS.workspaceInfo, ['/sample/project']],
+      [DESKTOP_OPERATIONS.switchWorkspaceBranch, ['/sample/project', 'feature/sample']],
+      [DESKTOP_OPERATIONS.createWorkspaceBranch, ['/sample/project', 'feature/new', base]],
+    ]);
+  });
+
   it('resolves a DOM File synchronously in preload without passing it to IPC', () => {
     const request = vi.fn();
     const getPathForFile = vi.fn((file: File) => file === diskFile ? '/sample files/example.pdf' : '');

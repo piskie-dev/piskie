@@ -20,6 +20,7 @@ import { IMCommandRouter } from './commands/command-router.js';
 import { ClearCommandHandler } from './commands/clear.command.js';
 import { channelRegistry } from './core/registry.js';
 import { registerBuiltinChannels, BUILTIN_CHANNEL_INFOS } from './channels/index.js';
+import { resolveChannelStoragePaths, type ChannelStoragePaths } from './core/channel-storage.js';
 import { AccountSessionStore } from './account-session-store.js';
 import { ConfigAgentBindings } from './config-agent-bindings.js';
 import { MessagingAgentSession } from './messaging-agent-session.js';
@@ -48,6 +49,8 @@ import type {
 export class IMGateway {
   private accountSessions: AccountSessionStore;
   private senderAuthorizationRegistry: SenderAuthorizationRegistry;
+  /** 各内置渠道的 Piskie 专属存储位置（<userData>/im-gateway/<channel>、<tmpdir>/piskie-im/<channel>）。 */
+  private readonly channelStorage: ChannelStoragePaths;
   private agentBindings?: ConfigAgentBindings;
 
   // Sub-components
@@ -80,8 +83,10 @@ export class IMGateway {
   private agentObservationBindings: Unsubscribe[] = [];
 
   constructor() {
+    const userDataDir = app.getPath('userData');
+    this.channelStorage = resolveChannelStoragePaths(userDataDir);
     this.senderAuthorizationRegistry = new SenderAuthorizationRegistry(
-      path.join(app.getPath('userData'), 'im-gateway')
+      path.join(userDataDir, 'im-gateway')
     );
     this.authorizationRequests = this.senderAuthorizationRegistry.changes;
     this.accountSessions = new AccountSessionStore(
@@ -197,8 +202,8 @@ export class IMGateway {
 
     this.senderAuthorizationRegistry.load();
 
-    // Register built-in channels
-    registerBuiltinChannels();
+    // Register built-in channels（注入渠道存储位置，避免 vendor 触碰 ~/.openclaw）
+    registerBuiltinChannels(this.channelStorage);
     this.initialized = true;
 
     appLog.info({

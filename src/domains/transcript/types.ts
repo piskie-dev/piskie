@@ -3,9 +3,18 @@ import type { TranscriptNode } from './nodes';
 
 export type { TranscriptNode };
 
+/** Complete assistant messages, including calls whose visible nodes are suppressed. */
+export interface TranscriptResponse {
+  readonly afterUserId?: string;
+  readonly ts: number;
+  readonly hasToolUse: boolean;
+  readonly textNodeIds: readonly string[];
+}
+
 export interface TranscriptProjection {
   readonly range: { readonly from: number; readonly toExclusive: number };
   readonly nodes: readonly TranscriptNode[];
+  readonly responses: readonly TranscriptResponse[];
   readonly nodeIdsByEntry: ReadonlyMap<number, readonly string[]>;
   readonly toolNodeByCallId: ReadonlyMap<string, string>;
 }

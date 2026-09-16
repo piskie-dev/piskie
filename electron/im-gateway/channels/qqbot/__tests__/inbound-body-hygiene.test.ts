@@ -15,6 +15,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { createChannelStorageFixture, listFilesRecursive } from '@electron/testing/im-channel-storage.fixture.js';
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -24,6 +25,8 @@ const FILE_URL = 'http://198.51.100.7/report.pdf';
 
 let vendorHome: string;
 let savedHome: string | undefined;
+// Piskie 专属 QQ 存储根（<userData>/im-gateway/qqbot），由夹具注入
+const storageFixture = createChannelStorageFixture('qqbot-hygiene-');
 /* eslint-disable @typescript-eslint/no-explicit-any -- vendor JS 无类型声明 */
 let processAttachments: any;
 let formatAttachmentTags: any;
@@ -32,11 +35,11 @@ let buildInboundDynamicContext: any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 beforeAll(async () => {
-  // vendor 状态根（~/.openclaw/…）沙箱化：HOME 指向 tmpdir 后再动态 import
-  // （ref-index-store 模块顶层即 mkdir 数据目录；getQQBotMediaDir 调用期取 HOME）
+  // HOME 沙箱化：断言 vendor 不再向 ~/.openclaw 落任何文件（存储根已改为宿主注入）
   vendorHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qqbot-vendor-home-'));
   savedHome = process.env.HOME;
   process.env.HOME = vendorHome;
+  storageFixture.bindAll();
   ({ processAttachments, buildInboundDynamicContext } = await import('../vendor/src/inbound-attachments.js'));
   ({ formatAttachmentTags } = await import('../vendor/src/group-history.js'));
   ({ formatMessageReferenceForAgent } = await import('../vendor/src/ref-index-store.js'));
@@ -47,6 +50,7 @@ afterAll(() => {
   else delete process.env.HOME;
   vi.unstubAllGlobals();
   fs.rmSync(vendorHome, { recursive: true, force: true });
+  storageFixture.cleanup();
 });
 
 beforeEach(() => {
@@ -105,8 +109,10 @@ describe('processAttachments 真实链路', () => {
     expect(path.dirname(saved)).toBe(managedDir);
     expect(fs.readFileSync(saved).equals(PNG_MAGIC)).toBe(true);
     expect(result.attachmentLocalPaths).toEqual([saved]);
-    // 原始下载文件不在 vendor 目录保留，只保留移交到受管目录的副本。
+    // 原始下载文件不在 vendor 目录保留，只保留移交到受管目录的副本；
+    // 既不落 ~/.openclaw，也不落 Piskie 专属 QQ 根。
     expect(listFiles(vendorHome)).toEqual([]);
+    expect(listFilesRecursive(storageFixture.storage.qqbotDataDir)).toEqual([]);
   });
 
   it('图片下载失败（HTTP 404 不可重试）→ 保留远程 URL 交核心层受管下载，不落任何盘', async () => {

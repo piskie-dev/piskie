@@ -6,23 +6,37 @@ import { clipboard, net, shell } from 'electron';
 import type {
   ClipboardAttachmentDescriptor,
   ClipboardAttachmentRequest,
+  CopyImageRequest,
   DesktopColorScheme,
   FilePreviewDescriptor,
+  WorkspaceInfo,
+  WorkspaceGitHead,
 } from '../../../shared/electron-contracts/desktop.js';
 import type {
   DesktopAppearancePort,
   DesktopPresentationPort,
 } from '../desktop-presentation-port.js';
 import type { ThemeService } from '../../services/theme.service.js';
+import type { pathsService } from '../../services/paths.service.js';
 import { PublicOperationError } from '../../capabilities/public-errors.js';
+import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
+import { copyImageFile } from './image-file-clipboard.js';
+import { expandHomePath } from '../../utils/expand-home-path.js';
+import { createWorkspaceBranch, readWorkspaceInfo, switchWorkspaceBranch } from './workspace.js';
 
-const IMAGE_MIME: Readonly<Record<string, string>> = Object.freeze({
+const ATTACHMENT_IMAGE_MIME: Readonly<Record<string, string>> = Object.freeze({
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
+});
+const FILE_PREVIEW_IMAGE_MIME: Readonly<Record<string, string>> = Object.freeze({
+  ...ATTACHMENT_IMAGE_MIME,
+  '.avif': 'image/avif',
+  '.ico': 'image/vnd.microsoft.icon',
+  '.svg': 'image/svg+xml',
 });
 const BINARY_MIME: Readonly<Record<string, string>> = Object.freeze({
   '.pdf': 'application/pdf',
@@ -53,6 +67,7 @@ export class DesktopApplication {
     name: string;
     version: string;
     userDataDirectory: string;
+    paths: Pick<typeof pathsService, 'getDefaultWorkspaceDir' | 'ensureWorkspace'>;
     development: boolean;
     presentation: DesktopPresentationPort;
     appearance: DesktopAppearancePort;
@@ -116,8 +131,31 @@ export class DesktopApplication {
 
   openWorkspace(workspace?: string): Promise<void> {
     return this.openPath(
-      workspace ?? path.join(this.dependencies.userDataDirectory, 'workspace'),
+      workspace ?? this.dependencies.paths.getDefaultWorkspaceDir(),
     );
+  }
+
+  async workspaceInfo(workspace?: string, signal?: AbortSignal): Promise<WorkspaceInfo> {
+    const defaultWorkspace = this.dependencies.paths.getDefaultWorkspaceDir();
+    const target = workspace ?? defaultWorkspace;
+    signal?.throwIfAborted();
+    if (target === defaultWorkspace) {
+      try {
+        await this.dependencies.paths.ensureWorkspace();
+      } catch (error) {
+        signal?.throwIfAborted();
+        return { path: target, git: null, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    return readWorkspaceInfo(target, signal);
+  }
+
+  switchWorkspaceBranch(workspace: string, branch: string, signal?: AbortSignal) {
+    return switchWorkspaceBranch(workspace, branch, signal);
+  }
+
+  createWorkspaceBranch(workspace: string, branch: string, base: WorkspaceGitHead, signal?: AbortSignal) {
+    return createWorkspaceBranch(workspace, branch, base, signal);
   }
 
   openAgentRunTrace(agentId: string): Promise<void> {
@@ -141,7 +179,7 @@ export class DesktopApplication {
     if (candidates.length === 0 || candidates.length > MAX_CLIPBOARD_ATTACHMENTS) {
       throw new PublicOperationError('invalid-input', 'Paste between 1 and 32 supported files.');
     }
-    const resolved = await Promise.all([...new Set(candidates)].map(resolveRegularFile));
+    const resolved = await Promise.all([...new Set(candidates)].map(resolveAttachmentPath));
     signal?.throwIfAborted();
     const unique = [...new Map(resolved.map((file) => [file.path, file])).values()];
     if (request.kind === 'native') {
@@ -154,7 +192,7 @@ export class DesktopApplication {
     const descriptors: ClipboardAttachmentDescriptor[] = [];
     try {
       for (const file of unique) {
-        const mediaType = IMAGE_MIME[path.extname(file.path).toLowerCase()];
+        const mediaType = file.isDirectory ? undefined : ATTACHMENT_IMAGE_MIME[path.extname(file.path).toLowerCase()];
         const metadata = { name: path.basename(file.path), path: file.path, size: file.size };
         descriptors.push(mediaType ? {
           ...metadata, kind: 'image',
@@ -168,16 +206,34 @@ export class DesktopApplication {
     }
   }
 
+  async copyImage(windowId: number, request: CopyImageRequest, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    // Capture the registered source before any await, so closing its preview cannot retarget this copy.
+    if (request.kind === 'preview') {
+      const sourcePath = this.dependencies.presentation.resolveFilePreviewPath(windowId, request.url);
+      if (!sourcePath) throw new PublicOperationError('not-found', 'The image preview is no longer available');
+      request = { kind: 'path', path: sourcePath };
+    }
+    await copyImageFile(request, async (target) => {
+      const file = await resolvePreviewPath(target);
+      signal?.throwIfAborted();
+      if (file.kind !== 'file') throw new PublicOperationError('invalid-input', 'An image file is required');
+      if (file.size > MAX_IMAGE_BYTES) throw new PublicOperationError('invalid-input', 'The image exceeds the 32 MiB copy limit');
+      return { path: file.path, bytes: await readFilePrefix(file.path, MAX_IMAGE_BYTES + 1, signal) };
+    }, signal);
+  }
+
   releasePreview(windowId: number, url: string): void {
     this.dependencies.presentation.releaseFilePreview(windowId, url);
   }
 
   async previewFile(windowId: number, targetPath: string, signal?: AbortSignal): Promise<FilePreviewDescriptor> {
     signal?.throwIfAborted();
-    const file = await resolveRegularFile(targetPath);
+    const file = await resolvePreviewPath(targetPath);
     signal?.throwIfAborted();
+    if (file.kind === 'directory') return { kind: 'directory' };
     const extension = path.extname(file.path).toLowerCase();
-    const imageMediaType = IMAGE_MIME[extension];
+    const imageMediaType = FILE_PREVIEW_IMAGE_MIME[extension];
     if (imageMediaType) {
       return {
         kind: 'image',
@@ -243,11 +299,12 @@ export class DesktopApplication {
   }
 
   private requireExistingPath(targetPath: string): string {
-    if (!path.isAbsolute(targetPath)) {
+    const expandedPath = expandHomePath(targetPath);
+    if (!path.isAbsolute(expandedPath)) {
       throw new PublicOperationError('invalid-input', 'An absolute path is required');
     }
     try {
-      const resolved = fs.realpathSync.native(targetPath);
+      const resolved = fs.realpathSync.native(expandedPath);
       const stats = fs.statSync(resolved);
       if (!stats.isFile() && !stats.isDirectory()) {
         throw new Error('Unsupported filesystem object');
@@ -260,12 +317,13 @@ export class DesktopApplication {
 
 }
 
-async function readFilePrefix(filePath: string, maxBytes: number): Promise<Buffer> {
+async function readFilePrefix(filePath: string, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   const handle = await fs.promises.open(filePath, 'r');
   try {
     const buffer = Buffer.allocUnsafe(maxBytes);
     let offset = 0;
     while (offset < buffer.length) {
+      signal?.throwIfAborted();
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (bytesRead === 0) break;
       offset += bytesRead;
@@ -303,7 +361,28 @@ function decodePreviewText(buffer: Buffer): string {
   return new TextDecoder('utf-8').decode(buffer);
 }
 
-async function resolveRegularFile(targetPath: string): Promise<{ path: string; size: number }> {
+async function resolvePreviewPath(targetPath: string): Promise<
+  | { kind: 'file'; path: string; size: number }
+  | { kind: 'directory'; path: string }
+> {
+  const expandedPath = expandHomePath(targetPath);
+  if (!path.isAbsolute(expandedPath)) {
+    throw new PublicOperationError('invalid-input', 'An absolute path is required');
+  }
+  let resolved: string;
+  let stats: fs.Stats;
+  try {
+    resolved = await fs.promises.realpath(expandedPath);
+    stats = await fs.promises.stat(resolved);
+  } catch {
+    throw new PublicOperationError('not-found', 'The requested path does not exist');
+  }
+  if (stats.isFile()) return { kind: 'file', path: resolved, size: stats.size };
+  if (stats.isDirectory()) return { kind: 'directory', path: resolved };
+  throw new PublicOperationError('invalid-input', 'A regular file or directory is required');
+}
+
+async function resolveAttachmentPath(targetPath: string): Promise<{ path: string; size: number; isDirectory: boolean }> {
   if (!path.isAbsolute(targetPath)) {
     throw new PublicOperationError('invalid-input', 'An absolute path is required');
   }
@@ -315,10 +394,12 @@ async function resolveRegularFile(targetPath: string): Promise<{ path: string; s
   } catch {
     throw new PublicOperationError('not-found', 'The requested path does not exist');
   }
-  if (!stats.isFile()) {
-    throw new PublicOperationError('invalid-input', 'A regular file is required');
+  const isFile = stats.isFile();
+  const isDirectory = !isFile && stats.isDirectory();
+  if (!isFile && !isDirectory) {
+    throw new PublicOperationError('invalid-input', 'A regular file or directory is required');
   }
-  return { path: resolved, size: stats.size };
+  return { path: resolved, size: isFile ? stats.size : 0, isDirectory };
 }
 
 function readClipboardPathCandidates(): string[] {

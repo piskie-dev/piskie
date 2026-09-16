@@ -3,7 +3,6 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createTypingCallbacks } from "../../../../../core/openclaw-compat/channel-runtime.js";
 import { resolveSenderCommandAuthorizationWithRuntime, resolveDirectDmAuthorizationOutcome, } from "../../../../../core/openclaw-compat/command-auth.js";
-import { resolvePreferredOpenClawTmpDir } from "../../../../../core/openclaw-compat/infra-runtime.js";
 import { sendTyping } from "../api/api.js";
 import { MessageItemType, TypingStatus } from "../api/types.js";
 import { loadWeixinAccount } from "../auth/accounts.js";
@@ -24,7 +23,11 @@ import { sendImageMessageWeixin } from "./send.js";
 import { StreamingMarkdownFilter } from "./markdown-filter.js";
 import { sendMessageItemWeixin, sendMessageWeixin } from "./send.js";
 import { handleSlashCommand } from "./slash-commands.js";
-const MEDIA_OUTBOUND_TEMP_DIR = path.join(resolvePreferredOpenClawTmpDir(), "weixin/media/outbound-temp");
+import { resolveWeixinTempDir } from "../storage/state-dir.js";
+/** PISKIE：出站媒体临时目录位于 <tmpdir>/piskie-im/weixin，惰性解析以确保注入已完成。 */
+function resolveMediaOutboundTempDir() {
+    return path.join(resolveWeixinTempDir(), "media", "outbound-temp");
+}
 /** Extract text body from item_list (for slash command detection). */
 function extractTextBody(itemList) {
     if (!itemList?.length)
@@ -403,7 +406,7 @@ export async function processOneMessage(full, deps) {
                         filePath = path.resolve(localMediaPath(source));
                     }
                     else if (source.startsWith("http://") || source.startsWith("https://")) {
-                        filePath = await downloadRemoteImageToTemp(source, MEDIA_OUTBOUND_TEMP_DIR, deps.abortSignal);
+                        filePath = await downloadRemoteImageToTemp(source, resolveMediaOutboundTempDir(), deps.abortSignal);
                         temporaryFile = filePath;
                     }
                     else {

@@ -2023,6 +2023,14 @@ html[data-theme='light'] .dropCard {
   background: rgb(0 0 0 / 0.6);
 }
 
+.shotToolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-block-end: 10px;
+}
+
 .shotShell img {
   max-inline-size: min(86vw, 900px);
   max-block-size: 80vh;
