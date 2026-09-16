@@ -25,7 +25,7 @@ import { ModelReasoningControl } from '../../../../components/shared';
 import { getAvailableModelOptions, useInferenceStore } from '../../../../store/inferenceStore';
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
 import type { PresentationText } from '../../../../i18n/presentationText';
-import { Popover } from '../../chrome/Popover';
+import { WorkspaceBar } from './WorkspaceBar';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { SkillTags } from '../SkillTags';
 import { SkillPicker } from './SkillPicker';
@@ -55,7 +55,6 @@ export interface WelcomeComposerProps {
   readonly onModeChange: (mode: AgentModeId) => void;
   readonly approvalMode: ApprovalMode;
   readonly onApprovalModeChange: (mode: ApprovalMode) => void;
-  readonly workspaceLabel: string;
   readonly workspacePath?: string;
   readonly onSelectWorkspace: () => void;
   readonly onUseDefaultWorkspace: () => void;
@@ -89,7 +88,6 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     onModeChange,
     approvalMode,
     onApprovalModeChange,
-    workspaceLabel,
     workspacePath,
     onSelectWorkspace,
     onUseDefaultWorkspace,
@@ -98,7 +96,6 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     statusSlot,
   }) => {
     const { t } = useTranslation();
-    const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
     const inferenceConfig = useInferenceStore((store) => store.config);
     const aiModels = useInferenceStore((store) => store.models.ai);
     const availableAiTargets = useInferenceStore((store) => store.availableTargets.ai);
@@ -146,6 +143,8 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
         <div ref={skillComposer.anchorRef} className={styles.composerFrame} onClick={focusInput}>
           <SkillPicker controller={skillComposer} />
           <div className={styles.composerShell}>
+            <WorkspaceBar workspace={workspacePath} disabled={sending}
+              editActions={{ chooseFolder: onSelectWorkspace, useDefault: onUseDefaultWorkspace }} />
             <AttachmentError error={error} />
             {skills.length > 0 && (
               <div className={styles.attachments}>
@@ -178,7 +177,7 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 ))}
                 {files.map((file) => (
                   <div key={file.id} className={styles.fileChip}>
-                    <FileText size={13} />
+                    {file.kind === 'directory' ? <FolderOpen size={13} /> : <FileText size={13} />}
                     <span className={styles.fileName}>{file.name}</span>
                     <button
                       type="button"
@@ -233,46 +232,6 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 </div>
 
                 <div className={styles.secondaryControls}>
-                  <Popover
-                    open={workspaceOpen}
-                    onClose={() => setWorkspaceOpen(false)}
-                    trigger={
-                      <button
-                        type="button"
-                        className={`${styles.controlPill} ${styles.workspaceButton}`}
-                        data-composer-control="true"
-                        title={workspacePath || t('sessionWorkbenchUi.shell.defaultWorkspace')}
-                        onClick={() => setWorkspaceOpen((open) => !open)}
-                      >
-                        <FolderOpen size={14} className={styles.workspaceIcon} />
-                        <span className={styles.workspaceButtonText}>{workspaceLabel}</span>
-                      </button>
-                    }
-                  >
-                    <div className={styles.workspaceMenu}>
-                      <button
-                        type="button"
-                        className={styles.workspaceMenuItem}
-                        onClick={() => {
-                          setWorkspaceOpen(false);
-                          onSelectWorkspace();
-                        }}
-                      >
-                        {t('sessionWorkbenchUi.composer.chooseFolder')}
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.workspaceMenuItem}
-                        onClick={() => {
-                          setWorkspaceOpen(false);
-                          onUseDefaultWorkspace();
-                        }}
-                      >
-                        {t('sessionWorkbenchUi.composer.useDefaultWorkspace')}
-                      </button>
-                    </div>
-                  </Popover>
-
                   <div className={`${styles.controlPill} ${styles.resourceControl}`} data-composer-control="true">
                     <BrowserEnvironmentBindingPicker
                       value={environmentIds}

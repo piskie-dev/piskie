@@ -125,6 +125,9 @@ export function createRuntime(
       liveBuffer = [];
       startPromise = (async () => {
         try {
+          disposers.push(agentControl.state.subscribe((snapshot) => {
+            agentRuns.syncControl(snapshot.agentsById);
+          }));
           disposers.push(api.agents.observeState((event) => {
             if (controlBuffer) controlBuffer.push(event);
             else applyControl(event);

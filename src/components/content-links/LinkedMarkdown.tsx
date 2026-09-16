@@ -13,7 +13,7 @@ import { ContentLink, LinkedText } from './ContentLinks';
 import { MarkdownImage, MarkdownImageProvider, type MarkdownImageOptions } from './MarkdownImage';
 import {
   scanContentTargets,
-  targetFromHref,
+  targetFromLinkHref,
   type ContentTargetKind,
 } from './scanTargets';
 import { markdownSourceBlocks, SOURCE_BLOCK_TAG } from './markdownSourceBlocks';
@@ -105,7 +105,7 @@ function MarkdownDetectedTarget(props: ComponentProps) {
 
 function MarkdownAnchor(props: ComponentProps) {
   const href = (props as ComponentProps & { href?: string }).href ?? '';
-  const target = targetFromHref(href);
+  const target = targetFromLinkHref(href);
   if (!target) return <>{props.children}</>;
   return (
     <ContentLink kind={target.kind} target={target.value}>

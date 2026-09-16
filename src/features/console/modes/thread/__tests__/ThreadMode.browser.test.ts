@@ -5,6 +5,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { AgentTarget } from '../../../../../../shared/types/agent-control';
 import { EMPTY_EMBEDDED_BROWSER_STATE, type EmbeddedBrowserState } from '../../../../../../shared/types/embedded-browser';
 import { ThreadMode, type ThreadModeProps } from '../ThreadMode';
+import { FileChangeSummary } from '../../../content/FileChangeSummary';
+import { dispatchKeyEvent } from '../../../data/keyboard';
+import type { ThreadViewProps } from '../ThreadView';
+import type { FileReviewTarget } from '../../../content/fileReviewTarget';
+import type { FilePreviewDescriptor } from '@shared/electron-contracts/desktop';
 
 vi.mock('../../../data/vm', () => ({
   useAgentVM: (agentId: string) => ({
@@ -18,18 +23,27 @@ vi.mock('../../../data/vm', () => ({
 }));
 vi.mock('../../../data/actions', () => ({ useConsoleActions: () => ({}) }));
 vi.mock('../../../data/useImageNodes', () => ({ useImageNodes: () => [] }));
-vi.mock('../../../data/useKeyboard', () => ({ useGlobalBinding: () => undefined }));
 vi.mock('../../../content/ThreadSidebar', () => ({ ThreadSidebar: () => null }));
-vi.mock('../../../content/ReviewSlot', () => ({ ReviewSlot: () => null }));
-vi.mock('../ThreadView', () => ({ ThreadView: () => null }));
+vi.mock('../../../content/ReviewSlot', () => ({ ReviewSlot: ({ target }: { target?: FileReviewTarget }) => createElement('div', {
+  'data-review-kind': target?.kind,
+  'data-review-path': target?.kind === 'path' ? target.path : undefined,
+  'data-preview-kind': target?.kind === 'path' ? target.preview.kind : undefined,
+}) }));
+vi.mock('../ThreadView', () => ({ ThreadView: ({ onToggleFileChanges, fileChangesOpen, onOpenFileChange }: ThreadViewProps) => createElement('div', null,
+  createElement(FileChangeSummary, { changes: { filesChanged: 1, added: 1, removed: 0 }, expanded: fileChangesOpen, onToggle: onToggleFileChanges }),
+  createElement('button', { onClick: () => onOpenFileChange?.('sample-call') }, 'Open sample call'),
+) }));
 vi.mock('../../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../../../content/ScreenView', () => ({
   BrowserScreenView: ({ browserId }: { browserId: string }) => createElement('div', { 'data-screen': browserId }),
 }));
 vi.mock('@/components/content-links', () => ({
-  ContentLinkUrlScope: ({ children, onOpenUrl }: { children: ReactNode; onOpenUrl: (url: string) => void }) => (
+  ContentLinkUrlScope: ({ children, onOpenUrl, onOpenLocalFile }: {
+    children: ReactNode; onOpenUrl: (url: string) => void; onOpenLocalFile: (path: string) => void;
+  }) => (
     createElement('div', null,
       createElement('button', { onClick: () => onOpenUrl('https://example.test/page') }, 'Open preview link'),
+      createElement('button', { onClick: () => onOpenLocalFile('/workspace/.示例目录') }, 'Open sample directory'),
       children,
     )
   ),
@@ -65,6 +79,7 @@ const api = {
   },
 };
 
+const preview = vi.fn<(path: string) => Promise<FilePreviewDescriptor>>();
 let dom: JSDOM;
 let container: HTMLDivElement;
 let root: Root;
@@ -75,10 +90,11 @@ beforeAll(() => {
   vi.stubGlobal('navigator', dom.window.navigator);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  Object.assign(dom.window, { piskie: { pilot: { embeddedBrowser: api } } });
+  Object.assign(dom.window, { piskie: { pilot: { embeddedBrowser: api }, desktop: { files: { preview } } } });
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  preview.mockReset().mockResolvedValue({ kind: 'directory' });
   states.clear();
   subscriptions.clear();
   retiredListeners.length = 0;
@@ -109,6 +125,42 @@ async function click(label: string) { await act(async () => button(label).click(
 const address = () => container.querySelector<HTMLInputElement>('input');
 
 describe('thread preview controls', () => {
+  it('opens the right review panel for a directory through the shared path entry', async () => {
+    await render();
+    expect(container.querySelector('[data-review-kind]')).toBeNull();
+    await click('Open sample directory');
+    expect(preview).toHaveBeenCalledExactlyOnceWith('/workspace/.示例目录');
+    const review = container.querySelector('[data-review-kind]')!;
+    expect(review.getAttribute('data-review-kind')).toBe('path');
+    expect(review.getAttribute('data-review-path')).toBe('/workspace/.示例目录');
+    expect(review.getAttribute('data-preview-kind')).toBe('directory');
+    expect(button('收起右侧栏').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('synchronizes the collection toggle with closing, Escape, other review targets and browser selection', async () => {
+    await render();
+    const summary = () => container.querySelector<HTMLButtonElement>('button[aria-label*="个文件已更改"]')!;
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+    await act(async () => summary().click());
+    expect(summary().getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('[data-review-kind]')?.getAttribute('data-review-kind')).toBe('collection');
+    await click('Open sample call');
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-review-kind]')?.getAttribute('data-review-kind')).toBe('cell');
+    await act(async () => summary().click());
+    await act(async () => { expect(dispatchKeyEvent({ key: 'Escape' })).toBe(true); });
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-review-kind]')).toBeNull();
+    await act(async () => summary().click());
+    await click('Open preview link');
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+    await act(async () => summary().click());
+    expect(summary().getAttribute('aria-expanded')).toBe('true');
+    expect(address()).toBeNull();
+    await act(async () => summary().click());
+    expect(summary().getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('restores a collapsed preview without navigating and releases it only on close', async () => {
     await render();
     await click('Open preview link');

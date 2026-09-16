@@ -87,6 +87,25 @@
   background: var(--surface-2);
 }
 
+.roundTitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--cyber-text-muted);
+}
+
+.callHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-block: 1px solid var(--line-1);
+  background: var(--surface-1);
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
 .headerHint {
   flex: 0 0 auto;
   padding: 0 6px;

@@ -138,6 +138,44 @@ describe('RendererRuntime', () => {
     await runtime.stop();
   });
 
+  it.each(['state-first', 'conversation-first'])('notifies only after canonical text and settled control, never from streaming (%s)', async (order) => {
+    const test = harness();
+    const runtime = createRuntime(test.api, test.services, { screenFeeds: test.screenFeeds });
+    const agentId = 'sample-main';
+    const requestId = 'sample-request';
+    const messages = { latestMessage: { index: 0, timestamp: 1000 }, latestAssistantIndex: -1, readThroughIndex: 0 };
+    runtime.agentRuns.listState.setState({ runs: [{ agentId, messages } as AgentRunSnapshot] });
+    const started = runtime.start();
+    await Promise.resolve();
+    test.resolveStates({ [agentId]: { ...state(agentId, undefined, requestId), phase: 'thinking', activeStartedAt: 1000 } });
+    await started;
+    const unread = () => runtime.agentRuns.listState.getState().attentionByAgentId[agentId]?.unread;
+    test.emitLive({ agentId, requestId, runId: 'sample-run', attempt: 1, sequence: 1, kind: 'text', delta: 'Example streaming text' });
+    expect(unread()).toBe(false);
+    const settled = {
+      ...state(agentId),
+      aiRequestState: { requestId, phase: 'finished' as const, outcome: 'success' as const, attempt: 0, maxAttempts: 1 },
+    };
+    test.emitState({ agentId, state: { ...settled, phase: 'thinking', activeStartedAt: 1000 } });
+    expect(unread()).toBe(false);
+    if (order === 'state-first') test.emitState({ agentId, state: settled });
+    expect(unread()).toBe(false);
+    test.emitConversation({
+      agentId, requestId, index: 1,
+      entry: { t: 'msg', role: 'assistant', id: 'sample-message', ts: 2000, content: 'Example final reply' },
+      messages: { latestMessage: { index: 1, timestamp: 2000 }, latestAssistantIndex: 1, readThroughIndex: 0 },
+    });
+    if (order === 'conversation-first') {
+      expect(unread()).toBe(false);
+      test.emitState({ agentId, state: settled });
+    }
+    expect(unread()).toBe(true);
+    // Starting another process does not erase an unread final answer from the last one.
+    test.emitState({ agentId, state: { ...state(agentId, undefined, 'next-request'), phase: 'thinking', activeStartedAt: 3000 } });
+    expect(unread()).toBe(true);
+    await runtime.stop();
+  });
+
   it('keeps drafts when an agent stops, clears the deleted owner and workers, and clears all on renderer stop', async () => {
     const test = harness();
     const api = { ...test.api, agentRuns: { delete: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]) } } as unknown as PiskieDesktopApi;

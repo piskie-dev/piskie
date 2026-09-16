@@ -3,6 +3,10 @@ import { isInterrupted } from '../../../../shared/types/agent-control';
 
 export type StatusKey = 'stopping' | 'interrupted' | 'thinking' | 'waiting' | 'running';
 
+export function isActiveStatus(status: StatusKey | undefined): boolean {
+  return status === 'thinking' || status === 'running';
+}
+
 export function resolveStatus(state: { phase: AgentPhase; interrupted?: boolean }): StatusKey {
   if (state.phase === 'stopping') return 'stopping';
   if (isInterrupted(state)) return 'interrupted';

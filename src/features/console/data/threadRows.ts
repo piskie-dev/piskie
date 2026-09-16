@@ -5,7 +5,8 @@
  * 同一 TaskDefinition 启动多次会得到不同 agentId，因此始终显示为多行。
  */
 
-import type { AgentRunMessageState } from '@shared/agent-run-messages';
+import { hasUnreadMessages, type AgentRunMessageState } from '@shared/agent-run-messages';
+import type { AgentRunAttention } from '@/domains/agent-runs/agent-run-attention';
 import { phaseOrder, type HistoryRow, type SessionRow } from './sessionRow';
 
 export interface ThreadRow {
@@ -17,6 +18,7 @@ export interface ThreadRow {
   /** 排序用；live 行没有历史条目时退回 `createdAt` */
   readonly lastActiveAt: string;
   readonly messages?: AgentRunMessageState;
+  readonly unread?: boolean;
   /** 有值即在跑。合并后这是"运行中"唯一的结构性体现 */
   readonly live?: SessionRow;
   /** 历史源行；恢复会话需要原样回传 */
@@ -36,6 +38,7 @@ function keyOf(row: { readonly agentId: string }): string {
 export function buildThreadRows(input: {
   readonly sessions: readonly SessionRow[];
   readonly history: readonly HistoryRow[];
+  readonly attentionByAgentId?: Readonly<Record<string, AgentRunAttention>>;
 }): readonly ThreadRow[] {
   // 防御重复投影只按同一个 AgentRun 去重，不跨 agentId 合并。
   const live = new Map<string, SessionRow>();
@@ -87,7 +90,10 @@ export function buildThreadRows(input: {
     });
   }
 
-  return [...merged.values()];
+  return [...merged.values()].map((row) => ({
+    ...row,
+    unread: input.attentionByAgentId?.[row.agentId]?.unread ?? hasUnreadMessages(row.messages),
+  }));
 }
 
 /**

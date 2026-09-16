@@ -17,6 +17,14 @@ interface ImageLightboxProps {
   onClose: () => void;
 }
 
+function pinDecodedImageSize(event: React.SyntheticEvent<HTMLImageElement>): void {
+  const image = event.currentTarget;
+  if (image.naturalWidth < 1 || image.naturalHeight < 1) return;
+  // A viewBox-only SVG has no CSS intrinsic size and collapses in a shrink-wrapped dialog.
+  image.width = image.naturalWidth;
+  image.height = image.naturalHeight;
+}
+
 const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -124,6 +132,7 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
                   current: activeIndex + 1,
                   total: count,
                 })}
+                onLoad={pinDecodedImageSize}
                 draggable={false}
               />
             </div>

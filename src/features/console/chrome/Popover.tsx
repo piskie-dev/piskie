@@ -19,18 +19,20 @@ export interface PopoverProps {
   /** 触发器：会被套一层 span 以承载 anchor-name */
   readonly trigger: React.ReactNode;
   readonly children: React.ReactNode;
-  /** 浮层贴哪一侧；默认下方左对齐，越界自动翻转 */
+  /** 浮层贴哪一侧；默认下方，越界自动翻转 */
   readonly placement?: 'block-end' | 'block-start' | 'inline-end' | 'inline-start';
+  /** 沿垂直于弹出方向的轴对齐触发器；默认末端对齐 */
+  readonly align?: 'start' | 'end';
   /** 承载 anchor-name 的触发器外层样式 */
   readonly triggerClassName?: string;
   readonly className?: string;
 }
 
-const PLACEMENT_AREA: Record<NonNullable<PopoverProps['placement']>, string> = {
-  'block-end': 'block-end span-inline-start',
-  'block-start': 'block-start span-inline-start',
-  'inline-end': 'inline-end span-block-start',
-  'inline-start': 'inline-start span-block-start',
+const PLACEMENT_AREA: Record<NonNullable<PopoverProps['placement']>, Record<NonNullable<PopoverProps['align']>, string>> = {
+  'block-end': { start: 'block-end span-inline-end', end: 'block-end span-inline-start' },
+  'block-start': { start: 'block-start span-inline-end', end: 'block-start span-inline-start' },
+  'inline-end': { start: 'inline-end span-block-end', end: 'inline-end span-block-start' },
+  'inline-start': { start: 'inline-start span-block-end', end: 'inline-start span-block-start' },
 };
 
 export const Popover: React.FC<PopoverProps> = ({
@@ -39,6 +41,7 @@ export const Popover: React.FC<PopoverProps> = ({
   trigger,
   children,
   placement = 'block-end',
+  align = 'end',
   triggerClassName,
   className,
 }) => {
@@ -81,7 +84,7 @@ export const Popover: React.FC<PopoverProps> = ({
         className={`${styles.popover} ${className ?? ''}`}
         style={{
           positionAnchor: anchorName,
-          positionArea: PLACEMENT_AREA[placement],
+          positionArea: PLACEMENT_AREA[placement][align],
         }}
       >
         {children}

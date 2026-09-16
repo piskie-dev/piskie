@@ -12,6 +12,13 @@ import { args, identifier } from '../../capabilities/validation.js';
 import type { DesktopApplication } from './desktop-application.js';
 
 const pathSchema = z.string().trim().min(1).max(16_384);
+const branchNameSchema = z.string().min(1).max(1_024);
+const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+const branchBaseSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('branch'), name: branchNameSchema, commit: commitSchema }).strict(),
+  z.object({ kind: z.literal('unborn'), name: branchNameSchema }).strict(),
+  z.object({ kind: z.literal('detached'), commit: commitSchema }).strict(),
+]);
 
 export function createDesktopController(
   application: DesktopApplication,
@@ -54,6 +61,21 @@ export function createDesktopController(
       DESKTOP_OPERATIONS.selectFiles,
       args([z.object({ type: z.enum(['file', 'folder', 'any']).optional() }).strict().optional()]),
       (context, [input]) => application.selectFiles(context.windowId, input?.type),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.workspaceInfo,
+      args([z.string().min(1).max(16_384).optional()]),
+      (context, [workspace]) => application.workspaceInfo(workspace, context.signal),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.switchWorkspaceBranch,
+      args([z.string().min(1).max(16_384), z.string().min(1).max(1_024)]),
+      (context, [workspace, branch]) => application.switchWorkspaceBranch(workspace, branch, context.signal),
+    ),
+    operation(
+      DESKTOP_OPERATIONS.createWorkspaceBranch,
+      args([z.string().min(1).max(16_384), branchNameSchema, branchBaseSchema]),
+      (context, [workspace, branch, base]) => application.createWorkspaceBranch(workspace, branch, base, context.signal),
     ),
     operation(DESKTOP_OPERATIONS.pickBackground, args([]), (context) => (
       application.pickBackground(context.windowId)

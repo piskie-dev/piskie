@@ -4,22 +4,36 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: inherit !important;
+  color: var(--cyber-accent) !important;
   font: inherit;
   line-height: inherit;
   text-align: inherit;
   vertical-align: baseline;
   cursor: pointer;
-  text-decoration: none;
-  transition: color 150ms ease;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color 150ms ease;
+}
+
+.target code,
+:global(.markdown-dark-theme) :is(a, button).target,
+:global(.markdown-dark-theme) :is(a, button).target code {
+  color: var(--cyber-accent) !important;
+}
+
+.target code {
+  text-decoration: inherit;
+  text-underline-offset: inherit;
 }
 
 .target:hover,
 .target:hover code,
 :global(.markdown-dark-theme) .target:hover,
 :global(.markdown-dark-theme) .target:hover code {
-  color: var(--cyber-accent) !important;
-  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
 }
 
 .target:focus-visible {

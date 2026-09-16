@@ -32,7 +32,7 @@ import type {
 } from '../../shared/electron-contracts/agents.js';
 import { createChangeChannel, type ChangeSource, type Unsubscribe } from '../core/change-channel.js';
 import { AgentRunPaths } from './agent-run-paths.js';
-import { isVisibleConversationMessage, type AgentRunMessageState } from '../../shared/agent-run-messages.js';
+import { isTextOnlyAssistantMessage, isVisibleConversationMessage, type AgentRunMessageState } from '../../shared/agent-run-messages.js';
 
 const PERSISTED_PLAIN_MESSAGE_TYPES = new Set([
   'text',
@@ -248,7 +248,7 @@ export class ConversationStore {
         if (!isVisibleConversationMessage(entry)) return;
         const index = summary.count + offset;
         summary.latestMessage = { index, timestamp: entry.ts };
-        if (entry.role === 'assistant') summary.latestAssistantIndex = index;
+        if (isTextOnlyAssistantMessage(entry)) summary.latestAssistantIndex = index;
       });
     }
     summary.count = count;

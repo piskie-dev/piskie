@@ -68,6 +68,15 @@ describe('agentInputRequestSchema（生产边界）', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each([
+    { name: 'sample.txt', path: '/sample workspace/sample.txt' },
+    { name: 'sample.txt', path: '/sample workspace/sample.txt', kind: 'file' },
+    { name: 'sample folder', path: '/sample workspace/sample folder', kind: 'directory' },
+  ])('accepts and preserves attachment $name with kind $kind', (file) => {
+    const result = agentInputRequestSchema.parse({ source: 'user', content: 'Sample message', files: [file] });
+    expect(result.files).toStrictEqual([file]);
+  });
+
   it('priority 越界被拒', () => {
     const result = agentInputRequestSchema.safeParse({
       source: 'user',

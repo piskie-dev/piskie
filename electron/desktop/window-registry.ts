@@ -571,7 +571,7 @@ export class WindowRegistry implements DesktopPresentationPort {
     const headers = {
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'none'",
+      'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
       'X-Content-Type-Options': 'nosniff',
     };
     if (request.method !== 'GET' && request.method !== 'HEAD') {

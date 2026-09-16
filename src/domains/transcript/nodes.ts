@@ -123,6 +123,8 @@ interface TranscriptNodeBase {
 export interface UserNode extends TranscriptNodeBase {
   readonly kind: 'user';
   readonly origin: 'user' | 'assignment' | 'parent';
+  /** Dispatch time from the parent envelope, independent of this message's consumption time. */
+  readonly parentSentAt?: number;
   readonly skills?: readonly string[];
   readonly skillLoadErrors?: readonly { readonly name: string; readonly error: string }[];
   readonly text?: string;
@@ -183,6 +185,13 @@ export interface ToolNode extends TranscriptNodeBase {
   /** 后端工具名原样（如 `read` / `browser_takeScreenshot`），用于诊断与 meta */
   readonly tool: string;
   readonly state: ToolState;
+  /** A directed instruction, used to associate the worker's next execution with its parent turn. */
+  readonly workerMessage?: {
+    readonly targetId: string;
+    readonly text: string;
+    readonly callTs: number;
+    readonly resultTs?: number;
+  };
   readonly badge?: TranscriptBadge;
   readonly media?: readonly CellMedia[];
   readonly files?: readonly TranscriptFileRef[];
@@ -219,6 +228,7 @@ export interface SummaryNode extends TranscriptNodeBase {
 /** 计划提交：正文就地阅读，审批门由 gate 承载 */
 export interface PlanNode extends TranscriptNodeBase {
   readonly kind: 'plan';
+  readonly running: boolean;
   readonly taskSummary: string;
   readonly body?: string;
   /** 待确认时携带 callId，供 Gate 配对；终态为 undefined */

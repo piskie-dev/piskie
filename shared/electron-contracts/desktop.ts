@@ -10,6 +10,9 @@ export const DESKTOP_OPERATIONS = Object.freeze({
   previewFile: 'desktop.files.preview',
   releasePreview: 'desktop.files.releasePreview',
   selectFiles: 'desktop.files.select',
+  workspaceInfo: 'desktop.workspace.info',
+  switchWorkspaceBranch: 'desktop.workspace.switchBranch',
+  createWorkspaceBranch: 'desktop.workspace.createBranch',
   pickBackground: 'desktop.theme.pickBackground',
   clearBackground: 'desktop.theme.clearBackground',
   setColorScheme: 'desktop.theme.setColorScheme',
@@ -34,7 +37,8 @@ export type FilePreviewDescriptor =
       readonly kind: 'file';
       readonly mediaType?: string;
       readonly size: number;
-    };
+    }
+  | { readonly kind: 'directory' };
 
 export type ClipboardAttachmentRequest =
   | { readonly kind: 'paths'; readonly paths: readonly string[] }
@@ -44,7 +48,7 @@ export type ClipboardAttachmentDescriptor = {
   readonly name: string;
   readonly path: string;
   readonly size: number;
-} & ({ readonly kind: 'image'; readonly previewUrl: string } | { readonly kind: 'file' });
+} & ({ readonly kind: 'image'; readonly previewUrl: string } | { readonly kind: 'file' | 'directory' });
 
 export const DESKTOP_TOPICS = Object.freeze({
   network: 'desktop.system.network',
@@ -77,8 +81,37 @@ interface DesktopThemeClient {
   setColorScheme(colorScheme: DesktopColorScheme): Promise<void>;
 }
 
+export type WorkspaceGitHead =
+  | { readonly kind: 'branch'; readonly name: string; readonly commit: string }
+  | { readonly kind: 'unborn'; readonly name: string }
+  | { readonly kind: 'detached'; readonly commit: string };
+
+export interface WorkspaceGitInfo {
+  readonly root: string;
+  readonly head: WorkspaceGitHead;
+  readonly branches: readonly string[];
+  /** Changed worktree entries, including staged, unstaged and untracked files. */
+  readonly dirtyFileCount: number;
+}
+
+export interface WorkspaceInfo {
+  readonly path: string;
+  readonly git: WorkspaceGitInfo | null;
+  /** A directory or Git read failure; distinct from a non-Git directory. */
+  readonly error?: string;
+}
+
+interface DesktopWorkspaceClient {
+  /** Omitting the path selects the application's default workspace. */
+  info(workspace?: string): Promise<WorkspaceInfo>;
+  switchBranch(workspace: string, branch: string): Promise<WorkspaceInfo>;
+  /** Creates from the displayed HEAD; rejects a stale base before changing the working tree. */
+  createBranch(workspace: string, branch: string, base: WorkspaceGitHead): Promise<WorkspaceInfo>;
+}
+
 export interface DesktopClient {
   readonly system: DesktopSystemClient;
   readonly files: DesktopFilesClient;
+  readonly workspace: DesktopWorkspaceClient;
   readonly theme: DesktopThemeClient;
 }

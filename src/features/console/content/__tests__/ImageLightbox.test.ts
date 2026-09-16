@@ -67,6 +67,25 @@ describe('ImageLightbox context navigation', () => {
     expect(container.querySelector('button[aria-label="关闭预览"]')).not.toBeNull();
   });
 
+  it('pins decoded dimensions so a viewBox-only SVG cannot collapse in the dialog', async () => {
+    await act(async () => {
+      root.render(createElement(ImageLightbox, {
+        preview: { urls: ['piskie-attachment://preview/vector'], index: 0 },
+        onClose: vi.fn(),
+      }));
+    });
+    const image = container.querySelector<HTMLImageElement>('img[alt^="第"]')!;
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 200 },
+      naturalHeight: { configurable: true, value: 150 },
+    });
+
+    await act(async () => image.dispatchEvent(new dom.window.Event('load')));
+
+    expect(image.getAttribute('width')).toBe('200');
+    expect(image.getAttribute('height')).toBe('150');
+  });
+
   it('starts at the clicked image and browses with controls, thumbnails, and arrow keys', async () => {
     const urls = [
       'https://example.test/one.png',

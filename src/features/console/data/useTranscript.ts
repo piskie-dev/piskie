@@ -3,11 +3,12 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useRendererRuntime } from '../../../renderer-runtime/hooks';
 import { projectLiveNodes } from '../../../domains/transcript/live-generation';
 import type { TranscriptSession } from '../../../domains/transcript/transcript-session';
-import type { TranscriptSessionSnapshot } from '../../../domains/transcript/types';
+import type { TranscriptResponse, TranscriptSessionSnapshot } from '../../../domains/transcript/types';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
 
 export interface TranscriptView {
   readonly nodes: readonly TranscriptNode[];
+  readonly responses: readonly TranscriptResponse[];
   readonly hasEarlier: boolean;
   readonly entryCount: number;
   readonly loaded: boolean;
@@ -23,6 +24,7 @@ const EMPTY_SNAPSHOT: TranscriptSessionSnapshot = Object.freeze({
   projection: Object.freeze({
     range: Object.freeze({ from: 0, toExclusive: 0 }),
     nodes: Object.freeze([]),
+    responses: Object.freeze([]),
     nodeIdsByEntry: new Map(),
     toolNodeByCallId: new Map(),
   }),
@@ -74,9 +76,10 @@ export function useTranscript(
 
   return useMemo(() => ({
     nodes,
+    responses: snapshot.projection.responses,
     hasEarlier: snapshot.hasEarlier,
     entryCount: snapshot.total,
     loaded: snapshot.phase === 'ready',
     loadEarlier,
-  }), [loadEarlier, nodes, snapshot.hasEarlier, snapshot.phase, snapshot.total]);
+  }), [loadEarlier, nodes, snapshot.projection.responses, snapshot.hasEarlier, snapshot.phase, snapshot.total]);
 }

@@ -6,6 +6,17 @@
   padding-block: 4px;
 }
 
+.inline {
+  display: flex;
+  min-inline-size: 0;
+  margin-inline-start: 8px;
+}
+
+.inline .summary {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
 .summary {
   display: inline-flex;
   align-items: center;
@@ -21,6 +32,22 @@
   font-variant-numeric: tabular-nums;
   line-height: 18px;
   white-space: nowrap;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.summary:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: 2px;
+}
+
+.summary svg {
+  flex: 0 0 auto;
 }
 
 .label {

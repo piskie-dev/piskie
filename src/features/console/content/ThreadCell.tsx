@@ -19,36 +19,17 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from '
 import { useTranslation } from 'react-i18next';
 import {
   ArrowDownLeft,
-  ArrowUpRight,
   Bell,
-  BookOpen,
-  Camera,
   ChevronRight,
-  CircleHelp,
   CircleSlash2,
   ClipboardList,
-  FileDiff,
-  FilePen,
-  FilePlus2,
-  FileSearch,
   FileText,
-  FolderOpen,
-  FolderSearch,
-  Globe,
-  Hourglass,
-  ImagePlus,
   ListChecks,
   Loader2,
-  Network,
-  Puzzle,
   Pause,
   RotateCcw,
-  Search,
   ShieldQuestion,
-  Smartphone,
   Terminal,
-  Workflow,
-  Wrench,
   XCircle,
 } from 'lucide-react';
 
@@ -78,8 +59,8 @@ import type {
 import styles from './thread.module.css';
 import activeTextStyles from './activeText.module.css';
 import { StreamingMarkdown } from './StreamingMarkdown';
-import { isBrowserToolName } from '../data/cells/toolPresentation';
-import { workerPresentation } from '../chrome/workerPresentation';
+import { ToolTypeIcon } from './ToolTypeIcon';
+import { WorkerCreationRow } from './WorkerCreationRow';
 import type { StatusKey } from '../data/status';
 import type { WorkerRef } from '../data/vm';
 
@@ -107,39 +88,6 @@ const FLOW_EVENT_STATUS_KEYS: Readonly<Record<string, string>> = {
  */
 const SHORTCUT_HINT = isMacOSPlatform() ? '⌘B' : 'Ctrl+B';
 
-/** 工具行的前置图标：与 Codex 的「描边小图标」气质一致，按状态而非语气选 */
-/**
- * 工具语义图标：每类操作有自己的脸，终端符只留给真正的 shell。
- * 精确名优先，前缀/模式兜底；认不出的用扳手（通用工具），不冒充命令行。
- */
-function toolGlyph(tool: string): React.ReactNode {
-  switch (tool) {
-    case 'read': return <FileText size={ICON} />;
-    case 'write': return <FilePlus2 size={ICON} />;
-    case 'edit': return <FilePen size={ICON} />;
-    case 'ls': return <FolderOpen size={ICON} />;
-    case 'glob': return <FolderSearch size={ICON} />;
-    case 'grep': return <FileSearch size={ICON} />;
-    case 'shell': return <Terminal size={ICON} />;
-    case 'task': return <ListChecks size={ICON} />;
-    case 'plan': return <ClipboardList size={ICON} />;
-    case 'ask_user': return <CircleHelp size={ICON} />;
-    case 'subagent':
-    case 'subagent_stop': return <Workflow size={ICON} />;
-    case 'skill_call': return <Puzzle size={ICON} />;
-    case 'load_skill': return <BookOpen size={ICON} />;
-    case 'tool_search': return <Search size={ICON} />;
-    case 'generate_image': return <ImagePlus size={ICON} />;
-    case 'wait': return <Hourglass size={ICON} />;
-    default:
-      if (/screenshot/i.test(tool)) return <Camera size={ICON} />;
-      if (tool.startsWith('mobile-core')) return <Smartphone size={ICON} />;
-      if (isBrowserToolName(tool)) return <Globe size={ICON} />;
-      if (/write|edit|patch|apply/i.test(tool)) return <FilePen size={ICON} />;
-      return <Wrench size={ICON} />;
-  }
-}
-
 function toolIcon(cell: ToolNode): React.ReactNode {
   switch (cell.state.phase) {
     case 'running':
@@ -151,7 +99,7 @@ function toolIcon(cell: ToolNode): React.ReactNode {
     case 'cancelled':
       return <CircleSlash2 size={ICON} />;
     case 'ok':
-      return toolGlyph(cell.tool);
+      return <ToolTypeIcon cell={cell} />;
   }
 }
 
@@ -711,7 +659,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
         return (
           <FlowEventDisclosure
             direction="outgoing"
-            icon={<ArrowUpRight size={ICON} />}
+            icon={<ToolTypeIcon cell={cell} />}
             title={title}
             summary={summary}
             tone={cell.tone}
@@ -791,7 +739,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
     case 'plan':
       return (
         <CollapsibleCard
-          icon={<FileDiff size={16} />}
+          icon={<ToolTypeIcon cell={cell} size={16} />}
           title={t('transcript.title.executionPlan')}
           subtitle={cell.taskSummary}
           // 计划正文恒默认展开：它是会话的关键产物，收起反而要多点一下。
@@ -810,34 +758,13 @@ export const ThreadCell = memo<ThreadCellProps>(({
 
     // 子流程创建：类型图标和短标签用于扫读，任务标题占据剩余宽度。
     case 'worker': {
-      const presentation = cell.workerType ? workerPresentation(cell.workerType) : undefined;
       const worker = workers?.find((candidate) => candidate.id === cell.workerId);
-      const status = cell.creating ? conversationStatus : worker?.status;
-      const live = status === 'thinking' || status === 'running';
-      const open = worker && onOpenWorker ? () => onOpenWorker(worker.id) : undefined;
-      const Icon = presentation?.icon ?? Network;
       return (
-        <button
-          className={styles.workerCreation}
-          type="button"
-          disabled={!open}
-          onClick={open}
-          data-clickable={!!open}
-          data-live={live}
-        >
-          <span className={styles.workerCreationIcon} aria-hidden>
-            {live ? <OrbIndicator size={ICON} variant="expanding" /> : <Icon size={ICON} />}
-          </span>
-          <span className={`${styles.workerCreationText} ${live ? activeTextStyles.text : ''}`}>
-            <span className={styles.workerCreationLabel}>{title}</span>
-            {presentation && (
-              <span className={styles.workerCreationType} title={t(presentation.labelKey)}>
-                {t(presentation.shortLabelKey)}
-              </span>
-            )}
-            <span className={styles.workerCreationSubject} title={cell.subject}>{cell.subject}</span>
-          </span>
-        </button>
+        <WorkerCreationRow
+          cell={cell}
+          status={cell.creating ? conversationStatus : worker?.status}
+          onActivate={worker && onOpenWorker ? () => onOpenWorker(worker.id) : undefined}
+        />
       );
     }
 

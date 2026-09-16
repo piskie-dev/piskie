@@ -270,16 +270,13 @@ export function createTranscriptSession(
             limit: PAGE_SIZE,
           });
           if (closed || epoch !== generation || page.entries.length === 0) return;
-          const current = projector.visibleEntries();
-          const visible = [
-            ...page.entries.map((entry, offset) => ({ index: page.from + offset, entry })),
-            ...current,
-          ];
-          const warmup = await loadWarmup(page.from, visible, epoch);
+          const earlier = page.entries.map((entry, offset) => ({ index: page.from + offset, entry }));
+          const warmup = await loadWarmup(page.from, [...earlier, ...projector.visibleEntries()], epoch);
           if (closed || epoch !== generation) return;
+          // Appends and gap repair can extend the visible range while warmup is pending.
           projector.reset(
             page.from,
-            visible.map((item) => item.entry),
+            [...page.entries, ...projector.visibleEntries().map((item) => item.entry)],
             warmup,
           );
           total = Math.max(total, page.total);

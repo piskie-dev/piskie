@@ -15,6 +15,8 @@ interface TargetControl {
 
 export interface TranscriptStore {
   session(agentId: string): TranscriptSession;
+  /** Full retained history for derived views; separate from the chat's paginated window. */
+  history(agentId: string): TranscriptSession;
   applyConversation(event: ConversationAppendEvent): void;
   enqueueLive(event: AgentLiveContentDelta): void;
   syncControl(targets: Readonly<Record<string, AgentControlTarget>>): void;
@@ -23,6 +25,7 @@ export interface TranscriptStore {
 
 export function createTranscriptStore(source: ConversationPageSource): TranscriptStore {
   const sessions = new Map<string, TranscriptSession>();
+  const histories = new Map<string, TranscriptSession>();
   const controls = new Map<string, TargetControl>();
   let liveQueue: AgentLiveContentDelta[] = [];
   let cancelFlush: (() => void) | null = null;
@@ -58,9 +61,35 @@ export function createTranscriptStore(source: ConversationPageSource): Transcrip
       if (closed) throw new Error('TranscriptStore is closed');
       return getSession(agentId);
     },
+    history(agentId) {
+      if (closed) throw new Error('TranscriptStore is closed');
+      const existing = histories.get(agentId);
+      if (existing) return existing;
+      const session = createTranscriptSession(agentId, source);
+      let loading: Promise<void> | undefined;
+      const history: TranscriptSession = {
+        ...session,
+        start() {
+          if (loading) return loading;
+          loading = (async () => {
+            await session.start();
+            while (!closed) {
+              const snapshot = session.state.getState();
+              if (snapshot.phase !== 'ready' || !snapshot.hasEarlier) break;
+              await session.loadEarlier();
+              if (session.state.getState().projection.range.from >= snapshot.projection.range.from) break;
+            }
+          })().finally(() => { loading = undefined; });
+          return loading;
+        },
+      };
+      histories.set(agentId, history);
+      return history;
+    },
     applyConversation(event) {
       if (closed) return;
       sessions.get(event.agentId)?.append(event);
+      histories.get(event.agentId)?.append(event);
     },
     enqueueLive(event) {
       if (closed) return;
@@ -101,7 +130,9 @@ export function createTranscriptStore(source: ConversationPageSource): Transcrip
       cancelFlush = null;
       liveQueue = [];
       for (const session of sessions.values()) session.close();
+      for (const history of histories.values()) history.close();
       sessions.clear();
+      histories.clear();
       controls.clear();
     },
   };

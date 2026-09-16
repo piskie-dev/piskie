@@ -11,7 +11,7 @@
  * |---|---|
  * | 一次 write/edit | 单个文件名 + 本次 diff（着色、带行号） |
  * | 读取的文本文件 | 带源文件行号的 Markdown 文档或只读代码视图 |
- * | 正文里的本地路径 | 当前磁盘快照，复用相同的文本预览与行号 |
+ * | 正文里的本地路径 | 文本展示当前磁盘快照；目录展示信息卡与系统动作 |
  * | 读不了的文件（二进制 / 超大 / 缺失） | **文件卡**：类型图标 + 原因 + 两个系统动作 |
  *
  * 二进制没有可读文本形态，硬渲染只会得到乱码。与其显示乱码，不如把它当**文件**呈现 ——
@@ -32,7 +32,8 @@ import type { ImagePreviewHandler } from '@/components/image-preview/renderedIma
 import { localPathDirectory } from '@/utils/localPath';
 import { collapseContext, type DiffLine } from '../data/diffLines';
 import { grammarForPath, tokenize, MAX_HIGHLIGHT_LINES, type Token } from './diff/highlight';
-import { basename, type FileChange, type ReadOp } from '../data/review';
+import { basename, fileChangeOf, type FileChange, type ReadOp } from '../data/review';
+import type { RoundFileChanges } from '../data/fileChanges';
 import { resolvePresentationText } from '../data/presentationText';
 import type { ReviewableFilePreview } from './fileReviewTarget';
 import styles from './review.module.css';
@@ -179,13 +180,14 @@ DiffBody.displayName = 'DiffBody';
 
 const FileCard = memo<{
   readonly path: string;
+  readonly kind?: 'file' | 'directory';
   readonly reason: string;
   readonly onOpenPath: (path: string) => void;
   readonly onRevealPath: (path: string) => void;
-}>(({ path, reason, onOpenPath, onRevealPath }) => {
+}>(({ path, kind = 'file', reason, onOpenPath, onRevealPath }) => {
   const { t } = useTranslation();
   return <div className={styles.card}>
-    <span className={styles.cardIcon}>{kindIcon(path)}</span>
+    <span className={styles.cardIcon}>{kind === 'directory' ? <FolderOpen size={18} /> : kindIcon(path)}</span>
     <div className={styles.cardMain}>
       <span className={styles.cardName} title={path}>
         {basename(path)}
@@ -194,7 +196,7 @@ const FileCard = memo<{
       <div className={styles.cardActions}>
         <button type="button" className={styles.cardButton} onClick={() => onOpenPath(path)}>
           <ExternalLink size={11} />
-          <span>{t('sessionWorkbenchUi.review.openWithSystem')}</span>
+          <span>{t(kind === 'directory' ? 'sessionWorkbenchUi.review.openDirectory' : 'sessionWorkbenchUi.review.openWithSystem')}</span>
         </button>
         <button type="button" className={styles.cardButton} onClick={() => onRevealPath(path)}>
           <FolderOpen size={11} />
@@ -302,6 +304,50 @@ const ReadView = memo<{
 
 ReadView.displayName = 'ReadView';
 
+/** One file in one turn, preserving the diff and line-number boundary of every call. */
+export const RecordedFileReview = memo<{
+  readonly file: RoundFileChanges;
+  readonly roundTitle: string;
+  readonly onRevealPath: (path: string) => void;
+}>(({ file, roundTitle, onRevealPath }) => {
+  const { t } = useTranslation();
+  const changes = useMemo(() => file.records.flatMap((record) => {
+    const change = fileChangeOf(record.node);
+    return change ? [{ id: record.id, change }] : [];
+  }), [file.records]);
+  const copyText = useMemo(() => changes.map(({ change }, index) => [
+    t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 }),
+    ...change.diff.lines.map((line) => (line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' ') + line.text),
+  ].join('\n')).join('\n\n'), [changes, t]);
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>
+        <span className={styles.headerTitle} title={file.path}>
+          {roundTitle && <span className={styles.roundTitle}>{roundTitle}</span>}
+          {basename(file.path)}
+        </span>
+        <StatText added={file.added} removed={file.removed} />
+        <HeaderActions copyText={copyText} path={file.path} onRevealPath={onRevealPath} />
+      </div>
+      <div className={styles.scroll}>
+        {changes.map(({ id, change }, index) => (
+          <section key={id} aria-label={t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 })}>
+            <div className={styles.callHeader}>
+              <span>{t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 })}</span>
+              <StatText added={change.stat.added} removed={change.stat.removed} />
+            </div>
+            {change.diff.degraded && <div className={styles.notice}>{t('sessionWorkbenchUi.review.oversizedDiff')}</div>}
+            <DiffBody lines={change.diff.lines} absoluteLines={change.absoluteLines} />
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+RecordedFileReview.displayName = 'RecordedFileReview';
+
 // ==================== 出口 ====================
 
 export interface PathPreview {
@@ -338,11 +384,12 @@ export const ReviewPanel = memo<ReviewPanelProps>(
       const type = descriptor.kind === 'file'
         ? (descriptor.mediaType ?? t('sessionWorkbenchUi.review.binaryFile'))
         : null;
-      const size = descriptor.size < 1024
-        ? `${descriptor.size} B`
-        : descriptor.size < 1024 * 1024
-          ? `${(descriptor.size / 1024).toFixed(1)} KB`
-          : `${(descriptor.size / 1024 / 1024).toFixed(2)} MB`;
+      const fileSize = descriptor.kind === 'file' ? descriptor.size : null;
+      const size = fileSize === null ? null : fileSize < 1024
+        ? `${fileSize} B`
+        : fileSize < 1024 * 1024
+          ? `${(fileSize / 1024).toFixed(1)} KB`
+          : `${(fileSize / 1024 / 1024).toFixed(2)} MB`;
 
       return (
         <div className={styles.panel}>
@@ -352,10 +399,13 @@ export const ReviewPanel = memo<ReviewPanelProps>(
             <HeaderActions copyText={text} path={path} onRevealPath={onRevealPath} />
           </div>
           <div className={styles.scroll}>
-            {descriptor.kind === 'file' ? (
+            {descriptor.kind !== 'text' ? (
               <FileCard
                 path={path}
-                reason={t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
+                kind={descriptor.kind}
+                reason={descriptor.kind === 'directory'
+                  ? t('sessionWorkbenchUi.review.directoryPreviewUnavailable')
+                  : t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
                 onOpenPath={onOpenPath}
                 onRevealPath={onRevealPath}
               />

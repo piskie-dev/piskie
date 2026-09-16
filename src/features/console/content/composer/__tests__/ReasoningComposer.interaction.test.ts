@@ -26,6 +26,7 @@ vi.mock('../../../chrome/Popover', () => ({
 }));
 vi.mock('../../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../ContextUsageRing', () => ({ ContextUsageRing: () => null }));
+vi.mock('../WorkspaceBar', () => ({ WorkspaceBar: () => null }));
 
 const low = { kind: 'effort', effort: 'low' } as const;
 const medium = { kind: 'effort', effort: 'medium' } as const;
