@@ -5,7 +5,7 @@
  * 入站事件只有索引值，无 API 可回查内容。
  * 采用 内存缓存 + JSONL 追加写持久化 方案，确保重启后历史引用仍可命中。
  *
- * 存储位置：~/.openclaw/qqbot/data/ref-index.jsonl
+ * 存储位置：<qqbotDataDir>/data/ref-index.jsonl（PISKIE：<userData>/im-gateway/qqbot）
  *
  * 每行格式：{"k":"REFIDX_xxx","v":{...},"t":1709000000}
  * - k = refIdx 键
@@ -19,8 +19,13 @@ import { formatAttachmentTags } from "./group-history.js";
 import { parseFaceTags, buildAttachmentSummaries } from "./utils/text-parsing.js";
 import { processAttachments, formatVoiceText } from "./inbound-attachments.js";
 // ============ 配置 ============
-const STORAGE_DIR = getQQBotDataDir("data");
-const REF_INDEX_FILE = path.join(STORAGE_DIR, "ref-index.jsonl");
+// PISKIE：惰性解析，避免模块导入期触碰未注入的存储根
+function getStorageDir() {
+    return getQQBotDataDir("data");
+}
+function getRefIndexFile() {
+    return path.join(getStorageDir(), "ref-index.jsonl");
+}
 const MAX_ENTRIES = 50000; // 内存中最大缓存条目数
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
 const COMPACT_THRESHOLD_RATIO = 2; // 文件行数超过有效条目 N 倍时 compact
@@ -36,10 +41,10 @@ function loadFromFile() {
     cache = new Map();
     totalLinesOnDisk = 0;
     try {
-        if (!fs.existsSync(REF_INDEX_FILE)) {
+        if (!fs.existsSync(getRefIndexFile())) {
             return cache;
         }
-        const raw = fs.readFileSync(REF_INDEX_FILE, "utf-8");
+        const raw = fs.readFileSync(getRefIndexFile(), "utf-8");
         const lines = raw.split("\n");
         const now = Date.now();
         let expired = 0;
@@ -85,7 +90,7 @@ function loadFromFile() {
 function appendLine(line) {
     try {
         ensureDir();
-        fs.appendFileSync(REF_INDEX_FILE, JSON.stringify(line) + "\n", "utf-8");
+        fs.appendFileSync(getRefIndexFile(), JSON.stringify(line) + "\n", "utf-8");
         totalLinesOnDisk++;
     }
     catch (err) {
@@ -93,8 +98,8 @@ function appendLine(line) {
     }
 }
 function ensureDir() {
-    if (!fs.existsSync(STORAGE_DIR)) {
-        fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    if (!fs.existsSync(getStorageDir())) {
+        fs.mkdirSync(getStorageDir(), { recursive: true });
     }
 }
 // ============ Compact：重写文件，去除过期和被覆盖的条目 ============
@@ -110,7 +115,7 @@ function compactFile() {
     const before = totalLinesOnDisk;
     try {
         ensureDir();
-        const tmpPath = REF_INDEX_FILE + ".tmp";
+        const tmpPath = getRefIndexFile() + ".tmp";
         const lines = [];
         for (const [key, entry] of cache) {
             const line = {
@@ -128,7 +133,7 @@ function compactFile() {
             lines.push(JSON.stringify(line));
         }
         fs.writeFileSync(tmpPath, lines.join("\n") + "\n", "utf-8");
-        fs.renameSync(tmpPath, REF_INDEX_FILE);
+        fs.renameSync(tmpPath, getRefIndexFile());
         totalLinesOnDisk = cache.size;
         console.log(`[ref-index-store] Compacted: ${before} lines → ${totalLinesOnDisk} lines`);
     }
@@ -315,6 +320,6 @@ export function getRefIndexStats() {
         size: store.size,
         maxEntries: MAX_ENTRIES,
         totalLinesOnDisk,
-        filePath: REF_INDEX_FILE,
+        filePath: getRefIndexFile(),
     };
 }

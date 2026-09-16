@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { copyText } from '@/services/clipboard';
 import { Copy, Eye, EyeOff, Pencil, Plug2, Search, Star } from 'lucide-react';
 import { createUuid } from '@shared/utils/identifiers';
 import type { SearchDocument, SearchProviderConfig } from '../../../../shared/types/web-search';
@@ -117,9 +118,9 @@ export const SearchDesk: React.FC<{
 
   const copyKey = async () => {
     try {
-      await navigator.clipboard.writeText(keyDraft ?? provider.apiKey ?? '');
+      await copyText(keyDraft ?? provider.apiKey ?? '');
       onFlash(messageText('settings.provider.copied'));
-    } catch (error) { onFlash(rawText(String(error)), 'halt'); }
+    } catch { onFlash(messageText('clipboardUi.copyFailed'), 'halt'); }
   };
 
   const freshOutcome = outcome?.revision === config.revision ? outcome : null;

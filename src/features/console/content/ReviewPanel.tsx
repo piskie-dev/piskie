@@ -23,11 +23,13 @@
  * **不知道落在文件第几行**，于是行号槽显示 `·`。宁可空着也不画假行号。
  */
 
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, Video } from 'lucide-react';
+import React, { memo, useMemo } from 'react';
+import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, TriangleAlert, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { LinkedMarkdown, type SourceBlockProps } from '@/components/content-links';
+import { useCopyAction } from '@/hooks/useCopyAction';
+import { copyText } from '@/services/clipboard';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { localPathDirectory } from '@/utils/localPath';
 import { collapseContext, type DiffLine } from '../data/diffLines';
@@ -51,40 +53,33 @@ function kindIcon(path: string): React.ReactNode {
 /**
  * 头部动作簇:复制内容 + 在文件夹中显示。
  * 复制源由调用侧给(read=文件内容原文;write/edit=本次 diff 文本);
- * 没有可复制文本(二进制/缺失)时不出复制钮。复制成功图标换勾 1.5s。
+ * 没有可复制文本(二进制/缺失)时不出复制钮。复制成功短暂显示勾选图标。
  */
 const HeaderActions = memo<{
   readonly copyText: string | null;
   readonly path: string;
   readonly onRevealPath: (path: string) => void;
-}>(({ copyText, path, onRevealPath }) => {
+}>(({ copyText: textToCopy, path, onRevealPath }) => {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
-
-  const copy = async (): Promise<void> => {
-    if (copyText === null) return;
-    await navigator.clipboard.writeText(copyText);
-    setCopied(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setCopied(false), 1500);
-  };
+  const contentKey = useMemo(() => ({ path, textToCopy }), [path, textToCopy]);
+  const { busy, status, run } = useCopyAction(contentKey);
+  const label = status === 'success' ? t('sessionWorkbenchUi.review.copied')
+    : status === 'error' ? t('clipboardUi.copyFailed')
+      : status === 'copying' ? t('clipboardUi.copying') : t('sessionWorkbenchUi.review.copyContent');
 
   return (
     <span className={styles.headerActions}>
-      {copyText !== null && (
+      {textToCopy !== null && (
         <button
           type="button"
           className={styles.headerButton}
-          onClick={() => void copy()}
-          title={copied ? t('sessionWorkbenchUi.review.copied') : t('sessionWorkbenchUi.review.copyContent')}
-          aria-label={t('sessionWorkbenchUi.review.copyContent')}
+          onClick={() => { void run(() => copyText(textToCopy)); }}
+          disabled={busy}
+          aria-busy={busy}
+          title={label}
+          aria-label={label}
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {status === 'success' ? <Check size={12} /> : status === 'error' ? <TriangleAlert size={12} /> : <Copy size={12} />}
         </button>
       )}
       <button

@@ -382,6 +382,7 @@ export function createElectronPiskieClient(options: {
       },
       files: {
         getPathForFile: (file) => options.getPathForFile(file),
+        copyImage: (input) => request(DESKTOP_OPERATIONS.copyImage, input),
         preview: (path) => request(DESKTOP_OPERATIONS.previewFile, path),
         releasePreview: (url) => request(DESKTOP_OPERATIONS.releasePreview, url),
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),

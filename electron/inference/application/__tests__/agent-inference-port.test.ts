@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import type { AgentHost } from '../../../agent/agent-host.js';
+import { renderToolResult } from '../../../agent/conversation/model-text.js';
+import { ImageModule } from '../../../agent/modules/image.module.js';
+import { pathsService } from '../../../services/paths.service.js';
+import { GenerateImageTool } from '../../../tools/image/generate-image.tool.js';
+import { toToolResult, type ToolContext } from '../../../tools/types.js';
+import { mapOpenAiResponsesRequest } from '../../drivers/openai/responses-request-mapper.js';
 import { AIErrorType } from '../../../../shared/constants/index.js';
 import type { AiEvent, AiGateway, AiRequest as DomainAiRequest } from '../../ai/contracts.js';
 import { GatewayCallError } from '../../execution/call-error.js';
 import type { InferenceRuntimeSnapshot } from '../../execution/runtime-snapshot.js';
 import { RuntimeSnapshotStore } from '../../execution/runtime-snapshot.js';
 import { MemoryArtifactStore } from '../../image/artifact-store.js';
+import type { ImageApplicationPort } from '../image-application-port.js';
 import {
   DefaultAgentInferencePort,
   type AgentInferenceOptions,
@@ -233,6 +244,101 @@ describe('DefaultAgentInferencePort', () => {
     });
     expect(port.contextWindow({ providerId: 'provider', modelId: 'model/one' })).toBe(200_000);
   });
+
+  it.each(['completed', 'partial'] as const)(
+    'sends committed generate_image bytes in the next Responses request for a %s batch',
+    async (status) => {
+      const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-generated-images-'));
+      const host = {
+        id: path.basename(outputDir), approvalMode: 'confirm', emitStateChange: vi.fn(),
+      } as unknown as AgentHost;
+      const imageModule = new ImageModule();
+      const bytes = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      const imageTarget = { providerId: 'sample-provider', modelId: 'sample-image-model' };
+      const imageApplication: ImageApplicationPort = {
+        hasTarget: () => true,
+        execute: async ({ prompt }) => {
+          if (prompt === 'Sample unavailable image') throw new Error('sample provider unavailable');
+          return {
+            runId: 'sample-image-run', model: imageTarget, configRevision: 1,
+            images: [{ artifactId: 'sample-image-artifact', bytes, mimeType: 'image/png' }],
+          };
+        },
+      };
+      imageModule.init(host, { imageTarget, imageApplication });
+      const waitForReviewAction = imageModule.waitForReviewAction.bind(imageModule);
+      vi.spyOn(imageModule, 'waitForReviewAction').mockImplementation((nodeId) => {
+        const pending = waitForReviewAction(nodeId);
+        expect(imageModule.submitReviewAction(nodeId, { type: 'approve' }).success).toBe(true);
+        return pending;
+      });
+      try {
+        const tool = new GenerateImageTool();
+        const images = [{ prompt: 'Sample illustration', outputPath: path.join(outputDir, 'sample.png') }];
+        if (status === 'partial') {
+          images.push({ prompt: 'Sample unavailable image', outputPath: path.join(outputDir, 'unavailable.png') });
+        }
+        const output = await tool.execute({ images }, {
+          imageOps: imageModule, signal: new AbortController().signal,
+        } as ToolContext);
+        expect(output.ok).toBe(status === 'completed');
+        expect(output.data).toMatchObject({ status });
+        await expect(fs.readFile(images[0].outputPath)).resolves.toEqual(bytes);
+        const rendered = renderToolResult(toToolResult(output), tool.def.name);
+        expect(rendered.isError).toBe(status === 'partial');
+
+        const artifacts = new MemoryArtifactStore();
+        const requests: Awaited<ReturnType<typeof mapOpenAiResponsesRequest>>[] = [];
+        const gateway: AiGateway = {
+          open: (request, context) => ({
+            events: (async function* (): AsyncIterable<AiEvent> {
+              requests.push(await mapOpenAiResponsesRequest(request, 'wire-model', {
+                wireApi: 'responses', maxTokensField: 'max_completion_tokens', assistantReasoningReplay: 'omit',
+              }, artifacts));
+              const base = { runId: context.runId, emittedAt: 1, attempt: 1 };
+              yield { ...base, kind: 'response.started', sequence: 1, model: request.model, configRevision: 5 };
+              yield { ...base, kind: 'text.delta', sequence: 2, text: 'Sample image received.' };
+              yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn' };
+            })(),
+            statistics: Promise.resolve({}),
+          }),
+          complete: vi.fn(),
+        };
+        const snapshots = new RuntimeSnapshotStore();
+        snapshots.publish(snapshot());
+        const port = new DefaultAgentInferencePort(gateway, snapshots, artifacts);
+        await port.invoke({
+          model: { providerId: 'provider', modelId: 'model/one' },
+          promptCacheKey: 'sample-agent',
+          systemPrompt: '',
+          messages: [
+            { role: 'assistant', content: [{ type: 'tool_use', id: 'call-image', name: tool.def.name, input: { images } }] },
+            { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-image', content: rendered.content, is_error: rendered.isError }] },
+          ],
+        }, options());
+
+        expect(requests).toHaveLength(1);
+        expect(requests[0].input).toEqual([
+          { type: 'function_call', call_id: 'call-image', name: 'generate_image', arguments: JSON.stringify({ images }) },
+          {
+            type: 'function_call_output', call_id: 'call-image',
+            output: [
+              { type: 'input_text', text: status === 'partial' ? `<error>${output.text}</error>` : output.text },
+              { type: 'input_image', detail: 'auto', image_url: `data:image/png;base64,${bytes.toString('base64')}` },
+            ],
+          },
+        ]);
+      } finally {
+        await imageModule.onDestroy();
+        vi.restoreAllMocks();
+        await fs.rm(outputDir, { recursive: true, force: true });
+        await fs.rm(pathsService.getTempDir(host.id), { recursive: true, force: true });
+      }
+    },
+  );
 
   it('round-trips opaque OpenAI reasoning and function item metadata into the next request', async () => {
     const requests: DomainAiRequest[] = [];

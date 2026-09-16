@@ -11,6 +11,7 @@ const electron = vi.hoisted(() => ({
   openPath: vi.fn(async () => ''),
   showItemInFolder: vi.fn(),
   readBuffer: vi.fn(() => Buffer.alloc(0)),
+  writeBuffer: vi.fn(),
   readText: vi.fn(() => ''),
 }));
 
@@ -20,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }));
 
 vi.mock('electron', () => ({
-  clipboard: { readBuffer: electron.readBuffer, readText: electron.readText },
+  clipboard: { readBuffer: electron.readBuffer, readText: electron.readText, writeBuffer: electron.writeBuffer },
   net: { isOnline: vi.fn(() => true) },
   shell: {
     openExternal: electron.openExternal,
@@ -29,6 +30,7 @@ vi.mock('electron', () => ({
   },
 }));
 
+import { gifBytes } from '../../../src/features/console/attachments/__tests__/fixtures.js';
 import { DesktopApplication } from '../capabilities/desktop-application.js';
 import { createDesktopController } from '../capabilities/desktop-controller.js';
 import { DESKTOP_OPERATIONS, type WorkspaceInfo } from '../../../shared/electron-contracts/desktop.js';
@@ -52,6 +54,7 @@ function fixture() {
   temporaryDirectories.push(userDataDirectory);
   const presentation = {
     releaseFilePreview: vi.fn(),
+    resolveFilePreviewPath: vi.fn<() => string | undefined>(),
     createFilePreviewUrl: vi.fn((_windowId: number, _filePath: string, _mediaType: string) => (
       'piskie-attachment://preview/opaque-token'
     )),
@@ -79,6 +82,31 @@ function fixture() {
 }
 
 describe('DesktopApplication file and URL handling', () => {
+  it('captures a preview source before release and copies its existing original file', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const source = path.join(userDataDirectory, 'sample image.gif');
+    fs.writeFileSync(source, gifBytes());
+    electron.readBuffer.mockImplementation(() => electron.writeBuffer.mock.lastCall![1]);
+    presentation.resolveFilePreviewPath.mockReturnValue(source);
+    const url = 'piskie-attachment://preview/sample-token';
+    const copying = application.copyImage(7, { kind: 'preview', url });
+    expect(presentation.resolveFilePreviewPath).toHaveBeenCalledWith(7, url);
+    application.releasePreview(7, url);
+    presentation.resolveFilePreviewPath.mockReturnValue(undefined);
+    await copying;
+    expect(electron.writeBuffer).toHaveBeenCalledWith('text/uri-list', Buffer.from(pathToFileURL(fs.realpathSync.native(source)).href + '\r\n'));
+    expect(fs.readFileSync(source)).toEqual(Buffer.from(gifBytes()));
+    expect(fs.existsSync(source)).toBe(true);
+    await expect(application.copyImage(8, { kind: 'preview', url })).rejects.toThrow('no longer available');
+  });
+
+  it('rejects a missing or directory copy source before publishing', async () => {
+    const { application, userDataDirectory } = fixture();
+    await expect(application.copyImage(7, { kind: 'path', path: path.join(userDataDirectory, 'missing.png') })).rejects.toThrow('does not exist');
+    await expect(application.copyImage(7, { kind: 'path', path: userDataDirectory })).rejects.toThrow('image file');
+    expect(electron.writeBuffer).not.toHaveBeenCalled();
+  });
+
   it.each(['implicit', 'recorded'] as const)('initializes the missing %s default workspace through its owner before describing it', async (selection) => {
     const { application, paths } = fixture();
     const workspace = paths.getDefaultWorkspaceDir();

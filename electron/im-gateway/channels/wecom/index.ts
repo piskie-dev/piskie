@@ -13,8 +13,18 @@
 import { monitorWeComProvider } from './vendor/monitor.js';
 import { resolveWeComAccount } from './account.js';
 import type { ChannelConnector, ConnectorFactory } from '../../core/channel-connector.js';
+import type { ChannelStoragePaths } from '../../core/channel-storage.js';
 
-export const createWeComConnector: ConnectorFactory = (_bot): ChannelConnector => ({
+/**
+ * 返回 wecom 渠道的 ConnectorFactory。
+ * 企业微信没有持久化存储需求（凭证来自 ConfigHost 快照，入站媒体走 Piskie 托管媒体目录），
+ * 保持与其它渠道一致的签名但忽略 storage。
+ */
+export function createWeComConnector(_storage: ChannelStoragePaths): ConnectorFactory {
+  return (_bot): ChannelConnector => buildWeComConnector();
+}
+
+const buildWeComConnector = (): ChannelConnector => ({
   id: 'wecom',
 
   async start(ctx): Promise<void> {

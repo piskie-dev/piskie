@@ -161,28 +161,6 @@ async function handleInteractionCreate(params) {
         }
     }
 }
-/** 解析 session store 文件路径 */
-function resolveSessionStorePath(cfg, agentId) {
-    const sessionCfg = cfg?.session;
-    const store = sessionCfg?.store;
-    const resolvedAgentId = agentId || "default";
-    if (store) {
-        let expanded = store;
-        if (expanded.includes("{agentId}")) {
-            expanded = expanded.replaceAll("{agentId}", resolvedAgentId);
-        }
-        if (expanded.startsWith("~")) {
-            const home = process.env.HOME || process.env.USERPROFILE || "";
-            expanded = expanded.replace(/^~/, home);
-        }
-        return path.resolve(expanded);
-    }
-    // 默认路径: ~/.openclaw/agents/{agentId}/sessions/sessions.json
-    const stateDir = process.env.OPENCLAW_STATE_DIR?.trim()
-        || process.env.CLAWDBOT_STATE_DIR?.trim()
-        || path.join(process.env.HOME || process.env.USERPROFILE || "", ".openclaw");
-    return path.join(stateDir, "agents", resolvedAgentId, "sessions", "sessions.json");
-}
 // ============ Mention Gating — 已抽取到 message-gating.ts ============
 // ============ Command Detection（委托框架运行时 commands-registry） ============
 /**
@@ -246,32 +224,13 @@ function resolveImplicitMention(params) {
     return refEntry?.isBot === true;
 }
 /**
- * 解析 groupActivation（session store > 配置 requireMention > 默认值）
+ * 解析 groupActivation（配置 requireMention > 默认值）
+ * PISKIE 本地改动：上游还会读取外部 OpenClaw 的 session store（~/.openclaw/agents/.../sessions.json）
+ * 覆盖该值；Piskie 没有该文件且不得读取外部 OpenClaw 数据，故只按配置决定。
  * @returns "mention" | "always"
  */
 function resolveGroupActivation(params) {
-    const defaultActivation = params.configRequireMention ? "mention" : "always";
-    try {
-        const storePath = resolveSessionStorePath(params.cfg, params.agentId);
-        if (!fs.existsSync(storePath)) {
-            return defaultActivation;
-        }
-        const raw = fs.readFileSync(storePath, "utf-8");
-        const store = JSON.parse(raw);
-        const entry = store[params.sessionKey];
-        if (!entry?.groupActivation) {
-            return defaultActivation;
-        }
-        const normalized = entry.groupActivation.trim().toLowerCase();
-        if (normalized === "mention" || normalized === "always") {
-            return normalized;
-        }
-        return defaultActivation;
-    }
-    catch {
-        // session store 读取失败时 fallback 到配置文件
-        return defaultActivation;
-    }
+    return params.configRequireMention ? "mention" : "always";
 }
 // QQ Bot intents - 按权限级别分组
 const INTENTS = {
@@ -295,8 +254,10 @@ const MAX_QUICK_DISCONNECT_COUNT = 3; // 连续快速断开次数阈值
 const QUICK_DISCONNECT_THRESHOLD = 5000; // 5秒内断开视为快速断开
 // 图床服务器配置（可通过环境变量覆盖）
 const IMAGE_SERVER_PORT = parseInt(process.env.QQBOT_IMAGE_SERVER_PORT || "18765", 10);
-// 使用绝对路径，确保文件保存和读取使用同一目录
-const IMAGE_SERVER_DIR = process.env.QQBOT_IMAGE_SERVER_DIR || getQQBotDataDir("images");
+// PISKIE：图床目录固定为注入的 QQ 数据根下 images/（不再支持 QQBOT_IMAGE_SERVER_DIR 覆盖），惰性解析
+function resolveImageServerDir() {
+    return getQQBotDataDir("images");
+}
 /**
  * 启动图床服务器
  */
@@ -307,7 +268,7 @@ async function ensureImageServer(log, publicBaseUrl) {
     try {
         const config = {
             port: IMAGE_SERVER_PORT,
-            storageDir: IMAGE_SERVER_DIR,
+            storageDir: resolveImageServerDir(),
             // 使用用户配置的公网地址，而不是 0.0.0.0
             baseUrl: publicBaseUrl || `http://0.0.0.0:${IMAGE_SERVER_PORT}`,
             ttlSeconds: 3600, // 1 小时过期

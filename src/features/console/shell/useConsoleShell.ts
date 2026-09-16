@@ -27,6 +27,8 @@ export type { ConsoleMode };
 export interface ConsoleImagePreview {
   readonly urls: readonly string[];
   readonly index: number;
+  /** Original filename of the image at the opening index. */
+  readonly name?: string;
 }
 
 export interface ConsoleShell {
@@ -49,6 +51,7 @@ export interface ConsoleShell {
     contextUrls?: readonly string[],
     contextIndex?: number,
     release?: () => void,
+    name?: string,
   ) => void;
   /**
    * 顶栏徽标要求定位到某个 worker 时的**一次性请求**（`useHeaderAction` 发）。
@@ -91,13 +94,14 @@ export function useConsoleShell(): ConsoleShell {
   useEffect(() => () => previewRelease.current?.(), []);
 
   const setPreviewImage = useCallback<ConsoleShell['setPreviewImage']>(
-    (src, contextUrls, contextIndex, release) => {
+    (src, contextUrls, contextIndex, release, name) => {
       const releaseFiles = retainFilePreviews(src === null ? [] : contextUrls ?? [src]);
       previewRelease.current?.();
       previewRelease.current = src === null ? undefined : () => { releaseFiles(); release?.(); };
       setPreviewImageState(src === null ? null : {
         urls: contextUrls ?? [src],
         index: contextIndex ?? 0,
+        name,
       });
     },
     [],

@@ -1,20 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { deriveRawAccountId } from "../auth/accounts.js";
 import { resolveStateDir } from "./state-dir.js";
 function resolveAccountsDir() {
-    return path.join(resolveStateDir(), "openclaw-weixin", "accounts");
+    return path.join(resolveStateDir(), "accounts");
 }
 /**
  * Path to the persistent get_updates_buf file for an account.
- * Stored alongside account data: ~/.openclaw/openclaw-weixin/accounts/{accountId}.sync.json
+ * Stored alongside account data: <weixinStateDir>/accounts/{accountId}.sync.json
  */
 export function getSyncBufFilePath(accountId) {
     return path.join(resolveAccountsDir(), `${accountId}.sync.json`);
-}
-/** Legacy single-account syncbuf (pre multi-account): `.openclaw-weixin-sync/default.json`. */
-function getLegacySyncBufDefaultJsonPath() {
-    return path.join(resolveStateDir(), "agents", "default", "sessions", ".openclaw-weixin-sync", "default.json");
 }
 function readSyncBufFile(filePath) {
     try {
@@ -30,28 +25,12 @@ function readSyncBufFile(filePath) {
     return undefined;
 }
 /**
- * Load persisted get_updates_buf.
- * Falls back in order:
- *   1. Primary path (normalized accountId, new installs)
- *   2. Compat path (raw accountId derived from pattern, old installs)
- *   3. Legacy single-account path (very old installs without multi-account support)
+ * Load persisted get_updates_buf from the primary (normalized accountId) path.
+ * PISKIE 本地改动：不再回退到 raw-ID 旧文件名或 OpenClaw 单账号 legacy 游标——
+ * Piskie 目录内没有旧数据，游标缺失时按首次登录处理。
  */
 export function loadGetUpdatesBuf(filePath) {
-    const value = readSyncBufFile(filePath);
-    if (value !== undefined)
-        return value;
-    // Compat: if given path uses a normalized accountId (e.g. "b0f5860fdecb-im-bot.sync.json"),
-    // also try the old raw-ID filename (e.g. "b0f5860fdecb@im.bot.sync.json").
-    const accountId = path.basename(filePath, ".sync.json");
-    const rawId = deriveRawAccountId(accountId);
-    if (rawId) {
-        const compatPath = path.join(resolveAccountsDir(), `${rawId}.sync.json`);
-        const compatValue = readSyncBufFile(compatPath);
-        if (compatValue !== undefined)
-            return compatValue;
-    }
-    // Legacy fallback: old single-account installs stored syncbuf without accountId.
-    return readSyncBufFile(getLegacySyncBufDefaultJsonPath());
+    return readSyncBufFile(filePath);
 }
 /**
  * Persist get_updates_buf. Creates parent dir if needed.

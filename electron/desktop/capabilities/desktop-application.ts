@@ -6,6 +6,7 @@ import { clipboard, net, shell } from 'electron';
 import type {
   ClipboardAttachmentDescriptor,
   ClipboardAttachmentRequest,
+  CopyImageRequest,
   DesktopColorScheme,
   FilePreviewDescriptor,
   WorkspaceInfo,
@@ -18,6 +19,8 @@ import type {
 import type { ThemeService } from '../../services/theme.service.js';
 import type { pathsService } from '../../services/paths.service.js';
 import { PublicOperationError } from '../../capabilities/public-errors.js';
+import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
+import { copyImageFile } from './image-file-clipboard.js';
 import { expandHomePath } from '../../utils/expand-home-path.js';
 import { createWorkspaceBranch, readWorkspaceInfo, switchWorkspaceBranch } from './workspace.js';
 
@@ -203,6 +206,23 @@ export class DesktopApplication {
     }
   }
 
+  async copyImage(windowId: number, request: CopyImageRequest, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    // Capture the registered source before any await, so closing its preview cannot retarget this copy.
+    if (request.kind === 'preview') {
+      const sourcePath = this.dependencies.presentation.resolveFilePreviewPath(windowId, request.url);
+      if (!sourcePath) throw new PublicOperationError('not-found', 'The image preview is no longer available');
+      request = { kind: 'path', path: sourcePath };
+    }
+    await copyImageFile(request, async (target) => {
+      const file = await resolvePreviewPath(target);
+      signal?.throwIfAborted();
+      if (file.kind !== 'file') throw new PublicOperationError('invalid-input', 'An image file is required');
+      if (file.size > MAX_IMAGE_BYTES) throw new PublicOperationError('invalid-input', 'The image exceeds the 32 MiB copy limit');
+      return { path: file.path, bytes: await readFilePrefix(file.path, MAX_IMAGE_BYTES + 1, signal) };
+    }, signal);
+  }
+
   releasePreview(windowId: number, url: string): void {
     this.dependencies.presentation.releaseFilePreview(windowId, url);
   }
@@ -297,12 +317,13 @@ export class DesktopApplication {
 
 }
 
-async function readFilePrefix(filePath: string, maxBytes: number): Promise<Buffer> {
+async function readFilePrefix(filePath: string, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   const handle = await fs.promises.open(filePath, 'r');
   try {
     const buffer = Buffer.allocUnsafe(maxBytes);
     let offset = 0;
     while (offset < buffer.length) {
+      signal?.throwIfAborted();
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (bytesRead === 0) break;
       offset += bytesRead;

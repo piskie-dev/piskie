@@ -102,14 +102,16 @@ describe('ImageLightbox context navigation', () => {
 
     const dialog = container.querySelector('dialog');
     const currentPicture = () => container.querySelector<HTMLImageElement>('img[alt^="第"]');
+    const currentCounter = () => container.querySelector('[aria-label="当前会话中的图片"] [aria-live="polite"]')?.textContent;
     const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
 
     expect(dialog?.hasAttribute('open')).toBe(true);
     expect(currentPicture()?.getAttribute('src')).toBe(urls[1]);
-    expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain('2 / 3');
+    expect(currentCounter()).toBe('2 / 3');
 
     await act(async () => button('下一张图片')?.click());
     expect(currentPicture()?.getAttribute('src')).toBe(urls[2]);
+    expect(currentCounter()).toBe('3 / 3');
 
     await act(async () => {
       dialog?.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
@@ -118,11 +120,14 @@ describe('ImageLightbox context navigation', () => {
       }));
     });
     expect(currentPicture()?.getAttribute('src')).toBe(urls[0]);
+    expect(currentCounter()).toBe('1 / 3');
 
     await act(async () => button('查看第 2 张图片')?.click());
     expect(currentPicture()?.getAttribute('src')).toBe(urls[1]);
+    expect(currentCounter()).toBe('2 / 3');
 
     await act(async () => button('上一张图片')?.click());
     expect(currentPicture()?.getAttribute('src')).toBe(urls[0]);
+    expect(currentCounter()).toBe('1 / 3');
   });
 });

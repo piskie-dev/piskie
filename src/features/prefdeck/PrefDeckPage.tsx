@@ -15,6 +15,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
+import { CopyActionButton } from '@/components/shared/CopyActionButton';
+import { copyImage } from '@/services/clipboard';
 
 import type { ProxyProfile } from '../../../shared/electron-contracts/configuration';
 import type { InferenceModelDefinition } from '../../../shared/types/inference';
@@ -381,6 +383,18 @@ export const PrefDeckPage: React.FC = () => {
         onClose={() => setShot(null)}
         onClick={() => setShot(null)}
       >
+        <div className={styles.shotToolbar} onClick={(event) => event.stopPropagation()}>
+          <CopyActionButton
+            className={styles.btn}
+            contentKey={shot}
+            label={t('clipboardUi.copyImage')}
+            disabled={!shot}
+            onCopy={() => copyImage({ kind: 'url', url: shot! })}
+          />
+          <button type="button" className={styles.orbBtn} onClick={() => setShot(null)} aria-label={t('common.close')}>
+            <X size={16} />
+          </button>
+        </div>
         {shot && <img src={shot} alt={t('settings.provider.testPreviewAlt')} />}
       </dialog>
     </div>

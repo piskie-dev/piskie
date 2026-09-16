@@ -9,6 +9,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCopyAction, type CopyStatus } from '@/hooks/useCopyAction';
+import { copyText } from '@/services/clipboard';
 import type { BrowserEnvironment, BrowserIdentityPolicy } from '@shared/types';
 import type { ProxyProfile, ProxyProtocol } from '@shared/types/proxy';
 import { SheetShell } from './SheetShell';
@@ -219,6 +221,7 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({
   const [draft, setDraft] = useState<ForgeDraft>(() => draftFrom(env));
   const [saving, setSaving] = useState(false);
   const [fault, setFault] = useState<PresentationText | null>(null);
+  const copy = useCopyAction(draft.userAgent);
 
   const patch = (part: Partial<ForgeDraft>) => setDraft((prev) => ({ ...prev, ...part }));
   const present = (value: PresentationText): string =>
@@ -240,11 +243,15 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({
 
   const copyUA = async () => {
     if (!draft.userAgent) return;
-    try {
-      await navigator.clipboard.writeText(draft.userAgent);
-    } catch {
-      setFault(messageText('environmentUi.forge.copyFailed'));
-    }
+    await copy.run(async () => {
+      try {
+        await copyText(draft.userAgent);
+        setFault((current) => current?.kind === 'message' && current.key === 'environmentUi.forge.copyFailed' ? null : current);
+      } catch (error) {
+        setFault(messageText('environmentUi.forge.copyFailed'));
+        throw error;
+      }
+    });
   };
 
   const submit = async () => {
@@ -367,6 +374,7 @@ export const ForgeSheet: React.FC<ForgeSheetProps> = ({
         patch={patch}
         proxies={proxies}
         onCopyUA={() => void copyUA()}
+        copyStatus={copy.status}
         onGenerateUA={generateUA}
       />
     </SheetShell>
@@ -381,6 +389,7 @@ export function ForgeFields({
   patch,
   proxies,
   onCopyUA,
+  copyStatus = 'idle',
   onGenerateUA,
   sections = ['basics', 'network', 'location', 'device'],
 }: {
@@ -388,6 +397,7 @@ export function ForgeFields({
   readonly patch: (part: Partial<ForgeDraft>) => void;
   readonly proxies: readonly ProxyProfile[];
   readonly onCopyUA: () => void;
+  readonly copyStatus?: CopyStatus;
   readonly onGenerateUA: () => void;
   readonly sections?: readonly ForgeSection[];
 }) {
@@ -670,8 +680,10 @@ export function ForgeFields({
                   className={styles.affixBtn}
                   title={t('environmentUi.forge.copyUa')}
                   onClick={onCopyUA}
+                  disabled={copyStatus === 'copying'}
                 >
-                  {t('environmentUi.forge.copyAction')}
+                  {copyStatus === 'success' ? t('clipboardUi.copied')
+                    : copyStatus === 'copying' ? t('clipboardUi.copying') : t('environmentUi.forge.copyAction')}
                 </button>
                 <button
                   type="button"

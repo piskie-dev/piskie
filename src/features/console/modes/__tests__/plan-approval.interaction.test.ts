@@ -7,11 +7,14 @@ const testDOM = await vi.hoisted(async () => {
   return dom;
 });
 
-import React, { act } from 'react';
+import React, { act, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { create } from 'zustand';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PendingToolCall } from '../../../../../shared/types';
+import { createTranscriptStore, type TranscriptStore } from '@/domains/transcript/transcript-store';
+import { RendererRuntimeProvider } from '@/renderer-runtime/RendererRuntimeProvider';
+import type { RendererRuntime } from '@/renderer-runtime/renderer-runtime';
 import { clearAllComposerDrafts } from '../../data/composer-drafts';
 import { ThreadView } from '../thread/ThreadView';
 import { DockPanel } from '../dock/DockPanel';
@@ -24,7 +27,6 @@ const h = vi.hoisted(() => ({
     interrupt: vi.fn(), interruptSubagent: vi.fn(), stop: vi.fn(),
   },
 }));
-vi.mock('../../../../renderer-runtime/hooks', () => ({ useRendererRuntime: () => ({ agentCommands: h.agentCommands }) }));
 vi.mock('../../data/vm', async (importOriginal) => ({
   ...await importOriginal<object>(), useAgentVM: h.useAgentVM, useWorkerVM: h.useWorkerVM,
 }));
@@ -60,8 +62,11 @@ interface TargetView {
   readonly pendingToolCall?: PendingToolCall;
 }
 const useViews = create<{ main: TargetView; worker: TargetView }>(() => ({} as never));
+const RuntimeProvider = RendererRuntimeProvider as ComponentType<{ readonly runtime: RendererRuntime }>;
 let root: Root;
 let container: HTMLDivElement;
+let transcript: TranscriptStore;
+let runtime: RendererRuntime;
 const mainId = 'sample-main';
 const workerId = 'sample-worker';
 const plan = (agentId: string): PendingToolCall => ({
@@ -74,7 +79,11 @@ const view = (agentId: string): TargetView => ({
   workers: [], pendingToolCall: plan(agentId),
 });
 const button = (text: string) => [...container.querySelectorAll('button')].find((item) => item.textContent?.includes(text))!;
-const render = (layout: 'thread' | 'dock', subagentId?: string) => root.render(React.createElement(layout === 'thread' ? ThreadView : DockPanel, { agentId: mainId, workerId: subagentId }));
+const render = (layout: 'thread' | 'dock', subagentId?: string) => root.render(React.createElement(
+  RuntimeProvider,
+  { runtime },
+  React.createElement(layout === 'thread' ? ThreadView : DockPanel, { agentId: mainId, workerId: subagentId }),
+));
 const setPending = (subagentId: string | undefined, pendingToolCall?: PendingToolCall) => {
   const key = subagentId ? 'worker' : 'main';
   useViews.setState((state) => ({ [key]: { ...state[key], pendingToolCall } }));
@@ -92,6 +101,10 @@ beforeEach(() => {
   } });
   clearAllComposerDrafts();
   useViews.setState({ main: view(mainId), worker: view(workerId) });
+  transcript = createTranscriptStore({
+    conversation: vi.fn(async () => ({ from: 0, entries: [], total: 0 })),
+  });
+  runtime = { agentCommands: h.agentCommands, transcript } as unknown as RendererRuntime;
   h.useAgentVM.mockImplementation(() => useViews((state) => state.main));
   h.useWorkerVM.mockImplementation((_agentId, id) => {
     const worker = useViews((state) => state.worker);
@@ -108,7 +121,7 @@ beforeEach(() => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); clearAllComposerDrafts(); container.remove(); vi.unstubAllGlobals();
+  await act(async () => root.unmount()); transcript.close(); clearAllComposerDrafts(); container.remove(); vi.unstubAllGlobals();
 });
 afterAll(() => testDOM.window.close());
 

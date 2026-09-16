@@ -4,6 +4,19 @@
 import guideContent from './guides.zh-CN';
 
 export default {
+  clipboardUi: {
+    copyImage: '复制图片',
+    copying: '复制中…',
+    copied: '已复制',
+    copyFailed: '复制失败',
+  },
+  mermaidUi: {
+    diagram: '图形',
+    source: '源码',
+    copySource: '复制源码',
+    rendering: '图表生成中…',
+    renderFailed: '无法渲染图表',
+  },
   agentManagement: {
     modelPicker: {
       providers: "筛选提供商",
@@ -854,7 +867,8 @@ export default {
       detachedHead: '分离 HEAD · {{commit}}',
       unbornBranch: '{{branch}}（尚无提交）',
       branchSwitchFailed: '无法切换分支：{{error}}',
-      uncommittedFiles: '未提交：{{count}} 个文件',
+      uncommittedFiles_one: '未提交：{{count}} 个文件',
+      uncommittedFiles_other: '未提交：{{count}} 个文件',
       cleanWorkspace: '工作区干净',
       createBranchEntry: '创建并检出新分支…',
       createBranchTitle: '创建新分支',
@@ -1877,6 +1891,7 @@ export default {
       hidePreview: '收起预览',
       showPreview: '按需预览',
       imageAlt: '模型输入图片预览',
+      copyImageMetadata: '复制图片元数据',
       copyNamed: '复制 {{name}}',
       copy: '复制',
       copied: '已复制',

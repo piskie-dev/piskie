@@ -573,7 +573,7 @@ export async function submitComposerDraft(
   return ok;
 }
 
-export type AttachmentPreviewOpener = (url: string, contextUrls?: readonly string[], index?: number, release?: () => void) => void;
+export type AttachmentPreviewOpener = (url: string, contextUrls?: readonly string[], index?: number, release?: () => void, name?: string) => void;
 const imagePreviews = new Set<() => void>();
 
 export function openAttachmentImage(image: ReadyAttachmentImage, show: AttachmentPreviewOpener): void {
@@ -589,7 +589,7 @@ export function openAttachmentImage(image: ReadyAttachmentImage, show: Attachmen
     consumers.delete(consumer);
   };
   imagePreviews.add(release);
-  try { show(url, undefined, undefined, release); } catch (error) { release(); throw error; }
+  try { show(url, undefined, undefined, release, image.name); } catch (error) { release(); throw error; }
 }
 
 export type ThumbnailResult = { readonly kind: 'ready'; readonly blob: Blob; readonly url: string }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
 import {
   DESKTOP_OPERATIONS,
   DESKTOP_TOPICS,
@@ -51,6 +52,16 @@ export function createDesktopController(
         name: z.string().min(1).max(16_384), size: z.number().int().nonnegative(),
       }).strict()).max(32), text: z.string().max(256 * 1024) }).strict(),
     ])]), (context, [request]) => application.clipboardAttachments(context.windowId, request, context.signal)),
+    operation(DESKTOP_OPERATIONS.copyImage, args([z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('path'), path: z.string().min(1).max(16_384) }).strict(),
+      z.object({ kind: z.literal('preview'), url: z.string().min(1).max(16_384) }).strict(),
+      z.object({ kind: z.literal('url'), url: z.string().min(1).max(16_384), name: z.string().max(16_384).optional() }).strict(),
+      z.object({
+        kind: z.literal('bytes'),
+        bytes: z.instanceof(ArrayBuffer).refine((value) => value.byteLength <= MAX_IMAGE_BYTES, 'Image exceeds the 32 MiB copy limit'),
+        name: z.string().max(16_384).optional(),
+      }).strict(),
+    ])]), (context, [request]) => application.copyImage(context.windowId, request, context.signal)),
     operation(DESKTOP_OPERATIONS.releasePreview, args([z.string().max(16_384)]), (context, [url]) => (
       application.releasePreview(context.windowId, url)
     )),

@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '../../attachments/__tests__/fixtures';
 
 let dom: JSDOM;
 let container: HTMLDivElement;
@@ -52,6 +53,27 @@ function displayedSourceLines(): string[] {
 }
 
 describe('ReviewPanel path preview', () => {
+  it('shows text copy failure only after the clipboard rejects, then permits retry', async () => {
+    const pending = deferred<void>();
+    const copy = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
+    await act(async () => root.render(createElement(ReviewPanel, {
+      change: null, preview: null,
+      read: { kind: 'read', path: '/workspace/sample.txt', content: 'first\n  second', startLine: 1 },
+      onOpenPath: noop, onRevealPath: noop,
+    })));
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="复制内容"]')!;
+    await act(async () => button.click());
+    expect(copy).toHaveBeenCalledExactlyOnceWith('first\n  second');
+    expect(button.disabled).toBe(true);
+    expect(button.title).toBe('复制中…');
+    await act(async () => pending.reject(new Error('denied')));
+    expect(button.disabled).toBe(false);
+    expect(button.title).toBe('复制失败');
+    await act(async () => button.click());
+    expect(button.title).toBe('已复制');
+  });
+
   it('renders a Markdown path as a document', async () => {
     await act(async () => {
       root.render(createElement(ReviewPanel, {

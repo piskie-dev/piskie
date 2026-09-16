@@ -6,29 +6,14 @@ import { resolveFrameworkAllowFromPath } from "./pairing.js";
 import { logger } from "../util/logger.js";
 export const DEFAULT_BASE_URL = "https://ilinkai.weixin.qq.com";
 export const CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
-// ---------------------------------------------------------------------------
-// Account ID compatibility (legacy raw ID → normalized ID)
-// ---------------------------------------------------------------------------
-/**
- * Pattern-based reverse of normalizeWeixinAccountId for known weixin ID suffixes.
- * Used only as a compatibility fallback when loading accounts / sync bufs stored
- * under the old raw ID.
- * e.g. "b0f5860fdecb-im-bot" → "b0f5860fdecb@im.bot"
- */
-export function deriveRawAccountId(normalizedId) {
-    if (normalizedId.endsWith("-im-bot")) {
-        return `${normalizedId.slice(0, -7)}@im.bot`;
-    }
-    if (normalizedId.endsWith("-im-wechat")) {
-        return `${normalizedId.slice(0, -10)}@im.wechat`;
-    }
-    return undefined;
-}
+// PISKIE 本地改动：状态根由宿主注入（<userData>/im-gateway/weixin），目录内不再有
+// `openclaw-weixin` 子层级；raw-ID / legacy credentials / openclaw.json 回退分支全部移除，
+// 因为 Piskie 专属目录里不存在旧数据，也不迁移旧 OpenClaw 数据。
 // ---------------------------------------------------------------------------
 // Account index (persistent list of registered account IDs)
 // ---------------------------------------------------------------------------
 function resolveWeixinStateDir() {
-    return path.join(resolveStateDir(), "openclaw-weixin");
+    return resolveStateDir();
 }
 function resolveAccountIndexPath() {
     return path.join(resolveWeixinStateDir(), "accounts.json");
@@ -97,48 +82,6 @@ function resolveAccountsDir() {
 function resolveAccountPath(accountId) {
     return path.join(resolveAccountsDir(), `${accountId}.json`);
 }
-/**
- * Legacy single-file token: `credentials/openclaw-weixin/credentials.json` (pre per-account files).
- */
-function resolveLegacyCredentialPath() {
-    return path.join(resolveStateDir(), "credentials", "openclaw-weixin", "credentials.json");
-}
-function loadLegacyToken() {
-    const legacyPath = resolveLegacyCredentialPath();
-    try {
-        if (!fs.existsSync(legacyPath))
-            return undefined;
-        const raw = fs.readFileSync(legacyPath, "utf-8");
-        const parsed = JSON.parse(raw);
-        return typeof parsed.token === "string" ? parsed.token : undefined;
-    }
-    catch {
-        return undefined;
-    }
-}
-function hasAccountFile(accountId) {
-    if (fs.existsSync(resolveAccountPath(accountId)))
-        return true;
-    const rawId = deriveRawAccountId(accountId);
-    return Boolean(rawId && fs.existsSync(resolveAccountPath(rawId)));
-}
-export function isUsingLegacyWeixinCredential(accountId) {
-    return !hasAccountFile(accountId) && Boolean(loadLegacyToken());
-}
-export function clearLegacyWeixinCredential() {
-    try {
-        fs.unlinkSync(resolveLegacyCredentialPath());
-    }
-    catch {
-        // Missing legacy credentials are an idempotent success.
-    }
-    try {
-        fs.unlinkSync(path.join(resolveStateDir(), "agents", "default", "sessions", ".openclaw-weixin-sync", "default.json"));
-    }
-    catch {
-        // The legacy sync cursor may never have existed.
-    }
-}
 function readAccountFile(filePath) {
     try {
         if (fs.existsSync(filePath)) {
@@ -150,25 +93,9 @@ function readAccountFile(filePath) {
     }
     return null;
 }
-/** Load account data by ID, with compatibility fallbacks. */
+/** Load account data by ID from the Piskie-owned accounts dir (no legacy fallbacks). */
 export function loadWeixinAccount(accountId) {
-    // Primary: try given accountId (normalized IDs written after this change).
-    const primary = readAccountFile(resolveAccountPath(accountId));
-    if (primary)
-        return primary;
-    // Compatibility: if the given ID is normalized, derive the old raw filename
-    // (e.g. "b0f5860fdecb-im-bot" → "b0f5860fdecb@im.bot") for existing installs.
-    const rawId = deriveRawAccountId(accountId);
-    if (rawId) {
-        const compat = readAccountFile(resolveAccountPath(rawId));
-        if (compat)
-            return compat;
-    }
-    // Legacy fallback: read token from old single-account credentials file.
-    const token = loadLegacyToken();
-    if (token)
-        return { token };
-    return null;
+    return readAccountFile(resolveAccountPath(accountId));
 }
 /**
  * Persist account data after QR login (merges into existing file).
@@ -204,99 +131,34 @@ export function saveWeixinAccount(accountId, update) {
  *   - accounts/{accountId}.json                  (credentials)
  *   - accounts/{accountId}.sync.json             (getUpdates sync buf)
  *   - accounts/{accountId}.context-tokens.json   (context tokens on disk)
- *   - credentials/openclaw-weixin-{accountId}-allowFrom.json (authorized users)
+ *   - authorization/{accountId}-allowFrom.json       (authorized users)
  */
 export function clearWeixinAccount(accountId) {
     const dir = resolveAccountsDir();
-    const accountIds = new Set([accountId]);
-    const rawId = deriveRawAccountId(accountId);
-    if (rawId)
-        accountIds.add(rawId);
-    for (const id of accountIds) {
-        for (const suffix of [".json", ".sync.json", ".context-tokens.json"]) {
-            try {
-                fs.unlinkSync(path.join(dir, `${id}${suffix}`));
-            }
-            catch {
-                // Missing files are an idempotent success.
-            }
-        }
+    for (const suffix of [".json", ".sync.json", ".context-tokens.json"]) {
         try {
-            fs.unlinkSync(resolveFrameworkAllowFromPath(id));
+            fs.unlinkSync(path.join(dir, `${accountId}${suffix}`));
         }
         catch {
-            // Missing authorization files are an idempotent success.
+            // Missing files are an idempotent success.
         }
     }
-}
-/**
- * Resolve the openclaw.json config file path.
- * Checks OPENCLAW_CONFIG env var, then state dir.
- */
-function resolveConfigPath() {
-    const envPath = process.env.OPENCLAW_CONFIG?.trim();
-    if (envPath)
-        return envPath;
-    return path.join(resolveStateDir(), "openclaw.json");
-}
-/**
- * Read `routeTag` from openclaw.json (for callers without an `OpenClawConfig` object).
- * Checks per-account `channels.<id>.accounts[accountId].routeTag` first, then section-level
- * `channels.<id>.routeTag`. Matches `feat_weixin_extension` behavior; channel key is `"openclaw-weixin"`.
- *
- * The config is cached after the first read since routeTag does not change at runtime.
- */
-let cachedRouteTagSection;
-function loadRouteTagSection() {
-    if (cachedRouteTagSection !== undefined)
-        return cachedRouteTagSection;
     try {
-        const configPath = resolveConfigPath();
-        if (!fs.existsSync(configPath)) {
-            cachedRouteTagSection = null;
-            return null;
-        }
-        const raw = fs.readFileSync(configPath, "utf-8");
-        const cfg = JSON.parse(raw);
-        const channels = cfg.channels;
-        const section = channels?.["openclaw-weixin"] ?? null;
-        cachedRouteTagSection = section;
-        return section;
+        fs.unlinkSync(resolveFrameworkAllowFromPath(accountId));
     }
     catch {
-        cachedRouteTagSection = null;
-        return null;
+        // Missing authorization files are an idempotent success.
     }
-}
-export function loadConfigRouteTag(accountId) {
-    const section = loadRouteTagSection();
-    if (!section)
-        return undefined;
-    if (accountId) {
-        const accounts = section.accounts;
-        const tag = accounts?.[accountId]?.routeTag;
-        if (typeof tag === "number")
-            return String(tag);
-        if (typeof tag === "string" && tag.trim())
-            return tag.trim();
-    }
-    if (typeof section.routeTag === "number")
-        return String(section.routeTag);
-    return typeof section.routeTag === "string" && section.routeTag.trim()
-        ? section.routeTag.trim()
-        : undefined;
 }
 /**
- * Read `botAgent` from `channels.openclaw-weixin.botAgent` in openclaw.json.
- * Returns the raw configured string (caller is responsible for sanitization)
- * or undefined when not set. Reuses the cached channel section.
+ * PISKIE 本地改动：不再读取外部 OpenClaw 的 openclaw.json（`OPENCLAW_CONFIG` / `<stateDir>/openclaw.json`）。
+ * routeTag / botAgent 一律返回 undefined，调用方（api.js `sanitizeBotAgent`）据此使用内置默认值。
  */
+export function loadConfigRouteTag(_accountId) {
+    return undefined;
+}
 export function loadConfigBotAgent() {
-    const section = loadRouteTagSection();
-    if (!section)
-        return undefined;
-    const value = section.botAgent;
-    return typeof value === "string" && value.trim() ? value : undefined;
+    return undefined;
 }
 /** PISKIE persists login changes itself and does not consume OpenClaw reload timestamps. */
 export async function triggerWeixinChannelReload() {

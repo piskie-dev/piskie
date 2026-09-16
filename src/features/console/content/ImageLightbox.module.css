@@ -89,11 +89,40 @@
   max-block-size: calc(90vh - 66px);
 }
 
-.dismiss {
+.toolbar {
   position: fixed;
   inset-block-start: 16px;
   inset-inline-end: 16px;
   z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-block-size: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-lg, 10px);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copy:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.copy:not(:disabled):hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.dismiss {
   inline-size: 40px;
   block-size: 40px;
   display: grid;
@@ -207,6 +236,7 @@
   object-fit: cover;
 }
 
+.copy:focus-visible,
 .dismiss:focus-visible,
 .thumbnail:focus-visible {
   outline: 2px solid #fff;

@@ -1,0 +1,105 @@
+.block {
+  margin-block: 1em;
+  overflow: hidden;
+  border: 1px solid var(--cyber-border);
+  border-radius: 8px;
+  background: var(--cyber-surface);
+  font-family: inherit;
+  white-space: normal;
+}
+
+.block[data-mermaid-view='diagram'] {
+  width: fit-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+}
+
+.toolbar,
+.views,
+.copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--cyber-border);
+}
+
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toolbar button:hover,
+.toolbar button[aria-pressed='true'] {
+  color: var(--cyber-text);
+  background: var(--surface-2);
+}
+
+.toolbar button:focus-visible {
+  outline: 2px solid var(--cyber-accent);
+  outline-offset: 2px;
+}
+
+.toolbar button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.block .source {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 12px !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.block .source code {
+  white-space: inherit;
+}
+
+.diagram {
+  padding: 12px;
+}
+
+.diagram[role='button'] {
+  cursor: zoom-in;
+}
+
+.diagram[aria-busy='true'] {
+  cursor: progress;
+}
+
+.diagram:focus-visible {
+  outline: 2px solid var(--cyber-accent);
+  outline-offset: -2px;
+}
+
+.block .image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(420px, 45vh);
+  margin: 0 auto !important;
+}
+
+.message {
+  padding: 20px 12px;
+  color: var(--cyber-text-muted);
+  font-size: 13px;
+}

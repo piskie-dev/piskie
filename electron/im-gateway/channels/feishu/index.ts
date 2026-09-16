@@ -7,14 +7,28 @@
  * 的本地宿主，桥接框架 InboundPipeline），vendor 协议代码近乎零改动。
  *
  * 协议实现见 ./vendor/（按 require 闭包收编 103 文件，UPSTREAM.md 记录来源与改动）。
+ *
+ * 存储：用户授权 token（UAT）落在 Piskie 专属位置——macOS Keychain service
+ * `piskie-feishu-uat`，Linux/Windows `<userData>/im-gateway/feishu/credentials`
+ * （由宿主经 ChannelStoragePaths 注入，见 ./storage.ts）；不迁移旧 OpenClaw 凭据，需重新授权。
  */
 
 import { monitorFeishuProvider } from './vendor/src/channel/monitor.js';
 import { LarkClient } from './vendor/src/core/lark-client.js';
 import { feishuRuntimeHost } from './runtime-adapter.js';
+import { bindFeishuStorage } from './storage.js';
 import type { ChannelConnector, ConnectorFactory } from '../../core/channel-connector.js';
+import type { ChannelStoragePaths } from '../../core/channel-storage.js';
 
-export const createFeishuConnector: ConnectorFactory = (_bot): ChannelConnector => ({
+/** 返回 feishu 渠道的 ConnectorFactory；每次创建 Connector 都重新绑定凭据存储位置。 */
+export function createFeishuConnector(storage: ChannelStoragePaths): ConnectorFactory {
+  return (_bot): ChannelConnector => {
+    bindFeishuStorage(storage);
+    return buildFeishuConnector();
+  };
+}
+
+const buildFeishuConnector = (): ChannelConnector => ({
   id: 'feishu',
 
   async start(ctx): Promise<void> {

@@ -13,30 +13,19 @@ function safeName(id) {
 function getMarkerFile(accountId, appId) {
     return path.join(getQQBotDataDir("data"), `startup-marker-${safeName(accountId)}-${safeName(appId)}.json`);
 }
-/** 旧版全局 marker 路径（兼容迁移） */
-const LEGACY_MARKER_FILE = path.join(getQQBotDataDir("data"), "startup-marker.json");
 export function getFirstLaunchGreetingText() {
     return `Haha，我的'灵魂'已上线，随时等你吩咐。`;
 }
 export function getUpgradeGreetingText(version) {
     return `🎉 QQBot 插件已更新至 v${version}，在线等候你的吩咐。`;
 }
+/** PISKIE 本地改动：移除旧版全局 startup-marker.json 的回退与自动迁移。 */
 export function readStartupMarker(accountId, appId) {
     try {
-        // 1. 新版 per-bot 路径优先
         const file = getMarkerFile(accountId, appId);
         if (fs.existsSync(file)) {
             const data = JSON.parse(fs.readFileSync(file, "utf8"));
             return data || {};
-        }
-        // 2. fallback 旧版全局 marker（兼容迁移）
-        if (fs.existsSync(LEGACY_MARKER_FILE)) {
-            const data = JSON.parse(fs.readFileSync(LEGACY_MARKER_FILE, "utf8"));
-            if (data) {
-                // 自动迁移：写到新路径
-                writeStartupMarker(accountId, appId, data);
-                return data;
-            }
         }
     }
     catch {

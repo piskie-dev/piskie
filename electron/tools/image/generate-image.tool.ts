@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { BaseTool } from '../base-tool.js';
 import type {
+  ImageRef,
   ToolContext,
   ToolDef,
   ToolOutput,
@@ -80,7 +81,7 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
       context.signal?.throwIfAborted();
       const outcome = await ops.commit(node.id, context.signal);
       context.signal?.throwIfAborted();
-      return this.buildFinalResult(node.id, node, outcome);
+      return this.buildFinalResult(node.id, node, outcome, context.signal);
     }
 
     // ── 审核动作循环：IPC 只提交动作，所有耗时操作都在本 Promise 内 ──
@@ -98,7 +99,7 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
         const outcome = await ops.commit(node.id, context.signal);
         context.signal?.throwIfAborted();   // 构建成功 tool result 前检查
         // 全部成功时节点已随审核会话关闭（getNode 返 undefined），用持有的同一活引用读 deletedCount
-        return this.buildFinalResult(node.id, node, outcome);
+        return this.buildFinalResult(node.id, node, outcome, context.signal);
       }
 
       ops.cancelReview(node.id, action.reason);
@@ -159,11 +160,12 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
   }
 
   /** 确认路径的最终结果：completed / partial / failed */
-  private buildFinalResult(
+  private async buildFinalResult(
     nodeId: string,
     node: ImageNodeState | undefined,
     outcome: ImageCommitOutcome,
-  ): ToolOutput<unknown> {
+    signal?: AbortSignal,
+  ): Promise<ToolOutput<unknown>> {
     const deletedCount = node?.deletedCount ?? 0;
     const data = {
       nodeId,
@@ -179,7 +181,7 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
     } else if (outcome.status === 'partial') {
       lines.push(
         `图片提交部分完成：${outcome.committed.length} 张成功、${outcome.errors.length} 张失败。`,
-        '注意：成功项已产生正式文件；重试前先核对下方已成功路径，不得重复处理。',
+        '成功项已保存，重试仅处理失败项。',
       );
     } else {
       lines.push('图片生成或提交全部失败，未产生任何正式文件。');
@@ -187,7 +189,6 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
     for (const img of outcome.committed) {
       const notes: string[] = [];
       if (img.userInstruction) notes.push(`用户在审核中要求修改：「${img.userInstruction}」，已按用户意愿应用`);
-      if (img.revisedPrompt) notes.push(`优化后 prompt: ${img.revisedPrompt}`);
       lines.push(`- [成功] ${JSON.stringify(img.outputPath)}${notes.length > 0 ? `（${JSON.stringify(notes.join('；'))}）` : ''}`);
     }
     for (const err of outcome.errors) {
@@ -197,17 +198,26 @@ export class GenerateImageTool extends BaseTool<GenerateImageParams> {
       lines.push(`用户在审核中主动删除了 ${deletedCount} 张图片（不创建对应最终文件，无需补生成）。`);
     }
 
-    // 不附图片内容块：图片已经用户人工审核，AI 无需视觉复检；路径是权威产物标识。
-    // 整图 base64 进上下文会在每次后续请求中重发，且 OpenAI 协议下会被 transformer
-    // 重新打包为伪 user 消息，诱发 AI 把成品当输入素材自发返工。UI 预览由日志层按路径读取。
-    const resultText = lines.join('\n');
+    const reads = await Promise.allSettled(outcome.committed.map(async (img): Promise<ImageRef> => ({
+      base64: (await fs.readFile(img.outputPath, { signal })).toString('base64'),
+      mediaType: img.mimeType,
+    })));
+    signal?.throwIfAborted();
 
-    if (outcome.status === 'completed') {
-      return { ok: true, text: resultText, data };
-    }
+    const images: ImageRef[] = [];
+    reads.forEach((read, index) => {
+      if (read.status === 'fulfilled') {
+        images.push(read.value);
+      } else {
+        const error = read.reason instanceof Error ? read.reason.message : String(read.reason);
+        lines.push(`- [图片回传失败] ${JSON.stringify(outcome.committed[index].outputPath)}: ${JSON.stringify(error)}`);
+      }
+    });
+
     return {
-      ok: false,
-      text: resultText,
+      ok: outcome.status === 'completed' && images.length === outcome.committed.length,
+      text: lines.join('\n'),
+      ...(images.length > 0 ? { images } : {}),
       data,
     };
   }

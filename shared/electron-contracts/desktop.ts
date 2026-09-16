@@ -7,6 +7,7 @@ export const DESKTOP_OPERATIONS = Object.freeze({
   openWorkspace: 'desktop.system.openWorkspace',
   openAgentRunTrace: 'desktop.system.openAgentRunTrace',
   clipboardAttachments: 'desktop.system.clipboardAttachments',
+  copyImage: 'desktop.files.copyImage',
   previewFile: 'desktop.files.preview',
   releasePreview: 'desktop.files.releasePreview',
   selectFiles: 'desktop.files.select',
@@ -40,6 +41,13 @@ export type FilePreviewDescriptor =
     }
   | { readonly kind: 'directory' };
 
+/** Original image sources; bytes cross the preload bridge as an ArrayBuffer. */
+export type CopyImageRequest =
+  | { readonly kind: 'path'; readonly path: string }
+  | { readonly kind: 'preview'; readonly url: string }
+  | { readonly kind: 'url'; readonly url: string; readonly name?: string }
+  | { readonly kind: 'bytes'; readonly bytes: ArrayBuffer; readonly name?: string };
+
 export type ClipboardAttachmentRequest =
   | { readonly kind: 'paths'; readonly paths: readonly string[] }
   | { readonly kind: 'native'; readonly files: readonly { readonly name: string; readonly size: number }[]; readonly text: string };
@@ -70,6 +78,8 @@ interface DesktopSystemClient {
 interface DesktopFilesClient {
   /** Resolves a DOM File in preload; returns an empty string for files without a disk backing. */
   getPathForFile(file: File): string;
+  /** Publishes an original-format image file to the system clipboard. Rejects on failure. */
+  copyImage(request: CopyImageRequest): Promise<void>;
   preview(path: string): Promise<FilePreviewDescriptor>;
   releasePreview(url: string): Promise<void>;
   select(input?: { type?: 'file' | 'folder' | 'any' }): Promise<string[]>;

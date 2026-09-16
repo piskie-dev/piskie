@@ -4,6 +4,19 @@
 import guideContent from './guides.en-US';
 
 export default {
+  clipboardUi: {
+    copyImage: 'Copy image',
+    copying: 'Copying…',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+  },
+  mermaidUi: {
+    diagram: 'Diagram',
+    source: 'Source',
+    copySource: 'Copy source',
+    rendering: 'Generating diagram…',
+    renderFailed: 'Unable to render diagram',
+  },
   agentManagement: {
     modelPicker: {
       providers: "Filter by provider",
@@ -1878,6 +1891,7 @@ export default {
       hidePreview: 'Hide Preview',
       showPreview: 'Preview on Demand',
       imageAlt: 'Model input image preview',
+      copyImageMetadata: 'Copy image metadata',
       copyNamed: 'Copy {{name}}',
       copy: 'Copy',
       copied: 'Copied',

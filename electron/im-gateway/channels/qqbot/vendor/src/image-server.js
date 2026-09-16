@@ -353,8 +353,10 @@ export async function ensureImageServer(publicBaseUrl) {
         return null;
     }
 }
-/** 默认下载目录：与入站附件统一放在 ~/.openclaw/media/qqbot/downloads/ */
-const DEFAULT_DOWNLOAD_DIR = getQQBotMediaDir("downloads");
+/** 默认下载目录：与入站附件统一放在 <qqbotMediaDir>/downloads/（PISKIE：惰性解析注入根） */
+function resolveDefaultDownloadDir() {
+    return getQQBotMediaDir("downloads");
+}
 /**
  * 下载远程文件到系统临时目录。
  *
@@ -373,7 +375,7 @@ const DEFAULT_DOWNLOAD_DIR = getQQBotMediaDir("downloads");
  */
 export async function downloadFile(url, originalFilename, options) {
     const timeoutMs = options?.timeoutMs ?? 30_000;
-    const destDir = options?.destDir ?? DEFAULT_DOWNLOAD_DIR;
+    const destDir = options?.destDir ?? resolveDefaultDownloadDir();
     const maxSizeBytes = options?.maxSizeBytes ?? 0; // 0 = 不限制
     const maxRetries = options?.maxRetries ?? 2;
     // ---- SSRF 防护（只做一次，不需要重试） ----

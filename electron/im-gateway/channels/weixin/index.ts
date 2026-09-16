@@ -6,21 +6,19 @@
  * 复刻旧 IMGateway 插件轨的调用形状（credentialId = pluginAccountId || bot.id，
  * QR 登录后插件真实账号 ID 由 IMGateway 写入独立 account-session state）。
  *
- * 登录态/凭证存储在 `~/.openclaw`（协议核心内部逻辑，收编后路径不变，登录态无缝保留）。
+ * 登录态/凭证存储在 Piskie 专属目录 `<userData>/im-gateway/weixin`（由宿主经
+ * ChannelStoragePaths 注入，见 ./storage.ts），与同机独立 OpenClaw 的 `~/.openclaw` 互不干扰；
+ * 不迁移旧数据，首次使用需重新扫码。
  */
 
 import { weixinPlugin } from './vendor/src/channel.js';
-import {
-  clearLegacyWeixinCredential,
-  clearWeixinAccount,
-  deriveRawAccountId,
-  isUsingLegacyWeixinCredential,
-  unregisterWeixinAccountId,
-} from './vendor/src/auth/accounts.js';
+import { clearWeixinAccount, unregisterWeixinAccountId } from './vendor/src/auth/accounts.js';
 import { clearContextTokensForAccount } from './vendor/src/messaging/inbound.js';
 import { weixinRuntimeHost } from './runtime-adapter.js';
+import { bindWeixinStorage } from './storage.js';
 import { normalizeAccountId } from '../../core/openclaw-compat/account-id.js';
 import type { ChannelConnector, ConnectorFactory } from '../../core/channel-connector.js';
+import type { ChannelStoragePaths } from '../../core/channel-storage.js';
 import type { MessagingConnectionConfig } from '@shared/types/im-gateway.js';
 
 function buildPluginLog(log: { info(...a: unknown[]): void; warn(...a: unknown[]): void; error(...a: unknown[]): void; debug(...a: unknown[]): void }) {
@@ -32,7 +30,18 @@ function buildPluginLog(log: { info(...a: unknown[]): void; warn(...a: unknown[]
   };
 }
 
-export const createWeixinConnector: ConnectorFactory = (bot: MessagingConnectionConfig): ChannelConnector => ({
+/**
+ * 返回 openclaw-weixin 渠道的 ConnectorFactory。
+ * 每次创建 Connector（含扫码/退出临时实例）都重新绑定存储根，避免任何路径依赖模块加载顺序。
+ */
+export function createWeixinConnector(storage: ChannelStoragePaths): ConnectorFactory {
+  return (bot: MessagingConnectionConfig): ChannelConnector => {
+    bindWeixinStorage(storage);
+    return buildWeixinConnector(bot);
+  };
+}
+
+const buildWeixinConnector = (bot: MessagingConnectionConfig): ChannelConnector => ({
   id: 'openclaw-weixin',
 
   async start(ctx): Promise<void> {
@@ -103,15 +112,12 @@ export const createWeixinConnector: ConnectorFactory = (bot: MessagingConnection
     return weixinPlugin.gateway.loginWithQrCancel({ accountId: opts.accountId });
   },
 
+  /** 只清理 Piskie 专属根下的账号文件/游标/上下文 token/授权名单，不触碰旧 OpenClaw 数据。 */
   async logoutAccount(opts) {
     const normalizedId = normalizeAccountId(bot.pluginAccountId || opts.accountId);
-    const usedLegacyCredential = isUsingLegacyWeixinCredential(normalizedId);
     clearContextTokensForAccount(normalizedId);
-    const rawId = deriveRawAccountId(normalizedId);
-    if (rawId) clearContextTokensForAccount(rawId);
     clearWeixinAccount(normalizedId);
     unregisterWeixinAccountId(normalizedId);
-    if (usedLegacyCredential) clearLegacyWeixinCredential();
     return { cleared: true, loggedOut: false };
   },
 });

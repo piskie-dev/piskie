@@ -6,15 +6,29 @@
  * 每次启动来自 ConfigHost 发布快照）。
  *
  * 协议实现见 ./vendor/（gateway 闭包 41 文件近原样收编，UPSTREAM.md 记录来源与改动）。
+ *
+ * 存储：会话/已知用户/引用索引/图床/媒体全部落在 Piskie 专属目录
+ * `<userData>/im-gateway/qqbot`（由宿主经 ChannelStoragePaths 注入，见 ./storage.ts），
+ * 与同机独立 OpenClaw 的 `~/.openclaw/qqbot`、`~/.openclaw/media/qqbot` 互不干扰；不迁移旧数据。
  */
 
 import { setQQBotRuntime } from './vendor/src/runtime.js';
 import { resolveQQBotAccount } from './vendor/src/config.js';
 import { startGateway } from './vendor/src/gateway.js';
 import { qqbotRuntimeHost } from './runtime-adapter.js';
+import { bindQQBotStorage } from './storage.js';
 import type { ChannelConnector, ConnectorFactory } from '../../core/channel-connector.js';
+import type { ChannelStoragePaths } from '../../core/channel-storage.js';
 
-export const createQQBotConnector: ConnectorFactory = (_bot): ChannelConnector => ({
+/** 返回 qqbot 渠道的 ConnectorFactory；每次创建 Connector 都重新绑定存储根。 */
+export function createQQBotConnector(storage: ChannelStoragePaths): ConnectorFactory {
+  return (_bot): ChannelConnector => {
+    bindQQBotStorage(storage);
+    return buildQQBotConnector();
+  };
+}
+
+const buildQQBotConnector = (): ChannelConnector => ({
   id: 'qqbot',
 
   async start(ctx): Promise<void> {

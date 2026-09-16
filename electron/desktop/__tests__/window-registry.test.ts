@@ -447,6 +447,21 @@ describe('WindowRegistry bootstrap authorization', () => {
     await expect(registry.stop('test')).resolves.toBeUndefined();
   });
 
+  it('resolves only registered preview sources belonging to the calling window', async () => {
+    const { registry, session } = await registryFixture();
+    const source = '/sample folder/original.gif';
+    const url = registry.createFilePreviewUrl(session.id, source, 'image/gif');
+    expect(registry.resolveFilePreviewPath(session.id, url)).toBe(source);
+    expect(registry.resolveFilePreviewPath(session.id + 1, url)).toBeUndefined();
+    expect(registry.resolveFilePreviewPath(session.id, 'piskie-attachment://preview/unknown')).toBeUndefined();
+    expect(registry.resolveFilePreviewPath(session.id, 'https://example.test/preview')).toBeUndefined();
+    registry.releaseFilePreview(session.id, url);
+    expect(registry.resolveFilePreviewPath(session.id, url)).toBeUndefined();
+    const held = registry.createFilePreviewUrl(session.id, source, 'image/gif', true);
+    await registry.stop('test');
+    expect(registry.resolveFilePreviewPath(session.id, held)).toBeUndefined();
+  });
+
   it('streams file previews through opaque per-window tokens', async () => {
     const { registry, session } = await registryFixture();
     const sourcePath = '/tmp/private folder/screenshot.png';

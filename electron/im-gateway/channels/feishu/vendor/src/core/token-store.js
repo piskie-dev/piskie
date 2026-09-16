@@ -10,13 +10,18 @@
  *
  * Platform backends:
  *   macOS   – Keychain Access via `security` CLI
- *   Linux   – AES-256-GCM encrypted files (XDG_DATA_HOME)
- *   Windows – AES-256-GCM encrypted files (%LOCALAPPDATA%)
+ *   Linux   – AES-256-GCM encrypted files
+ *   Windows – AES-256-GCM encrypted files
  *
  * Storage layout:
- *   Service  = "openclaw-feishu-uat"
+ *   Service  = 注入的 keychainService（PISKIE："piskie-feishu-uat"）
  *   Account  = "{appId}:{userOpenId}"
  *   Password = JSON-serialised StoredUAToken
+ *
+ * PISKIE 本地改动：service 与加密文件目录不再在模块加载时按 XDG_DATA_HOME /
+ * %LOCALAPPDATA% 推导，而是每次操作时从 token-store-location 读取宿主注入的
+ * `<userData>/im-gateway/feishu/credentials`（Linux/Windows 共用同一目录与 master.key 逻辑）。
+ * 账号 key、AES-256-GCM 加密与文件权限处理保持上游原样；不读取/迁移/删除旧位置。
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.maskToken = maskToken;
@@ -28,15 +33,18 @@ const node_child_process_1 = require("node:child_process");
 const node_util_1 = require("node:util");
 const promises_1 = require("node:fs/promises");
 const node_path_1 = require("node:path");
-const node_os_1 = require("node:os");
 const node_crypto_1 = require("node:crypto");
 const lark_logger_1 = require("./lark-logger.js");
+const token_store_location_1 = require("./token-store-location.js");
 const log = (0, lark_logger_1.larkLogger)('core/token-store');
 const execFile = (0, node_util_1.promisify)(node_child_process_1.execFile);
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const KEYCHAIN_SERVICE = 'openclaw-feishu-uat';
+/** PISKIE：service 名由宿主注入（piskie-feishu-uat）。 */
+function keychainService() {
+    return (0, token_store_location_1.requireFeishuTokenStoreLocation)().keychainService;
+}
 /** Refresh proactively when access_token expires within this window. */
 const REFRESH_AHEAD_MS = 5 * 60 * 1000; // 5 minutes
 // ---------------------------------------------------------------------------
@@ -89,10 +97,14 @@ const darwinBackend = {
 // Headless Linux servers typically lack D-Bus / GNOME Keyring, so we store
 // tokens as AES-256-GCM encrypted files instead of using `secret-tool`.
 //
-// Storage path: ${XDG_DATA_HOME:-~/.local/share}/openclaw-feishu-uat/
+// Storage path (PISKIE): 注入的 credentialsDir = <userData>/im-gateway/feishu/credentials
 // ---------------------------------------------------------------------------
-const LINUX_UAT_DIR = (0, node_path_1.join)(process.env.XDG_DATA_HOME || (0, node_path_1.join)((0, node_os_1.homedir)(), '.local', 'share'), 'openclaw-feishu-uat');
-const MASTER_KEY_PATH = (0, node_path_1.join)(LINUX_UAT_DIR, 'master.key');
+function linuxUatDir() {
+    return (0, token_store_location_1.requireFeishuTokenStoreLocation)().credentialsDir;
+}
+function masterKeyPath() {
+    return (0, node_path_1.join)(linuxUatDir(), 'master.key');
+}
 const MASTER_KEY_BYTES = 32; // AES-256
 const IV_BYTES = 12; // GCM recommended
 const TAG_BYTES = 16; // GCM auth tag
@@ -102,7 +114,7 @@ function linuxSafeFileName(account) {
 }
 /** Ensure the credentials directory exists with mode 0700. */
 async function ensureLinuxCredDir() {
-    await (0, promises_1.mkdir)(LINUX_UAT_DIR, { recursive: true, mode: 0o700 });
+    await (0, promises_1.mkdir)(linuxUatDir(), { recursive: true, mode: 0o700 });
 }
 /**
  * Load or create the 32-byte master key.
@@ -112,7 +124,7 @@ async function ensureLinuxCredDir() {
  */
 async function getMasterKey() {
     try {
-        const key = await (0, promises_1.readFile)(MASTER_KEY_PATH);
+        const key = await (0, promises_1.readFile)(masterKeyPath());
         if (key.length === MASTER_KEY_BYTES)
             return key;
         log.warn('master key has unexpected length, regenerating');
@@ -124,8 +136,8 @@ async function getMasterKey() {
     }
     await ensureLinuxCredDir();
     const key = (0, node_crypto_1.randomBytes)(MASTER_KEY_BYTES);
-    await (0, promises_1.writeFile)(MASTER_KEY_PATH, key, { mode: 0o600 });
-    await (0, promises_1.chmod)(MASTER_KEY_PATH, 0o600);
+    await (0, promises_1.writeFile)(masterKeyPath(), key, { mode: 0o600 });
+    await (0, promises_1.chmod)(masterKeyPath(), 0o600);
     log.info('generated new master key for encrypted file storage');
     return key;
 }
@@ -156,7 +168,7 @@ const linuxBackend = {
     async get(_service, account) {
         try {
             const key = await getMasterKey();
-            const data = await (0, promises_1.readFile)((0, node_path_1.join)(LINUX_UAT_DIR, linuxSafeFileName(account)));
+            const data = await (0, promises_1.readFile)((0, node_path_1.join)(linuxUatDir(), linuxSafeFileName(account)));
             return decryptData(data, key);
         }
         catch {
@@ -166,14 +178,14 @@ const linuxBackend = {
     async set(_service, account, data) {
         const key = await getMasterKey();
         await ensureLinuxCredDir();
-        const filePath = (0, node_path_1.join)(LINUX_UAT_DIR, linuxSafeFileName(account));
+        const filePath = (0, node_path_1.join)(linuxUatDir(), linuxSafeFileName(account));
         const encrypted = encryptData(data, key);
         await (0, promises_1.writeFile)(filePath, encrypted, { mode: 0o600 });
         await (0, promises_1.chmod)(filePath, 0o600);
     },
     async remove(_service, account) {
         try {
-            await (0, promises_1.unlink)((0, node_path_1.join)(LINUX_UAT_DIR, linuxSafeFileName(account)));
+            await (0, promises_1.unlink)((0, node_path_1.join)(linuxUatDir(), linuxSafeFileName(account)));
         }
         catch {
             // Already absent – fine.
@@ -190,20 +202,24 @@ const linuxBackend = {
 // Uses the same AES-256-GCM scheme as the Linux backend with its own
 // independent storage directory and master key.
 //
-// Storage path: %LOCALAPPDATA%\openclaw-feishu-uat\
+// Storage path (PISKIE): 注入的 credentialsDir = <userData>/im-gateway/feishu/credentials
 // ---------------------------------------------------------------------------
-const WIN32_UAT_DIR = (0, node_path_1.join)(process.env.LOCALAPPDATA ?? (0, node_path_1.join)(process.env.USERPROFILE ?? (0, node_os_1.homedir)(), 'AppData', 'Local'), KEYCHAIN_SERVICE);
-const WIN32_MASTER_KEY_PATH = (0, node_path_1.join)(WIN32_UAT_DIR, 'master.key');
+function win32UatDir() {
+    return (0, token_store_location_1.requireFeishuTokenStoreLocation)().credentialsDir;
+}
+function win32MasterKeyPath() {
+    return (0, node_path_1.join)(win32UatDir(), 'master.key');
+}
 /** Convert account key to a filesystem-safe filename (whitelist approach). */
 function win32SafeFileName(account) {
     return account.replace(/[^a-zA-Z0-9._-]/g, '_') + '.enc';
 }
 async function ensureWin32CredDir() {
-    await (0, promises_1.mkdir)(WIN32_UAT_DIR, { recursive: true });
+    await (0, promises_1.mkdir)(win32UatDir(), { recursive: true });
 }
 async function getWin32MasterKey() {
     try {
-        const key = await (0, promises_1.readFile)(WIN32_MASTER_KEY_PATH);
+        const key = await (0, promises_1.readFile)(win32MasterKeyPath());
         if (key.length === MASTER_KEY_BYTES)
             return key;
         log.warn('win32 master key has unexpected length, regenerating');
@@ -215,7 +231,7 @@ async function getWin32MasterKey() {
     }
     await ensureWin32CredDir();
     const key = (0, node_crypto_1.randomBytes)(MASTER_KEY_BYTES);
-    await (0, promises_1.writeFile)(WIN32_MASTER_KEY_PATH, key);
+    await (0, promises_1.writeFile)(win32MasterKeyPath(), key);
     log.info('generated new master key for win32 encrypted file storage');
     return key;
 }
@@ -223,7 +239,7 @@ const win32Backend = {
     async get(_service, account) {
         try {
             const key = await getWin32MasterKey();
-            const data = await (0, promises_1.readFile)((0, node_path_1.join)(WIN32_UAT_DIR, win32SafeFileName(account)));
+            const data = await (0, promises_1.readFile)((0, node_path_1.join)(win32UatDir(), win32SafeFileName(account)));
             return decryptData(data, key);
         }
         catch {
@@ -233,13 +249,13 @@ const win32Backend = {
     async set(_service, account, data) {
         const key = await getWin32MasterKey();
         await ensureWin32CredDir();
-        const filePath = (0, node_path_1.join)(WIN32_UAT_DIR, win32SafeFileName(account));
+        const filePath = (0, node_path_1.join)(win32UatDir(), win32SafeFileName(account));
         const encrypted = encryptData(data, key);
         await (0, promises_1.writeFile)(filePath, encrypted);
     },
     async remove(_service, account) {
         try {
-            await (0, promises_1.unlink)((0, node_path_1.join)(WIN32_UAT_DIR, win32SafeFileName(account)));
+            await (0, promises_1.unlink)((0, node_path_1.join)(win32UatDir(), win32SafeFileName(account)));
         }
         catch {
             // Already absent – fine.
@@ -272,7 +288,7 @@ const backend = createBackend();
  */
 async function getStoredToken(appId, userOpenId) {
     try {
-        const json = await backend.get(KEYCHAIN_SERVICE, accountKey(appId, userOpenId));
+        const json = await backend.get(keychainService(), accountKey(appId, userOpenId));
         if (!json)
             return null;
         return JSON.parse(json);
@@ -289,14 +305,14 @@ async function getStoredToken(appId, userOpenId) {
 async function setStoredToken(token) {
     const key = accountKey(token.appId, token.userOpenId);
     const payload = JSON.stringify(token);
-    await backend.set(KEYCHAIN_SERVICE, key, payload);
+    await backend.set(keychainService(), key, payload);
     log.info(`saved UAT for ${token.userOpenId} (at:${maskToken(token.accessToken)})`);
 }
 /**
  * Remove a stored UAT from the credential store.
  */
 async function removeStoredToken(appId, userOpenId) {
-    await backend.remove(KEYCHAIN_SERVICE, accountKey(appId, userOpenId));
+    await backend.remove(keychainService(), accountKey(appId, userOpenId));
     log.info(`removed UAT for ${userOpenId}`);
 }
 // ---------------------------------------------------------------------------

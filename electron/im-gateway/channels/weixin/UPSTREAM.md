@@ -32,7 +32,13 @@
 | run_id | `messaging/process-message.js`、`messaging/send*.js` | 每条普通入站创建一个 run，文本、媒体、工具和迟到多轮输出共用；新 dispatcher 创建新 run |
 | 在线通知 | `channel.js`、`api/api.js` | `notifyStart` 使用 Connector signal + 2 秒上限；`notifyStop` 使用独立 2 秒硬超时并在 connector settle 前等待 |
 | GUI QR | `auth/login-qr.js`、`channel.js` | 禁止 stdin；验证码 continuation、取消、过期、blocked、alreadyConnected 显式返回；新 Bot 不上传其他账号 token |
-| 本地 logout | `auth/accounts.js`、`index.ts` | 清 normalized/raw account、context、sync、index；仅在 legacy 凭证确为来源时清 legacy credential/cursor |
+| 本地 logout | `auth/accounts.js`、`index.ts` | 只清 Piskie 微信根下的 account、context、sync、allowFrom、index；不存在 raw-ID / legacy 凭证 / legacy 游标分支，不触碰旧 OpenClaw 目录 |
+| 存储根注入 | `storage/state-dir.js`、`../storage.ts`、`index.ts` | `resolveStateDir()` 返回宿主注入的 `<userData>/im-gateway/weixin`（未注入即抛错，无 `OPENCLAW_STATE_DIR`/`~/.openclaw` 回退）；新增 `resolveWeixinTempDir()` → `<tmpdir>/piskie-im/weixin`；`createWeixinConnector(storage)` 在每次创建 Connector（含扫码/退出临时实例）时绑定 |
+| 目录层级 | `auth/accounts.js`、`storage/sync-buf.js`、`messaging/inbound.js`、`messaging/debug-mode.js` | 去掉 `openclaw-weixin/` 子层级：`accounts.json`、`accounts/*.json|*.sync.json|*.context-tokens.json`、`debug-mode.json` 直接位于微信根；`.d.ts` 只声明 `clearWeixinAccount`/`unregisterWeixinAccountId` |
+| 旧数据分支移除 | `auth/accounts.js`、`storage/sync-buf.js` | 删除 `deriveRawAccountId`、legacy `credentials/openclaw-weixin/credentials.json`、legacy sync 游标、raw-ID 文件名回退与 `isUsingLegacyWeixinCredential`/`clearLegacyWeixinCredential`；`loadConfigRouteTag`/`loadConfigBotAgent` 固定返回 `undefined`（不再读 `OPENCLAW_CONFIG`/openclaw.json，api.js 用内置默认 botAgent） |
+| 授权名单 | `auth/pairing.js` | allowFrom 与文件锁位于 `<weixinStateDir>/authorization/<accountId>-allowFrom.json`；不再读取 `OPENCLAW_OAUTH_DIR` 或 OpenClaw `credentials/` |
+| 日志 | `util/logger.js`、`channel.js`、`core/vendor-log.ts` | 不再写 `openclaw-YYYY-MM-DD.log`、不读 `OPENCLAW_LOG_LEVEL`；经 `createVendorLogSink('openclaw-weixin')` 转发到 Piskie appLog（scope `messaging.vendor.openclaw-weixin`）；移除 `getLogFilePath()` |
+| 出站临时目录 | `channel.js`、`messaging/process-message.js`、`core/openclaw-compat/infra-runtime.ts` | `resolvePreferredOpenClawTmpDir` 已删除；远程媒体下载到 `<weixinTempDir>/media/outbound-temp`（惰性解析），沿用原有 unlink 清理 |
 
 ## re-vendor 流程
 
@@ -43,4 +49,4 @@
 5. 按上表逐项重放媒体、abort、重试、工具、QR、通知和 logout 适配。
 6. 运行 vendor 完整性、类型检查、微信特征测试、四渠道回归、Electron 构建和真机长工具链验收。
 
-账号、context token 和 sync buf 的磁盘格式沿用上游，升级不得要求既有用户重新扫码。
+账号、context token 和 sync buf 的**文件格式**沿用上游，但**存储位置**为 Piskie 专属根（`<userData>/im-gateway/weixin`），与独立 OpenClaw 的 `~/.openclaw` 隔离。项目处于开发阶段，不迁移、不读取旧目录：切换到隔离存储后既有用户需在 Piskie 内重新扫码一次；此后 re-vendor 升级不得再改变文件位置或格式，避免再次要求扫码。

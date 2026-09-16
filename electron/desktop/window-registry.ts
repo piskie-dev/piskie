@@ -289,6 +289,13 @@ export class WindowRegistry implements DesktopPresentationPort {
     return `${ATTACHMENT_PREVIEW_SCHEME}://${ATTACHMENT_PREVIEW_HOST}/${token}`;
   }
 
+  resolveFilePreviewPath(windowId: number, url: string): string | undefined {
+    const target = new URL(url);
+    if (target.protocol !== `${ATTACHMENT_PREVIEW_SCHEME}:` || target.hostname !== ATTACHMENT_PREVIEW_HOST) return undefined;
+    const entry = this.filePreviews.get(target.pathname.slice(1));
+    return entry?.windowId === windowId && this.sessionsByWindowId.has(windowId) ? entry.filePath : undefined;
+  }
+
   releaseFilePreview(windowId: number, url: string): void {
     const target = new URL(url);
     if (target.protocol !== `${ATTACHMENT_PREVIEW_SCHEME}:` || target.hostname !== ATTACHMENT_PREVIEW_HOST) return;

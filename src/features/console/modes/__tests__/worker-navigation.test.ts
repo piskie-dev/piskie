@@ -1,9 +1,12 @@
 import { JSDOM } from 'jsdom';
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectConversationNodes } from '@/domains/transcript/project-entry';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
+import { createTranscriptStore, type TranscriptStore } from '@/domains/transcript/transcript-store';
+import { RendererRuntimeProvider } from '@/renderer-runtime/RendererRuntimeProvider';
+import type { RendererRuntime } from '@/renderer-runtime/renderer-runtime';
 import type { StatusKey } from '../../data/status';
 import type { ConversationComposerProps } from '../../content/composer/ConversationComposer';
 import { ThreadMode } from '../thread/ThreadMode';
@@ -68,6 +71,9 @@ vi.mock('@/components/content-links', () => ({
 let dom: JSDOM;
 let container: HTMLDivElement;
 let root: Root;
+let transcript: TranscriptStore;
+let runtime: RendererRuntime;
+const RuntimeProvider = RendererRuntimeProvider as ComponentType<{ readonly runtime: RendererRuntime }>;
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
   dom.window.Element.prototype.getAnimations = () => [];
@@ -87,11 +93,15 @@ beforeEach(() => {
     t: 'tool', ts: 2, toolUseId: 'call-example', ok: true,
     result: [{ type: 'text', text: 'Worker 已按要求创建: Inspect the sample\nsubagentId: worker-example' }],
   }]);
+  transcript = createTranscriptStore({
+    conversation: vi.fn(async () => ({ from: 0, entries: [], total: 0 })),
+  });
+  runtime = { transcript } as unknown as RendererRuntime;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); transcript.close(); container.remove(); });
 afterAll(() => { dom.window.close(); vi.unstubAllGlobals(); });
 
 type Mode = 'thread' | 'dock';
@@ -102,9 +112,10 @@ async function render(mode: Mode) {
     menuSourceOf: () => ({ phase: 'waiting' as const }),
     sessionsCollapsed: true, onToggleSessions: vi.fn(), emptyState: null,
   };
-  await act(async () => root.render(mode === 'thread'
+  const content = mode === 'thread'
     ? createElement(ThreadMode, props)
-    : createElement(DockMode, props)));
+    : createElement(DockMode, props);
+  await act(async () => root.render(createElement(RuntimeProvider, { runtime }, content)));
 }
 const row = () => container.querySelector<HTMLElement>('[class*="workerCreation"]');
 

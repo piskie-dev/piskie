@@ -5,14 +5,18 @@
  * （`cancel` 事件），左右键、两侧按钮与底部缩略图共用同一个当前索引。
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CopyActionButton } from '@/components/shared/CopyActionButton';
+import { copyImage } from '@/services/clipboard';
 import styles from './ImageLightbox.module.css';
 
 interface ImageLightboxProps {
   preview: {
     readonly urls: readonly string[];
     readonly index: number;
+    /** Original filename of the image at the opening index. */
+    readonly name?: string;
   } | null;
   onClose: () => void;
 }
@@ -39,6 +43,8 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
     ? selection.index
     : (preview?.index ?? 0);
   const imageUrl = preview?.urls[activeIndex] ?? null;
+  const imageName = activeIndex === preview?.index ? preview.name : undefined;
+  const copyKey = useMemo(() => ({ preview, activeIndex }), [preview, activeIndex]);
 
   // 打开/关闭 dialog 与预览请求同步；关闭走原生动画（不立即 remove）
   useEffect(() => {
@@ -102,14 +108,23 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
       onKeyDown={handleKeyDown}
       aria-label={t('sessionWorkbenchUi.lightbox.title')}
     >
-      <button
-        type="button"
-        className={styles.dismiss}
-        onClick={onClose}
-        aria-label={t('sessionWorkbenchUi.lightbox.close')}
-      >
-        ✕
-      </button>
+      <div className={styles.toolbar}>
+        <CopyActionButton
+          className={styles.copy}
+          contentKey={copyKey}
+          label={t('clipboardUi.copyImage')}
+          disabled={!imageUrl}
+          onCopy={() => copyImage({ kind: 'url', url: imageUrl!, name: imageName })}
+        />
+        <button
+          type="button"
+          className={styles.dismiss}
+          onClick={onClose}
+          aria-label={t('sessionWorkbenchUi.lightbox.close')}
+        >
+          ✕
+        </button>
+      </div>
 
       <div className={styles.browser} data-multiple={count > 1 ? 'true' : undefined}>
         <div className={styles.stage}>

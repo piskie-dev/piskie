@@ -5,23 +5,24 @@
  * 不发起任何网络请求（token/probe/getUpdates/WebSocket）。
  * 真实走通各渠道 vendor 入口（startGateway/monitorFeishuProvider/
  * monitorWeComProvider/startAccount）的 pre-abort 短路路径。
+ *
+ * 渠道存储由夹具注入到临时 userData；OPENCLAW_STATE_DIR 指向一个"外部 OpenClaw"目录，
+ * 用于断言四渠道启动全程不向其写入任何文件。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// state dir 重定向必须先于任何 vendor 模块导入（vi.hoisted 在 import 之前执行）。
+// 环境变量必须先于任何 vendor 模块导入设置（vi.hoisted 在 import 之前执行）。
 // Feishu CJS 源码解析由全局 Vitest setup 统一提供。
 const hoistedState = await vi.hoisted(async () => {
   const nodeOs = await import('node:os');
   const nodeFs = await import('node:fs');
   const nodePath = await import('node:path');
-  const stateDir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'im-startup-abort-'));
-  process.env.OPENCLAW_STATE_DIR = stateDir;
-  return { stateDir };
+  const externalStateDir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'im-startup-abort-external-'));
+  process.env.OPENCLAW_STATE_DIR = externalStateDir;
+  return { externalStateDir };
 });
-
-
 
 vi.mock('../../../core/storage/index.js', () => {
   class TaskDefinitionNotFoundError extends Error {
@@ -40,8 +41,17 @@ import { createFeishuConnector } from '../feishu/index.js';
 import { createQQBotConnector } from '../qqbot/index.js';
 import { createWeComConnector } from '../wecom/index.js';
 import { createWeixinConnector } from '../weixin/index.js';
+import { createChannelStorageFixture, listFilesRecursive } from '@electron/testing/im-channel-storage.fixture.js';
 import type { ConnectorContext } from '../../core/channel-connector.js';
 import type { MessagingConnectionConfig } from '@shared/types/im-gateway.js';
+
+const fixture = createChannelStorageFixture('im-startup-abort-');
+const { storage } = fixture;
+
+afterAll(() => {
+  fixture.cleanup();
+  fs.rmSync(hoistedState.externalStateDir, { recursive: true, force: true });
+});
 
 function makeBot(overrides: Partial<MessagingConnectionConfig> = {}): MessagingConnectionConfig {
   return {
@@ -105,32 +115,36 @@ afterEach(() => {
 
 describe('四渠道启动中止：pre-aborted signal 下 start() 立即 settle 且零网络请求', () => {
   it('feishu：startWS pre-abort 短路（不 probe、不建 WSClient）', { timeout: 15000 }, async () => {
-    const connector = createFeishuConnector(makeBot({ channelType: 'feishu' }));
+    const connector = createFeishuConnector(storage)(makeBot({ channelType: 'feishu' }));
     await expectSettles(connector.start(makeCtx(makeBot({ channelType: 'feishu' }))));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('qqbot：startGateway 入口 pre-abort 短路（不跑诊断、不取 token）', { timeout: 15000 }, async () => {
-    const connector = createQQBotConnector(makeBot({ channelType: 'qqbot' }));
+    const connector = createQQBotConnector(storage)(makeBot({ channelType: 'qqbot' }));
     await expectSettles(connector.start(makeCtx(makeBot({ channelType: 'qqbot' }))));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('wecom：monitor pre-abort 立即 settle（wsClient.disconnect + cleanup）', { timeout: 15000 }, async () => {
-    const connector = createWeComConnector(makeBot({ channelType: 'wecom' }));
+    const connector = createWeComConnector(storage)(makeBot({ channelType: 'wecom' }));
     await expectSettles(connector.start(makeCtx(makeBot({ channelType: 'wecom' }))));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('weixin：monitor 主循环 pre-abort 不进入（不发 getUpdates）', { timeout: 15000 }, async () => {
-    // 伪造已登录态：legacy 凭证 fallback 对任意 accountId 生效（configured=true 才到达主循环）
-    const credDir = path.join(hoistedState.stateDir, 'credentials', 'openclaw-weixin');
-    fs.mkdirSync(credDir, { recursive: true });
-    fs.writeFileSync(path.join(credDir, 'credentials.json'), JSON.stringify({ token: 'fake-token' }), 'utf-8');
+    // 伪造已登录态：在 Piskie 专属微信根写入 credentialId（= bot.id）的账号文件（configured=true 才到达主循环）
+    const accountsDir = path.join(storage.weixinStateDir, 'accounts');
+    fs.mkdirSync(accountsDir, { recursive: true });
+    fs.writeFileSync(path.join(accountsDir, 'bot-abort-test.json'), JSON.stringify({ token: 'fake-token' }), 'utf-8');
 
-    const connector = createWeixinConnector(makeBot({ channelType: 'openclaw-weixin' }));
+    const connector = createWeixinConnector(storage)(makeBot({ channelType: 'openclaw-weixin' }));
     await expectSettles(connector.start(makeCtx(makeBot({ channelType: 'openclaw-weixin' }))));
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('四渠道启动全程不向 OPENCLAW_STATE_DIR 指向的外部 OpenClaw 目录写入任何文件', () => {
+    expect(listFilesRecursive(hoistedState.externalStateDir)).toEqual([]);
   });
 });
 
