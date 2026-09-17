@@ -25,6 +25,12 @@ import type { WorkerRef } from '../data/vm';
 import { TranscriptRow } from './TranscriptRow';
 import { useStickToBottom } from './useStickToBottom';
 import { readScrollMemory, saveScrollMemory } from './scrollMemory';
+import {
+  mergeTranscriptProcessBoundaries,
+  readTranscriptOpenGroups,
+  readTranscriptProcessBoundaries,
+  setTranscriptGroupOpen,
+} from './transcriptPresentationMemory';
 import { AgentActivityRow } from './AgentActivityRow';
 import styles from './Transcript.module.css';
 
@@ -63,8 +69,8 @@ export interface TranscriptProps {
    */
   readonly scrollAffordance?: boolean;
   /**
-   * 滚动位置驻留键(按目标)。调用方以目标为 key 重挂本组件后,
-   * 卸载时按此键记住位置,再次挂载原样恢复——主/子各记各的。
+   * 运行期展示与滚动位置驻留键(按目标)。调用方以目标为 key 重挂本组件后,
+   * 再次挂载恢复过程边界、展开选择和滚动位置——主/子各记各的。
    */
   readonly memoryKey?: string;
 }
@@ -90,15 +96,19 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
     const { t } = useTranslation();
     const scrollRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
-    const processBoundaries = useRef<TranscriptProcessBoundaries>(new Map());
+    const processBoundaries = useRef<TranscriptProcessBoundaries>(
+      memoryKey ? readTranscriptProcessBoundaries(memoryKey) ?? new Map() : new Map(),
+    );
     const { rows, boundaries } = useMemo(
       () => buildTranscriptRows(nodes, responses, processSettled && activeStartedAt === undefined, processBoundaries.current),
       [nodes, responses, processSettled, activeStartedAt],
     );
     // Retain only boundaries from committed renders; rows always use the current transcript nodes.
     useLayoutEffect(() => {
-      processBoundaries.current = boundaries;
-    }, [boundaries]);
+      processBoundaries.current = memoryKey
+        ? mergeTranscriptProcessBoundaries(memoryKey, boundaries, nodes.map((node) => node.id))
+        : boundaries;
+    }, [boundaries, memoryKey, nodes]);
     const activeToolGroupId = useMemo(() => {
       if (!toolsActive) return undefined;
       // A visible reply, user turn, or inline worker card ends the active tool interval.
@@ -117,7 +127,9 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
       [nodes],
     );
     // Call IDs survive text streaming and canonical replacement, as well as outer process folding.
-    const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+    const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(
+      () => memoryKey ? readTranscriptOpenGroups(memoryKey) ?? new Set() : new Set(),
+    );
     // 外部要拿滚动容器（thread 的"回到底部"浮钮），但粘底仍由本组件持有
     useImperativeHandle(forwardedRef, () => scrollRef.current as HTMLDivElement, []);
     // 渲染期读驻留(模块内存,纯读):决定初始粘底与否;组件按 memoryKey 重挂,挂载期内不变
@@ -130,13 +142,16 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
     );
     const toggleGroup = useCallback((id: string, anchor: HTMLElement) => {
       preserveAnchor(anchor);
-      setOpenGroups((previous) => {
-        const next = new Set(previous);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-    }, [preserveAnchor]);
+      const open = !openGroups.has(id);
+      if (memoryKey) {
+        setOpenGroups(setTranscriptGroupOpen(memoryKey, id, open));
+        return;
+      }
+      const next = new Set(openGroups);
+      if (open) next.add(id);
+      else next.delete(id);
+      setOpenGroups(next);
+    }, [memoryKey, openGroups, preserveAnchor]);
 
     /**
      * 滚动位置驻留:挂载时若该目标记过"非贴底"位置就原样恢复

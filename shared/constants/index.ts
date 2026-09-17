@@ -64,6 +64,7 @@ export enum AIErrorType {
 export const DEFAULT_SETTINGS = {
   theme: 'auto',
   language: 'en-US',
+  autoCheckAndDownloadUpdates: true,
   navEdgeDockEnabled: true,
   navPrismEnabled: true,
   navPrismSpot: null,

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { RequestVM } from '../../data/vm';
+import activeTextStyles from '../activeText.module.css';
 import { AIRequestStatus } from '../AIRequestStatus';
 
 function render(request: RequestVM): string {
@@ -10,19 +11,30 @@ function render(request: RequestVM): string {
 }
 
 describe('AIRequestStatus', () => {
-  it('shows retry progress using the compact MCP runtime treatment', () => {
-    const markup = render({
-      retrying: true,
-      failed: false,
-      backoff: false,
-      attempt: 2,
-      maxAttempts: 5,
-      attemptStartedAt: Date.now(),
-    });
+  it('shows retry progress with the active orb and thinking shimmer', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_800_000_000_000);
 
-    expect(markup).toContain('AI 请求重试中（2/5）');
-    expect(markup).toContain('请求中');
-    expect(markup).not.toContain('已重试 2 次');
+    try {
+      const markup = render({
+        retrying: true,
+        failed: false,
+        backoff: false,
+        attempt: 2,
+        maxAttempts: 5,
+        attemptStartedAt: Date.now() - 30_000,
+        errorCode: 'network',
+      });
+
+      expect(markup).toContain('AI 请求重试中（2/5）');
+      expect(markup).toContain('请求中 · 已运行 30s');
+      expect(markup).toContain('network');
+      expect(markup).toContain('data-orb-variant="expanding"');
+      expect(markup).toContain(`class="${activeTextStyles.text}"`);
+      expect(markup).not.toContain('已重试 2 次');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('derives the retry countdown from the absolute deadline', () => {
@@ -61,6 +73,8 @@ describe('AIRequestStatus', () => {
     expect(markup).toContain('已重试 5 次');
     expect(markup).toContain('invalid_prompt');
     expect(markup).not.toContain(`AI 请求失败（已重试 5 次）：${providerMessage}`);
+    expect(markup).not.toContain('data-orb-variant="expanding"');
+    expect(markup).not.toContain(`class="${activeTextStyles.text}"`);
   });
 
   it('shows compaction and resend without ordinary retry counters', () => {
@@ -83,6 +97,10 @@ describe('AIRequestStatus', () => {
 
     expect(compacting).toContain('正在压缩上下文');
     expect(resending).toContain('上下文已压缩，正在重新请求');
+    expect(compacting).toContain('data-orb-variant="expanding"');
+    expect(resending).toContain('data-orb-variant="expanding"');
+    expect(compacting).toContain(`class="${activeTextStyles.text}"`);
+    expect(resending).toContain(`class="${activeTextStyles.text}"`);
     expect(compacting).not.toContain('1/5');
     expect(resending).not.toContain('1/5');
   });

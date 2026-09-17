@@ -157,10 +157,15 @@ export function createApplicationComposition(options: {
   const webSearch = createWebSearchController(capabilities.webSearch, (url) => desktopApplication.openExternal(url));
   const inference = createInferenceController(capabilities.inference.inferenceHost);
   const runtime = createRuntimeController(() => options.backend.snapshot());
+  const initialSettings = appConfigStore.getSettings();
   const updateApplication = new UpdateApplication({
     currentVersion: options.app.version,
     provider: options.app.updateProvider,
     disabledReason: options.app.updateDisabledReason,
+    autoCheckAndDownloadEnabled: initialSettings.autoCheckAndDownloadUpdates,
+  });
+  const unsubscribeUpdateSettings = appConfigStore.changes.subscribe((settings) => {
+    updateApplication.setAutoCheckAndDownloadEnabled(settings.autoCheckAndDownloadUpdates);
   });
   const updates = createUpdateController(updateApplication);
   updateApplication.start();
@@ -203,6 +208,7 @@ export function createApplicationComposition(options: {
     dispose: () => {
       webSearch.dispose();
       accountApplication.dispose();
+      unsubscribeUpdateSettings();
       updateApplication.dispose();
     },
   });

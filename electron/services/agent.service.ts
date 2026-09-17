@@ -1008,26 +1008,28 @@ export class AgentService {
    * 消费"投递事实"而非预查状态——post 返回 false 与 runtime 不存在同构处理，无 TOCTOU 窗口。
    */
   async injectEventToAgent(agentId: string, event: AgentInputEvent): Promise<boolean> {
-    // post 是事件唯一写入点：归一化在入口内完成，返回是否被接收
-    const runtime = this.activeRuntimes.get(agentId);
-    if (runtime && runtime.post(event)) {
-      return true;
-    }
+    return this.withLifecycleLock(this.lifecycleKey(agentId), async () => {
+      // 模型保存、恢复与投递按会话顺序执行，包括已活动的 Runtime。
+      const runtime = this.activeRuntimes.get(agentId);
+      if (runtime && runtime.post(event)) {
+        return true;
+      }
 
-    const state = await this.resumeAgent(agentId, { autoStart: false });
-    if (!state) {
-      appLog.warn({
-        event: 'agent.event.inject.rejected',
-        message: 'Agent event injection was rejected',
-        context: {
-          scope: 'agent.event',
-          agentId,
-          reason: 'runtime_restore_unavailable',
-        },
-      });
-      return false;
-    }
-    return this.activeRuntimes.get(agentId)!.post(event);
+      const state = await this.resumeLocked(agentId, { autoStart: false });
+      if (!state) {
+        appLog.warn({
+          event: 'agent.event.inject.rejected',
+          message: 'Agent event injection was rejected',
+          context: {
+            scope: 'agent.event',
+            agentId,
+            reason: 'runtime_restore_unavailable',
+          },
+        });
+        return false;
+      }
+      return this.activeRuntimes.get(agentId)!.post(event);
+    });
   }
 
   async injectEventToSubagent(
@@ -1061,14 +1063,15 @@ export class AgentService {
   // Agent 配置变更
   // ============================================================
 
-  setAgentModel(agentId: string, model: string): boolean {
-    const runtime = this.activeRuntimes.get(agentId);
-    if (!runtime) {
-      return false;
-    }
-    this.validateModelReference(model);
-    runtime.setModel(model);
-    return true;
+  async setAgentModel(agentId: string, model: string): Promise<boolean> {
+    return this.withLifecycleLock(this.lifecycleKey(agentId), async () => {
+      this.validateModelReference(model);
+      const header = this.conversationStore.updateHeaderModel(agentId, model);
+      if (!header) return false;
+
+      this.activeRuntimes.get(agentId)?.setModel(header.currentModel);
+      return true;
+    });
   }
 
   setAgentReasoning(

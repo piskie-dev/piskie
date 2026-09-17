@@ -53,6 +53,7 @@ export interface AgentRunRepository {
   syncControl(states: Readonly<Record<string, AgentControlSnapshot>>): void;
   markRead(agentId: string, throughIndex: number): Promise<void>;
   rename(agentId: string, name: string): Promise<void>;
+  applyModel(agentId: string, currentModel: string): Promise<void>;
   loadPreview(agentId: string): Promise<AgentControlSnapshot | null>;
   clearPreview(agentId?: string): void;
   delete(agentId: string): Promise<void>;
@@ -83,6 +84,8 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
   let renameRevision = 0;
   const renameRequests = new Map<string, number>();
   const renamedTitles = new Map<string, { readonly name: string; readonly revision: number }>();
+  let modelRevision = 0;
+  const confirmedModels = new Map<string, { readonly model: string; readonly revision: number }>();
   let accepting = true;
   let controlStates: Readonly<Record<string, AgentControlSnapshot>> = {};
   // Append observations may arrive before the first list contains their run.
@@ -133,10 +136,17 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
     return next;
   };
 
+  const withConfirmedModel = <T extends { agentId: string; currentModel: string }>(snapshot: T, readRevision: number): T => {
+    const confirmed = confirmedModels.get(snapshot.agentId);
+    return confirmed && confirmed.revision > readRevision
+      ? { ...snapshot, currentModel: confirmed.model } : snapshot;
+  };
+
   const refresh = async (): Promise<void> => {
     if (!accepting) return;
     const request = ++listRequest;
     const titleRevision = renameRevision;
+    const readModelRevision = modelRevision;
     const current = listState.getState();
     listState.setState({
       ...current,
@@ -150,7 +160,7 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       const mergedRuns = runs.map((run) => {
         const renamed = renamedTitles.get(run.agentId);
         return {
-          ...run,
+          ...withConfirmedModel(run, readModelRevision),
           ...(renamed && renamed.revision > titleRevision
             ? { runConfig: { ...run.runConfig, name: renamed.name } }
             : {}),
@@ -193,6 +203,40 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
     if (agentId && current.agentId !== agentId) return;
     previewRequest += 1;
     previewState.setState(INITIAL_PREVIEW, true);
+  };
+
+  const loadPreview = async (agentId: string, keepReady = false): Promise<AgentControlSnapshot | null> => {
+    if (!accepting) return null;
+    const request = ++previewRequest;
+    if (!keepReady) previewState.setState({ phase: 'loading', agentId, state: null, error: null }, true);
+    try {
+      const snapshot = await client.state(agentId);
+      if (!accepting || request !== previewRequest) return snapshot;
+      if (!snapshot) throw new Error('Agent run state is unavailable');
+      const run = listState.getState().runs.find((item) => item.agentId === agentId);
+      const currentSnapshot = run
+        ? { ...snapshot, runConfig: { ...snapshot.runConfig, name: run.runConfig.name } }
+        : snapshot;
+      previewState.setState({
+        phase: 'ready',
+        agentId,
+        state: currentSnapshot,
+        error: null,
+      }, true);
+      return currentSnapshot;
+    } catch (error) {
+      if (!accepting || request !== previewRequest) return null;
+      if (!keepReady || previewState.getState().phase !== 'ready') {
+        previewState.setState({
+          phase: 'failed',
+          agentId,
+          state: null,
+          error: error instanceof Error ? error.message : String(error),
+        }, true);
+      }
+      if (keepReady) throw error;
+      return null;
+    }
   };
 
   return {
@@ -243,49 +287,26 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       readRequests.set(key, request);
       return request;
     },
-    async loadPreview(agentId) {
-      if (!accepting) return null;
-      const request = ++previewRequest;
-      previewState.setState({ phase: 'loading', agentId, state: null, error: null }, true);
-      try {
-        const snapshot = await client.state(agentId);
-        if (!accepting || request !== previewRequest) return snapshot;
-        if (!snapshot) {
-          previewState.setState({
-            phase: 'failed',
-            agentId,
-            state: null,
-            error: 'Agent run state is unavailable',
-          }, true);
-          return null;
-        }
-        const run = listState.getState().runs.find((item) => item.agentId === agentId);
-        const currentSnapshot = run
-          ? { ...snapshot, runConfig: { ...snapshot.runConfig, name: run.runConfig.name } }
-          : snapshot;
-        previewState.setState({
-          phase: 'ready',
-          agentId,
-          state: currentSnapshot,
-          error: null,
-        }, true);
-        return currentSnapshot;
-      } catch (error) {
-        if (accepting && request === previewRequest) {
-          previewState.setState({
-            phase: 'failed',
-            agentId,
-            state: null,
-            error: error instanceof Error ? error.message : String(error),
-          }, true);
-        }
-        return null;
+    loadPreview,
+    clearPreview,
+    async applyModel(agentId, currentModel) {
+      if (!accepting) return;
+      confirmedModels.set(agentId, { model: currentModel, revision: ++modelRevision });
+      const current = listState.getState();
+      listState.setState({
+        runs: current.runs.map((run) => run.agentId === agentId ? { ...run, currentModel } : run),
+        revision: current.revision + 1,
+      });
+      const preview = previewState.getState();
+      if (preview.agentId === agentId) {
+        // Keep model and reasoning from one authoritative read; supersede any older preview.
+        await loadPreview(agentId, true);
       }
     },
-    clearPreview,
     async rename(agentId, name) {
       if (!accepting) throw new Error('AgentRunRepository is closed');
       const request = ++mutationRequest;
+      const readModelRevision = modelRevision;
       renameRequests.set(agentId, request);
       const renamed = await client.rename(agentId, name);
       if (!accepting || renameRequests.get(agentId) !== request) return;
@@ -294,7 +315,7 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       renamedTitles.set(agentId, { name: renamed.runConfig.name, revision: ++renameRevision });
       const current = listState.getState();
       const canonical = {
-        ...renamed,
+        ...withConfirmedModel(renamed, readModelRevision),
         messages: rememberMessages(agentId, renamed.messages),
       };
       listState.setState({
@@ -320,6 +341,7 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       if (!accepting) throw new Error('AgentRunRepository is closed');
       await client.delete(agentId);
       renamedTitles.delete(agentId);
+      confirmedModels.delete(agentId);
       messagesByAgentId.delete(agentId);
       readableAssistantIndexes.delete(agentId);
       responses.delete(agentId);
@@ -336,6 +358,7 @@ export function createAgentRunRepository(client: AgentRunClient, onDeleted?: (ag
       previewRequest += 1;
       renameRequests.clear();
       renamedTitles.clear();
+      confirmedModels.clear();
       messagesByAgentId.clear();
       readableAssistantIndexes.clear();
       responses.clear();

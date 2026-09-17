@@ -204,6 +204,121 @@
   gap: 8px;
 }
 
+.updateAnchor {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.updateTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-block-size: 28px;
+  min-inline-size: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--status-running) 28%, var(--line-1));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-running) 9%, var(--sb-cell));
+  color: color-mix(in srgb, var(--status-running) 52%, var(--cyber-text));
+  cursor: pointer;
+  font-size: 11.5px;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.updateTrigger:hover,
+.updateTrigger[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--status-running) 46%, var(--line-1));
+  background: color-mix(in srgb, var(--status-running) 14%, var(--sb-cell-hi));
+}
+
+.updateTrigger:focus-visible,
+.updatePanel button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--status-running) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.updatePanel {
+  inline-size: min(300px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--glass-2);
+  color: var(--cyber-text);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--cyber-bg) 68%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+
+.updatePanelCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-block-end: 1px solid var(--line-1);
+}
+
+.updatePanelCopy strong {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.updatePanelCopy span {
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.updatePanelActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 6px;
+}
+
+.updatePanelActions button {
+  min-block-size: 30px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--cyber-text) 78%, transparent);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+
+.updatePanelActions button:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.updatePanelActions button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.updatePanelActions .updatePanelPrimary {
+  background: color-mix(in srgb, var(--status-running) 15%, transparent);
+  color: color-mix(in srgb, var(--status-running) 55%, var(--cyber-text));
+}
+
+.updatePanelActions .updatePanelPrimary:hover {
+  background: color-mix(in srgb, var(--status-running) 22%, transparent);
+}
+
+.updateSpin {
+  animation: sb-update-spin 900ms linear infinite;
+}
+
+@keyframes sb-update-spin {
+  to { rotate: 360deg; }
+}
+
 /* 中断失败的瞬时提示 */
 .note {
   font-size: 11px;
@@ -510,6 +625,17 @@
   }
 }
 
+@media (max-width: 900px) {
+  .updateTrigger {
+    inline-size: 28px;
+    padding: 0;
+  }
+
+  .updateTrigger span {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .castDot,
   .lamp i,
@@ -518,10 +644,18 @@
     animation: none;
   }
 
+  .updateSpin {
+    animation: none;
+  }
+
   .accountTrigger,
   .accountChevron,
   .accountPanelActions button,
   .accountPanelSplitActions button {
+    transition: none;
+  }
+
+  .updateTrigger {
     transition: none;
   }
 }

@@ -33,6 +33,12 @@
   flex: none;
 }
 
+.requestOrb {
+  display: inline-flex;
+  flex: none;
+  color: var(--status-thinking);
+}
+
 .copy {
   display: block;
   min-width: 0;

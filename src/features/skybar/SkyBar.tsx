@@ -21,6 +21,7 @@ import { createConsoleHeaderAction } from '../console/shell/headerAction';
 import { isMacOSPlatform } from '../../utils/platform';
 import { absorbTargets, sessionTokenTally } from './tally';
 import { AccountControl } from './AccountControl';
+import { UpdateIndicator } from './UpdateIndicator';
 import styles from './skybar.module.css';
 
 import logo from '/logo-on-dark-128.png';
@@ -139,6 +140,7 @@ export const SkyBar: React.FC = () => {
       </span>
 
       <div className={styles.deck}>
+        <UpdateIndicator />
         <KernelDownloadIndicator />
 
         {senderAuthorizationCount > 0 && (

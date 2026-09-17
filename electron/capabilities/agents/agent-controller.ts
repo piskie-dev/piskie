@@ -147,8 +147,8 @@ export function createAgentController(
         if (!accepted) notFound('Agent or subagent was not found');
       },
     ),
-    operation(AGENT_OPERATIONS.setModel, args([identifier, identifier]), ([agentId, model]) => {
-      if (!agent.setAgentModel(agentId, model)) notFound('Agent was not found');
+    operation(AGENT_OPERATIONS.setModel, args([identifier, identifier]), async ([agentId, model]) => {
+      if (!await agent.setAgentModel(agentId, model)) notFound('Agent was not found');
     }),
     operation(
       AGENT_OPERATIONS.setSubagentModel,

@@ -64,7 +64,9 @@ describe('ImageLightbox context navigation', () => {
     expect(container.querySelector('button[aria-label="上一张图片"]')).toBeNull();
     expect(container.querySelector('button[aria-label="下一张图片"]')).toBeNull();
     expect(container.querySelector('[aria-label="当前会话中的图片"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="关闭预览"]')).not.toBeNull();
+    const closeButton = container.querySelector('button[aria-label="关闭预览"]');
+    expect(closeButton?.querySelector('svg')).not.toBeNull();
+    expect(closeButton?.textContent).toBe('');
   });
 
   it('pins decoded dimensions so a viewBox-only SVG cannot collapse in the dialog', async () => {

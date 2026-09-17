@@ -582,6 +582,7 @@ export interface AgentStateChangeEvent {
 export interface AppSettings {
   theme: 'light' | 'dark' | 'auto';
   language: 'zh-CN' | 'en-US';
+  autoCheckAndDownloadUpdates: boolean;
   navEdgeDockEnabled: boolean;
   navPrismEnabled: boolean;
   navPrismSpot: { x: number; y: number } | null;

@@ -31,6 +31,10 @@ function control(agentId: string): AgentControlSnapshot {
   } as unknown as AgentControlSnapshot;
 }
 
+const modelA = { currentModel: 'sample::model-a', reasoningOverride: { kind: 'effort', effort: 'low' } } as const;
+const modelB = { currentModel: 'sample::model-b', reasoningOverride: { kind: 'effort', effort: 'high' } } as const;
+const modelC = { currentModel: 'sample::model-c', reasoningOverride: { kind: 'budget', tokens: 4096 } } as const;
+
 function client(overrides: Partial<AgentRunClient> = {}): AgentRunClient {
   return {
     list: vi.fn(async () => []),
@@ -147,6 +151,127 @@ describe('AgentRunRepository', () => {
       phase: 'ready',
       agentId: 'history',
     });
+  });
+
+  it('refreshes a cold model and its different reasoning default together while keeping the preview ready', async () => {
+    let finishRead!: (snapshot: AgentControlSnapshot) => void;
+    const state = vi.fn().mockResolvedValueOnce({ ...control('sample-main'), ...modelA })
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRead = resolve; }))
+      .mockImplementation(async (agentId) => ({ ...control(agentId), ...modelA }));
+    const repository = createAgentRunRepository(client({
+      list: vi.fn(async () => [run('sample-main'), run('sample-other')]), state,
+    }));
+    await repository.refresh();
+    await repository.loadPreview('sample-main');
+    const previous = repository.previewState.getState();
+    const changed = vi.fn();
+    const unsubscribe = repository.previewState.subscribe(changed);
+    const refreshing = repository.applyModel('sample-main', modelB.currentModel);
+    expect(repository.listState.getState().runs[0]?.currentModel).toBe(modelB.currentModel);
+    expect(repository.previewState.getState()).toBe(previous);
+    expect(changed).not.toHaveBeenCalled();
+
+    finishRead({ ...control('sample-main'), ...modelB });
+    await refreshing;
+    expect(repository.previewState.getState()).toMatchObject({ phase: 'ready', state: modelB });
+    expect(changed).toHaveBeenCalledOnce();
+    unsubscribe();
+
+    await repository.loadPreview('sample-other');
+    await repository.applyModel('sample-main', modelC.currentModel);
+    expect(repository.previewState.getState()).toMatchObject({ agentId: 'sample-other', state: modelA });
+    repository.clearPreview('sample-other');
+    await repository.applyModel('sample-main', modelB.currentModel);
+    expect(repository.previewState.getState().phase).toBe('idle');
+    expect(state).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves a confirmed model across older list, preview and rename responses, then accepts fresh reads', async () => {
+    const original = run('sample-main');
+    let finishList!: (runs: AgentRunSnapshot[]) => void;
+    let finishPreview!: (state: AgentControlSnapshot) => void;
+    let finishRename!: (run: AgentRunSnapshot) => void;
+    const state = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finishPreview = resolve; }))
+      .mockResolvedValueOnce({ ...control('sample-main'), ...modelB })
+      .mockResolvedValue({ ...control('sample-main'), ...modelC });
+    const list = vi.fn().mockResolvedValueOnce([original])
+      .mockImplementationOnce(() => new Promise((resolve) => { finishList = resolve; }))
+      .mockResolvedValue([{ ...original, currentModel: modelC.currentModel }]);
+    const repository = createAgentRunRepository(client({
+      list, state,
+      rename: vi.fn(() => new Promise<AgentRunSnapshot>((resolve) => { finishRename = resolve; })),
+    }));
+    await repository.refresh();
+    const listing = repository.refresh();
+    const previewing = repository.loadPreview('sample-main');
+    const renaming = repository.rename('sample-main', 'Revised sample');
+    await repository.applyModel('sample-main', modelB.currentModel);
+    finishRename({ ...original, runConfig: { ...original.runConfig, name: 'Revised sample' } });
+    await renaming;
+    expect(repository.listState.getState().runs[0]?.currentModel).toBe(modelB.currentModel);
+    finishList([original]);
+    finishPreview({ ...control('sample-main'), ...modelA });
+    await Promise.all([listing, previewing]);
+    expect(repository.previewState.getState()).toMatchObject({ phase: 'ready', state: modelB });
+    expect(repository.listState.getState().runs[0]?.currentModel).toBe(modelB.currentModel);
+
+    repository.clearPreview();
+    await repository.loadPreview('sample-main');
+    await repository.refresh();
+    expect(repository.previewState.getState()).toMatchObject({ state: modelC });
+    expect(repository.listState.getState().runs[0]?.currentModel).toBe(modelC.currentModel);
+  });
+
+  it.each(['success', 'failure'] as const)('ignores a previous model read %s after a newer selection is confirmed', async (outcome) => {
+    let finishPrevious!: (snapshot: AgentControlSnapshot) => void;
+    let failPrevious!: (error: Error) => void;
+    const state = vi.fn().mockResolvedValueOnce({ ...control('sample-main'), ...modelA })
+      .mockImplementationOnce(() => new Promise((resolve, reject) => { finishPrevious = resolve; failPrevious = reject; }))
+      .mockResolvedValueOnce({ ...control('sample-main'), ...modelC });
+    const repository = createAgentRunRepository(client({ state }));
+    await repository.loadPreview('sample-main');
+
+    const previous = repository.applyModel('sample-main', modelB.currentModel);
+    await repository.applyModel('sample-main', modelC.currentModel);
+    expect(repository.previewState.getState()).toMatchObject({ phase: 'ready', state: modelC });
+    if (outcome === 'success') finishPrevious({ ...control('sample-main'), ...modelB });
+    else failPrevious(new Error('Previous sample read failed'));
+    await expect(previous).resolves.toBeUndefined();
+    expect(repository.previewState.getState()).toMatchObject({ phase: 'ready', state: modelC });
+  });
+
+  it.each(['another target', 'live state'] as const)('does not replace the preview when a model read finishes after selecting %s', async (destination) => {
+    let finishRead!: (snapshot: AgentControlSnapshot) => void;
+    const state = vi.fn().mockResolvedValueOnce({ ...control('sample-main'), ...modelA })
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRead = resolve; }))
+      .mockResolvedValueOnce({ ...control('sample-other'), ...modelC });
+    const repository = createAgentRunRepository(client({ state }));
+    await repository.loadPreview('sample-main');
+    const refreshing = repository.applyModel('sample-main', modelB.currentModel);
+    if (destination === 'another target') await repository.loadPreview('sample-other');
+    else {
+      // The renderer clears the history preview when a live control snapshot arrives.
+      repository.syncControl({ 'sample-main': { ...control('sample-main'), ...modelB } });
+      repository.clearPreview('sample-main');
+    }
+    const selected = repository.previewState.getState();
+    finishRead({ ...control('sample-main'), ...modelB });
+    await refreshing;
+    expect(repository.previewState.getState()).toBe(selected);
+  });
+
+  it('keeps the ready model pair and reports a failed refresh, then updates both fields on retry', async () => {
+    const state = vi.fn().mockResolvedValueOnce({ ...control('sample-main'), ...modelA })
+      .mockRejectedValueOnce(new Error('Sample preview read failed'))
+      .mockResolvedValueOnce({ ...control('sample-main'), ...modelB });
+    const repository = createAgentRunRepository(client({ state }));
+    await repository.loadPreview('sample-main');
+    const previous = repository.previewState.getState();
+
+    await expect(repository.applyModel('sample-main', modelB.currentModel)).rejects.toThrow('Sample preview read failed');
+    expect(repository.previewState.getState()).toBe(previous);
+    await repository.applyModel('sample-main', modelB.currentModel);
+    expect(repository.previewState.getState()).toMatchObject({ phase: 'ready', state: modelB });
   });
 
   it('applies the canonical renamed snapshot immediately to the list and ready preview', async () => {

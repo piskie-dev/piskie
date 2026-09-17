@@ -62,6 +62,7 @@ describe('lightbox copy selection', () => {
     const pending = deferred<void>();
     publish.mockReturnValueOnce(pending.promise);
     await render(gallery);
+    expect(copyButton().querySelector('span')?.className).toContain('visuallyHidden');
     await nextImage();
     await act(async () => { copyButton().click(); copyButton().click(); });
     expect(publish).toHaveBeenCalledExactlyOnceWith({ kind: 'url', url: gallery.urls[1], name: undefined });

@@ -34,11 +34,21 @@ afterAll(() => {
 });
 
 const button = () => container.querySelector('button')!;
-const render = (contentKey: string, onCopy: () => Promise<void>) => act(async () => {
-  root.render(createElement(CopyActionButton, { contentKey, onCopy, label: 'Copy sample' }));
+const render = (contentKey: string, onCopy: () => Promise<void>, iconOnly = false) => act(async () => {
+  root.render(createElement(CopyActionButton, { contentKey, onCopy, label: 'Copy sample', iconOnly }));
 });
 
 describe('shared copy feedback', () => {
+  it('keeps status text available to assistive technology in icon-only mode', async () => {
+    await render('image:first', async () => undefined, true);
+    const label = button().querySelector('span')!;
+    expect(label.textContent).toBe('Copy sample');
+    expect(label.className).toContain('visuallyHidden');
+    expect(label.getAttribute('aria-live')).toBe('polite');
+    expect(button().getAttribute('aria-label')).toBe('Copy sample');
+    expect(button().getAttribute('title')).toBe('Copy sample');
+  });
+
   it('locks immediately, waits for publication, then expires success feedback', async () => {
     vi.useFakeTimers();
     const pending = deferred<void>();

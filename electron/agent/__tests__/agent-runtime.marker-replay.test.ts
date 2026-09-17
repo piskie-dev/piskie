@@ -205,6 +205,22 @@ describe('marker 回放（环境强制覆盖机制已删除）', () => {
     ]);
   });
 
+  it('uses the selected header model for the first inference request despite older model markers', async () => {
+    const invoke = vi.fn(fakeAgentInference().invoke);
+    const runtime = buildRuntime({
+      initialModel: 'sample-provider::chosen-model',
+      inference: fakeAgentInference({ invoke }),
+    });
+    await runtime.replayConversation([
+      { t: 'marker', ts: 1, key: 'model', value: 'sample-provider::old-model' },
+      { t: 'msg', ts: 2, id: 'sample-message', role: 'user', content: 'Continue the sample task.' },
+    ]);
+    await runtime.requestForTest();
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke.mock.calls[0]![0].model).toEqual({ providerId: 'sample-provider', modelId: 'chosen-model' });
+    expect(runtime.getModel()).toBe('sample-provider::chosen-model');
+  });
+
   it('恢复时忽略历史 reasoning marker，并从最新模型配置建立明确快照', async () => {
     // 场景：模型 A（仅支持 effort）设置 reasoning → summary → 切换模型 B（仅支持 budget）→ 退出 → resume。
     // header 以最终模型 B 初始化；历史 reasoningOverride marker 不携带所属模型，

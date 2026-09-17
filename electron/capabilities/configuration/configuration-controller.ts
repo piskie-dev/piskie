@@ -40,6 +40,7 @@ const backgroundImageSchema = z.string().refine(isThemeBackgroundUrl).nullable()
 const settingsKeySchema = z.enum([
   'theme',
   'language',
+  'autoCheckAndDownloadUpdates',
   'navEdgeDockEnabled',
   'navPrismEnabled',
   'navPrismSpot',
@@ -49,6 +50,7 @@ const settingsKeySchema = z.enum([
 const settingsSchema = z.strictObject({
   theme: z.enum(['light', 'dark', 'auto']).optional(),
   language: z.enum(['zh-CN', 'en-US']).optional(),
+  autoCheckAndDownloadUpdates: z.boolean().optional(),
   navEdgeDockEnabled: z.boolean().optional(),
   navPrismEnabled: z.boolean().optional(),
   navPrismSpot: navPrismSpotSchema.optional(),
