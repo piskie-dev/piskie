@@ -6,6 +6,7 @@ import type {
   ConfigDomainReader,
 } from './integrations.js';
 import { createManagedDomain } from './domain-factory.js';
+import { schedulesBoundToDefinition } from './schedule-references.js';
 
 const definitionIdSchema = z.string().trim().min(1)
   .describe('Immutable non-empty Task Definition ID.');
@@ -36,11 +37,11 @@ const taskAdvancedSettingsFields = {
   backgroundMode: z.boolean().describe('Whether browser work starts in background mode.').optional(),
 };
 
-const taskAdvancedSettingsWriteSchema = z.strictObject({
+export const taskAdvancedSettingsWriteSchema = z.strictObject({
   ...taskAdvancedSettingsFields,
   fingerprint: runtimeFingerprintWriteSchema.optional(),
 });
-const taskAdvancedSettingsStoredSchema = z.object({
+export const taskAdvancedSettingsStoredSchema = z.object({
   ...taskAdvancedSettingsFields,
   fingerprint: runtimeFingerprintStoredSchema.optional(),
 });
@@ -51,10 +52,10 @@ const taskBindingsFields = {
     z.string().trim().min(1).describe('Browser environment ID available to this task.'),
   ).describe('Browser environments available to future AgentRuns.').optional(),
 };
-const taskBindingsWriteSchema = z.strictObject(taskBindingsFields);
-const taskBindingsStoredSchema = z.object(taskBindingsFields);
+export const taskBindingsWriteSchema = z.strictObject(taskBindingsFields);
+export const taskBindingsStoredSchema = z.object(taskBindingsFields);
 
-const mcpServersSchema = z.array(
+export const mcpServersSchema = z.array(
   z.string().trim().min(1).describe('MCP server name available to this task.'),
 ).describe('MCP server selection copied into future AgentRuns.').check((context) => {
   if (new Set(context.value).size !== context.value.length) {
@@ -167,6 +168,7 @@ export function createTaskDefinitionsDomain(
         }),
         dependencyRevisions: async () => ({
           'im-bots': revisionOf(await readDomain('im-bots')),
+          schedules: revisionOf(await readDomain('schedules')),
         }),
         validateSemantic: async (candidate) => {
           const issues = validateBoundDefinitionPurposes(
@@ -177,18 +179,18 @@ export function createTaskDefinitionsDomain(
         },
         analyzeImpact: async (current, candidate) => {
           const bots = await readDomain('im-bots');
+          const schedules = await readDomain('schedules');
           return Object.keys(current.definitions)
             .filter((id) => !candidate.definitions[id])
             .map((id) => {
               const affectedBots = botsBoundToDefinition(bots, id);
+              const affectedSchedules = schedulesBoundToDefinition(schedules, id);
               return {
                 code: 'TASK_DEFINITION_REMOVED',
                 severity: 'high' as const,
                 path: `/definitions/${escapePointer(id)}`,
-                message: affectedBots.length > 0
-                  ? `Task Definition ${id} will be removed and ${affectedBots.length} bound IM Bot(s) will become invalid.`
-                  : `Task Definition ${id} will be removed; existing AgentRun snapshots are retained.`,
-                details: { affectedBots },
+                message: describeDefinitionRemoval(id, affectedBots.length, affectedSchedules.length),
+                details: { affectedBots, affectedSchedules },
               };
             });
         },
@@ -216,6 +218,16 @@ function legacyTaskDefinitionPurpose(
   definition: Pick<TaskDefinition, 'promptTemplate'>,
 ): TaskDefinition['purpose'] {
   return definition.promptTemplate === '' ? 'messaging' : 'general';
+}
+
+function describeDefinitionRemoval(id: string, bots: number, schedules: number): string {
+  const consequences = [
+    bots > 0 ? `${bots} bound IM Bot(s) will become invalid` : '',
+    schedules > 0 ? `${schedules} Schedule(s) will be suspended` : '',
+  ].filter(Boolean);
+  return consequences.length > 0
+    ? `Task Definition ${id} will be removed and ${consequences.join(' and ')}.`
+    : `Task Definition ${id} will be removed; existing AgentRun snapshots are retained.`;
 }
 
 function botsBoundToDefinition(value: unknown, definitionId: string): string[] {

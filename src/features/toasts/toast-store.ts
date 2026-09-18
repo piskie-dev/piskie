@@ -18,6 +18,13 @@ export interface ToastItem {
   readonly durationMs: number;
   /** push 时间戳:同 id 重推时变化,用于重置自动消隐计时 */
   readonly pushedAt: number;
+  /** 可选的跟进动作(如跳转到会话);点击后通知随即关闭 */
+  readonly action?: ToastAction;
+}
+
+export interface ToastAction {
+  readonly label: string;
+  readonly run: () => void;
 }
 
 export type ToastInput = Omit<ToastItem, 'pushedAt' | 'durationMs'> & {

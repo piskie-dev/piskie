@@ -188,6 +188,7 @@ describe('piskie config CLI', () => {
           { id: 'mcp' },
           { id: 'model-catalog' },
           { id: 'proxies' },
+          { id: 'schedules' },
           { id: 'task-definitions' },
           { id: 'web-search' },
           { id: 'worker-preferences' },

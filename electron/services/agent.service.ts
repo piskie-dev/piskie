@@ -1,6 +1,7 @@
 import type { WorkerPreferencesDocument } from '../../shared/types/worker-preferences.js';
 import { resolveWorkerInference, type WorkerInferenceInput } from '../agent/worker-inference.js';
 import type { SearchPort } from '../../shared/types/web-search.js';
+import type { SchedulePort } from '../tools/types.js';
 /**
  * AgentService — Agent 调度服务
  * 管理多个 AgentRuntime 的生命周期（支持并发执行）
@@ -11,6 +12,8 @@ import type { SearchPort } from '../../shared/types/web-search.js';
  * - Resume = 读文件 + 创建新 AgentRuntime + replay + start
  * - ⚓ 提示词锚点（agent_run 工具 description）：顶层 AgentRun 在 activeRuntimes 中彼此无父子关系，
  *   不级联、无自动回收——改动此语义需同步 tools/agent/agent-run.tool.ts 的 description 首段
+ * - ⚓ 提示词锚点（schedule 工具 description）：定时任务新建的运行同样是无父子关系的顶层 AgentRun；
+ *   改动 startAgent 的启动语义需同步 tools/schedule/schedule.tool.ts 的目标说明
  */
 
 import { AgentRuntime } from '../agent/agent-runtime.js';
@@ -61,6 +64,7 @@ export interface AgentServiceRuntimeBindings {
   agentInference: AgentInferencePort;
   imageApplication: ImageApplicationPort;
   search?: SearchPort;
+  schedules?: SchedulePort;
 }
 
 /**
@@ -105,6 +109,7 @@ export class AgentService {
   private agentInference: AgentInferencePort | null = null;
   private inferenceHost: InferenceRuntimeHost | null = null;
   private search: SearchPort | undefined;
+  private schedules: SchedulePort | undefined;
   private imageApplication: ImageApplicationPort | null = null;
   private initialized = false;
   private conversationStore!: ConversationStore;
@@ -293,6 +298,7 @@ export class AgentService {
     this.agentInference = bindings.agentInference;
     this.imageApplication = bindings.imageApplication;
     this.search = bindings.search;
+    this.schedules = bindings.schedules;
     occupancyRegistry.clear();
 
     this.initialized = true;
@@ -440,6 +446,7 @@ export class AgentService {
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
           search: this.search,
+          schedules: this.schedules,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -856,6 +863,7 @@ export class AgentService {
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
           search: this.search,
+          schedules: this.schedules,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -1215,6 +1223,7 @@ export class AgentService {
     this.agentInference = null;
     this.imageApplication = null;
     this.search = undefined;
+    this.schedules = undefined;
     this.reservedAgentIds.clear();
 
     const failures = results.filter(

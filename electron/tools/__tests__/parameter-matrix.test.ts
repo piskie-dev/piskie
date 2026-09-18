@@ -41,10 +41,25 @@ const STRICT_NUMERIC_PARAMS = new Set([
 ]);
 
 // Cross-field constraints need a valid combination beyond sampling each field independently.
+// An `undefined` override removes the sampled field.
 const BASELINE_OVERRIDES: Record<string, JsonSchema> = {
   subagent: { type: 'local-worker', subject: '本地任务', prompt: '完成看板任务', skills: ['skill-a'] },
   web_search: { publishedAfter: '2026-01-01', publishedBefore: '2026-02-01' },
+  schedule: { delaySeconds: 60, at: undefined, cron: undefined },
 };
+
+// Optional numerics that stand in for a required choice: clearing them leaves no choice, so rejection is correct.
+const EXCLUSIVE_NUMERIC_PARAMS = new Set([
+  'schedule.delaySeconds',
+]);
+
+function applyOverrides(base: JsonSchema, overrides: JsonSchema | undefined): JsonSchema {
+  const merged = { ...base, ...overrides };
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === undefined) delete merged[key];
+  }
+  return merged;
+}
 
 function selectSchema(schema: JsonSchema): JsonSchema {
   const alternatives = (schema.oneOf ?? schema.anyOf) as JsonSchema[] | undefined;
@@ -233,7 +248,7 @@ describe('model-facing parameter coercion matrix', () => {
         continue;
       }
       const apiSchema = toApiSchema(entry.contract.schema);
-      const baseline = { ...sample(apiSchema) as JsonSchema, ...BASELINE_OVERRIDES[definition.name] };
+      const baseline = applyOverrides(sample(apiSchema) as JsonSchema, BASELINE_OVERRIDES[definition.name]);
       const baselineResult = parse(entry.contract.schema, baseline);
       if (!baselineResult.ok) {
         failures.push(`${definition.name}: generated valid baseline failed: ${baselineResult.errors.join('; ')}`);
@@ -277,9 +292,10 @@ describe('model-facing parameter coercion matrix', () => {
           }
         } else {
           const empty = parse(entry.contract.schema, replaceAtPath(baseline, item.path, ''));
-          if (item.optional && !empty.ok) {
+          const clearable = item.optional && !EXCLUSIVE_NUMERIC_PARAMS.has(qualifiedPath);
+          if (clearable && !empty.ok) {
             failures.push(`${qualifiedPath}: rejected an empty optional numeric parameter`);
-          } else if (!item.optional && empty.ok) {
+          } else if (!clearable && empty.ok) {
             failures.push(`${qualifiedPath}: accepted an empty required numeric string`);
           }
         }

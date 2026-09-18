@@ -12,6 +12,7 @@ const botSchema = z.object({
   id: identifier,
   channelType: identifier,
   name: identifier,
+  autoStart: z.boolean().optional(),
   definitionId: identifier.optional(),
   replyForward: z.object({
     forwardAssistantText: z.boolean(),

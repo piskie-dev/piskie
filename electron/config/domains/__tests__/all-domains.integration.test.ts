@@ -147,6 +147,9 @@ async function fixture(
     mcp: {
       publish: (_snapshot, context) => publications.push({ domain: context.domain, source: context.source }),
     },
+    schedules: {
+      publish: (_schedules, context) => publications.push({ domain: context.domain, source: context.source }),
+    },
   };
   const host = createConfigHost({
     rootDirectory: root,
@@ -596,6 +599,7 @@ describe('all managed Config Domains', () => {
       'mcp',
       'model-catalog',
       'proxies',
+      'schedules',
       'task-definitions',
       'web-search',
       'worker-preferences',
@@ -1035,7 +1039,7 @@ describe('all managed Config Domains', () => {
     expect(removeBoundDefinition.validation.valid).toBe(true);
     expect(removeBoundDefinition.impacts).toContainEqual(expect.objectContaining({
       code: 'TASK_DEFINITION_REMOVED',
-      details: { affectedBots: ['bot-a'] },
+      details: { affectedBots: ['bot-a'], affectedSchedules: [] },
     }));
 
     const missingSelection = await host.createPatchPlan<ConfigPlan>('inference-selections', [{

@@ -17,6 +17,7 @@ export type CapabilityId =
   | 'observability'
   | 'pilot'
   | 'runtime'
+  | 'schedules'
   | 'task-definitions'
   | 'updates';
 

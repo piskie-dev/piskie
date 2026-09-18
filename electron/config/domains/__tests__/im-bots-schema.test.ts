@@ -15,6 +15,29 @@ function bot(replyForward: Record<string, unknown>) {
   };
 }
 
+describe('im-bots auto-start', () => {
+  const config = { channelType: 'openclaw-weixin', name: 'Example Bot' };
+
+  it('defaults missing values off for both new writes and existing stored Bots', () => {
+    const document = { bots: { example: config } };
+    expect(imBotsWriteSchema.parse(document).bots.example?.autoStart).toBe(false);
+    expect(imBotsStoredSchema.parse({ ...document, revision: 1 }).bots.example?.autoStart).toBe(false);
+  });
+
+  it.each([false, true])('preserves explicit autoStart=%s through write and read schemas', (autoStart) => {
+    const written = imBotsWriteSchema.parse({ bots: { example: { ...config, autoStart } } });
+    expect(written.bots.example?.autoStart).toBe(autoStart);
+    expect(imBotsStoredSchema.parse({ ...written, revision: 1 }).bots.example?.autoStart).toBe(autoStart);
+  });
+
+  it('rejects non-boolean writes while retaining tolerant reads and strict writes for unknown keys', () => {
+    const document = { bots: { example: { ...config, autoStart: true, unknownOption: true } } };
+    expect(imBotsStoredSchema.parse({ ...document, revision: 1 }).bots.example).toEqual({ ...config, autoStart: true });
+    expect(imBotsWriteSchema.safeParse(document).success).toBe(false);
+    expect(imBotsWriteSchema.safeParse({ bots: { example: { ...config, autoStart: 'true' } } }).success).toBe(false);
+  });
+});
+
 describe('im-bots assistant text hard cut', () => {
   it('defaults tool images on, preserves explicit off, and keeps reads tolerant and writes strict', () => {
     const reply = { forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false };
@@ -76,11 +99,13 @@ describe('im-bots assistant text hard cut', () => {
     expect(parsed.bots.legacy).toEqual({
       channelType: 'openclaw-weixin',
       name: 'Legacy Bot',
+      autoStart: false,
     });
     expect(parsed.bots.current).toEqual({
       channelType: 'openclaw-weixin',
       name: 'Current Bot',
       definitionId: 'td-current',
+      autoStart: false,
     });
     expect(parsed.agentBindings).toEqual({});
   });

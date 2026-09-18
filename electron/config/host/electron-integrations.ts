@@ -4,9 +4,11 @@ import { app } from 'electron';
 import { resolveInitialAppLanguage } from '../../../shared/utils/app-language.js';
 import {
   appConfigStore,
+  scheduleStore,
   taskDefinitionStore,
   publishProxyPoolSnapshot,
 } from '../../core/storage/index.js';
+import { agentService } from '../../services/agent.service.js';
 import { imGateway } from '../../im-gateway/index.js';
 import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { publishGlobalMcpSnapshot } from '../../mcp/bridge/injection.js';
@@ -60,6 +62,17 @@ export function createElectronConfigDomainIntegrations(webSearch: ConfigDomainIn
       publish: (snapshot) => {
         publishGlobalMcpSnapshot(snapshot);
         mcpConnectionManager.invalidateCatalogCache();
+      },
+    },
+    schedules: {
+      publish: (schedules) => scheduleStore.publish(schedules),
+      sessionExists: (agentId) => {
+        try {
+          return agentService.getConversationStore().hasAgentId(agentId);
+        } catch {
+          // AgentService 尚未初始化时无法判断，按存在处理。
+          return true;
+        }
       },
     },
   };

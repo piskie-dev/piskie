@@ -14,6 +14,7 @@ import type {
   SubagentPort,
   TaskBoardPort,
   ToolResourceIds,
+  SchedulePort,
 } from '../tools/types.js';
 import type { BrowserHostRuntime } from '../piskiepilot/core/skill/host.js';
 import type { RoleType } from './roles/role.js';
@@ -40,6 +41,7 @@ export interface TypedToolContext {
   readonly events?: EventPort;
   readonly imageOps?: ImageOpsPort;
   readonly search?: SearchPort;
+  readonly schedules?: SchedulePort;
   readonly browser?: BrowserHostRuntime;
 }
 
@@ -53,6 +55,7 @@ export class ToolContextBuilder {
   private _subagents?: SubagentPort;
   private _events?: EventPort;
   private _search?: SearchPort;
+  private _schedules?: SchedulePort;
   private _imageOps?: ImageOpsPort;
   private _browser?: BrowserHostRuntime;
 
@@ -111,6 +114,11 @@ export class ToolContextBuilder {
     return this;
   }
 
+  setSchedules(port: SchedulePort): this {
+    this._schedules = port;
+    return this;
+  }
+
   setImageOps(ops: ImageOpsPort): this {
     this._imageOps = ops;
     return this;
@@ -158,6 +166,7 @@ export class ToolContextBuilder {
       events: this._events,
       imageOps: this._imageOps,
       search: this._search,
+      schedules: this._schedules,
       browser: this._browser,
     });
   }

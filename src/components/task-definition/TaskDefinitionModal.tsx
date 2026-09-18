@@ -49,6 +49,8 @@ export interface TaskDefinitionModalProps {
   readonly onCreated: (definition: TaskDefinitionSnapshot, shouldStart: boolean) => void;
   /** 默认开启 IM 模式（从 ConnectionEditorModal 打开时） */
   readonly defaultIMMode?: boolean;
+  /** 只建模板不启动（从定时任务表单打开时）：按钮显示「仅创建」，回调 shouldStart 恒为 false */
+  readonly createOnly?: boolean;
   /** 传入时进入编辑模式，并用现有模板回填草稿。 */
   readonly editingDefinition?: TaskDefinitionSnapshot;
   readonly onUpdated?: (definition: TaskDefinitionSnapshot, shouldStart: boolean) => void;
@@ -61,6 +63,7 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
   onClose,
   onCreated,
   defaultIMMode = false,
+  createOnly = false,
   editingDefinition,
   onUpdated,
   allowUpdateAndStart = false,
@@ -122,7 +125,7 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
           )
         : await taskDefinitions.create(draftToTaskDefinitionInput(draft));
       if (editingDefinition) onUpdated?.(definition, shouldStart);
-      else onCreated(definition, !draft.im);
+      else onCreated(definition, !draft.im && !createOnly);
     } catch (error) {
       setFault(presentationFromError(
         error,
@@ -133,6 +136,7 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
     }
   }, [
     busy,
+    createOnly,
     draft,
     editing,
     editingDefinition,
@@ -232,7 +236,7 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
               ? busy ? t('console.saving') : t('common.save')
               : busy
                 ? t('console.creating')
-                : draft.im
+                : draft.im || createOnly
                   ? t('console.createWithoutRun')
                   : t('console.createAndRun')}
           </button>

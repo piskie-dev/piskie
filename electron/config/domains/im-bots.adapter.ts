@@ -76,6 +76,9 @@ const channelCredentialContracts = {
 const botWriteSchema = z.strictObject({
   channelType: channelTypeSchema,
   name: z.string().trim().min(1).describe('User-visible Bot name.'),
+  autoStart: z.boolean().default(false)
+    .describe('Whether this Bot connects to IM when the application starts; saving does not start it.')
+    .meta({ 'x-piskie': { applyMode: 'next-app-start' } }),
   definitionId: z.string().trim().min(1)
     .describe('Optional Task Definition used for incoming messages.')
     .optional(),

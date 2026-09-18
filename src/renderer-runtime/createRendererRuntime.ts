@@ -35,6 +35,7 @@ export function createRendererRuntime(api: PiskieDesktopApi): RendererRuntime {
         'app-settings': fetchSettings,
         proxies: refreshGlobalProxies,
         'task-definitions': domains.taskDefinitions.refresh,
+        schedules: domains.schedules.refresh,
         'browser-profiles': async () => {
           await refreshEnvironments();
         },

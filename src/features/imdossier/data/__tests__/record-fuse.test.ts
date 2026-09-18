@@ -6,6 +6,7 @@ import { faultOfForm, fuseBotRecord, type DossierFormValues } from '../record-fu
 function form(overrides: Partial<DossierFormValues> = {}): DossierFormValues {
   return {
     name: '值班号',
+    autoStart: false,
     channelType: 'feishu',
     appId: 'cli_x1',
     appSecret: '',

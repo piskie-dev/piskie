@@ -16,6 +16,7 @@ import type { MessagingConnectionConfig } from '../../../../shared/electron-cont
 /** 档案表单值(DossierPane 的受控字段全集) */
 export interface DossierFormValues {
   name: string;
+  autoStart: boolean;
   channelType: string;
   appId: string;
   /** 空串 = 不修改(保留持久层旧值) */
@@ -59,6 +60,7 @@ export function fuseBotRecord(
     id: context.botId,
     channelType: form.channelType,
     name: form.name.trim(),
+    autoStart: form.autoStart,
     dmPolicy: form.dmPolicy,
     groupPolicy: form.groupPolicy,
     requireMention: form.requireMention,

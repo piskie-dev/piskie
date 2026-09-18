@@ -5,3 +5,4 @@
 export { publishProxyPoolSnapshot } from './proxy-config-store.js';
 export { appConfigStore } from './app-config-store.js';
 export { taskDefinitionStore } from './task-definition-store.js';
+export { scheduleStore } from './schedule-store.js';

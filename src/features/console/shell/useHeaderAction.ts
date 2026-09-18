@@ -54,7 +54,7 @@ export function useHeaderAction({ onReveal, onNewChat, onNewTemplate }: HeaderAc
     const target =
       action.kind === 'approval'
         ? firstAwaiting(states)
-        : action.kind === 'error'
+        : action.kind === 'error' || action.kind === 'reveal'
           ? (isCurrentTarget(action.target, states) ? action.target : null)
           : null;
 

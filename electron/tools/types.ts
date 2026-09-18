@@ -1,4 +1,6 @@
 import type { SearchCapabilities, SearchPort } from '../../shared/types/web-search.js';
+import type { ScheduleCreateInput } from '../../shared/electron-contracts/schedules.js';
+import type { ScheduleCreator, ScheduleView } from '../../shared/types/schedules.js';
 /**
  * 工具系统类型定义
  */
@@ -169,6 +171,14 @@ export type ToolResourceIds = Readonly<{
   browserId?: string;
 }>;
 
+/** 定时任务工具端口（仅授予 schedule / schedule_list / schedule_cancel）。 */
+export interface SchedulePort {
+  create(input: ScheduleCreateInput, createdBy: ScheduleCreator): Promise<ScheduleView>;
+  list(): Promise<readonly ScheduleView[]>;
+  /** false = 任务不存在。 */
+  cancel(scheduleId: string): Promise<boolean>;
+}
+
 export interface ToolContext {
   readonly agentId: string;
   readonly callId: string;
@@ -198,6 +208,7 @@ export interface ToolContext {
   readonly events?: EventPort;
   readonly imageOps?: ImageOpsPort;
   readonly search?: SearchPort;
+  readonly schedules?: SchedulePort;
   readonly browser?: BrowserHostRuntime;
 }
 

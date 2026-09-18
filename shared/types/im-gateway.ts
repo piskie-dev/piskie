@@ -11,6 +11,8 @@ export interface MessagingConnectionConfig {
 
   // PISKIE internal (not passed to plugin)
   definitionId?: string;
+  /** Connect when the application starts; defaults to false. */
+  autoStart?: boolean;
   replyForward?: IMReplyForwardConfig;
 
   // Application credentials are absent for account-login channels.

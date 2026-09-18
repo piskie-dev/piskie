@@ -11,6 +11,7 @@ import type { ModesClient } from './modes.js';
 import type { ObservabilityClient } from './observability.js';
 import type { PilotClient } from './pilot.js';
 import type { RuntimeClient } from './runtime.js';
+import type { ScheduleClient } from './schedules.js';
 import type { TaskDefinitionClient } from './task-definitions.js';
 import type { UpdateClient } from './updates.js';
 
@@ -21,6 +22,7 @@ export interface PiskieDesktopApi {
   readonly agents: AgentClient;
   readonly modes: ModesClient;
   readonly taskDefinitions: TaskDefinitionClient;
+  readonly schedules: ScheduleClient;
   readonly agentRuns: AgentRunClient;
   readonly configuration: ConfigurationClient;
   readonly inference: InferenceClient;

@@ -31,6 +31,10 @@ import {
   createAgentRunRepository,
   type AgentRunRepository,
 } from '../domains/agent-runs/agent-run-repository';
+import {
+  createScheduleRepository,
+  type ScheduleRepository,
+} from '../domains/schedules/schedule-repository';
 
 export type RendererRuntimePhase =
   | 'new'
@@ -43,7 +47,7 @@ export type RendererRuntimePhase =
 export interface RendererRuntimeServices {
   startSubscriptions(
     register: (dispose: () => void) => void,
-    domains: Pick<RendererRuntime, 'taskDefinitions'>,
+    domains: Pick<RendererRuntime, 'taskDefinitions' | 'schedules'>,
   ): void;
   bootstrap(): Promise<void>;
   stop(): void | Promise<void>;
@@ -57,6 +61,7 @@ export interface RendererRuntime {
   readonly screenFeeds: ScreenFeedRegistry;
   readonly taskDefinitions: TaskDefinitionRepository;
   readonly agentRuns: AgentRunRepository;
+  readonly schedules: ScheduleRepository;
   phase(): RendererRuntimePhase;
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -69,6 +74,7 @@ export function createRuntime(
     readonly screenFeeds?: ScreenFeedRegistry;
     readonly taskDefinitions?: TaskDefinitionRepository;
     readonly agentRuns?: AgentRunRepository;
+    readonly schedules?: ScheduleRepository;
   } = {},
 ): RendererRuntime {
   const agentControl = createAgentControlStore();
@@ -79,6 +85,7 @@ export function createRuntime(
   const screenFeeds = resources.screenFeeds ?? createScreenFeedRegistry();
   const taskDefinitions = resources.taskDefinitions
     ?? createTaskDefinitionRepository(api.taskDefinitions);
+  const schedules = resources.schedules ?? createScheduleRepository(api.schedules);
   let currentPhase: RendererRuntimePhase = 'new';
   let startPromise: Promise<void> | null = null;
   let stopPromise: Promise<void> | null = null;
@@ -112,6 +119,7 @@ export function createRuntime(
     screenFeeds,
     taskDefinitions,
     agentRuns,
+    schedules,
     phase: () => currentPhase,
     start() {
       if (currentPhase === 'ready') return Promise.resolve();
@@ -140,9 +148,10 @@ export function createRuntime(
             if (liveBuffer) liveBuffer.push(event);
             else transcript.enqueueLive(event);
           }));
+          disposers.push(schedules.start());
           services.startSubscriptions(
             (dispose) => disposers.push(dispose),
-            { taskDefinitions },
+            { taskDefinitions, schedules },
           );
 
           await api.runtime.status();
@@ -167,6 +176,7 @@ export function createRuntime(
           contextInspector.close();
           transcript.close();
           taskDefinitions.close();
+          schedules.close();
           agentRuns.close();
           clearAllComposerDrafts();
           clearFilePreviews();
@@ -209,6 +219,7 @@ export function createRuntime(
         contextInspector.close();
         transcript.close();
         taskDefinitions.close();
+        schedules.close();
         agentRuns.close();
         clearAllComposerDrafts();
         clearFilePreviews();
