@@ -44,6 +44,18 @@ const ToastCard: React.FC<{ readonly toast: ToastItem }> = ({ toast }) => {
     >
       <div className={styles.title}>{toast.title}</div>
       {toast.detail && <div className={styles.detail}>{toast.detail}</div>}
+      {toast.action && (
+        <button
+          type="button"
+          className={styles.action}
+          onClick={() => {
+            toast.action?.run();
+            dismiss(toast.id);
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         type="button"
         className={styles.close}

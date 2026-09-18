@@ -8,6 +8,7 @@
 import type { FC, SVGProps } from 'react';
 import {
   Bot,
+  CalendarClock,
   Chrome,
   MessageSquareText,
   MessagesSquare,
@@ -25,8 +26,9 @@ export interface NavStopSpec {
 export const NAV_STOPS: readonly NavStopSpec[] = [
   { path: '/console', titleKey: 'nav.sessionHub', Icon: MessageSquareText },
   { path: '/market', titleKey: 'nav.market', Icon: Puzzle },
-  { path: '/browser', titleKey: 'nav.environmentGallery', Icon: Chrome },
   { path: '/messaging', titleKey: 'nav.messagingDock', Icon: MessagesSquare },
+  { path: '/schedules', titleKey: 'nav.schedules', Icon: CalendarClock },
+  { path: '/browser', titleKey: 'nav.environmentGallery', Icon: Chrome },
   { path: '/agents', titleKey: 'nav.agentManagement', Icon: Bot },
   { path: '/preferences', titleKey: 'nav.preferenceDeck', Icon: SlidersHorizontal },
 ];

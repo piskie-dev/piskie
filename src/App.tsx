@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AgentManagementPage } from './features/agents/AgentManagementPage';
+import { SchedulesPage, ScheduleToastBridge } from './features/schedules';
 import { ConsolePage } from './features/console';
 import Market from './pages/Market';
 import { ImDossierPage } from './features/imdossier/ImDossierPage';
@@ -22,6 +23,7 @@ function WorkspaceShell() {
       <Routes>
         <Route path="/console" element={<ConsolePage />} />
         <Route path="/agents" element={<AgentManagementPage />} />
+        <Route path="/schedules" element={<SchedulesPage />} />
         <Route path="/market" element={<Market />} />
         <Route path="/skills" element={<Navigate to="/market?view=installed" replace />} />
         {/* IM 渠道页；保留 /connections 重定向以兼容旧书签。 */}
@@ -79,6 +81,7 @@ function App() {
       <AppBackground />
       <IncidentToastBridge />
       <AgentLifecycleToastBridge />
+      <ScheduleToastBridge />
       <ToastHost />
       <WorkspaceShell />
     </ContentLinkHost>

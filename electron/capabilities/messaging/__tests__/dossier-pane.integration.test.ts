@@ -12,6 +12,9 @@ import { MessagingApplication } from '../messaging-application.js';
 import { ConfigHost } from '../../../config/host/config-host.js';
 import { ConfigDomainRegistry } from '../../../config/core/registry.js';
 import { createImBotsDomain } from '../../../config/domains/im-bots.adapter.js';
+import { configDomainStoragePaths } from '../../../config/core/storage-layout.js';
+import { createMessagingController } from '../messaging-controller.js';
+import { MESSAGING_OPERATIONS } from '../../../../shared/electron-contracts/messaging.js';
 import type { PiskieDesktopApi } from '../../../../shared/electron-contracts/api';
 import * as runtimeModule from '../../../../src/renderer-runtime/renderer-runtime';
 import { createRendererRuntime } from '../../../../src/renderer-runtime/createRendererRuntime';
@@ -26,7 +29,10 @@ const state = vi.hoisted(() => ({
 }));
 const qr = vi.hoisted(() => vi.fn((_props: { onConnected: (already: boolean) => void }) => null));
 const guide = vi.hoisted(() => vi.fn((_props: { ready: boolean }) => null));
-const runtime = vi.hoisted(() => ({ taskDefinitions: { refresh: vi.fn(async () => undefined) } }));
+const runtime = vi.hoisted(() => ({
+  taskDefinitions: { refresh: vi.fn(async () => undefined) },
+  schedules: { refresh: vi.fn(async () => undefined) },
+}));
 const templates = vi.hoisted(() => [
   { definitionId: 'td-first', name: 'First template', purpose: 'messaging' },
   { definitionId: 'td-second', name: 'Second template', purpose: 'messaging' },
@@ -66,6 +72,12 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.clearAllMocks();
   Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', { value: vi.fn() });
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  dom.window.HTMLDialogElement.prototype.close = function () {
+    if (!this.open) return;
+    this.open = false;
+    this.dispatchEvent(new dom.window.Event('close'));
+  };
   useMessagingStore.setState({ ...initialStore, ...state });
   container = document.createElement('div');
   document.body.append(container);
@@ -101,11 +113,16 @@ async function savedBotFixture(channel = 'openclaw-weixin') {
     definitions: Object.fromEntries(templates.map((template) => [template.definitionId, template])),
   })));
   const host = new ConfigHost(registry);
-  const application = new MessagingApplication({ config: host, gateway: { getBotStates: () => [] } as never });
-  const saveBot = vi.fn((config: MessagingConnectionConfig) => application.saveBot(config));
+  const startBot = vi.fn(async () => undefined);
+  const application = new MessagingApplication({ config: host, gateway: { getBotStates: () => [], startBot } as never });
+  const saveOperation = createMessagingController(application).operations.find(({ id }) => id === MESSAGING_OPERATIONS.saveBot)!;
+  const saveBot = vi.fn((config: MessagingConnectionConfig) => {
+    const [validated] = saveOperation.input.parse([config]) as [MessagingConnectionConfig];
+    return application.saveBot(validated);
+  });
   const status = vi.fn(() => application.status());
   Object.assign(dom.window, { piskie: { runtime: { host: 'electron' }, messaging: {
-    saveBot: (config: MessagingConnectionConfig) => track(saveBot(config)), status: () => track(status()),
+    saveBot: (config: MessagingConnectionConfig) => track(saveBot(config)), status: () => track(status()), startBot,
   } } });
   useMessagingStore.setState({ connections: [] });
   const onSaved = vi.fn();
@@ -122,7 +139,10 @@ async function savedBotFixture(channel = 'openclaw-weixin') {
   }
   const render = async (key = 'first') => { await act(async () => root.render(createElement(Editor, { key }))); };
   await render();
-  return { application, host, saveBot, status, onSaved, onDismiss, onFlash, render };
+  const readStored = async () => JSON.parse(await fs.readFile(configDomainStoragePaths(directory, 'im-bots').configFile, 'utf8')) as {
+    bots: Record<string, { autoStart: boolean }>;
+  };
+  return { application, host, saveBot, startBot, status, onSaved, onDismiss, onFlash, render, readStored };
 }
 
 async function input(id: string, value: string) {
@@ -162,6 +182,89 @@ async function save(waitForRefresh = true) {
     }
   });
 }
+
+describe('Bot auto-start settings', () => {
+  function toggle() {
+    return container.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  }
+  function dialog() {
+    return container.querySelector<HTMLDialogElement>('dialog')!;
+  }
+  function confirmButton() {
+    return [...dialog().querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent === '确认开启')!;
+  }
+
+  it('starts disabled and saves the default for a new Bot', async () => {
+    const f = await savedBotFixture();
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    await fillDraft();
+    await save();
+    const id = f.saveBot.mock.calls[0]![0].id;
+    expect((await f.readStored()).bots[id]?.autoStart).toBe(false);
+    expect(f.startBot).not.toHaveBeenCalled();
+  });
+
+  it('keeps an existing Bot without the field disabled', async () => {
+    await act(async () => root.render(createElement(DossierPane, {
+      focus: { kind: 'bot', botId: 'bot-1' }, pageGuide: { consoleURL: '', steps: [] },
+      onFlash: vi.fn(), onDismiss: vi.fn(), onSaved: vi.fn(), onDraft: vi.fn(),
+    })));
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    expect(dialog().open).toBe(false);
+  });
+
+  it.each(['cancel', 'native-close'])('keeps auto-start off after %s and asks again next time', async (action) => {
+    const f = await savedBotFixture();
+    await act(async () => toggle().click());
+    expect(dialog().open).toBe(true);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    expect(dialog().textContent).toContain('自动连接 IM');
+    expect(dialog().textContent).toContain('按当前权限接收消息、执行任务和发送回复');
+    expect(dialog().textContent).toContain('模型调用费用');
+    await act(async () => {
+      if (action === 'native-close') dialog().close(); // Esc / backdrop use the same native close event.
+      else dialog().querySelector<HTMLButtonElement>('button')!.click();
+    });
+    expect(dialog().open).toBe(false);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    await fillDraft();
+    await save();
+    expect(f.saveBot.mock.calls[0]![0].autoStart).toBe(false);
+    await act(async () => toggle().click());
+    expect(dialog().open).toBe(true);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it.each([false, true])('requires confirmation and Save, persists independently, and does not connect, existing=%s', async (existing) => {
+    const f = await savedBotFixture();
+    await fillDraft();
+    if (existing) await save();
+    await act(async () => toggle().click());
+    await act(async () => confirmButton().click());
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    expect(dialog().open).toBe(false);
+    expect(f.saveBot).toHaveBeenCalledTimes(existing ? 1 : 0);
+    if (existing) expect((await f.application.status()).configs[0]?.autoStart).toBe(false);
+    await save();
+    const stored = (await f.application.status()).configs[0]!;
+    expect(stored.autoStart).toBe(true);
+    expect((await f.readStored()).bots[stored.id]?.autoStart).toBe(true);
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    await f.application.saveBot({ id: 'other-bot', channelType: 'openclaw-weixin', name: 'Other Bot', appId: '' });
+    expect((await f.application.status()).configs.find((bot) => bot.id === 'other-bot')?.autoStart).toBe(false);
+    await act(async () => toggle().click());
+    expect(dialog().open).toBe(false);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    await save();
+    expect((await f.readStored()).bots[stored.id]?.autoStart).toBe(false);
+    await act(async () => toggle().click());
+    expect(dialog().open).toBe(true);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    expect(f.startBot).not.toHaveBeenCalled();
+    expect(state.stopConnection).not.toHaveBeenCalled();
+  });
+});
 
 it('enables tool activity and results by default for a new Bot', async () => {
   const f = await savedBotFixture();

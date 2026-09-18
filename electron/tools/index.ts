@@ -8,6 +8,9 @@ import { SubagentTool } from './agent/subagent.tool.js';
 import { SubagentStopTool } from './agent/subagent-stop.tool.js';
 import { SendEventTool } from './agent/send-event.tool.js';
 import { AgentRunTool } from './agent/agent-run.tool.js';
+import { ScheduleTool } from './schedule/schedule.tool.js';
+import { ScheduleListTool } from './schedule/schedule-list.tool.js';
+import { ScheduleCancelTool } from './schedule/schedule-cancel.tool.js';
 import { PlanTool } from './plan/plan.tool.js';
 import { AskUserTool } from './plan/ask-user.tool.js';
 import { TaskTool } from './task/task.tool.js';
@@ -35,6 +38,9 @@ const builtinTools = (
   new SubagentStopTool(),
   new SendEventTool(),
   new AgentRunTool(),
+  new ScheduleTool(),
+  new ScheduleListTool(),
+  new ScheduleCancelTool(),
   new PlanTool(),
   new TaskTool(),
   new WebSearchTool(),

@@ -6,6 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CopyActionButton } from '@/components/shared/CopyActionButton';
 import { copyImage } from '@/services/clipboard';
@@ -114,6 +115,7 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
           contentKey={copyKey}
           label={t('clipboardUi.copyImage')}
           disabled={!imageUrl}
+          iconOnly
           onCopy={() => copyImage({ kind: 'url', url: imageUrl!, name: imageName })}
         />
         <button
@@ -122,7 +124,7 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
           onClick={onClose}
           aria-label={t('sessionWorkbenchUi.lightbox.close')}
         >
-          ✕
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
 

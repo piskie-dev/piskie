@@ -11,7 +11,7 @@ import { planRepository } from '../agent-runs/plan-repository.js';
 import { screenService } from '../services/screen.service.js';
 import { themeService } from '../services/theme.service.js';
 import { pathsService } from '../services/paths.service.js';
-import { appConfigStore, taskDefinitionStore } from '../core/storage/index.js';
+import { appConfigStore, scheduleStore, taskDefinitionStore } from '../core/storage/index.js';
 import { browserControlPort } from '../core/pilot/pilot-manager.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
 import type { BackendCapabilitySet } from '../runtime/backend-composition.js';
@@ -28,6 +28,8 @@ import { AgentRunApplication } from './agent-runs/agent-run-application.js';
 import { createAgentRunController } from './agent-runs/agent-run-controller.js';
 import { TaskDefinitionApplication } from './task-definitions/task-definition-application.js';
 import { createTaskDefinitionController } from './task-definitions/task-definition-controller.js';
+import { ScheduleApplication } from './schedules/schedule-application.js';
+import { createScheduleController } from './schedules/schedule-controller.js';
 import { createInferenceController } from './inference/inference-controller.js';
 import { createModeController } from './modes/mode-controller.js';
 import { CapabilityMarketApplication } from './market/capability-market-application.js';
@@ -97,6 +99,15 @@ export function createApplicationComposition(options: {
     () => listWorkerTypes(specRegistry),
   );
   const taskDefinitions = createTaskDefinitionController(taskDefinitionApplication);
+  const scheduleApplication = new ScheduleApplication({
+    config: configHost,
+    definitions: scheduleStore,
+    templates: taskDefinitionStore,
+    scheduler: capabilities.schedules,
+  });
+  capabilities.scheduleToolPort.bind(scheduleApplication.toolPort());
+  scheduleApplication.start();
+  const schedules = createScheduleController(scheduleApplication);
   const agentRuns = createAgentRunController(agentRunApplication);
   const modes = createModeController(modeCatalog);
   const configuration = createConfigurationController(
@@ -157,10 +168,15 @@ export function createApplicationComposition(options: {
   const webSearch = createWebSearchController(capabilities.webSearch, (url) => desktopApplication.openExternal(url));
   const inference = createInferenceController(capabilities.inference.inferenceHost);
   const runtime = createRuntimeController(() => options.backend.snapshot());
+  const initialSettings = appConfigStore.getSettings();
   const updateApplication = new UpdateApplication({
     currentVersion: options.app.version,
     provider: options.app.updateProvider,
     disabledReason: options.app.updateDisabledReason,
+    autoCheckAndDownloadEnabled: initialSettings.autoCheckAndDownloadUpdates,
+  });
+  const unsubscribeUpdateSettings = appConfigStore.changes.subscribe((settings) => {
+    updateApplication.setAutoCheckAndDownloadEnabled(settings.autoCheckAndDownloadUpdates);
   });
   const updates = createUpdateController(updateApplication);
   updateApplication.start();
@@ -173,6 +189,7 @@ export function createApplicationComposition(options: {
       ...agent.operations,
       ...modes,
       ...taskDefinitions,
+      ...schedules.operations,
       ...agentRuns,
       ...configuration.operations,
       ...inference,
@@ -186,6 +203,7 @@ export function createApplicationComposition(options: {
     topics: [
       ...updates.topics,
       ...agent.topics,
+      ...schedules.topics,
       ...configuration.topics,
       ...market.topics,
       ...pilot.topics,
@@ -201,8 +219,11 @@ export function createApplicationComposition(options: {
       observabilityApplication.releaseConnection(connectionId);
     },
     dispose: () => {
+      capabilities.scheduleToolPort.unbind();
+      scheduleApplication.dispose();
       webSearch.dispose();
       accountApplication.dispose();
+      unsubscribeUpdateSettings();
       updateApplication.dispose();
     },
   });

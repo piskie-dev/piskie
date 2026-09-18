@@ -107,6 +107,7 @@ describe('InferenceRuntimeHost', () => {
       'mcp',
       'model-catalog',
       'proxies',
+      'schedules',
       'task-definitions',
       'web-search',
       'worker-preferences',

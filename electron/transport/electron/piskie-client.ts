@@ -19,11 +19,14 @@ import {
   PILOT_OPERATIONS,
   PILOT_TOPICS,
   RUNTIME_OPERATIONS,
+  SCHEDULE_OPERATIONS,
+  SCHEDULE_TOPICS,
   TASK_DEFINITION_OPERATIONS,
   UPDATE_OPERATIONS,
   UPDATE_TOPICS,
   type PiskieDesktopApi,
 } from '../../../shared/electron-contracts/index.js';
+import type { SchedulesSnapshot } from '../../../shared/types/schedules.js';
 import type { ElectronPreloadClient } from './preload-client.js';
 
 export function createElectronPiskieClient(options: {
@@ -162,6 +165,18 @@ export function createElectronPiskieClient(options: {
         updates,
       ),
       delete: (definitionId) => request(TASK_DEFINITION_OPERATIONS.delete, definitionId),
+    },
+    schedules: {
+      list: () => request(SCHEDULE_OPERATIONS.list),
+      create: (input) => request(SCHEDULE_OPERATIONS.create, input),
+      update: (scheduleId, updates) => request(SCHEDULE_OPERATIONS.update, scheduleId, updates),
+      delete: (scheduleId) => request(SCHEDULE_OPERATIONS.delete, scheduleId),
+      runNow: (scheduleId) => request(SCHEDULE_OPERATIONS.runNow, scheduleId),
+      queryHistory: (query) => request(SCHEDULE_OPERATIONS.queryHistory, query),
+      observeChanges: (listener) => transport.subscribe(SCHEDULE_TOPICS.changes, {
+        onSnapshot: (snapshot) => listener({ kind: 'snapshot', snapshot: snapshot as SchedulesSnapshot }),
+        onChange: listener,
+      }),
     },
     agentRuns: {
       list: () => request(AGENT_RUN_OPERATIONS.list),

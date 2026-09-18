@@ -13,9 +13,11 @@ import {
   type PiskieUpdateStatus,
   type UpdateClient,
 } from '@shared/electron-contracts';
+import { DEFAULT_SETTINGS } from '@shared/constants';
 import { AboutDesk } from '../AboutDesk';
 import { AccountDesk } from '../AccountDesk';
 import { resetAccountStore } from '../../../../store/accountStore';
+import { useUIStore } from '../../../../store/uiStore';
 
 const NOW = 2_000_000_000_000;
 let dom: JSDOM;
@@ -37,6 +39,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   resetAccountStore();
+  useUIStore.getState().setSettings(structuredClone(DEFAULT_SETTINGS));
   await i18n.changeLanguage('zh-CN');
   container = document.createElement('div');
   document.body.append(container);
@@ -186,6 +189,25 @@ describe('AboutDesk updates', () => {
     await clickButton('重启并更新');
     expect(restartAndInstall).toHaveBeenCalledOnce();
   });
+
+  it('persists the automatic check and download switch through app settings', async () => {
+    const writeAll = vi.fn(async () => undefined);
+    installPiskie({ writeSettings: writeAll });
+
+    await render(createElement(AboutDesk));
+    const toggle = container.querySelector<HTMLButtonElement>('[role="switch"]');
+    expect(toggle?.getAttribute('aria-label')).toBe('自动检查并下载更新');
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+
+    await click(toggle!);
+    expect(writeAll).toHaveBeenLastCalledWith({ autoCheckAndDownloadUpdates: false });
+    expect(toggle?.getAttribute('aria-checked')).toBe('false');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('自动检查已关闭');
+
+    await click(toggle!);
+    expect(writeAll).toHaveBeenLastCalledWith({ autoCheckAndDownloadUpdates: true });
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+  });
 });
 
 function accountClient(overrides: Partial<AccountClient> = {}): AccountClient {
@@ -219,12 +241,18 @@ function updateClient(overrides: Partial<UpdateClient> = {}): UpdateClient {
 function installPiskie(options: {
   account?: AccountClient;
   updates?: UpdateClient;
+  writeSettings?: (settings: Record<string, unknown>) => Promise<void>;
 }): void {
   Object.defineProperty(dom.window, 'piskie', {
     configurable: true,
     value: {
       account: options.account ?? accountClient(),
       updates: options.updates ?? updateClient(),
+      configuration: {
+        settings: {
+          writeAll: options.writeSettings ?? vi.fn(async () => undefined),
+        },
+      },
       runtime: { version: '0.1.0' },
     },
   });
@@ -255,7 +283,11 @@ async function clickButton(label: string): Promise<void> {
   const button = [...container.querySelectorAll('button')]
     .find((candidate) => candidate.textContent?.includes(label));
   if (!button) throw new Error(`Button not found: ${label}`);
-  await act(async () => button.click());
+  await click(button);
+}
+
+async function click(element: HTMLElement): Promise<void> {
+  await act(async () => element.click());
   await flushEffects();
 }
 

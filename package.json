@@ -1,6 +1,6 @@
 {
   "name": "piskie",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "description": "面向复杂任务的 AI 智能体桌面工作台，统一组织计划、工具与执行过程",
@@ -72,6 +72,7 @@
     "@wecom/aibot-node-sdk": "^1.0.7",
     "cheerio": "^1.1.2",
     "core-js": "3.46.0",
+    "croner": "^10.0.1",
     "debug": "4.4.3",
     "diff": "^8.0.2",
     "electron-updater": "^6.8.9",

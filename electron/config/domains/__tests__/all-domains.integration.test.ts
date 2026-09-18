@@ -147,6 +147,9 @@ async function fixture(
     mcp: {
       publish: (_snapshot, context) => publications.push({ domain: context.domain, source: context.source }),
     },
+    schedules: {
+      publish: (_schedules, context) => publications.push({ domain: context.domain, source: context.source }),
+    },
   };
   const host = createConfigHost({
     rootDirectory: root,
@@ -191,6 +194,7 @@ describe('all managed Config Domains', () => {
     await expect(fresh.host.show('app-settings')).resolves.toMatchObject({
       revision: 0,
       language: 'zh-CN',
+      autoCheckAndDownloadUpdates: true,
     });
 
     const existing = await fixture(async (root) => {
@@ -202,6 +206,7 @@ describe('all managed Config Domains', () => {
     await expect(existing.host.show('app-settings')).resolves.toMatchObject({
       revision: 0,
       language: 'en-US',
+      autoCheckAndDownloadUpdates: true,
     });
   });
 
@@ -344,6 +349,7 @@ describe('all managed Config Domains', () => {
       revision: 0,
       theme: 'auto',
       language: 'zh-CN',
+      autoCheckAndDownloadUpdates: true,
       navEdgeDockEnabled: true,
       navPrismEnabled: true,
       navPrismSpot: null,
@@ -500,6 +506,7 @@ describe('all managed Config Domains', () => {
     }
 
     await applyPlan(host, 'app-settings', [
+      { op: 'replace', path: '/autoCheckAndDownloadUpdates', value: false },
       { op: 'replace', path: '/navEdgeDockEnabled', value: false },
       { op: 'replace', path: '/navPrismSpot', value: { x: 120, y: 240 } },
       {
@@ -511,6 +518,7 @@ describe('all managed Config Domains', () => {
     ], 0);
     await expect(host.show('app-settings')).resolves.toMatchObject({
       revision: 1,
+      autoCheckAndDownloadUpdates: false,
       navEdgeDockEnabled: false,
       navPrismEnabled: true,
       navPrismSpot: { x: 120, y: 240 },
@@ -591,6 +599,7 @@ describe('all managed Config Domains', () => {
       'mcp',
       'model-catalog',
       'proxies',
+      'schedules',
       'task-definitions',
       'web-search',
       'worker-preferences',
@@ -1030,7 +1039,7 @@ describe('all managed Config Domains', () => {
     expect(removeBoundDefinition.validation.valid).toBe(true);
     expect(removeBoundDefinition.impacts).toContainEqual(expect.objectContaining({
       code: 'TASK_DEFINITION_REMOVED',
-      details: { affectedBots: ['bot-a'] },
+      details: { affectedBots: ['bot-a'], affectedSchedules: [] },
     }));
 
     const missingSelection = await host.createPatchPlan<ConfigPlan>('inference-selections', [{

@@ -1,5 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConversationEntry } from '../../../shared/types/agent-control.js';
+import type { AgentRunHeader, ConversationEntry } from '../../../shared/types/agent-control.js';
+import { createAgentController } from '../../capabilities/agents/agent-controller.js';
+import type { ControllerContext } from '../../capabilities/catalog.js';
+import { createElectronPiskieClient } from '../../transport/electron/piskie-client.js';
+import type { ElectronPreloadClient } from '../../transport/electron/preload-client.js';
 import type { InferenceSelections, ModelTarget } from '../../../shared/types/inference.js';
 
 const h = vi.hoisted(() => {
@@ -28,6 +32,9 @@ const h = vi.hoisted(() => {
     stateError: unknown;
     destroyError: unknown;
     destroyGate?: Promise<void>;
+    prepareGate?: Promise<void>;
+    currentModel: string;
+    postedModels: string[] = [];
     interruptGate?: Promise<void>;
     posted: unknown[] = [];
     durableUserMessages: Array<{ text: string; tag?: string; messageId?: string }> = [];
@@ -42,6 +49,7 @@ const h = vi.hoisted(() => {
       this.config = config;
       this.id = config.id;
       this.mainAgentId = config.options.mainAgentId;
+      this.currentModel = config.options.initialModel;
       instances.push(this);
       nextRuntimeTweaks.shift()?.(this);
     }
@@ -49,6 +57,7 @@ const h = vi.hoisted(() => {
     async prepare(): Promise<void> {
       this.prepareCalls += 1;
       if (this.prepareError) throw this.prepareError;
+      await this.prepareGate;
     }
 
     async start(): Promise<void> {
@@ -73,9 +82,11 @@ const h = vi.hoisted(() => {
     post(event: unknown): boolean {
       if (this.destroyCalls > 0) return false;
       this.posted.push(event);
+      this.postedModels.push(this.currentModel);
       return true;
     }
 
+    setModel(model: string): void { this.currentModel = model; }
     injectEventToSubagent(): boolean { return true; }
     async replayConversation(entries: unknown[]): Promise<void> { this.replayedEntries = entries; }
     repairConversationTail(): void {}
@@ -96,7 +107,7 @@ const h = vi.hoisted(() => {
         runConfig: structuredClone(this.config.options.runConfig),
         createdAt: '2026-08-19T00:00:00.000Z',
         lastActiveAt: '2026-08-19T00:00:00.000Z',
-        currentModel: this.config.options.initialModel,
+        currentModel: this.currentModel,
         approvalMode: this.config.options.initialApprovalMode ?? 'confirm',
         childAgents: structuredClone(this.headerChildren),
       };
@@ -108,7 +119,7 @@ const h = vi.hoisted(() => {
         agentId: this.id,
         phase: 'waiting',
         interrupted: false,
-        currentModel: this.config.options.initialModel,
+        currentModel: this.currentModel,
         reasoningOverride: { kind: 'provider-default' },
         approvalMode: this.config.options.initialApprovalMode ?? 'confirm',
         modeId: this.config.options.initialModeId ?? 'normal',
@@ -444,6 +455,130 @@ describe('AgentService 激活事务', () => {
   });
 });
 
+describe('AgentService persisted model selection', () => {
+  const selectedModel = 'provider-1::chosen-model';
+  const event = {
+    id: 'sample-event', timestamp: new Date(0), source: 'user' as const,
+    content: 'Continue the sample task.', priority: 'normal' as const,
+  };
+  let root: string;
+  let Store: typeof import('../../agent-runs/conversation-store.js').ConversationStore;
+
+  const publicAgents = () => {
+    const operations = createAgentController(agentService, {} as never, () => []).operations;
+    const context: ControllerContext = {
+      generation: 'sample-generation', connectionId: 'sample-connection', windowId: 1,
+      signal: new AbortController().signal,
+    };
+    return createElectronPiskieClient({
+      getPathForFile: vi.fn(), version: 'sample', platform: 'linux',
+      transport: {
+        // Requests execute independently, as they do on the Electron connection.
+        request: (id: string, args: unknown[]) => Promise.resolve().then(() => {
+          const operation = operations.find((item) => item.id === id)!;
+          return operation.execute(context, operation.input.parse(args));
+        }),
+      } as unknown as ElectronPreloadClient,
+    }).agents;
+  };
+
+  beforeEach(async () => {
+    ({ ConversationStore: Store } = await vi.importActual<typeof import('../../agent-runs/conversation-store.js')>('../../agent-runs/conversation-store.js'));
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-model-selection-'));
+    service.conversationStore = new Store(root);
+    service.conversationStore.writeHeader('disk-run', header('disk-run'));
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('saves a cold selection without activation and reopens the persisted model before the first message', async () => {
+    const before = service.conversationStore.readHeader('disk-run');
+    await publicAgents().setModel('disk-run', selectedModel);
+
+    expect(h.instances).toHaveLength(0);
+    expect(agentService.hasAgentInMemory('disk-run')).toBe(false);
+    expect(agentRunTraceService.attach).not.toHaveBeenCalled();
+    const reopened = new Store(root);
+    expect(reopened.readHeader('disk-run')).toEqual({ ...before, currentModel: selectedModel });
+    service.conversationStore = reopened;
+    expect(agentService.buildHistoryPreview('disk-run')?.currentModel).toBe(selectedModel);
+
+    await publicAgents().inject('disk-run', event);
+    expect(h.instances).toHaveLength(1);
+    expect(h.instances[0]?.posted).toEqual([event]);
+    expect(h.instances[0]?.postedModels).toEqual([selectedModel]);
+    expect(h.instances[0]?.prepareCalls).toBe(1);
+    expect(h.instances[0]?.startCalls).toBe(0);
+  });
+
+  it.each(['cold', 'active'] as const)('orders consecutive model and message requests for a %s session without a renderer wait', async (phase) => {
+    if (phase === 'active') await agentService.resumeAgent('disk-run', { autoStart: false });
+    const agents = publicAgents();
+    const saving = agents.setModel('disk-run', selectedModel);
+    const sending = agents.inject('disk-run', event);
+    await Promise.all([saving, sending]);
+
+    expect(h.instances).toHaveLength(1);
+    expect(h.instances[0]?.postedModels).toEqual([selectedModel]);
+    expect(new Store(root).readHeader('disk-run')?.currentModel).toBe(selectedModel);
+  });
+
+  it('queues selection and delivery behind an in-progress restore without overwriting the new model', async () => {
+    const gate = h.deferred();
+    h.nextRuntimeTweaks.push((runtime) => { runtime.prepareGate = gate.promise; });
+    const restoring = agentService.resumeAgent('disk-run', { autoStart: false });
+    await waitUntil(() => h.instances[0]?.prepareCalls === 1);
+    const agents = publicAgents();
+    const acknowledged = vi.fn();
+    const saving = agents.setModel('disk-run', selectedModel).then(acknowledged);
+    const sending = agents.inject('disk-run', event);
+    await tick();
+    expect(acknowledged).not.toHaveBeenCalled();
+    expect(h.instances[0]?.posted).toEqual([]);
+    expect(agentService.hasAgentInMemory('disk-run')).toBe(false);
+
+    gate.resolve();
+    await Promise.all([restoring, saving, sending]);
+    expect(acknowledged).toHaveBeenCalledOnce();
+    expect(h.instances).toHaveLength(1);
+    expect(h.instances[0]?.postedModels).toEqual([selectedModel]);
+    expect(new Store(root).readHeader('disk-run')?.currentModel).toBe(selectedModel);
+  });
+
+  it('validates a cold model with the shared inference port before changing history', async () => {
+    const before = service.conversationStore.readHeader('disk-run');
+    const validate = vi.spyOn(h.FakeAgentInference.prototype, 'assertTarget')
+      .mockImplementation(() => { throw new Error('Sample model unavailable'); });
+    await expect(publicAgents().setModel('disk-run', selectedModel)).rejects.toThrow('Sample model unavailable');
+    expect(validate).toHaveBeenCalledWith({ providerId: 'provider-1', modelId: 'chosen-model' });
+    expect(new Store(root).readHeader('disk-run')).toEqual(before);
+    expect(h.instances).toHaveLength(0);
+  });
+
+  it.each(['cold', 'active'] as const)('reports disk write failures without changing the %s model', async (phase) => {
+    if (phase === 'active') await agentService.resumeAgent('disk-run', { autoStart: false });
+    const before = service.conversationStore.readHeader('disk-run');
+    const write = vi.spyOn(service.conversationStore, 'writeHeader')
+      .mockImplementation(() => { throw new Error('Sample model save failed'); });
+    await expect(publicAgents().setModel('disk-run', selectedModel)).rejects.toThrow('Sample model save failed');
+    expect(new Store(root).readHeader('disk-run')).toEqual(before);
+    if (phase === 'active') expect(h.instances[0]?.currentModel).toBe(before.currentModel);
+    else expect(h.instances).toHaveLength(0);
+    write.mockRestore();
+    await expect(publicAgents().setModel('disk-run', selectedModel)).resolves.toBeUndefined();
+  });
+
+  it('awaits a missing-run result at the controller and leaves history absent', async () => {
+    await expect(publicAgents().setModel('missing-run', selectedModel)).rejects.toMatchObject({
+      code: 'not-found', message: 'Agent was not found',
+    });
+    expect(new Store(root).readHeader('missing-run')).toBeNull();
+    expect(h.instances).toHaveLength(0);
+  });
+});
+
 describe('AgentService saved model fallback', () => {
   const unavailableModel = 'removed-provider::saved-model';
   const fallbackModel = 'provider-1::model-1';
@@ -724,7 +859,7 @@ function runConfig() {
   };
 }
 
-function header(agentId: string) {
+function header(agentId: string): AgentRunHeader {
   return {
     agentId,
     agentSpec: 'director',

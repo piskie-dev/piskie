@@ -11,6 +11,7 @@ import {
 import { createElectronConfigDomainIntegrations } from '../../config/host/electron-integrations.js';
 import type { AgentService, AgentServiceRuntimeBindings } from '../../services/agent.service.js';
 import type { RuntimeComponent } from '../component-manifest.js';
+import type { SchedulePort } from '../../tools/types.js';
 
 export interface InferenceComponentState {
   bindings?: AgentServiceRuntimeBindings;
@@ -20,6 +21,7 @@ export function createInferenceComponent(options: {
   userDataDirectory: string;
   agentService: AgentService;
   search: SearchService;
+  schedules?: SchedulePort;
   state: InferenceComponentState;
 }): RuntimeComponent<AgentServiceRuntimeBindings> {
   let host: InferenceRuntimeHost | undefined;
@@ -78,6 +80,7 @@ export function createInferenceComponent(options: {
         userDataDirectory: options.userDataDirectory,
         inferenceHost: host,
         search: options.search,
+        schedules: options.schedules,
         agentInference: new DefaultAgentInferencePort(
           host.aiGateway,
           host.control.runtime,

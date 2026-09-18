@@ -11,6 +11,7 @@ import { projectLiveNodes } from '@/domains/transcript/live-generation';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
 import type { WorkerRef } from '../../data/vm';
 import type { TranscriptProps } from '../Transcript';
+import { clearTranscriptPresentationMemory } from '../transcriptPresentationMemory';
 import activeTextStyles from '../activeText.module.css';
 import styles from '../Transcript.module.css';
 import '@/i18n';
@@ -43,9 +44,13 @@ const result = (id: string, text = 'Sample output'): ToolEntry => ({
 const defaultWorkers: readonly WorkerRef[] = [
   { id: 'sample-worker', subject: 'Sample work', type: 'local-worker', status: 'waiting' },
 ];
-async function render(props: Omit<TranscriptProps, 'renderNode'>) {
+async function render(
+  props: Omit<TranscriptProps, 'renderNode'>,
+  instanceKey: string | undefined = props.memoryKey,
+) {
   const workers = props.workers ?? defaultWorkers;
   await act(async () => root.render(createElement(Transcript, {
+    key: instanceKey,
     ...props,
     workers,
     renderNode: (cell: TranscriptNode) => createElement(ThreadCell, {
@@ -54,12 +59,17 @@ async function render(props: Omit<TranscriptProps, 'renderNode'>) {
     }),
   })));
 }
-async function renderEntries(entries: readonly ConversationEntry[], options: Partial<TranscriptProps> = {}, pendingCallId?: string) {
+async function renderEntries(
+  entries: readonly ConversationEntry[],
+  options: Partial<TranscriptProps> = {},
+  pendingCallId?: string,
+  instanceKey?: string,
+) {
   const projector = new TranscriptProjector();
   projector.reset(0, entries);
   if (pendingCallId) projector.setPendingCallId(pendingCallId);
   const { nodes, responses } = projector.snapshot();
-  await render({ nodes, responses, ...options });
+  await render({ nodes, responses, ...options }, instanceKey ?? options.memoryKey);
 }
 async function start(entries: readonly ConversationEntry[]) {
   const session = createTranscriptSession('sample-agent', {
@@ -112,6 +122,7 @@ beforeAll(async () => {
   ({ ThreadCell } = await import('../ThreadCell'));
 });
 beforeEach(() => {
+  clearTranscriptPresentationMemory();
   dom.window.HTMLElement.prototype.scrollIntoView = vi.fn();
   container = document.createElement('div');
   document.body.append(container);
@@ -129,6 +140,109 @@ afterAll(() => {
   else delete nodeRequire.extensions['.css'];
   dom.window.close();
   vi.unstubAllGlobals();
+});
+
+describe('target presentation memory', () => {
+  const queuedEntries = (): ConversationEntry[] => [
+    user(),
+    assistant('sample-running-work', [
+      { type: 'text', text: 'Inspecting the first sample.' }, call('sample-running-tool'),
+    ]),
+    result('sample-running-tool'),
+  ];
+  const nextUser = (): MsgEntry => ({
+    ...user(9000), id: 'sample-next-user', content: 'Inspect another sample.',
+  });
+
+  it.each([false, true])('restores a queued-input process and its explicit open state after a target remount (open: %s)', async (open) => {
+    const entries = queuedEntries();
+    await renderEntries(entries, { memoryKey: 'target-main', toolsActive: true });
+    expect(group('process')).toBeNull();
+
+    entries.push(nextUser());
+    await renderEntries(entries, { memoryKey: 'target-main', toolsActive: true });
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('false');
+    await click(toggle('process'));
+    if (!open) await click(toggle('process'));
+
+    await renderEntries([
+      { ...user(), id: 'sample-worker-user', content: 'Inspect a worker sample.' },
+    ], { memoryKey: 'target-worker' });
+    expect(group('process')).toBeNull();
+    await renderEntries(entries, { memoryKey: 'target-main', toolsActive: true });
+    expect(group('process')?.dataset.groupId).toBe('process:sample-user');
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe(String(open));
+
+    entries.push(
+      assistant('sample-next-work', [call('sample-next-tool')], 10000),
+      { ...result('sample-next-tool'), ts: 11000 },
+    );
+    await renderEntries(entries, { memoryKey: 'target-main', toolsActive: true });
+    entries.push({ ...user(12000), id: 'sample-third-user', content: 'Inspect a third sample.' });
+    await renderEntries(entries, { memoryKey: 'target-main', toolsActive: true });
+    const processes = [...container.querySelectorAll<HTMLElement>('[data-transcript-group="process"]')];
+    expect(processes.map((process) => process.dataset.groupId)).toEqual([
+      'process:sample-user', 'process:sample-next-user',
+    ]);
+    expect(processes[0]!.querySelector('button')?.getAttribute('aria-expanded')).toBe(String(open));
+  });
+
+  it('advances a retained process boundary after remount when the same turn finishes again', async () => {
+    const { session, append, show } = await start([
+      user(), assistant('sample-first-work', [call('sample-first-tool')]),
+      result('sample-first-tool'), assistant('sample-first-final', 'First reply.', 8000),
+    ]);
+    await show({ memoryKey: 'target-main' });
+    await show({ memoryKey: 'target-main', processSettled: true });
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final']);
+
+    await renderEntries([{ ...user(), id: 'sample-worker-user' }], { memoryKey: 'target-worker' });
+    await show({ memoryKey: 'target-main', processSettled: true });
+    expect(group('process')?.dataset.groupId).toBe('process:sample-user');
+
+    append(assistant('sample-resumed-work', [call('sample-resumed-tool')], 10000));
+    append({ ...result('sample-resumed-tool'), ts: 11000 });
+    append(assistant('sample-latest-final', 'Latest reply.', 12000));
+    await show({ memoryKey: 'target-main', processSettled: true });
+    expect(outsideIds()).toEqual(['sample-user', 'sample-latest-final']);
+    await click(toggle('process'));
+    expect(group('process')?.contains(node('sample-first-final'))).toBe(true);
+    expect(group('process')?.contains(node('sample-resumed-tool'))).toBe(true);
+    session.close();
+  });
+
+  it('keeps the same group id isolated between targets', async () => {
+    const entries = [user(), assistant('sample-preface', 'Inspecting.'), assistant('sample-final', 'Final reply.', 8000)];
+    await renderEntries(entries, { memoryKey: 'target-main', processSettled: true });
+    await click(toggle('process'));
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('true');
+
+    await renderEntries(entries, { memoryKey: 'target-worker', processSettled: true });
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('false');
+    await renderEntries(entries, { memoryKey: 'target-main', processSettled: true });
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('keeps boundaries local when no memory key is provided', async () => {
+    const entries = queuedEntries();
+    await renderEntries(entries, { toolsActive: true }, undefined, 'local-first');
+    entries.push(nextUser());
+    await renderEntries(entries, { toolsActive: true }, undefined, 'local-first');
+    expect(group('process')).not.toBeNull();
+    await click(toggle('process'));
+
+    await renderEntries(entries, { toolsActive: true }, undefined, 'local-second');
+    expect(group('process')).toBeNull();
+
+    const completed = [
+      user(), assistant('sample-preface', 'Inspecting.'), assistant('sample-final', 'Final reply.', 8000),
+    ];
+    await renderEntries(completed, { processSettled: true }, undefined, 'local-third');
+    await click(toggle('process'));
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('true');
+    await renderEntries(completed, { processSettled: true }, undefined, 'local-fourth');
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe('false');
+  });
 });
 
 describe('workers in collapsed processes', () => {

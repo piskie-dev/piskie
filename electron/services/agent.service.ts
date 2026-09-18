@@ -1,6 +1,7 @@
 import type { WorkerPreferencesDocument } from '../../shared/types/worker-preferences.js';
 import { resolveWorkerInference, type WorkerInferenceInput } from '../agent/worker-inference.js';
 import type { SearchPort } from '../../shared/types/web-search.js';
+import type { SchedulePort } from '../tools/types.js';
 /**
  * AgentService — Agent 调度服务
  * 管理多个 AgentRuntime 的生命周期（支持并发执行）
@@ -11,6 +12,8 @@ import type { SearchPort } from '../../shared/types/web-search.js';
  * - Resume = 读文件 + 创建新 AgentRuntime + replay + start
  * - ⚓ 提示词锚点（agent_run 工具 description）：顶层 AgentRun 在 activeRuntimes 中彼此无父子关系，
  *   不级联、无自动回收——改动此语义需同步 tools/agent/agent-run.tool.ts 的 description 首段
+ * - ⚓ 提示词锚点（schedule 工具 description）：定时任务新建的运行同样是无父子关系的顶层 AgentRun；
+ *   改动 startAgent 的启动语义需同步 tools/schedule/schedule.tool.ts 的目标说明
  */
 
 import { AgentRuntime } from '../agent/agent-runtime.js';
@@ -61,6 +64,7 @@ export interface AgentServiceRuntimeBindings {
   agentInference: AgentInferencePort;
   imageApplication: ImageApplicationPort;
   search?: SearchPort;
+  schedules?: SchedulePort;
 }
 
 /**
@@ -105,6 +109,7 @@ export class AgentService {
   private agentInference: AgentInferencePort | null = null;
   private inferenceHost: InferenceRuntimeHost | null = null;
   private search: SearchPort | undefined;
+  private schedules: SchedulePort | undefined;
   private imageApplication: ImageApplicationPort | null = null;
   private initialized = false;
   private conversationStore!: ConversationStore;
@@ -293,6 +298,7 @@ export class AgentService {
     this.agentInference = bindings.agentInference;
     this.imageApplication = bindings.imageApplication;
     this.search = bindings.search;
+    this.schedules = bindings.schedules;
     occupancyRegistry.clear();
 
     this.initialized = true;
@@ -440,6 +446,7 @@ export class AgentService {
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
           search: this.search,
+          schedules: this.schedules,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -856,6 +863,7 @@ export class AgentService {
             this.observationChannel.publisher.observerFor(runtimeId),
           imageApplication: this.imageApplication || undefined,
           search: this.search,
+          schedules: this.schedules,
           imageTarget: selections.image,
           onFatalTeardown: this.buildFatalTeardownHandler(() => runtime),
         },
@@ -1008,26 +1016,28 @@ export class AgentService {
    * 消费"投递事实"而非预查状态——post 返回 false 与 runtime 不存在同构处理，无 TOCTOU 窗口。
    */
   async injectEventToAgent(agentId: string, event: AgentInputEvent): Promise<boolean> {
-    // post 是事件唯一写入点：归一化在入口内完成，返回是否被接收
-    const runtime = this.activeRuntimes.get(agentId);
-    if (runtime && runtime.post(event)) {
-      return true;
-    }
+    return this.withLifecycleLock(this.lifecycleKey(agentId), async () => {
+      // 模型保存、恢复与投递按会话顺序执行，包括已活动的 Runtime。
+      const runtime = this.activeRuntimes.get(agentId);
+      if (runtime && runtime.post(event)) {
+        return true;
+      }
 
-    const state = await this.resumeAgent(agentId, { autoStart: false });
-    if (!state) {
-      appLog.warn({
-        event: 'agent.event.inject.rejected',
-        message: 'Agent event injection was rejected',
-        context: {
-          scope: 'agent.event',
-          agentId,
-          reason: 'runtime_restore_unavailable',
-        },
-      });
-      return false;
-    }
-    return this.activeRuntimes.get(agentId)!.post(event);
+      const state = await this.resumeLocked(agentId, { autoStart: false });
+      if (!state) {
+        appLog.warn({
+          event: 'agent.event.inject.rejected',
+          message: 'Agent event injection was rejected',
+          context: {
+            scope: 'agent.event',
+            agentId,
+            reason: 'runtime_restore_unavailable',
+          },
+        });
+        return false;
+      }
+      return this.activeRuntimes.get(agentId)!.post(event);
+    });
   }
 
   async injectEventToSubagent(
@@ -1061,14 +1071,15 @@ export class AgentService {
   // Agent 配置变更
   // ============================================================
 
-  setAgentModel(agentId: string, model: string): boolean {
-    const runtime = this.activeRuntimes.get(agentId);
-    if (!runtime) {
-      return false;
-    }
-    this.validateModelReference(model);
-    runtime.setModel(model);
-    return true;
+  async setAgentModel(agentId: string, model: string): Promise<boolean> {
+    return this.withLifecycleLock(this.lifecycleKey(agentId), async () => {
+      this.validateModelReference(model);
+      const header = this.conversationStore.updateHeaderModel(agentId, model);
+      if (!header) return false;
+
+      this.activeRuntimes.get(agentId)?.setModel(header.currentModel);
+      return true;
+    });
   }
 
   setAgentReasoning(
@@ -1212,6 +1223,7 @@ export class AgentService {
     this.agentInference = null;
     this.imageApplication = null;
     this.search = undefined;
+    this.schedules = undefined;
     this.reservedAgentIds.clear();
 
     const failures = results.filter(

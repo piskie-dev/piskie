@@ -12,6 +12,7 @@ describe('configuration settings boundary', () => {
     )!;
 
     expect(writeSettings.input.safeParse([{
+      autoCheckAndDownloadUpdates: false,
       navEdgeDockEnabled: false,
       navPrismEnabled: true,
       navPrismSpot: { x: 120, y: 240 },
@@ -37,6 +38,8 @@ describe('configuration settings boundary', () => {
     )!;
 
     expect(readSetting.input.safeParse(['navPrismSpot']).success).toBe(true);
+    expect(readSetting.input.safeParse(['autoCheckAndDownloadUpdates']).success).toBe(true);
+    expect(writeSetting.input.safeParse(['autoCheckAndDownloadUpdates', false]).success).toBe(true);
     expect(writeSetting.input.safeParse(['navPrismSpot', { x: 12, y: 34 }]).success).toBe(true);
     expect(writeSetting.input.safeParse([
       'backgroundImage',

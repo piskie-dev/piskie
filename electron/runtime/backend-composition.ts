@@ -31,6 +31,12 @@ import { createBrowserEnvironmentComponent } from './components/browser-environm
 import { createScreenStreamsComponent } from './components/screen-streams.component.js';
 import { createStorageComponent } from './components/storage.component.js';
 import { createProxyTransportsComponent } from './components/proxy-transports.component.js';
+import {
+  createSchedulerComponent,
+  type SchedulerHandle,
+} from './components/scheduler.component.js';
+import { scheduleStore, taskDefinitionStore } from '../core/storage/index.js';
+import { createLateBoundSchedulePort, type LateBoundSchedulePort } from '../schedules/index.js';
 
 export interface BackendCapabilitySet {
   readonly userDataDirectory: string;
@@ -46,6 +52,8 @@ export interface BackendCapabilitySet {
   readonly mcp: typeof mcpConnectionManager;
   readonly marketChanges: MarketChanges;
   readonly hostAssets: Readonly<HostAssetsState>;
+  readonly schedules: SchedulerHandle;
+  readonly scheduleToolPort: LateBoundSchedulePort;
 }
 
 export interface BackendComposition {
@@ -73,6 +81,7 @@ export function createBackendComposition(options: {
   const inferenceState: InferenceComponentState = {};
   const webSearch = new SearchService(new SearchAuth(options.userDataDirectory));
   const hostAssetsState: HostAssetsState = {};
+  const scheduleToolPort = createLateBoundSchedulePort();
 
   const components: readonly RuntimeComponent[] = Object.freeze([
     createStorageComponent({
@@ -82,6 +91,7 @@ export function createBackendComposition(options: {
     createWebSearchComponent(webSearch),
     createInferenceComponent({
       search: webSearch,
+      schedules: scheduleToolPort,
       userDataDirectory: options.userDataDirectory,
       agentService,
       state: inferenceState,
@@ -94,6 +104,12 @@ export function createBackendComposition(options: {
     }),
     createBrowserEnvironmentComponent(browserEnvironmentRuntime),
     createAgentComponent({ agentService, inference: inferenceState }),
+    createSchedulerComponent({
+      userDataDirectory: options.userDataDirectory,
+      agentService,
+      definitions: scheduleStore,
+      templates: taskDefinitionStore,
+    }),
     createScreenStreamsComponent(screenStreamService),
     createMarketWatchersComponent({
       userDataDirectory: options.userDataDirectory,
@@ -110,6 +126,8 @@ export function createBackendComposition(options: {
     createCapabilities(ready) {
       const inference = ready.get('inference') as AgentServiceRuntimeBindings | undefined;
       if (!inference) throw new Error('Inference capability is missing after backend startup');
+      const schedules = ready.get('scheduler') as SchedulerHandle | undefined;
+      if (!schedules) throw new Error('Scheduler capability is missing after backend startup');
       return Object.freeze({
         userDataDirectory: options.userDataDirectory,
         agent: agentService,
@@ -124,6 +142,8 @@ export function createBackendComposition(options: {
         mcp: mcpConnectionManager,
         marketChanges,
         hostAssets: Object.freeze({ ...hostAssetsState }),
+        schedules,
+        scheduleToolPort,
       });
     },
   });

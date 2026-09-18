@@ -308,6 +308,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         <WorkspaceBar workspace={workerId && workspace === undefined ? null : workspace}
           className={styles.workspaceBar} disabled={controlsDisabled} />
         <AttachmentError error={submitError} />
+        <AttachmentError error={settings.modelError} />
         {skills.length > 0 && (
           <div className={styles.attachments}>
             <SkillTags skills={skills} options={skillOptions}

@@ -104,7 +104,10 @@ export function createAgentCommands(
       return executeVoid(() => agents.injectSubagent(agentId, subagentId, event));
     },
     setModel(agentId, model) {
-      return executeVoid(() => agents.setModel(agentId, model));
+      return executeVoid(async () => {
+        await agents.setModel(agentId, model);
+        await runs.applyModel(agentId, model);
+      });
     },
     setSubagentModel(agentId, subagentId, model) {
       return executeVoid(() => agents.setSubagentModel(agentId, subagentId, model));

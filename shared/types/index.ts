@@ -582,6 +582,7 @@ export interface AgentStateChangeEvent {
 export interface AppSettings {
   theme: 'light' | 'dark' | 'auto';
   language: 'zh-CN' | 'en-US';
+  autoCheckAndDownloadUpdates: boolean;
   navEdgeDockEnabled: boolean;
   navPrismEnabled: boolean;
   navPrismSpot: { x: number; y: number } | null;
@@ -770,6 +771,7 @@ export * from './system-logs.js';
 // ============================================================
 
 export * from './proxy.js';
+export * from './schedules.js';
 
 // ============================================================
 // Image Node 类型（生图节点）

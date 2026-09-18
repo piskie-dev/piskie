@@ -85,6 +85,23 @@
   overflow-wrap: anywhere;
 }
 
+.action {
+  margin-block-start: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-badge);
+  background: var(--surface-1);
+  color: var(--cyber-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--surface-2);
+  border-color: var(--line-3);
+}
+
 .close {
   position: absolute;
   inset-block-start: 8px;

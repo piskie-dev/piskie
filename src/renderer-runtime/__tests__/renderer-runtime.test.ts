@@ -37,12 +37,15 @@ function harness() {
   let liveListener: ((event: AgentLiveContentDelta) => void) | undefined;
   let conversationListener: ((event: ConversationAppendEvent) => void) | undefined;
   let resolveStates: ((states: Record<string, AgentControlSnapshot>) => void) | undefined;
-  const disposers = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+  const disposers = [vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()];
   const listStates = vi.fn(() => new Promise<Record<string, AgentControlSnapshot>>((resolve) => {
     resolveStates = resolve;
   }));
   const api = {
     runtime: { status: vi.fn(async () => ({ ready: true })) },
+    schedules: {
+      observeChanges: vi.fn(() => disposers[4]),
+    },
     agents: {
       listStates,
       interrupt: vi.fn(async () => undefined),

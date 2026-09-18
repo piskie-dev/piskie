@@ -7,6 +7,7 @@ import type {
 import type { MessagingConnectionConfig } from '../../../shared/types/im-gateway.js';
 import type { BotState } from '../../../shared/types/im-gateway.js';
 import type { ProxyPoolSnapshot } from '../../../shared/types/proxy.js';
+import type { Schedule } from '../../../shared/types/schedules.js';
 import type { ConfigDomainPublishContext } from '../contracts/domain.js';
 import { DEFAULT_SETTINGS } from '../../../shared/constants/index.js';
 
@@ -60,6 +61,11 @@ export interface ConfigDomainIntegrations {
       context: ConfigDomainPublishContext,
     ): Promise<void> | void;
   };
+  schedules: {
+    publish(schedules: readonly Schedule[], context: ConfigDomainPublishContext): Promise<void> | void;
+    /** 注入型任务的目标会话是否还存在（只用于校验告警）。 */
+    sessionExists?(agentId: string): boolean;
+  };
 }
 
 export function emptyConfigDomainIntegrations(): ConfigDomainIntegrations {
@@ -86,6 +92,9 @@ export function emptyConfigDomainIntegrations(): ConfigDomainIntegrations {
       observe: (configs) => configs.map((config) => ({ config, status: 'stopped' })),
     },
     mcp: {
+      publish: () => undefined,
+    },
+    schedules: {
       publish: () => undefined,
     },
   };

@@ -1,10 +1,12 @@
 import { memo } from 'react';
-import { AlertTriangle, LoaderCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useTimeSeconds } from '../../../hooks/useTimeSeconds';
 import type { RequestVM } from '../data/vm';
+import activeTextStyles from './activeText.module.css';
 import styles from './mcpRuntimeCard.module.css';
+import { OrbIndicator } from './OrbIndicator';
 
 export interface AIRequestStatusProps {
   readonly request?: RequestVM;
@@ -31,8 +33,10 @@ export const AIRequestStatus = memo<AIRequestStatusProps>(({ request, variant = 
     return (
       <div className={styles.status} data-variant={variant} aria-live="polite">
         <div className={styles.line} data-tone="progress">
-          <LoaderCircle className={styles.spin} aria-hidden />
-          <span className={styles.copy}><strong>{label}</strong></span>
+          <span className={styles.requestOrb}><OrbIndicator size={12} variant="expanding" /></span>
+          <span className={styles.copy}>
+            <strong><span className={activeTextStyles.text}>{label}</span></strong>
+          </span>
         </div>
       </div>
     );
@@ -53,12 +57,16 @@ export const AIRequestStatus = memo<AIRequestStatusProps>(({ request, variant = 
     return (
       <div className={styles.status} data-variant={variant} aria-live="polite">
         <div className={styles.line} data-tone="progress">
-          <LoaderCircle className={styles.spin} aria-hidden />
+          <span className={styles.requestOrb}><OrbIndicator size={12} variant="expanding" /></span>
           <span className={styles.copy}>
-            <strong>{t('sessionWorkbenchUi.request.retryProgress', {
-              current: request.attempt,
-              total: request.maxAttempts > 0 ? request.maxAttempts : progress,
-            })}</strong>
+            <strong>
+              <span className={activeTextStyles.text}>
+                {t('sessionWorkbenchUi.request.retryProgress', {
+                  current: request.attempt,
+                  total: request.maxAttempts > 0 ? request.maxAttempts : progress,
+                })}
+              </span>
+            </strong>
             <span className={styles.reason}> · {detail}</span>
             {request.errorMessage && request.backoff && (
               <span className={styles.names} title={request.errorMessage}>：{request.errorMessage}</span>

@@ -17,6 +17,10 @@ const languageSchema = z.enum(['zh-CN', 'en-US'])
   .describe('Application interface language.')
   .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'Visible interface text is refreshed.' } });
 
+const autoCheckAndDownloadUpdatesSchema = z.boolean()
+  .describe('Whether the application automatically checks for and downloads updates.')
+  .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'Background update scheduling updates immediately.' } });
+
 const navEdgeDockEnabledSchema = z.boolean()
   .describe('Whether the invisible edge navigation dock is enabled.')
   .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'Edge navigation visibility updates immediately.' } });
@@ -45,6 +49,7 @@ const backgroundMaskOpacitySchema = z.number().min(APP_BG_MASK_MIN).max(APP_BG_M
 export const appSettingsWriteSchema = z.strictObject({
   theme: themeSchema,
   language: languageSchema,
+  autoCheckAndDownloadUpdates: autoCheckAndDownloadUpdatesSchema,
   navEdgeDockEnabled: navEdgeDockEnabledSchema,
   navPrismEnabled: navPrismEnabledSchema,
   navPrismSpot: navPrismSpotSchema,
@@ -56,6 +61,8 @@ export const appSettingsReadSchema = z.strictObject({
   revision: z.number().int().nonnegative().describe('Monotonic app-settings revision.'),
   theme: themeSchema,
   language: languageSchema,
+  autoCheckAndDownloadUpdates: autoCheckAndDownloadUpdatesSchema
+    .default(DEFAULT_SETTINGS.autoCheckAndDownloadUpdates),
   navEdgeDockEnabled: navEdgeDockEnabledSchema.default(DEFAULT_SETTINGS.navEdgeDockEnabled),
   navPrismEnabled: navPrismEnabledSchema.default(DEFAULT_SETTINGS.navPrismEnabled),
   navPrismSpot: navPrismSpotSchema.default(DEFAULT_SETTINGS.navPrismSpot),
@@ -83,8 +90,8 @@ export function createAppSettingsDomain(
     contract: {
       id: 'app-settings',
       title: 'Application settings',
-      description: 'User-visible theme, language, navigation and background preferences.',
-      schemaVersion: 2,
+      description: 'User-visible theme, language, update, navigation and background preferences.',
+      schemaVersion: 3,
       readSchema: appSettingsReadSchema,
       writeSchema: appSettingsWriteSchema,
       capabilities: ['show', 'plan', 'validate', 'apply', 'verify', 'history', 'rollback'],
@@ -118,6 +125,7 @@ function toAppSettings(document: AppSettingsDocument): AppSettings {
   return {
     theme: document.theme,
     language: document.language,
+    autoCheckAndDownloadUpdates: document.autoCheckAndDownloadUpdates,
     navEdgeDockEnabled: document.navEdgeDockEnabled,
     navPrismEnabled: document.navPrismEnabled,
     navPrismSpot: document.navPrismSpot,

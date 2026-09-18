@@ -2,8 +2,9 @@ import { BaseTool } from '../base-tool.js';
 import type { ToolContext, ToolDef, ToolOutput } from '../types.js';
 import { z } from '../params.js';
 import { createDirectorRunConfig } from '../../agent/launch/agent-run-config-factory.js';
-import { directorSpec } from '../../agent/specs/builtin/director.js';
+import { startDirectorRun } from '../../agent/launch/start-director-run.js';
 import { agentRunTraceService } from '../../agent-runs/agent-run-trace-service.js';
+import { handoffGuidance } from './handoff.js';
 
 const agentRunSchema = z
   .object({
@@ -85,7 +86,7 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
 
 ## 编写 taskDescription
 
-把新的顶层智能体当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断，但不知道当前对话和既有进展；taskDescription 是它拿到的全部材料。`,
+${handoffGuidance('顶层智能体', 'taskDescription', { isolated: true })}`,
   };
 
   async execute(params: AgentRunParams, context: ToolContext): Promise<ToolOutput<unknown>> {
@@ -112,13 +113,10 @@ export class AgentRunTool extends BaseTool<AgentRunParams> {
     });
 
     try {
-      const { agentService } = await import('../../services/agent.service.js');
-      const state = await agentService.startAgent({
-        runConfig,
-        agentSpec: directorSpec,
-        initialModeId,
-        initialApprovalMode: context.modes.approvalMode(),
-        launchOptions: { initialModel: context.currentModel },
+      const state = await startDirectorRun(runConfig, {
+        modeId: initialModeId,
+        approvalMode: context.modes.approvalMode(),
+        model: context.currentModel,
       });
       const tracePath = agentRunTraceService.tracePath(state.agentId);
       return this.success(`顶层智能体已创建: ${state.agentId}\n运行流水: ${tracePath}`, {

@@ -123,6 +123,63 @@ describe('UpdateApplication', () => {
     expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
     application.dispose();
   });
+
+  it('stops automatic checks while disabled, keeps manual checks, and resumes once', async () => {
+    vi.useFakeTimers();
+    const provider = new FakeUpdateProvider();
+    provider.checkForUpdates.mockImplementation(async () => {
+      provider.emit({ type: 'not-available' });
+    });
+    const application = new UpdateApplication({
+      currentVersion: '0.1.0',
+      provider,
+      initialDelayMs: 100,
+      intervalMs: 1_000,
+    });
+
+    application.start();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    application.setAutoCheckAndDownloadEnabled(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(1);
+    await application.check();
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
+
+    application.setAutoCheckAndDownloadEnabled(true);
+    application.setAutoCheckAndDownloadEnabled(true);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(provider.checkForUpdates).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(1);
+    application.dispose();
+  });
+
+  it('starts without an automatic timer when the persisted preference is disabled', async () => {
+    vi.useFakeTimers();
+    const provider = new FakeUpdateProvider();
+    provider.checkForUpdates.mockImplementation(async () => {
+      provider.emit({ type: 'not-available' });
+    });
+    const application = new UpdateApplication({
+      currentVersion: '0.1.0',
+      provider,
+      autoCheckAndDownloadEnabled: false,
+    });
+
+    application.start();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1_000);
+    expect(provider.checkForUpdates).not.toHaveBeenCalled();
+    await application.check();
+    expect(provider.checkForUpdates).toHaveBeenCalledOnce();
+    application.dispose();
+  });
 });
 
 describe('classifyUpdateError', () => {

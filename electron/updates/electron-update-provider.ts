@@ -17,7 +17,7 @@ const log = appLog.child({ scope: 'desktop.updates.provider' });
 
 export function createElectronUpdateProvider(updater: AppUpdater = electronUpdater.autoUpdater): UpdateProvider {
   updater.autoDownload = true;
-  updater.autoInstallOnAppQuit = true;
+  updater.autoInstallOnAppQuit = false;
   updater.autoRunAppAfterInstall = true;
   updater.allowPrerelease = false;
   updater.allowDowngrade = false;

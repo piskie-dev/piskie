@@ -18,12 +18,14 @@ describe('messaging configuration boundaries', () => {
         toolFilter: { mode: 'include' as const, tools: ['browser.click'] } },
     }]) {
       const fused = fuseBotRecord(existing, {
-        name: 'Bot', channelType, appId: 'app-1', appSecret: existing ? '' : 'new-secret',
+        name: 'Bot', autoStart: true, channelType, appId: 'app-1', appSecret: existing ? '' : 'new-secret',
         definitionId: 'definition-1', dmPolicy: 'pairing', groupPolicy: 'allowlist',
         groupAllowText: 'group-1\ngroup-2', requireMention: true,
-        forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false,
+        forwardAssistantText: true, forwardToolCalls: false, forwardToolResults: false, forwardToolImages: true,
       }, { botId: 'bot-1', atRest: true, scanLogin: channelType === 'openclaw-weixin' });
       expect(save.input.safeParse([fused]).success).toBe(true);
+      expect(fused.autoStart).toBe(true);
+      expect(save.input.safeParse([{ ...fused, autoStart: 'true' }]).success).toBe(false);
     }
   });
 

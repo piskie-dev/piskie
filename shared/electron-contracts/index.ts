@@ -13,6 +13,7 @@ export * from './pilot.js';
 export * from './protocol.js';
 export * from './public-fault.js';
 export * from './runtime.js';
+export * from './schedules.js';
 export * from './task-definitions.js';
 export * from './updates.js';
 

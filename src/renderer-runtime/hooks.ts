@@ -7,6 +7,7 @@ import type {
   AgentRunListSnapshot,
   AgentRunPreviewSnapshot,
 } from '../domains/agent-runs/agent-run-repository';
+import type { ScheduleRepositorySnapshot } from '../domains/schedules/schedule-repository';
 import type { TaskDefinitionRepositorySnapshot } from '../domains/task-definitions/task-definition-repository';
 import type { ContextInspectorResourceSnapshot } from '../features/context-inspector/context-inspector-resource';
 import { RendererRuntimeContext } from './renderer-runtime-context';
@@ -37,6 +38,13 @@ export function useTaskDefinitionRepository<T>(
 ): T {
   const runtime = useRendererRuntime();
   return useStore(runtime.taskDefinitions.state, selector);
+}
+
+export function useScheduleRepository<T>(
+  selector: (snapshot: ScheduleRepositorySnapshot) => T,
+): T {
+  const runtime = useRendererRuntime();
+  return useStore(runtime.schedules.state, selector);
 }
 
 export function useAgentRunList<T>(selector: (snapshot: AgentRunListSnapshot) => T): T {

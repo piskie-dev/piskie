@@ -24,6 +24,7 @@ export class UpdateApplication {
   private readonly initialDelayMs: number;
   private readonly intervalMs: number;
   private readonly now: () => number;
+  private autoCheckAndDownloadEnabled: boolean;
   private current: PiskieUpdateStatus;
   private target?: UpdateTarget;
   private timer?: ReturnType<typeof setTimeout>;
@@ -39,10 +40,12 @@ export class UpdateApplication {
     initialDelayMs?: number;
     intervalMs?: number;
     now?: () => number;
+    autoCheckAndDownloadEnabled?: boolean;
   }) {
     this.initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
     this.now = options.now ?? Date.now;
+    this.autoCheckAndDownloadEnabled = options.autoCheckAndDownloadEnabled ?? true;
     this.changes = this.channel.source;
     this.current = options.provider
       ? this.makeStatus({ state: 'idle' })
@@ -56,11 +59,21 @@ export class UpdateApplication {
     if (this.started || this.disposed || !this.options.provider) return;
     this.started = true;
     this.unsubscribeProvider = this.options.provider.subscribe((event) => this.onProviderEvent(event));
-    this.schedule(this.initialDelayMs);
+    if (this.autoCheckAndDownloadEnabled) this.schedule(this.initialDelayMs);
   }
 
   status(): PiskieUpdateStatus {
     return this.current;
+  }
+
+  setAutoCheckAndDownloadEnabled(enabled: boolean): void {
+    if (enabled === this.autoCheckAndDownloadEnabled) return;
+    this.autoCheckAndDownloadEnabled = enabled;
+    if (!enabled) {
+      this.clearScheduledCheck();
+      return;
+    }
+    if (this.started) this.schedule(this.initialDelayMs);
   }
 
   check(): Promise<PiskieUpdateStatus> {
@@ -109,8 +122,7 @@ export class UpdateApplication {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
+    this.clearScheduledCheck();
     this.unsubscribeProvider?.();
     this.unsubscribeProvider = undefined;
   }
@@ -169,12 +181,22 @@ export class UpdateApplication {
   }
 
   private schedule(delayMs: number): void {
-    if (this.disposed || !this.options.provider) return;
+    if (
+      this.disposed
+      || !this.options.provider
+      || !this.autoCheckAndDownloadEnabled
+      || this.timer
+    ) return;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       void this.check().finally(() => this.schedule(this.intervalMs));
     }, delayMs);
     this.timer.unref?.();
+  }
+
+  private clearScheduledCheck(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
   }
 
   private setStatus(status: PiskieUpdateStatus): void {

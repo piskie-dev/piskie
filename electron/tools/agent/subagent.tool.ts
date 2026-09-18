@@ -1,9 +1,10 @@
 import { BaseTool } from '../base-tool.js';
 import type { SubagentTypeDescriptor, ToolContext, ToolDef } from '../types.js';
 import { createSubagentSchema, subagentSchema, type SubagentParams } from './subagent-contract.js';
+import { handoffGuidance } from './handoff.js';
 
 const OPENING = `创建 Worker 承接一个工作包或一个检索问题。subject 是给用户看的短标题。`;
-const HANDOFF = `把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断；prompt 是它拿到的全部材料。`;
+const HANDOFF = handoffGuidance(' Worker ', 'prompt');
 const DESCRIPTION = `${OPENING}
 
 ${HANDOFF}`;

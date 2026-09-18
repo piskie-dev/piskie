@@ -26,6 +26,7 @@ const CAPABILITIES = new Set([
   'observability',
   'pilot',
   'runtime',
+  'schedules',
   'task-definitions',
   'updates',
 ]);

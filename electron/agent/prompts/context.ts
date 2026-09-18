@@ -45,7 +45,7 @@ export function renderContext(ctx: PromptContext): string {
 
   // <current_time>（时间锚点；只到日期粒度——细粒度时间戳在事件信封的 ts 属性，
   // 日粒度让系统提示词在一天内保持字节稳定，不破坏 prompt cache 前缀）
-  blocks.push(`<current_time>${new Date().toISOString().slice(0, 10)}</current_time>`);
+  blocks.push(`<current_time>${localDateStamp()}</current_time>`);
 
   // <file_system>
   const canWrite = !isWorker || ctx.assignment !== 'question' || ctx.toolNames?.some((name) => ['write', 'edit', 'shell'].includes(name));
@@ -70,4 +70,10 @@ export function renderContext(ctx: PromptContext): string {
   }
 
   return blocks.join('\n\n');
+}
+
+/** 本地日期（YYYY-MM-DD）：模型据此理解「今天/明天」，与定时任务的本地时间口径一致。 */
+function localDateStamp(now = new Date()): string {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }

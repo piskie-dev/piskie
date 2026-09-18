@@ -57,6 +57,7 @@ export class MessagingApplication {
       new Set([
         'channelType',
         'name',
+        'autoStart',
         'definitionId',
         'replyForward',
         'appId',

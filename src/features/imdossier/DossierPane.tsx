@@ -22,6 +22,7 @@ import type { SetupGuide } from '../../../shared/types/setup-guide';
 import type { MessagingConnectionConfig } from '../../../shared/electron-contracts/messaging';
 import { CHANNEL_SETUP_GUIDES } from '../../../shared/constants/channel-setup-guides';
 import { TaskDefinitionModal } from '../../components/task-definition/TaskDefinitionModal';
+import { Dialog } from '../console/chrome/Dialog';
 import {
   messageText,
   resolvePresentationText,
@@ -71,6 +72,7 @@ function seedForm(persisted: MessagingConnectionConfig | undefined): Omit<Dossie
   const isDraft = persisted === undefined;
   return {
     name: persisted?.name ?? '',
+    autoStart: persisted?.autoStart ?? false,
     appId: persisted?.appId ?? '',
     appSecret: '',
     definitionId: persisted?.definitionId,
@@ -140,6 +142,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const [armedDelete, setArmedDelete] = useState(false);
   const [qrSession, setQrSession] = useState<{ force: boolean } | null>(null);
   const [defModalOpen, setDefModalOpen] = useState(false);
+  const [autoStartConfirmOpen, setAutoStartConfirmOpen] = useState(false);
   const [userDraft, setUserDraft] = useState('');
   const mounted = useRef(false);
   useEffect(() => {
@@ -380,6 +383,21 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
                 : t('imPlugin.start')}
             </button>
           )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.autoStart}
+            aria-label={t('imPlugin.dossier.autoStart')}
+            title={t('imPlugin.dossier.autoStartHint')}
+            className={styles.btn}
+            onClick={() => {
+              if (form.autoStart) patch({ autoStart: false });
+              else setAutoStartConfirmOpen(true);
+            }}
+          >
+            <span>{t('imPlugin.dossier.autoStart')}</span>
+            <span className={styles.flagPill} aria-hidden="true" />
+          </button>
           {isBot && (
             <button
               type="button"
@@ -796,6 +814,31 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
           {saving ? t('imPlugin.dossier.savingSettings') : t('common.save')}
         </button>
       </div>
+
+      <Dialog
+        open={autoStartConfirmOpen}
+        onClose={() => setAutoStartConfirmOpen(false)}
+        title={t('imPlugin.dossier.autoStartConfirmTitle')}
+        width={420}
+      >
+        <p className={styles.fieldNote}>{t('imPlugin.dossier.autoStartConfirmBody')}</p>
+        <div className={styles.headActs}>
+          <span className={styles.headSpring} />
+          <button type="button" className={styles.btn} onClick={() => setAutoStartConfirmOpen(false)}>
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrime}`}
+            onClick={() => {
+              patch({ autoStart: true });
+              setAutoStartConfirmOpen(false);
+            }}
+          >
+            {t('imPlugin.dossier.autoStartConfirmAction')}
+          </button>
+        </div>
+      </Dialog>
 
       <TaskDefinitionModal
         open={defModalOpen}

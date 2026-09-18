@@ -2,11 +2,14 @@
  * 关于页（重写）。
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe2, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
 
 import type { PiskieUpdateStatus } from '@shared/electron-contracts/updates';
+import { DEFAULT_SETTINGS } from '@shared/constants';
+import { useUpdateStatus, publishUpdateStatus } from '../../updates/useUpdateStatus';
+import { useUIStore } from '../../../store';
 import styles from '../deck.module.css';
 import logo128 from '/logo-on-dark-128.png';
 
@@ -15,29 +18,13 @@ const ABOUT_TITLE_ID = 'piskie-about-title';
 export const AboutDesk: React.FC = () => {
   const { t } = useTranslation();
   const version = window.piskie.runtime.version;
-  const [updateStatus, setUpdateStatus] = useState<PiskieUpdateStatus>();
+  const updateStatus = useUpdateStatus();
+  const settings = useUIStore((state) => state.settings);
+  const updateSettings = useUIStore((state) => state.updateSettings);
   const [updateActionPending, setUpdateActionPending] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    const apply = (status: PiskieUpdateStatus): void => {
-      if (active) setUpdateStatus(status);
-    };
-    const unsubscribe = window.piskie.updates.observeStatus(apply);
-    void window.piskie.updates.status().then(apply).catch(() => {
-      apply({
-        state: 'error',
-        currentVersion: version,
-        error: 'generic',
-        checkedAt: new Date().toISOString(),
-        retryable: true,
-      });
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [version]);
+  const [settingActionPending, setSettingActionPending] = useState(false);
+  const autoCheckAndDownloadUpdates = settings?.autoCheckAndDownloadUpdates
+    ?? DEFAULT_SETTINGS.autoCheckAndDownloadUpdates;
 
   const runUpdateAction = async (): Promise<void> => {
     if (!updateStatus || updateActionPending) return;
@@ -48,9 +35,9 @@ export const AboutDesk: React.FC = () => {
         return;
       }
       const status = await window.piskie.updates.check();
-      setUpdateStatus(status);
+      publishUpdateStatus(status);
     } catch {
-      setUpdateStatus({
+      publishUpdateStatus({
         state: 'error',
         currentVersion: version,
         error: 'generic',
@@ -62,6 +49,18 @@ export const AboutDesk: React.FC = () => {
     }
   };
 
+  const toggleAutomaticUpdates = async (): Promise<void> => {
+    if (!settings || settingActionPending) return;
+    setSettingActionPending(true);
+    try {
+      await updateSettings({
+        autoCheckAndDownloadUpdates: !autoCheckAndDownloadUpdates,
+      });
+    } finally {
+      setSettingActionPending(false);
+    }
+  };
+
   const actionBusy = updateActionPending
     || updateStatus?.state === 'checking'
     || updateStatus?.state === 'available'
@@ -69,7 +68,7 @@ export const AboutDesk: React.FC = () => {
   const actionDisabled = !updateStatus
     || updateStatus.state === 'disabled'
     || actionBusy;
-  const updateText = updateStatusText(updateStatus, t);
+  const updateText = updateStatusText(updateStatus, autoCheckAndDownloadUpdates, t);
 
   return (
     <>
@@ -99,6 +98,18 @@ export const AboutDesk: React.FC = () => {
           <div className={styles.aboutRow}>
             {t('settings.about.status')}
             <span className={styles.chip} data-state="prime">{t('settings.about.releaseStage')}</span>
+          </div>
+          <div className={styles.aboutRow}>
+            <span>{t('settings.about.autoCheckAndDownloadUpdates')}</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoCheckAndDownloadUpdates}
+              aria-label={t('settings.about.autoCheckAndDownloadUpdates')}
+              className={styles.aboutToggle}
+              disabled={!settings || settingActionPending}
+              onClick={() => void toggleAutomaticUpdates()}
+            />
           </div>
           <div className={`${styles.aboutRow} ${styles.aboutUpdateRow}`} aria-busy={actionBusy}>
             <span className={styles.aboutUpdateCopy}>
@@ -160,6 +171,7 @@ export const AboutDesk: React.FC = () => {
 
 function updateStatusText(
   status: PiskieUpdateStatus | undefined,
+  autoCheckAndDownloadUpdates: boolean,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
   if (!status) return t('settings.about.updateLoading');
@@ -167,7 +179,9 @@ function updateStatusText(
     case 'disabled':
       return t(`settings.about.updateDisabled.${status.reason}`);
     case 'idle':
-      return t('settings.about.updateIdle');
+      return autoCheckAndDownloadUpdates
+        ? t('settings.about.updateIdle')
+        : t('settings.about.updateIdleManual');
     case 'checking':
       return t('settings.about.updateChecking');
     case 'up-to-date':

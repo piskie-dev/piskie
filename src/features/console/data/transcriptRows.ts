@@ -22,7 +22,7 @@ export type TranscriptRow = TranscriptContentRow | {
 };
 
 /** Only fold positions and observed normal completion are retained between renders. */
-interface ProcessBoundary {
+export interface ProcessBoundary {
   /** Null records a normal direct reply with no preceding work to fold. */
   readonly endNodeId: string | null;
   readonly durationMs?: number;

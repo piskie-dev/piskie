@@ -13,11 +13,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import type { InferenceConfig, InferenceModelDefinition } from '../../../../../../shared/types/inference';
 import type { ReasoningSelection } from '../../../../../../shared/types/reasoning';
 import { useInferenceStore } from '../../../../../store/inferenceStore';
-import { clearAllComposerDrafts } from '../../../data/composer-drafts';
+import { clearAllComposerDrafts, composerDraftKey, useComposerDraftStore } from '../../../data/composer-drafts';
+import type { AgentCommandResult } from '../../../../../domains/agent-control/agent-commands';
 import { ConversationComposer } from '../ConversationComposer';
 
 const runtime = vi.hoisted(() => ({
-  agentCommands: { setReasoning: vi.fn(), setSubagentReasoning: vi.fn() },
+  agentCommands: { setReasoning: vi.fn(), setSubagentReasoning: vi.fn(), setModel: vi.fn(), setSubagentModel: vi.fn() },
 }));
 vi.mock('../../../../../renderer-runtime/hooks', () => ({ useRendererRuntime: () => runtime }));
 vi.mock('../../../chrome/Popover', () => ({
@@ -114,6 +115,9 @@ beforeEach(() => {
     modes: { listAvailable: vi.fn().mockResolvedValue([]) },
   } });
   clearAllComposerDrafts();
+  submit.mockClear();
+  runtime.agentCommands.setModel.mockReset().mockResolvedValue({ ok: true });
+  runtime.agentCommands.setSubagentModel.mockReset().mockResolvedValue({ ok: true });
   targets = [
     { agentId: 'session-example', model: 'sample-provider::main-model', reasoningOverride: medium },
     { agentId: 'session-example', workerId: 'worker-example', model: 'sample-provider::worker-model', reasoningOverride: low },
@@ -143,6 +147,77 @@ afterEach(async () => {
 });
 
 afterAll(() => testDOM.window.close());
+
+describe('model selection feedback', () => {
+  const options = (key: string) => [...panel(key).querySelectorAll<HTMLButtonElement>('[class*="modelList"] button')];
+
+  it('keeps sending available during model saving and shows the controlled model after acknowledgement', async () => {
+    let saved!: (result: AgentCommandResult) => void;
+    submit.mockResolvedValueOnce(true);
+    runtime.agentCommands.setModel.mockReturnValue(new Promise<AgentCommandResult>((resolve) => { saved = resolve; }));
+    await act(async () => render());
+    await open('session-example');
+    await act(async () => {
+      useComposerDraftStore.getState().setDraft(composerDraftKey('session-example'), 'Continue the sample task.');
+      options('session-example')[1]!.click();
+    });
+    expect(runtime.agentCommands.setModel).toHaveBeenCalledExactlyOnceWith('session-example', 'sample-provider::worker-model');
+    expect(options('session-example')[0]!.dataset.selected).toBe('true');
+    expect(options('session-example')[1]!.dataset.selected).toBeUndefined();
+    expect(trigger('session-example').disabled).toBe(false);
+    const send = panel('session-example').querySelector<HTMLButtonElement>('[class*="mainAction"]')!;
+    expect(send.disabled).toBe(false);
+    await act(async () => send.click());
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ text: 'Continue the sample task.' }));
+
+    await act(async () => {
+      targets[0]!.model = 'sample-provider::worker-model';
+      render();
+      saved({ ok: true, value: undefined });
+    });
+    expect(options('session-example')[1]!.dataset.selected).toBe('true');
+    expect(panel('session-example').querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('keeps the current target failure when an earlier selection succeeds after switching targets', async () => {
+    let finishPrevious!: (result: AgentCommandResult) => void;
+    runtime.agentCommands.setModel
+      .mockReturnValueOnce(new Promise<AgentCommandResult>((resolve) => { finishPrevious = resolve; }))
+      .mockResolvedValueOnce({ ok: false, error: 'Current model save failed' });
+    const renderTarget = (agentId: string) => root.render(createElement('section', { 'data-target': agentId },
+      createElement(ConversationComposer, {
+        agentId, model: 'sample-provider::main-model', reasoningOverride: medium,
+        targetName: 'Example target', approvalMode: 'auto', sourceVersion: 0,
+        canPause: false, onSubmit: submit, onInterrupt: interrupt,
+      })));
+    await act(async () => renderTarget('session-example'));
+    await open('session-example');
+    await act(async () => options('session-example')[1]!.click());
+    await act(async () => renderTarget('session-other'));
+    await act(async () => options('session-other')[1]!.click());
+    expect(panel('session-other').querySelector('[role="alert"]')?.textContent).toBe('Current model save failed');
+    await act(async () => finishPrevious({ ok: true, value: undefined }));
+    expect(panel('session-other').querySelector('[role="alert"]')?.textContent).toBe('Current model save failed');
+  });
+
+  it.each(['main', 'worker'] as const)('shows a %s model failure outside the picker and clears it on retry', async (variant) => {
+    const key = variant === 'main' ? 'session-example' : 'worker-example';
+    const command = variant === 'main' ? runtime.agentCommands.setModel : runtime.agentCommands.setSubagentModel;
+    command.mockResolvedValueOnce({ ok: false, error: 'Sample model save failed' });
+    await act(async () => render());
+    await open(key);
+    const previousIndex = variant === 'main' ? 0 : 1;
+    await act(async () => options(key)[1 - previousIndex]!.click());
+    expect(options(key)[previousIndex]!.dataset.selected).toBe('true');
+    await act(async () => trigger(key).click());
+    expect(panel(key).querySelector('[role="alert"]')?.textContent).toBe('Sample model save failed');
+    expect(panel('session-other').querySelector('[role="alert"]')).toBeNull();
+
+    await open(key);
+    await act(async () => options(key)[1 - previousIndex]!.click());
+    expect(panel(key).querySelector('[role="alert"]')).toBeNull();
+  });
+});
 
 describe.each(['main', 'worker'] as const)('%s reasoning selection', (variant) => {
   const key = variant === 'main' ? 'session-example' : 'worker-example';

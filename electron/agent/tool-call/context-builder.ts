@@ -24,9 +24,12 @@ import type {
   ToolAgentType,
   ToolResourceIds,
   WorkspaceContext,
+  SchedulePort,
 } from '../../tools/types.js';
 import type { BrowserHostRuntime } from '../../piskiepilot/core/skill/host.js';
 import { InvariantViolation } from '../../tools/pipeline/invariant-violation.js';
+
+const SCHEDULE_TOOL_NAMES: ReadonlySet<string> = new Set(['schedule', 'schedule_list', 'schedule_cancel']);
 
 export type ToolContextFactoryOptions = Readonly<{
   activation: ToolActivationContext;
@@ -55,6 +58,7 @@ export type ToolActivationContext = Readonly<{
   events?: EventPort;
   imageOps?: ImageOpsPort;
   search?: SearchPort;
+  schedules?: SchedulePort;
   browser?: BrowserHostRuntime;
   post(event: AgentInputRequest): boolean;
 }>;
@@ -129,6 +133,7 @@ export class ToolCallContextFactory {
       subagents: entry.tool.def.scope === 'main' ? activation.subagents : undefined,
       events: ['send_event', 'task'].includes(entry.modelName) ? activation.events : undefined,
       search: entry.modelName === 'web_search' ? activation.search : undefined,
+      schedules: SCHEDULE_TOOL_NAMES.has(entry.modelName) ? activation.schedules : undefined,
       imageOps: entry.modelName === 'generate_image' ? activation.imageOps : undefined,
       browser: domain === 'browser' ? activation.browser : undefined,
     });

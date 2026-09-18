@@ -17,6 +17,7 @@ const CURRENT_CAPABILITIES: CapabilityId[] = [
   'observability',
   'pilot',
   'runtime',
+  'schedules',
   'task-definitions',
   'updates',
 ];

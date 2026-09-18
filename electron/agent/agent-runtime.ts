@@ -1007,6 +1007,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   private createToolContext(): ToolActivationContext {
     const builder = new ToolContextBuilder();
     if (this.options.search) builder.setSearch(this.options.search);
+    if (this.options.schedules) builder.setSchedules(this.options.schedules);
 
     builder.setModes({
       modeId: () => {
@@ -1061,6 +1062,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       events: typed.events,
       imageOps: typed.imageOps,
       search: typed.search,
+      schedules: typed.schedules,
       browser: typed.browser,
       post: (event) => {
         if (info.role === 'worker' && event.source === 'subagent') {

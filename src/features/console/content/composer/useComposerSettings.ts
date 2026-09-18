@@ -4,7 +4,7 @@
  * 这些回写的唯一住所：全是 store 分发（agent 级 / worker 级两条通道），呈现层不掺业务。
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
@@ -15,9 +15,11 @@ import {
 } from '../../../../store/inferenceStore';
 import { useRendererRuntime } from '../../../../renderer-runtime/hooks';
 import { useComposerDraftStore } from '../../data/composer-drafts';
+import { rawText, type PresentationText } from '../../../../i18n/presentationText';
 
 export interface ComposerSettings {
   readonly modelGroups: ModelOptGroup[];
+  readonly modelError?: PresentationText;
   readonly onModelChange: (next: string) => Promise<void>;
   readonly onReasoningChange: (selection?: ReasoningSelection) => Promise<void>;
   /** 仅主 Agent 可切换 Catalog 允许的运行时模式；Worker 上是空操作。 */
@@ -27,6 +29,12 @@ export interface ComposerSettings {
 
 export function useComposerSettings(agentId: string, workerId: string | undefined, model: string): ComposerSettings {
   const { agentCommands } = useRendererRuntime();
+  const modelRequest = useRef(0);
+  const [modelFailure, setModelFailure] = useState<{
+    agentId: string; workerId: string | undefined; error: PresentationText;
+  }>();
+  const modelError = modelFailure?.agentId === agentId && modelFailure.workerId === workerId
+    ? modelFailure.error : undefined;
   const inferenceConfig = useInferenceStore((store) => store.config);
   const aiModels = useInferenceStore((store) => store.models.ai);
   const availableAiTargets = useInferenceStore((store) => store.availableTargets.ai);
@@ -38,8 +46,14 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
 
   const onModelChange = useCallback(
     async (next: string) => {
-      if (workerId) await agentCommands.setSubagentModel(agentId, workerId, next);
-      else await agentCommands.setModel(agentId, next);
+      const request = ++modelRequest.current;
+      setModelFailure(undefined);
+      const result = workerId
+        ? await agentCommands.setSubagentModel(agentId, workerId, next)
+        : await agentCommands.setModel(agentId, next);
+      if (request === modelRequest.current) {
+        setModelFailure(result.ok ? undefined : { agentId, workerId, error: rawText(result.error) });
+      }
     },
     [agentCommands, agentId, workerId],
   );
@@ -81,11 +95,12 @@ export function useComposerSettings(agentId: string, workerId: string | undefine
   return useMemo(
     () => ({
       modelGroups,
+      modelError,
       onModelChange,
       onReasoningChange,
       onModeChange,
       onApprovalModeChange,
     }),
-    [modelGroups, onApprovalModeChange, onModeChange, onModelChange, onReasoningChange],
+    [modelGroups, modelError, onApprovalModeChange, onModeChange, onModelChange, onReasoningChange],
   );
 }

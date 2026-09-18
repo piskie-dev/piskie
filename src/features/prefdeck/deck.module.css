@@ -1316,6 +1316,51 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
   flex: 0 0 auto;
 }
 
+.aboutToggle {
+  position: relative;
+  flex: 0 0 auto;
+  inline-size: 32px;
+  block-size: 18px;
+  padding: 0;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 999px;
+  background: var(--pd-well);
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.aboutToggle::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 50%;
+  background: var(--pd-faint);
+  transition: translate 180ms ease, background-color 180ms ease;
+}
+
+.aboutToggle[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--pd-beam) 45%, transparent);
+  background: color-mix(in srgb, var(--pd-beam) 18%, var(--pd-well));
+}
+
+.aboutToggle[aria-checked='true']::after {
+  translate: 14px 0;
+  background: var(--pd-beam);
+}
+
+.aboutToggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.aboutToggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pd-beam) 62%, transparent);
+  outline-offset: 2px;
+}
+
 .aboutUpdateProgress {
   flex: 1 0 100%;
   block-size: 3px;
@@ -1338,6 +1383,11 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
   }
 
   .aboutUpdateProgress > span {
+    transition: none;
+  }
+
+  .aboutToggle,
+  .aboutToggle::after {
     transition: none;
   }
 }

@@ -336,6 +336,15 @@ export class ConversationStore {
     return updated;
   }
 
+  updateHeaderModel(mainAgentId: string, currentModel: string): AgentRunHeader | null {
+    const header = this.readHeader(mainAgentId);
+    if (!header) return null;
+
+    const updated = { ...header, currentModel };
+    this.writeHeader(mainAgentId, updated);
+    return updated;
+  }
+
   /**
    * 只扫描 agent-runs 的直接子目录；Worker 不形成独立 AgentRun。
    */

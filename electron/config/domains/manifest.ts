@@ -19,6 +19,7 @@ import { createModelCatalogDomain } from './model-catalog.adapter.js';
 import { createWebSearchDomain } from './web-search.adapter.js';
 import { createWorkerPreferencesDomain } from './worker-preferences.adapter.js';
 import { createProxiesDomain } from './proxies.adapter.js';
+import { createSchedulesDomain } from './schedules.adapter.js';
 
 export interface ConfigDomainManifestContext {
   rootDirectory?: string;
@@ -103,6 +104,11 @@ export const CONFIG_DOMAIN_MANIFEST = {
   proxies: managed((context) => createProxiesDomain(
     context.rootDirectory,
     context.integrations.proxies,
+    context.readDomain,
+  )),
+  schedules: managed((context) => createSchedulesDomain(
+    context.rootDirectory,
+    context.integrations.schedules,
     context.readDomain,
   )),
 } as const satisfies Record<string, ConfigDomainFactory>;

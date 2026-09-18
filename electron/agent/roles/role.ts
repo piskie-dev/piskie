@@ -1,5 +1,6 @@
 import type { WorkerInferenceResolver } from '../worker-inference.js';
 import type { SearchPort } from '../../../shared/types/web-search.js';
+import type { SchedulePort } from '../../tools/types.js';
 /**
  * AgentRole — 角色行为策略接口
  * 每个 agent 有且仅有一个 Role，由 Spec 的 role 字段决定。
@@ -85,6 +86,7 @@ export interface RoleDefaults {
 export interface RuntimeOptions {
   resolveWorkerInference?: WorkerInferenceResolver;
   search?: SearchPort;
+  schedules?: SchedulePort;
   mainAgentId: string;
   runConfig?: AgentRunConfig;
   subagentConfig?: SubagentConfig;
