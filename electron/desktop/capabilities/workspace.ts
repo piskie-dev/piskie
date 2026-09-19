@@ -77,16 +77,29 @@ async function readGit(workspace: string, signal?: AbortSignal): Promise<Workspa
   return { root, head, branches, dirtyFileCount: dirtyPaths.size };
 }
 
+async function requireWorkspaceDirectory(workspace: string): Promise<void> {
+  if (!(await stat(workspace)).isDirectory()) {
+    throw new PublicOperationError('invalid-input', 'The workspace is not a directory');
+  }
+}
+
 export async function readWorkspaceInfo(workspace: string, signal?: AbortSignal): Promise<WorkspaceInfo> {
   if (!path.isAbsolute(workspace)) {
     throw new PublicOperationError('invalid-input', 'An absolute workspace path is required');
   }
   signal?.throwIfAborted();
   try {
-    if (!(await stat(workspace)).isDirectory()) {
-      throw new PublicOperationError('invalid-input', 'The workspace is not a directory');
-    }
-    return { path: workspace, git: await readGit(workspace, signal) };
+    await requireWorkspaceDirectory(workspace);
+    const gitInfo = await readGit(workspace, signal).catch(async (error: unknown) => {
+      signal?.throwIfAborted();
+      const failure = error as NodeJS.ErrnoException | undefined;
+      if (failure?.code !== 'ENOENT' || failure.syscall !== 'spawn git') throw error;
+      // A missing cwd also causes spawn ENOENT; only a usable folder can fall back without Git.
+      await requireWorkspaceDirectory(workspace);
+      signal?.throwIfAborted();
+      return null;
+    });
+    return { path: workspace, git: gitInfo };
   } catch (error) {
     signal?.throwIfAborted();
     return { path: workspace, git: null, error: gitError(error) };
