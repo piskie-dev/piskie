@@ -9,6 +9,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BadgeInfo,
+  BarChart3,
   BookOpen,
   Bot,
   Globe,
@@ -36,7 +37,7 @@ export interface CatalogProviderItem {
 export type DeckSect =
   | 'ai' | 'image' | 'ai-tuning' | 'image-tuning'
   | 'web-search' | 'web-search-settings'
-  | 'proxy' | 'account' | 'look' | 'kernel' | 'logs' | 'guides' | 'about';
+  | 'proxy' | 'account' | 'look' | 'kernel' | 'model-usage' | 'logs' | 'guides' | 'about';
 
 export interface CatalogPaneProps {
   readonly searchProviders: readonly { id: string; title: string; active: boolean }[];
@@ -161,6 +162,7 @@ export const CatalogPane: React.FC<CatalogPaneProps> = ({
         {plainLeaf('account', <UserRound size={15} />, t('settings.catalog.account'))}
         {plainLeaf('look', <Palette size={15} />, t('settings.catalog.appearance'))}
         {plainLeaf('kernel', <Chrome size={15} />, t('settings.catalog.browserRuntime'))}
+        {plainLeaf('model-usage', <BarChart3 size={15} />, t('settings.tabs.modelUsage'))}
         {plainLeaf('logs', <ScrollText size={15} />, t('settings.tabs.logs'))}
         {plainLeaf('guides', <BookOpen size={15} />, t('guides.library'))}
         {plainLeaf('about', <BadgeInfo size={15} />, t('settings.tabs.about'))}

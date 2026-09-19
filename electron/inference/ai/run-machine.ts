@@ -25,7 +25,7 @@ export interface ExecuteAiRunInput {
   target: CompiledTarget;
   policy: AiExecutionPolicy;
   dependencies?: Partial<AiRunDependencies>;
-  onAttemptStarted?: (at: number) => void;
+  onAttemptStarted?: (at: number, attempt: number) => void;
 }
 
 export async function* executeAiRun(input: ExecuteAiRunInput): AsyncIterable<AiEvent> {
@@ -74,7 +74,7 @@ export async function* executeAiRun(input: ExecuteAiRunInput): AsyncIterable<AiE
   while (state.attempt < input.policy.maxAttempts) {
     state = reduceAiRun(state, { kind: 'attempt.opened' });
     const attempt = state.attempt;
-    input.onAttemptStarted?.(dependencies.now());
+    input.onAttemptStarted?.(dependencies.now(), attempt);
     const attemptController = new AbortController();
     const detachParentAbort = forwardAbort(input.context.signal, attemptController);
     const attemptContext: AttemptContext = {

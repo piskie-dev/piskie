@@ -343,6 +343,15 @@ export function createElectronPiskieClient(options: {
       observeAuthorization: (listener) => observe(MESSAGING_TOPICS.authorization, listener),
     },
     observability: {
+      modelUsage: {
+        query: (filter) => request(OBSERVABILITY_OPERATIONS.usageQuery, filter),
+        page: (snapshot, offset, sort, descending) => request(OBSERVABILITY_OPERATIONS.usagePage, snapshot, offset, sort, descending),
+        detail: (snapshot, id) => request(OBSERVABILITY_OPERATIONS.usageDetail, snapshot, id),
+        status: () => request(OBSERVABILITY_OPERATIONS.usageStatus),
+        export: (snapshot, language) => waitForUser(OBSERVABILITY_OPERATIONS.usageExport, snapshot, language),
+        previewCleanup: (days, all) => request(OBSERVABILITY_OPERATIONS.usagePreview, days, all),
+        cleanup: (all, confirmed) => request(OBSERVABILITY_OPERATIONS.usageCleanup, all, confirmed),
+      },
       incidents: {
         clear: (incidentId) => request(OBSERVABILITY_OPERATIONS.clearIncident, incidentId),
         clearAll: () => request(OBSERVABILITY_OPERATIONS.clearIncidents),

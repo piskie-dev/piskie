@@ -18,6 +18,7 @@ export interface BrowserEnvironmentsSnapshot {
 export type ConfigDomainReader = (domain: string) => Promise<unknown>;
 
 export interface ConfigDomainIntegrations {
+  modelUsage?: { publish(config: import('../../../shared/types/model-usage.js').ModelUsageConfig): void };
   workerPreferences?: {
     listTypes(): readonly import('../../../shared/types/worker-preferences.js').WorkerTypeDescriptor[];
   };

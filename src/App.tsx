@@ -22,6 +22,7 @@ function WorkspaceShell() {
       <Routes>
         <Route path="/console" element={<ConsolePage />} />
         <Route path="/agents" element={<AgentManagementPage />} />
+        <Route path="/usage" element={<Navigate to="/preferences?sect=model-usage" replace />} />
         <Route path="/market" element={<Market />} />
         <Route path="/skills" element={<Navigate to="/market?view=installed" replace />} />
         {/* IM 渠道页；保留 /connections 重定向以兼容旧书签。 */}
