@@ -74,6 +74,11 @@ export function createDesktopController(
       (context, [input]) => application.selectFiles(context.windowId, input?.type),
     ),
     operation(
+      DESKTOP_OPERATIONS.defaultWorkspacePath,
+      args([]),
+      () => application.defaultWorkspacePath(),
+    ),
+    operation(
       DESKTOP_OPERATIONS.workspaceInfo,
       args([z.string().min(1).max(16_384).optional()]),
       (context, [workspace]) => application.workspaceInfo(workspace, context.signal),

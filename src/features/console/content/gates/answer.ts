@@ -8,12 +8,9 @@
  */
 
 import type { AIQuestionItem } from '../../../../../shared/types';
+import type { QuestionItemDraft } from '../../data/question-drafts';
 
-export interface ItemDraft {
-  readonly selected: readonly string[];
-  readonly custom: string;
-}
-
+export type ItemDraft = QuestionItemDraft;
 export const EMPTY_DRAFT: ItemDraft = { selected: [], custom: '' };
 
 /**

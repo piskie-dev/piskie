@@ -135,6 +135,10 @@ export class DesktopApplication {
     );
   }
 
+  defaultWorkspacePath(): string {
+    return this.dependencies.paths.getDefaultWorkspaceDir();
+  }
+
   async workspaceInfo(workspace?: string, signal?: AbortSignal): Promise<WorkspaceInfo> {
     const defaultWorkspace = this.dependencies.paths.getDefaultWorkspaceDir();
     const target = workspace ?? defaultWorkspace;

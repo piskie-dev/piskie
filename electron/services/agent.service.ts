@@ -54,6 +54,7 @@ import {
 } from '../agent/observations.js';
 import { createCompactId } from '@shared/utils/identifiers.js';
 import { emptyAgentActivityState } from '../agent/run-metrics.js';
+import { pathsService } from './paths.service.js';
 
 /** 拆除慢观测阈值（仅日志，无任何限时语义） */
 const STOP_DESTROY_SLOW_MS = 5000;
@@ -329,8 +330,17 @@ export class AgentService {
     if (!this.agentInference) {
       throw new Error('AgentService not initialized');
     }
+    const resolvedLaunch = launch.runConfig.workspace === undefined
+      ? {
+          ...launch,
+          runConfig: {
+            ...launch.runConfig,
+            workspace: pathsService.getDefaultWorkspaceDir(),
+          },
+        }
+      : launch;
     const agentId = this.allocateAgentId();
-    return this.withLifecycleLock(agentId, () => this.startLocked(agentId, launch));
+    return this.withLifecycleLock(agentId, () => this.startLocked(agentId, resolvedLaunch));
   }
 
   /**

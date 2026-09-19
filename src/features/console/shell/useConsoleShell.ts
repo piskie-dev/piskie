@@ -21,6 +21,7 @@ import type { SessionMenuSource } from '../data/sessionMenu';
 import { useComposerDraftStore, WELCOME_DRAFT_KEY } from '../data/composer-drafts';
 import { resolveConsoleSelectedAgentId } from './selection';
 import { retainFilePreviews } from '@/services/file-preview';
+import { workspaceGroupKey } from '../data/workspaceGroups';
 
 export type { ConsoleMode };
 
@@ -35,6 +36,7 @@ export interface ConsoleShell {
   readonly sessions: ReturnType<typeof useSessionRows>;
   readonly history: readonly HistoryRow[];
   readonly selectedAgentId: string | null;
+  readonly defaultWorkspacePath?: string;
   readonly selectSession: (agentId: string) => void;
   /** 重置新会话草稿并打开输入页。 */
   readonly newSession: () => void;
@@ -63,7 +65,7 @@ export interface ConsoleShell {
   readonly reveal: (target: { agentId: string; workerId?: string }) => void;
 }
 
-export function useConsoleShell(): ConsoleShell {
+export function useConsoleShell(defaultWorkspacePath?: string): ConsoleShell {
   const sessions = useSessionRows();
   const history = useHistoryRows();
   const actions = useConsoleActions();
@@ -136,8 +138,8 @@ export function useConsoleShell(): ConsoleShell {
       ?? history.find((item) => item.agentId === agentId);
     if (!row) return;
     pendingWorkspaceReveal.current = null;
-    expandWorkspaceGroup(row.workspace ?? '');
-  }, [sessions, history, selection, expandWorkspaceGroup]);
+    expandWorkspaceGroup(workspaceGroupKey(row.workspace, defaultWorkspacePath));
+  }, [sessions, history, selection, defaultWorkspacePath, expandWorkspaceGroup]);
 
   const [revealWorker, setRevealWorker] = useState<ConsoleShell['revealWorker']>(null);
   const revealSeq = useRef(0);
@@ -155,23 +157,26 @@ export function useConsoleShell(): ConsoleShell {
 
   const newSessionIn = useCallback((workspace?: string) => {
     pendingWorkspaceReveal.current = null;
-    expandWorkspaceGroup(workspace ?? '');
-    useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY, { workspace });
+    const key = workspaceGroupKey(workspace, defaultWorkspacePath);
+    expandWorkspaceGroup(key);
+    useComposerDraftStore.getState().resetDraft(WELCOME_DRAFT_KEY, {
+      workspace: key ? workspace : undefined,
+    });
     setSelection({ kind: 'empty' });
-  }, [expandWorkspaceGroup, setSelection]);
+  }, [defaultWorkspacePath, expandWorkspaceGroup, setSelection]);
 
   const newSession = useCallback(() => newSessionIn(), [newSessionIn]);
 
   const openHistory = useCallback(
     (row: HistoryRow) => {
       pendingWorkspaceReveal.current = null;
-      expandWorkspaceGroup(row.workspace ?? '');
+      expandWorkspaceGroup(workspaceGroupKey(row.workspace, defaultWorkspacePath));
       // 已加载的历史行就是普通在跑会话，按 live 选中；否则拉磁盘预览态
       const loaded = !!controlStates[row.agentId];
       setSelection({ agentId: row.agentId, kind: loaded ? 'live' : 'history' });
       if (!loaded) void actions.loadHistory(row.agentId);
     },
-    [actions, controlStates, expandWorkspaceGroup, setSelection],
+    [actions, controlStates, defaultWorkspacePath, expandWorkspaceGroup, setSelection],
   );
 
   /**
@@ -199,6 +204,7 @@ export function useConsoleShell(): ConsoleShell {
     sessions,
     history,
     selectedAgentId,
+    defaultWorkspacePath,
     selectSession,
     newSession,
     newSessionIn,

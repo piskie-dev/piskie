@@ -37,6 +37,21 @@ export function workspaceLabel(
   return segments.at(-1) || workspace;
 }
 
+export function workspaceGroupKey(
+  workspace: string | undefined,
+  defaultWorkspacePath?: string,
+): string {
+  return !workspace || workspace === defaultWorkspacePath ? '' : workspace;
+}
+
+export function normalizeWorkspaceGroupKeys(
+  keys: readonly string[],
+  defaultWorkspacePath?: string,
+): readonly string[] {
+  if (!defaultWorkspacePath || !keys.includes(defaultWorkspacePath)) return keys;
+  return [...new Set(keys.map((key) => workspaceGroupKey(key || undefined, defaultWorkspacePath)))];
+}
+
 function timeOf(row: ThreadRow): number {
   const time = new Date(row.lastActiveAt).getTime();
   return Number.isNaN(time) ? 0 : time;
@@ -45,11 +60,12 @@ function timeOf(row: ThreadRow): number {
 export function groupByWorkspace(
   rows: readonly ThreadRow[],
   defaultLabel: string,
+  defaultWorkspacePath?: string,
 ): readonly WorkspaceGroup[] {
   const buckets = new Map<string, ThreadRow[]>();
 
   for (const row of rows) {
-    const key = row.workspace ?? '';
+    const key = workspaceGroupKey(row.workspace, defaultWorkspacePath);
     const bucket = buckets.get(key);
     if (bucket) bucket.push(row);
     else buckets.set(key, [row]);
@@ -74,14 +90,16 @@ export function groupByWorkspace(
 export function reconcileWorkspaceOrder(
   saved: readonly string[],
   groups: readonly WorkspaceGroup[],
+  defaultWorkspacePath?: string,
 ): readonly string[] {
-  const known = new Set(saved);
+  const normalizedSaved = normalizeWorkspaceGroupKeys(saved, defaultWorkspacePath);
+  const known = new Set(normalizedSaved);
   const added = groups.map((group) => group.key).filter((key) => !known.has(key));
-  if (added.length === 0) return saved;
-  if (saved.length === 0 && added.includes('')) {
+  if (added.length === 0) return normalizedSaved;
+  if (normalizedSaved.length === 0 && added.includes('')) {
     return ['', ...added.filter((key) => key !== '')];
   }
-  return [...saved, ...added];
+  return [...normalizedSaved, ...added];
 }
 
 export function orderWorkspaceGroups(

@@ -10,6 +10,13 @@ import type { ConversationAppendEvent } from '@shared/types';
 import type { ScreenFeedRegistry } from '../../domains/screen-feed/screen-feed-registry';
 import { createRuntime, type RendererRuntimeServices } from '../renderer-runtime';
 import { useComposerDraftStore } from '../../features/console/data/composer-drafts';
+import {
+  getQuestionDraft,
+  getQuestionDraftVersion,
+  questionDraftKey,
+  useQuestionDraftStore,
+  type QuestionDraftKey,
+} from '../../features/console/data/question-drafts';
 
 function state(
   agentId: string,
@@ -30,6 +37,29 @@ function state(
       },
     }),
   } as AgentControlSnapshot;
+}
+
+function questionState(agentId: string, requestId: string): AgentControlSnapshot {
+  return {
+    ...state(agentId),
+    pendingQuestion: {
+      id: requestId,
+      agentId,
+      questions: [{ question: 'Sample question?', multiSelect: false }],
+      timestamp: new Date(0),
+    },
+  };
+}
+
+function writeQuestionDraft(agentId: string, requestId: string, custom: string): QuestionDraftKey {
+  const key = questionDraftKey(agentId, requestId);
+  useQuestionDraftStore.getState().setItem(
+    key,
+    0,
+    { selected: [], custom },
+    getQuestionDraftVersion(key),
+  );
+  return key;
 }
 
 function harness() {
@@ -141,6 +171,35 @@ describe('RendererRuntime', () => {
     await runtime.stop();
   });
 
+  it('reconciles question drafts against the final authoritative pending identity', async () => {
+    const current = writeQuestionDraft('sample-main', 'question-current', 'Current answer');
+    const stale = writeQuestionDraft('sample-main', 'question-stale', 'Stale answer');
+    const orphan = writeQuestionDraft('sample-orphan', 'question-orphan', 'Orphan answer');
+    useComposerDraftStore.getState().appendFiles(stale, [{
+      id: 'sample-file', name: 'sample.txt', path: '/sample/sample.txt',
+    }]);
+    const test = harness();
+    const runtime = createRuntime(test.api, test.services, { screenFeeds: test.screenFeeds });
+    const started = runtime.start();
+    await Promise.resolve();
+    test.resolveStates({ 'sample-main': questionState('sample-main', 'question-current') });
+    await started;
+
+    expect(getQuestionDraft(current)[0]?.custom).toBe('Current answer');
+    expect(getQuestionDraft(stale)).toEqual([]);
+    expect(getQuestionDraft(orphan)).toEqual([]);
+    expect(useComposerDraftStore.getState().drafts[stale]).toBeUndefined();
+
+    const next = writeQuestionDraft('sample-main', 'question-next', 'Next answer');
+    test.emitState({ agentId: 'sample-main', state: questionState('sample-main', 'question-next') });
+    expect(getQuestionDraft(current)).toEqual([]);
+    expect(getQuestionDraft(next)[0]?.custom).toBe('Next answer');
+
+    test.emitState({ agentId: 'sample-main', state: state('sample-main') });
+    expect(getQuestionDraft(next)).toEqual([]);
+    await runtime.stop();
+  });
+
   it.each(['state-first', 'conversation-first'])('notifies only after canonical text and settled control, never from streaming (%s)', async (order) => {
     const test = harness();
     const runtime = createRuntime(test.api, test.services, { screenFeeds: test.screenFeeds });
@@ -179,23 +238,41 @@ describe('RendererRuntime', () => {
     await runtime.stop();
   });
 
-  it('keeps drafts when an agent stops, clears the deleted owner and workers, and clears all on renderer stop', async () => {
+  it('keeps composer drafts when an agent stops and clears every draft at its owning lifecycle', async () => {
     const test = harness();
     const api = { ...test.api, agentRuns: { delete: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]) } } as unknown as PiskieDesktopApi;
     const runtime = createRuntime(api, test.services, { screenFeeds: test.screenFeeds });
-    const started = runtime.start(); await Promise.resolve(); test.resolveStates({}); await started;
+    const started = runtime.start();
+    await Promise.resolve();
+    test.resolveStates({
+      example: questionState('example', 'question-one'),
+      other: questionState('other', 'question-other'),
+    });
+    await started;
     const drafts = useComposerDraftStore.getState();
     drafts.setDraft('agent:example', 'Example body');
     drafts.setDraft('worker:example:child', 'Worker body');
     drafts.setDraft('agent:other', 'Other body');
+    const stoppedQuestion = writeQuestionDraft('example', 'question-one', 'Example answer');
+    const otherQuestion = writeQuestionDraft('other', 'question-other', 'Other answer');
     test.emitState({ agentId: 'example', state: null });
     expect(useComposerDraftStore.getState().drafts['agent:example']?.text).toBe('Example body');
+    expect(getQuestionDraft(stoppedQuestion)).toEqual([]);
+    expect(getQuestionDraft(otherQuestion)[0]?.custom).toBe('Other answer');
+    const deletedQuestion = writeQuestionDraft('example', 'question-two', 'Unsynced answer');
+    useComposerDraftStore.getState().appendFiles(deletedQuestion, [{
+      id: 'sample-file', name: 'sample.txt', path: '/sample/sample.txt',
+    }]);
     await runtime.agentRuns.delete('example');
     expect(useComposerDraftStore.getState().drafts['agent:example']).toBeUndefined();
     expect(useComposerDraftStore.getState().drafts['worker:example:child']).toBeUndefined();
     expect(useComposerDraftStore.getState().drafts['agent:other']?.text).toBe('Other body');
+    expect(getQuestionDraft(deletedQuestion)).toEqual([]);
+    expect(useComposerDraftStore.getState().drafts[deletedQuestion]).toBeUndefined();
+    expect(getQuestionDraft(otherQuestion)[0]?.custom).toBe('Other answer');
     await runtime.stop();
     expect(useComposerDraftStore.getState().drafts).toEqual({});
+    expect(getQuestionDraft(otherQuestion)).toEqual([]);
   });
 
   it('disposes every subscription once and makes stop idempotent', async () => {

@@ -82,6 +82,15 @@ function fixture() {
 }
 
 describe('DesktopApplication file and URL handling', () => {
+  it('returns the default workspace path without creating the directory', () => {
+    const { application, paths } = fixture();
+    const workspace = paths.getDefaultWorkspaceDir();
+
+    expect(application.defaultWorkspacePath()).toBe(workspace);
+    expect(paths.ensureWorkspace).not.toHaveBeenCalled();
+    expect(fs.existsSync(workspace)).toBe(false);
+  });
+
   it('captures a preview source before release and copies its existing original file', async () => {
     const { application, presentation, userDataDirectory } = fixture();
     const source = path.join(userDataDirectory, 'sample image.gif');

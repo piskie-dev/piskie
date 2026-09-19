@@ -332,6 +332,14 @@
     box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.feedback[data-multiline='true'] {
+  align-items: flex-end;
+  min-block-size: 30px;
+  block-size: auto;
+  padding-block: 3px;
+  border-radius: var(--radius-badge);
+}
+
 /* 聚焦是「你在操作」：中性白光，不抢门的琥珀等待光 */
 .feedback:focus-within {
   border-color: var(--line-3);
@@ -361,6 +369,20 @@
 
 .feedbackInput::placeholder {
   color: color-mix(in srgb, var(--cyber-text-muted) 50%, transparent);
+}
+
+.feedbackTextarea,
+.feedbackTextarea:focus {
+  block-size: auto;
+  min-block-size: 22px;
+  max-block-size: 120px;
+  line-height: 1.5;
+  resize: none;
+  field-sizing: content;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
 }
 
 .send {
@@ -493,17 +515,24 @@
   min-block-size: 0;
   padding-block: 8px;
   max-block-size: 384px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
 .questionText {
+  min-inline-size: 0;
   padding-inline: 12px;
   margin-block-end: 6px;
   font-size: 16px;
   color: var(--cyber-text);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.questions > div {
+  min-inline-size: 0;
 }
 
 .questionOrdinal {
@@ -511,10 +540,31 @@
   color: var(--cyber-text-muted);
 }
 
-/* 提问门的选项文字用 `--cyber-text`（旧 `OPTION_IDLE` 是 text-cyber-text，
-   与审批门的 ghost 项用 muted 不同） */
-.optionsScroll .option {
+/* 提问门由 questions 承担主纵向滚动；单题的选项列表不再形成第二层滚动。 */
+.questions .optionsScroll {
+  min-inline-size: 0;
+  max-block-size: none;
+  overflow-x: clip;
+  overflow-y: visible;
+  overscroll-behavior: auto;
+  scrollbar-gutter: auto;
+}
+
+/* 提问门选项允许完整换行；审批门 actionRow 仍保持 30px 紧凑单行按钮。 */
+.questions .optionsScroll .option {
+  align-items: flex-start;
+  min-block-size: 30px;
+  block-size: auto;
+  padding-block: 5px;
   color: var(--cyber-text);
+}
+
+.questions .optionsScroll .optionLabel {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 18px;
 }
 
 .questionHint {

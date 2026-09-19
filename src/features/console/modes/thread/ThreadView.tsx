@@ -292,6 +292,7 @@ export const ThreadView = memo<ThreadViewProps>(
         {/* 门与输入互斥：有待决策时输入让位（与 dock 同语义，不同外观） */}
         {gate ? (
           <Gate
+            agentId={agentId}
             request={gate}
             disabled={worker ? worker.phase === 'waiting' : request.phase === 'stopping'}
             onDecide={decide}

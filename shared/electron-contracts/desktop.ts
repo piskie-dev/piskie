@@ -11,6 +11,7 @@ export const DESKTOP_OPERATIONS = Object.freeze({
   previewFile: 'desktop.files.preview',
   releasePreview: 'desktop.files.releasePreview',
   selectFiles: 'desktop.files.select',
+  defaultWorkspacePath: 'desktop.workspace.defaultPath',
   workspaceInfo: 'desktop.workspace.info',
   switchWorkspaceBranch: 'desktop.workspace.switchBranch',
   createWorkspaceBranch: 'desktop.workspace.createBranch',
@@ -112,6 +113,8 @@ export interface WorkspaceInfo {
 }
 
 interface DesktopWorkspaceClient {
+  /** Returns the default workspace identity without creating or inspecting the directory. */
+  defaultPath(): Promise<string>;
   /** Omitting the path selects the application's default workspace. */
   info(workspace?: string): Promise<WorkspaceInfo>;
   switchBranch(workspace: string, branch: string): Promise<WorkspaceInfo>;

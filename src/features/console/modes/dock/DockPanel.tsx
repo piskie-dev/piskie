@@ -289,6 +289,7 @@ export const DockPanel = memo<DockPanelProps>(
         gate={
           gate ? (
             <Gate
+              agentId={agentId}
               request={gate}
               // 停止中 / 等待中锁门
               disabled={gateDisabled}
