@@ -44,6 +44,7 @@ import {
   filterWorkspaceGroups,
   groupByWorkspace,
   moveWorkspaceGroup,
+  normalizeWorkspaceGroupKeys,
   orderWorkspaceGroups,
   reconcileWorkspaceOrder,
   type WorkspaceDropEdge,
@@ -63,6 +64,7 @@ export interface ThreadSidebarProps {
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
   readonly onNewSession?: () => void;
   readonly renderTaskLauncher?: (trigger: ReactNode) => ReactNode;
+  readonly defaultWorkspacePath?: string;
   /** 组头「在此工作区新建会话」:回空态并预选该组目录 */
   readonly onNewSessionIn?: (workspace?: string) => void;
 }
@@ -79,6 +81,7 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     menuSourceOf,
     onNewSession,
     renderTaskLauncher,
+    defaultWorkspacePath,
     onNewSessionIn,
   }) => {
     const { t } = useTranslation();
@@ -96,17 +99,28 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const historyReady = useHistoryRowsReady();
     const attentionByAgentId = useAgentRunList((state) => state.attentionByAgentId);
     const savedOrder = useUIStore((state) => state.workspaceGroupOrder);
+    const expandedGroups = useUIStore((state) => state.expandedWorkspaceGroups);
     const setOrder = useUIStore((state) => state.setWorkspaceGroupOrder);
     const searching = query.trim().length > 0;
 
     const allGroups = useMemo(() => groupByWorkspace(
       buildThreadRows({ sessions, history, attentionByAgentId }),
       t('sessionWorkbenchUi.shell.defaultWorkspace'),
-    ), [history, sessions, attentionByAgentId, t]);
-    const order = useMemo(() => reconcileWorkspaceOrder(savedOrder, allGroups), [savedOrder, allGroups]);
+      defaultWorkspacePath,
+    ), [history, sessions, attentionByAgentId, defaultWorkspacePath, t]);
+    const order = useMemo(
+      () => reconcileWorkspaceOrder(savedOrder, allGroups, defaultWorkspacePath),
+      [savedOrder, allGroups, defaultWorkspacePath],
+    );
     useEffect(() => {
       if (historyReady && order !== savedOrder) setOrder([...order]);
     }, [historyReady, order, savedOrder, setOrder]);
+    useEffect(() => {
+      const normalized = normalizeWorkspaceGroupKeys(expandedGroups, defaultWorkspacePath);
+      if (normalized !== expandedGroups) {
+        useUIStore.setState({ expandedWorkspaceGroups: [...normalized] });
+      }
+    }, [defaultWorkspacePath, expandedGroups]);
     const orderedGroups = useMemo(() => orderWorkspaceGroups(allGroups, order), [allGroups, order]);
     const groups = useMemo(() => filterWorkspaceGroups(orderedGroups, query), [orderedGroups, query]);
     const moveGroup = useCallback((source: string, target: string, edge: WorkspaceDropEdge) => {

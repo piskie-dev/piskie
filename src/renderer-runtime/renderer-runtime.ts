@@ -1,5 +1,9 @@
 import type { PiskieDesktopApi } from '@shared/electron-contracts/api';
-import { clearAgentComposerDrafts, clearAllComposerDrafts } from '../features/console/data/composer-drafts';
+import {
+  clearAgentConsoleDrafts,
+  clearAllConsoleDrafts,
+  reconcileQuestionDrafts,
+} from '../features/console/data/question-drafts';
 import { clearFilePreviews } from '../services/file-preview';
 import type { AgentLiveContentDelta } from '@shared/electron-contracts/agents';
 import type { AgentControlChangedEvent } from '@shared/electron-contracts/agent-runs';
@@ -78,7 +82,7 @@ export function createRuntime(
   } = {},
 ): RendererRuntime {
   const agentControl = createAgentControlStore();
-  const agentRuns = resources.agentRuns ?? createAgentRunRepository(api.agentRuns, clearAgentComposerDrafts);
+  const agentRuns = resources.agentRuns ?? createAgentRunRepository(api.agentRuns, clearAgentConsoleDrafts);
   const agentCommands = createAgentCommands(api.agents, agentControl, agentRuns);
   const contextInspector = createContextInspectorResource(api.agents);
   const transcript = createTranscriptStore(api.agents);
@@ -93,10 +97,19 @@ export function createRuntime(
   let controlBuffer: AgentControlChangedEvent[] | null = null;
   let liveBuffer: AgentLiveContentDelta[] | null = null;
 
-  const applyControl = (event: AgentControlChangedEvent) => {
+  const reconcileQuestions = () => {
+    reconcileQuestionDrafts(Object.values(agentControl.state.getState().agentsById).flatMap((state) => (
+      state.pendingQuestion
+        ? [{ agentId: state.agentId, requestId: state.pendingQuestion.id }]
+        : []
+    )));
+  };
+
+  const applyControl = (event: AgentControlChangedEvent, reconcile = true) => {
     agentControl.apply(event);
     if (event.state) agentRuns.clearPreview(event.agentId);
     transcript.syncControl(agentControl.state.getState().targetsById);
+    if (reconcile) reconcileQuestions();
   };
 
   const disposeSubscriptions = () => {
@@ -161,7 +174,8 @@ export function createRuntime(
 
           const pendingControl = controlBuffer;
           controlBuffer = null;
-          for (const event of pendingControl) applyControl(event);
+          for (const event of pendingControl) applyControl(event, false);
+          reconcileQuestions();
 
           const pendingLive = liveBuffer;
           liveBuffer = null;
@@ -178,7 +192,7 @@ export function createRuntime(
           taskDefinitions.close();
           schedules.close();
           agentRuns.close();
-          clearAllComposerDrafts();
+          clearAllConsoleDrafts();
           clearFilePreviews();
           try {
             await screenFeeds.close();
@@ -221,7 +235,7 @@ export function createRuntime(
         taskDefinitions.close();
         schedules.close();
         agentRuns.close();
-        clearAllComposerDrafts();
+        clearAllConsoleDrafts();
         clearFilePreviews();
         try {
           await screenFeeds.close();

@@ -1,7 +1,7 @@
 const testDOM = await vi.hoisted(async () => {
   const { JSDOM } = await import('jsdom');
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
-  for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Event', 'KeyboardEvent', 'File', 'FileReader', 'Blob'] as const) {
+  for (const name of ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'Event', 'KeyboardEvent', 'File', 'FileReader', 'Blob'] as const) {
     Object.defineProperty(globalThis, name, { configurable: true, writable: true, value: name === 'window' ? dom.window : dom.window[name] });
   }
   return dom;
@@ -11,7 +11,12 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from 'i18next';
-import { clearAllComposerDrafts, useComposerDraftStore } from '../../../data/composer-drafts';
+import { useComposerDraftStore } from '../../../data/composer-drafts';
+import {
+  clearAllConsoleDrafts,
+  getQuestionDraft,
+  questionDraftKey,
+} from '../../../data/question-drafts';
 import { pngBytes, deferred } from '../../../attachments/__tests__/fixtures';
 import { PlanGate, type PlanGateProps } from '../PlanGate';
 import type { GateDecision, GateRequest } from '../contract';
@@ -55,7 +60,8 @@ async function paste(files: File[], text = '', kind: 'paste' | 'drop' = 'paste')
     items: files.map((file) => ({ kind: 'file', getAsFile: () => file })), types: ['Files'],
     getData: (type: string) => type === 'text/plain' ? text : '',
   } });
-  await act(async () => input().dispatchEvent(event));
+    const field = container.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea')!;
+    await act(async () => field.dispatchEvent(event));
 }
 
 async function prepareImages() {
@@ -78,7 +84,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'piskie', { configurable: true, value: {
     desktop: { files: { getPathForFile }, system: { clipboardAttachments } },
   } });
-  clearAllComposerDrafts();
+  clearAllConsoleDrafts();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -86,7 +92,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
-  clearAllComposerDrafts();
+  clearAllConsoleDrafts();
   container.remove();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -208,14 +214,14 @@ describe.each(['tool', 'diff', 'command', 'question'] as const)('%s file feedbac
       params: {}, timestamp: new Date(), description: 'Sample operation', category: 'system',
     };
     await act(async () => root.render(kind === 'question'
-      ? React.createElement(QuestionGate, { request: { kind, id: call.id, items: [{ question: 'Sample question?', multiSelect: false }] }, onDecide })
+      ? React.createElement(QuestionGate, { agentId: call.agentId, request: { kind, id: call.id, items: [{ question: 'Sample question?', multiSelect: false }] }, onDecide })
       : kind === 'tool' ? React.createElement(ToolGate, { request: { kind, call }, onDecide })
         : kind === 'diff' ? React.createElement(DiffGate, { request: { kind, call }, onDecide, onViewDiff: vi.fn() })
           : React.createElement(CommandGate, { request: { kind, call }, onDecide })));
     await paste([new File(['Sample'], 'example.pdf', { type: 'application/pdf' })], 'Sample feedback', method);
     await prepareImages();
     expect(container.textContent).toContain('example.pdf');
-    expect(input().value).toBe('Sample feedback');
+    expect(container.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea')?.value).toBe('Sample feedback');
     await act(async () => send().click());
     expect(onDecide).toHaveBeenCalledOnce();
     const decision = onDecide.mock.calls[0]![0];
@@ -226,6 +232,67 @@ describe.each(['tool', 'diff', 'command', 'question'] as const)('%s file feedbac
     expect(decision.files).toEqual([{ name: 'example.pdf', path: '/sample/example.pdf' }]);
     expect(decision.kind === 'answer' ? decision.answer : decision.feedback).not.toContain('/sample/example.pdf');
   });
+});
+
+describe('question drafts', () => {
+  const questionRequest: Extract<GateRequest, { kind: 'question' }> = {
+    kind: 'question',
+    id: 'sample-question',
+    items: [
+      { question: 'Choose a sample option', options: ['Option A', 'Option B'], multiSelect: false },
+      { question: 'Add sample details', multiSelect: false },
+    ],
+  };
+
+  function renderQuestion(request = questionRequest, agentId = 'sample-agent'): void {
+    act(() => root.render(React.createElement(QuestionGate, {
+      agentId,
+      request,
+      onDecide,
+    })));
+  }
+
+  function typeQuestion(index: number, value: string): void {
+    const textarea = container.querySelectorAll('textarea')[index]!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, value);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  it('restores answers and files after remount, isolates sessions, and resets after submission', async () => {
+    renderQuestion();
+    act(() => [...container.querySelectorAll('button')].find((item) => item.textContent?.includes('Option B'))!.click());
+    typeQuestion(1, 'Sample details');
+    await paste([new File(['Sample'], 'example.pdf', { type: 'application/pdf' })]);
+
+    expect(container.textContent).toContain('example.pdf');
+    expect(container.querySelectorAll('textarea')[1]?.value).toBe('Sample details');
+    expect([...container.querySelectorAll('button')].find((item) => item.textContent?.includes('Option B'))?.dataset.variant).toBe('primary');
+
+    act(() => root.render(null));
+    renderQuestion();
+    expect(container.textContent).toContain('example.pdf');
+    expect(container.querySelectorAll('textarea')[1]?.value).toBe('Sample details');
+    expect([...container.querySelectorAll('button')].find((item) => item.textContent?.includes('Option B'))?.dataset.variant).toBe('primary');
+
+    renderQuestion({ ...questionRequest, id: 'other-question' }, 'other-agent');
+    expect(container.textContent).not.toContain('example.pdf');
+    expect(container.querySelectorAll('textarea')[1]?.value).toBe('');
+
+    renderQuestion();
+    await act(async () => button('submitAnswer').click());
+    expect(onDecide).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      kind: 'answer',
+      callId: 'sample-question',
+      answers: ['Option B', 'Sample details'],
+      files: [{ name: 'example.pdf', path: '/sample/example.pdf' }],
+    }));
+    expect(getQuestionDraft(questionDraftKey('sample-agent', 'sample-question'))).toEqual([]);
+    expect(container.textContent).not.toContain('example.pdf');
+    expect([...container.querySelectorAll('textarea')].map((item) => item.value)).toEqual(['', '']);
+  });
+
 });
 
 describe('plan modification feedback', () => {

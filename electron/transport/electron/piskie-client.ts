@@ -403,6 +403,7 @@ export function createElectronPiskieClient(options: {
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),
       },
       workspace: {
+        defaultPath: () => request(DESKTOP_OPERATIONS.defaultWorkspacePath),
         info: (workspace) => request(DESKTOP_OPERATIONS.workspaceInfo, workspace),
         switchBranch: (workspace, branch) => request(DESKTOP_OPERATIONS.switchWorkspaceBranch, workspace, branch),
         createBranch: (workspace, branch, base) => request(DESKTOP_OPERATIONS.createWorkspaceBranch, workspace, branch, base),

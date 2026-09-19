@@ -50,7 +50,8 @@ import styles from './shell/shell.module.css';
 
 const ConsoleShellView: React.FC = () => {
   const { t } = useTranslation();
-  const shell = useConsoleShell();
+  const [defaultWorkspacePath, setDefaultWorkspacePath] = useState<string>();
+  const shell = useConsoleShell(defaultWorkspacePath);
   const welcomeVersion = useComposerDraftVersion(WELCOME_DRAFT_KEY);
   const hasActiveSession = shell.selectedAgentId !== null;
   const renderedMode = hasActiveSession ? shell.mode : 'thread';
@@ -58,6 +59,16 @@ const ConsoleShellView: React.FC = () => {
   const taskDefinitions = useTaskDefinitionRepository((store) => store.definitions);
   const taskDefinitionsReady = useTaskDefinitionRepository((store) => store.phase === 'ready');
   const taskDefinitionError = useTaskDefinitionRepository((store) => store.error);
+
+  useEffect(() => {
+    let active = true;
+    void window.piskie.desktop.workspace.defaultPath().then((workspace) => {
+      if (active) setDefaultWorkspacePath(workspace);
+    }).catch((error) => {
+      console.error('Failed to resolve the default workspace path', error);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     void runtime.taskDefinitions.refresh();
@@ -235,6 +246,7 @@ const ConsoleShellView: React.FC = () => {
   const shared = {
     sessions: shell.sessions,
     history: shell.history,
+    defaultWorkspacePath: shell.defaultWorkspacePath,
     selectedAgentId: shell.selectedAgentId,
     onSelectSession: shell.selectSession,
     onSelectHistory: shell.openHistory,

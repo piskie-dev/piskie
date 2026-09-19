@@ -196,6 +196,29 @@ describe('workspace navigation', () => {
     expect(props.onNewSessionIn).toHaveBeenLastCalledWith('/sample/workspace');
   });
 
+  it('merges legacy omitted and explicit default paths while preserving the default group identity', async () => {
+    const defaultWorkspacePath = '/sample/runtime/workspace';
+    useUIStore.setState({
+      expandedWorkspaceGroups: [defaultWorkspacePath],
+      workspaceGroupOrder: [defaultWorkspacePath, '', '/sample/project'],
+    });
+    await render({
+      defaultWorkspacePath,
+      history: [
+        history('legacy'),
+        history('current', defaultWorkspacePath),
+        history('project', '/sample/project'),
+      ],
+    });
+
+    expect(groupNames()).toEqual([defaultLabel, 'project']);
+    expect(useUIStore.getState().workspaceGroupOrder).toEqual(['', '/sample/project']);
+    expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['']);
+    expect(rowCount()).toBe(2);
+    await click('在 默认工作区 新建会话');
+    expect(props.onNewSessionIn).toHaveBeenLastCalledWith(undefined);
+  });
+
   it('waits for full history before saving the initial order, with all groups closed', async () => {
     historyState.ready = false;
     await render({ history: [history('beta', '/sample/beta')] });

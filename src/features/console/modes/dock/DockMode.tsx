@@ -33,6 +33,7 @@ import styles from './workbench.module.css';
 export interface DockModeProps {
   readonly sessions: readonly SessionRow[];
   readonly history: readonly HistoryRow[];
+  readonly defaultWorkspacePath?: string;
   readonly selectedAgentId: string | null;
   readonly onSelectSession: (agentId: string) => void;
   readonly onSelectHistory: (row: HistoryRow) => void;
@@ -57,6 +58,7 @@ export const DockMode = memo<DockModeProps>(
   ({
     sessions,
     history,
+    defaultWorkspacePath,
     selectedAgentId,
     onSelectSession,
     onSelectHistory,
@@ -149,6 +151,7 @@ export const DockMode = memo<DockModeProps>(
           <ThreadSidebar
             sessions={sessions}
             history={history}
+            defaultWorkspacePath={defaultWorkspacePath}
             selectedAgentId={selectedAgentId}
             collapsed={sessionsCollapsed}
             onToggleCollapsed={onToggleSessions}

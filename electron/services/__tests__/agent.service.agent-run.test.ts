@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentControlStateChanged } from '../../agent/observations.js';
+import type { AgentRunConfig } from '../../../shared/types/index.js';
 
 const h = vi.hoisted(() => {
   let sequence = 0;
@@ -271,6 +272,27 @@ describe('AgentService AgentRun start and resume', () => {
     expect(stored).not.toHaveProperty('definitionId');
   });
 
+  it('materializes the default workspace for new AgentRuns without mutating the launch input', async () => {
+    service.createAgentCandidate = () => 'AAAAAA';
+    const input = {
+      ...launch('Default workspace run'),
+      runConfig: {
+        name: 'Default workspace run',
+        description: 'Default workspace run description',
+        promptTemplate: 'Default workspace run prompt',
+      },
+    };
+
+    const state = await agentService.startAgent(input);
+
+    expect(input.runConfig).not.toHaveProperty('workspace');
+    expect(state.runConfig.workspace).toBe('/tmp/agent-service-agent-run-test/workspace');
+    expect(service.conversationStore.readHeader('ag-AAAAAA').runConfig.workspace)
+      .toBe('/tmp/agent-service-agent-run-test/workspace');
+    expect(h.instances[0]!.config.options.runConfig.workspace)
+      .toBe('/tmp/agent-service-agent-run-test/workspace');
+  });
+
   it('resumes from Header and disk artifacts using the same agentId', async () => {
     service.conversationStore.writeHeader(
       'main-history',
@@ -288,6 +310,20 @@ describe('AgentService AgentRun start and resume', () => {
     expect(h.instances).toHaveLength(1);
     expect(h.instances[0]!.prepareCalls).toBe(1);
     expect(h.instances[0]!.startCalls).toBe(0);
+  });
+
+  it('keeps a legacy omitted workspace unchanged when resuming', async () => {
+    const legacyConfig: AgentRunConfig = { ...runConfig('Legacy default') };
+    delete legacyConfig.workspace;
+    const legacyHeader = header('legacy-default', legacyConfig);
+    service.conversationStore.writeHeader('legacy-default', legacyHeader);
+
+    const state = await agentService.resumeAgent('legacy-default', { autoStart: false });
+
+    expect(state?.runConfig).not.toHaveProperty('workspace');
+    expect(h.instances[0]!.config.options.runConfig).not.toHaveProperty('workspace');
+    expect(service.conversationStore.readHeader('legacy-default').runConfig)
+      .not.toHaveProperty('workspace');
   });
 
   it('resumes Browser Skill with the persisted mode and dedicated AgentSpec', async () => {
@@ -386,7 +422,7 @@ function runConfig(name: string) {
 
 function header(
   agentId: string,
-  config: ReturnType<typeof runConfig>,
+  config: AgentRunConfig,
   agentSpec = 'director',
   modeId = 'normal',
   approvalMode = 'confirm',

@@ -11,7 +11,8 @@ import { resolveTaskDescription, type SessionRow } from '../sessionRow';
 import { buildThreadRows, type ThreadRow } from '../threadRows';
 import {
   filterWorkspaceGroups, groupByWorkspace, moveWorkspaceGroup,
-  orderWorkspaceGroups, reconcileWorkspaceOrder, workspaceLabel,
+  normalizeWorkspaceGroupKeys, orderWorkspaceGroups, reconcileWorkspaceOrder,
+  workspaceGroupKey, workspaceLabel,
 } from '../workspaceGroups';
 import { rawText } from '../presentationText';
 
@@ -64,6 +65,23 @@ describe('groupByWorkspace', () => {
     expect(groups.map((group) => group.label).sort()).toEqual(['default'.replace('default', '默认工作区'), 'p'].sort());
   });
 
+  it('把旧缺省值和真实默认路径归入同一个默认组', () => {
+    const defaultPath = '/sample/runtime/workspace';
+    const groups = groupByWorkspace([
+      row({ agentId: 'legacy' }),
+      row({ agentId: 'current', workspace: defaultPath }),
+      row({ agentId: 'project', workspace: '/sample/project' }),
+    ], DEFAULT_WORKSPACE, defaultPath);
+
+    expect(groups.map((group) => group.key).sort()).toEqual(['', '/sample/project']);
+    expect(groups.find((group) => group.key === '')).toMatchObject({
+      label: DEFAULT_WORKSPACE,
+      path: undefined,
+    });
+    expect(groups.find((group) => group.key === '')?.rows.map((item) => item.agentId).sort())
+      .toEqual(['current', 'legacy']);
+  });
+
   it('组间按组内最近活跃倒序', () => {
     const groups = groupByWorkspace([
       row({ agentId: 'old', workspace: '/w/old', createdAt: '2026-07-01T00:00:00.000Z' }),
@@ -107,6 +125,25 @@ describe('workspace order and search', () => {
     const refreshed = [...groups()].reverse();
     expect(reconcileWorkspaceOrder(moved, refreshed)).toBe(moved);
     expect(orderWorkspaceGroups(refreshed, moved).map((group) => group.key)).toEqual(moved);
+  });
+
+  it('normalizes persisted default-path keys without duplicating the semantic default key', () => {
+    const defaultPath = '/sample/runtime/workspace';
+    expect(workspaceGroupKey(defaultPath, defaultPath)).toBe('');
+    expect(workspaceGroupKey(undefined, defaultPath)).toBe('');
+    expect(workspaceGroupKey('/sample/project', defaultPath)).toBe('/sample/project');
+    expect(normalizeWorkspaceGroupKeys(
+      [defaultPath, '/sample/project', ''],
+      defaultPath,
+    )).toEqual(['', '/sample/project']);
+    expect(reconcileWorkspaceOrder(
+      [defaultPath, '/sample/project', ''],
+      groupByWorkspace([
+        row({ agentId: 'default', workspace: defaultPath }),
+        row({ agentId: 'project', workspace: '/sample/project' }),
+      ], DEFAULT_WORKSPACE, defaultPath),
+      defaultPath,
+    )).toEqual(['', '/sample/project']);
   });
 
   it('inserts before or after the target, including the default group', () => {

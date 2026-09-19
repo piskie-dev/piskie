@@ -84,6 +84,8 @@ GateOption.displayName = 'GateOption';
 export interface GateFeedbackProps {
   /** 与上方选项连续的键位序号；不传则不出键帽 */
   readonly ordinal?: number;
+  /** 自由回答等长文本场景显式开启；默认仍使用单行 input */
+  readonly multiline?: boolean;
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly onFocus?: () => void;
@@ -99,35 +101,51 @@ export interface GateFeedbackProps {
 }
 
 export const GateFeedback = memo<GateFeedbackProps>(
-  ({ ordinal, value, onChange, onFocus, onSubmit, onPaste, onDragOver, onDrop, placeholder, canSubmit, disabled, hideSend }) => {
+  ({ ordinal, multiline = false, value, onChange, onFocus, onSubmit, onPaste, onDragOver, onDrop, placeholder, canSubmit, disabled, hideSend }) => {
     const { t } = useTranslation();
     const onKeyDown = useCallback(
-      (event: React.KeyboardEvent<HTMLInputElement>) => {
+      (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         // 输入法组合中的回车不提交
-        if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+        if (event.key === 'Enter' && (!multiline || !event.shiftKey) && !event.nativeEvent.isComposing) {
           event.preventDefault();
           if (canSubmit) onSubmit();
         }
       },
-      [canSubmit, onSubmit],
+      [canSubmit, multiline, onSubmit],
     );
 
     return (
-      <div className={styles.feedback}>
+      <div className={styles.feedback} data-multiline={multiline ? 'true' : undefined}>
         {ordinal !== undefined && <kbd className={styles.key}>{ordinal}</kbd>}
-        <input
-          type="text"
-          className={styles.feedbackInput}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocus}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          placeholder={placeholder}
-          disabled={disabled}
-        />
+        {multiline ? (
+          <textarea
+            className={`${styles.feedbackInput} ${styles.feedbackTextarea}`}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onFocus={onFocus}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+          />
+        ) : (
+          <input
+            type="text"
+            className={styles.feedbackInput}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onFocus={onFocus}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            placeholder={placeholder}
+            disabled={disabled}
+          />
+        )}
         {!hideSend && (
           <button
             type="button"

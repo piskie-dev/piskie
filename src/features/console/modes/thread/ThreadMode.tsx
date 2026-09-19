@@ -42,6 +42,7 @@ import styles from './threadview.module.css';
 export interface ThreadModeProps {
   readonly sessions: readonly SessionRow[];
   readonly history: readonly HistoryRow[];
+  readonly defaultWorkspacePath?: string;
   readonly selectedAgentId: string | null;
   readonly onSelectSession: (agentId: string) => void;
   readonly onSelectHistory: (row: HistoryRow) => void;
@@ -66,6 +67,7 @@ export const ThreadMode = memo<ThreadModeProps>(
   ({
     sessions,
     history,
+    defaultWorkspacePath,
     selectedAgentId,
     onSelectSession,
     onSelectHistory,
@@ -277,6 +279,7 @@ export const ThreadMode = memo<ThreadModeProps>(
           <ThreadSidebar
             sessions={sessions}
             history={history}
+            defaultWorkspacePath={defaultWorkspacePath}
             selectedAgentId={selectedAgentId}
             collapsed={sessionsCollapsed}
             onToggleCollapsed={onToggleSessions}

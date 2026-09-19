@@ -23,6 +23,7 @@ export type { GateDecision, GateImage, GateRequest } from './gates/contract';
 export type { GateSource } from './gates/resolve';
 
 export interface GateProps {
+  readonly agentId: string;
   readonly request: GateRequest;
   /** 停止中 / 等待中时锁门 */
   readonly disabled?: boolean;
@@ -34,7 +35,7 @@ export interface GateProps {
 function noop() {}
 
 export const Gate = memo<GateProps>(
-  ({ request, disabled, onDecide, onViewDiff, onPreviewImage }) => {
+  ({ agentId, request, disabled, onDecide, onViewDiff, onPreviewImage }) => {
     const common = { disabled, onDecide, onPreviewImage };
 
     switch (request.kind) {
@@ -51,7 +52,7 @@ export const Gate = memo<GateProps>(
         return <PlanGate key={request.call.id} request={request} {...common} />;
 
       case 'question':
-        return <QuestionGate request={request} {...common} />;
+        return <QuestionGate key={`${agentId}:${request.id}`} agentId={agentId} request={request} {...common} />;
     }
   },
 );

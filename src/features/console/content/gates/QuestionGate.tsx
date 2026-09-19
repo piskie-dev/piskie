@@ -10,19 +10,25 @@
  * 提交序列化走 `serializeAskUserAnswers`（格式是与模型的约定，改它等于改协议）。
  */
 
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback } from 'react';
 import { CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { AIQuestionItem } from '../../../../../shared/types';
 import { serializeAskUserAnswers } from '../../../../utils/askUserAnswer';
 import { useAttachmentDraft } from '../../attachments';
+import {
+  questionDraftKey,
+  resetQuestionDraft,
+  useQuestionDraft,
+} from '../../data/question-drafts';
 import { EMPTY_DRAFT, isComplete, resolveItemAnswer, toggleSelection, type ItemDraft } from './answer';
 import type { GateCommonProps, GateRequest } from './contract';
 import { GateAttachments, GateFeedback, GateHeader, GateOption } from './parts';
 import styles from './gates.module.css';
 
 export interface QuestionGateProps extends GateCommonProps {
+  readonly agentId: string;
   readonly request: Extract<GateRequest, { kind: 'question' }>;
 }
 
@@ -91,6 +97,7 @@ const QuestionItem = memo<QuestionItemProps>(
 
           <GateFeedback
             ordinal={options.length > 0 ? options.length + 1 : undefined}
+            multiline
             value={draft.custom}
             onChange={(custom) => onChange({ ...draft, custom })}
             onSubmit={inlineSubmit ? inlineSubmit.onSubmit : onEnterSubmit}
@@ -110,13 +117,14 @@ const QuestionItem = memo<QuestionItemProps>(
 
 QuestionItem.displayName = 'QuestionItem';
 
-export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDecide, onPreviewImage }) => {
+export const QuestionGate = memo<QuestionGateProps>(({ agentId, request, disabled, onDecide, onPreviewImage }) => {
   const { t } = useTranslation();
   const { id, items } = request;
   const single = items.length === 1;
+  const draftKey = questionDraftKey(agentId, id);
 
-  const [drafts, setDrafts] = useState<readonly ItemDraft[]>(() => items.map(() => EMPTY_DRAFT));
-  const attachments = useAttachmentDraft();
+  const [drafts, setDrafts] = useQuestionDraft(draftKey, items.length);
+  const attachments = useAttachmentDraft(draftKey);
 
   const answers = items.map((item, index) => resolveItemAnswer(item, drafts[index] ?? EMPTY_DRAFT));
   const allAnswered = isComplete(answers);
@@ -133,14 +141,14 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
         answers: [...final],
         images,
       }));
-      if (ok) attachments.clear();
+      if (ok) resetQuestionDraft(draftKey);
     },
-    [answers, attachments, disabled, id, items, onDecide],
+    [answers, attachments, disabled, draftKey, id, items, onDecide],
   );
 
   const updateDraft = useCallback((index: number, draft: ItemDraft) => {
     setDrafts((previous) => previous.map((candidate, i) => (i === index ? draft : candidate)));
-  }, []);
+  }, [setDrafts]);
 
   return (
     <div className={styles.gate} data-disabled={disabled ? 'true' : undefined}>
@@ -158,11 +166,11 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
             index={index}
             total={items.length}
             draft={drafts[index] ?? EMPTY_DRAFT}
-            disabled={disabled}
+            disabled={disabled || attachments.submitting}
             onChange={(draft) => updateDraft(index, draft)}
             onPickSubmit={single ? (answer) => void submit([answer]) : undefined}
             onEnterSubmit={() => void submit()}
-            inlineSubmit={single ? { enabled: allAnswered, onSubmit: () => void submit() } : undefined}
+            inlineSubmit={single ? { enabled: allAnswered && !attachments.submitting, onSubmit: () => void submit() } : undefined}
             onPaste={(event) => attachments.handlePaste(event, (custom) => updateDraft(index, { ...(drafts[index] ?? EMPTY_DRAFT), custom }))}
             onDragOver={attachments.handleDragOver}
             onDrop={(event) => attachments.handleDrop(event, (custom) => updateDraft(index, { ...(drafts[index] ?? EMPTY_DRAFT), custom }))}
@@ -184,7 +192,7 @@ export const QuestionGate = memo<QuestionGateProps>(({ request, disabled, onDeci
             type="button"
             className={styles.submit}
             onClick={() => void submit()}
-            disabled={!allAnswered || disabled}
+            disabled={!allAnswered || disabled || attachments.submitting}
           >
             {t('sessionWorkbenchUi.gate.submitAnswer')}
           </button>
