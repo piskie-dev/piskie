@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import type { WorkspaceGitHead, WorkspaceInfo } from '../../../../../../shared/electron-contracts/desktop';
 import { WelcomeComposer } from '../WelcomeComposer';
 import { ConversationComposer } from '../ConversationComposer';
-import { clearAllComposerDrafts, useComposerDraftStore, WELCOME_DRAFT_KEY } from '../../../data/composer-drafts';
+import { clearAllComposerDrafts, composerDraftKey, useComposerDraftStore, WELCOME_DRAFT_KEY } from '../../../data/composer-drafts';
 
 vi.mock('../../../../../components/agent-params/ApprovalModeSelector', () => ({ default: () => null }));
 vi.mock('../../../../../components/agent-params/ModeSelector', () => ({ default: () => null }));
@@ -30,12 +30,14 @@ const createBranch = vi.fn<(workspace: string, branch: string, base: WorkspaceGi
 const commitId = 'a'.repeat(40);
 const chooseFolder = vi.fn();
 const useDefault = vi.fn();
+const submit = vi.fn().mockResolvedValue(true);
 let root: Root;
 let container: HTMLDivElement;
 let workspace: string | undefined;
 let head: string;
 let branches: string[];
 let dirtyFileCount: number;
+let welcomeText: string;
 let variant: 'welcome' | 'main' | 'worker';
 const workspaceInfo = (selected = workspace ?? '/sample/default-workspace'): WorkspaceInfo => ({
   path: selected,
@@ -44,8 +46,8 @@ const workspaceInfo = (selected = workspace ?? '/sample/default-workspace'): Wor
 
 function Harness() {
   if (variant === 'welcome') return createElement(WelcomeComposer, {
-    value: '', onChange: vi.fn(), skills: [], onSkillsChange: vi.fn(), draftIdentity: 'sample-welcome',
-    onSubmit: vi.fn(), onPaste: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), placeholder: 'Sample task', images: [], files: [],
+    value: welcomeText, onChange: vi.fn(), skills: [], onSkillsChange: vi.fn(), draftIdentity: 'sample-welcome',
+    onSubmit: submit, onPaste: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), placeholder: 'Sample task', images: [], files: [],
     onRemoveAttachment: vi.fn(), onModelChange: vi.fn(), modeId: 'normal', onModeChange: vi.fn(),
     approvalMode: 'confirm', onApprovalModeChange: vi.fn(), workspacePath: workspace,
     onSelectWorkspace: chooseFolder, onUseDefaultWorkspace: useDefault, environmentIds: [], onEnvironmentIdsChange: vi.fn(),
@@ -54,7 +56,7 @@ function Harness() {
     agentId: 'sample-session', workerId: variant === 'worker' ? 'sample-worker' : undefined, workspace,
     targetName: 'Sample target', model: 'example::model', reasoningOverride: { kind: 'provider-default' },
     approvalMode: 'confirm', sourceVersion: 0, canPause: false,
-    onSubmit: vi.fn().mockResolvedValue(true), onInterrupt: vi.fn(),
+    onSubmit: submit, onInterrupt: vi.fn(),
   });
 }
 
@@ -90,6 +92,7 @@ beforeEach(() => {
   info.mockReset().mockImplementation(async (selected) => workspaceInfo(selected));
   switchBranch.mockReset().mockImplementation(async (selected, branch) => { head = branch; return workspaceInfo(selected); });
   chooseFolder.mockReset(); useDefault.mockReset();
+  submit.mockReset().mockResolvedValue(true); welcomeText = '';
   createBranch.mockReset().mockImplementation(async (selected, branch) => { head = branch; branches.push(branch); return workspaceInfo(selected); });
   head = 'main'; branches = ['feature/sample', 'main']; dirtyFileCount = 3; workspace = '/sample/session-directory'; variant = 'main';
   Object.defineProperty(window, 'piskie', { configurable: true, value: {
@@ -140,9 +143,39 @@ describe('workspace information in composers', () => {
     expect(container.textContent).toContain('工作区未知'); expect(info).not.toHaveBeenCalled(); expect(branchButton()).toBeNull();
   });
 
-  it('hides branch controls for a non-Git directory', async () => {
-    info.mockResolvedValue({ path: workspace!, git: null }); await render();
-    expect(container.querySelector('[title="/sample/session-directory"]')).not.toBeNull(); expect(branchButton()).toBeNull();
+  it.each((['welcome', 'main', 'worker'] as const).flatMap((mode) => [
+    { mode, state: 'unavailable' }, { mode, state: 'pending' },
+  ]))('allows $mode tasks when Git information is $state without a warning', async ({ mode, state }) => {
+    variant = mode;
+    const task = 'Help organize the files in this folder';
+    if (mode === 'welcome') welcomeText = task;
+    else useComposerDraftStore.getState().setDraft(composerDraftKey('sample-session', mode === 'worker' ? 'sample-worker' : undefined), task);
+    const plainFolder: WorkspaceInfo = { path: workspace!, git: null };
+    let finish!: (value: WorkspaceInfo) => void;
+    if (state === 'pending') info.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    else info.mockResolvedValue(plainFolder);
+    await render();
+    const directory = container.querySelector<HTMLElement>('[title="/sample/session-directory"]')!;
+    expect(directory).not.toBeNull(); expect(branchButton()).toBeNull();
+    expect(info).toHaveBeenCalledWith(workspace);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toContain('重试');
+    if (mode === 'welcome') {
+      await click(directory);
+      const choose = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => item.textContent === '选择文件夹')!;
+      expect(choose.disabled).toBe(false);
+      await click(choose); expect(chooseFolder).toHaveBeenCalledOnce();
+    }
+    const send = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')!;
+    expect(send.disabled).toBe(false);
+    await click(send);
+    expect(submit).toHaveBeenCalledOnce();
+    if (mode !== 'welcome') expect(submit).toHaveBeenCalledWith(expect.objectContaining({ text: task }));
+    if (state === 'pending') {
+      await act(async () => finish(plainFolder));
+      expect(branchButton()).toBeNull(); expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(submit).toHaveBeenCalledOnce();
+    }
   });
 
   it('refreshes on opening, searches local branches, marks current and displays a successful switch', async () => {

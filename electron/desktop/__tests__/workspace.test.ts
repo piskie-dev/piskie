@@ -1,10 +1,15 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWorkspaceBranch, readWorkspaceInfo, switchWorkspaceBranch } from '../capabilities/workspace.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 const exec = promisify(execFile);
 let root: string;
@@ -30,9 +35,52 @@ beforeEach(async () => {
   await mkdir(repository);
   await git('init', '--initial-branch=main');
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  vi.mocked(stat).mockReset();
+  await rm(root, { recursive: true, force: true });
+});
 
 describe('desktop workspace Git operations', () => {
+  it.each(['ordinary', 'repository'] as const)('keeps an existing %s directory usable without Git and detects Git again after recovery', async (kind) => {
+    const workspace = kind === 'repository' ? repository : path.join(root, 'ordinary folder');
+    if (kind === 'ordinary') await mkdir(workspace);
+    vi.stubEnv('PATH', root);
+
+    await expect(readWorkspaceInfo(workspace)).resolves.toEqual({ path: workspace, git: null });
+    await writeFile(path.join(workspace, 'sample.txt'), 'Available without Git\n');
+    expect(await readFile(path.join(workspace, 'sample.txt'), 'utf8')).toBe('Available without Git\n');
+
+    vi.unstubAllEnvs();
+    const recovered = await readWorkspaceInfo(workspace);
+    expect(recovered.error).toBeUndefined();
+    if (kind === 'repository') expect(recovered.git?.head).toEqual({ kind: 'unborn', name: 'main' });
+    else expect(recovered.git).toBeNull();
+  });
+
+  it('still reports a workspace removed after the directory check', async () => {
+    const metadata = await stat(repository);
+    await rm(repository, { recursive: true });
+    const directoryCheck = vi.mocked(stat).mockClear().mockResolvedValueOnce(metadata);
+
+    await expect(readWorkspaceInfo(repository)).resolves.toMatchObject({
+      path: repository, git: null, error: expect.stringContaining('ENOENT'),
+    });
+    expect(directoryCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves cancellation while Git is unavailable', async () => {
+    const controller = new AbortController();
+    const metadata = await stat(repository);
+    vi.stubEnv('PATH', root);
+    vi.mocked(stat).mockImplementationOnce(async () => {
+      controller.abort(new Error('Workspace read cancelled'));
+      return metadata;
+    });
+
+    await expect(readWorkspaceInfo(repository, controller.signal)).rejects.toThrow('Workspace read cancelled');
+  });
+
   it('recognizes repository subdirectories and returns only existing local branches', async () => {
     await commit();
     await git('branch', 'feature/示例');
