@@ -558,7 +558,7 @@ export class SubagentModule implements AgentModule {
         const activeOwner = this.findActiveBrowserBindingOwner(browserBinding.userDataId);
         if (activeOwner) {
           throw new Error(
-            `浏览器 Profile ${browserBinding.userDataId} 当前仍由 ${activeOwner} 使用，请先停止该 Worker`
+            `该浏览器环境已由 Worker ${activeOwner} 使用。`
           );
         }
       }

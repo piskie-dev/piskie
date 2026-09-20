@@ -14,7 +14,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import type { ComposerSkillOption } from '../../../../../../shared/types/skill';
 import { WelcomeComposer } from '../WelcomeComposer';
 import { ConversationComposer } from '../ConversationComposer';
-import { clearAllComposerDrafts, composerDraftKey, useComposerDraftStore } from '../../../data/composer-drafts';
+import {
+  clearAllComposerDrafts,
+  composerDraftKey,
+  useComposerDraftStore,
+  WELCOME_DRAFT_KEY,
+} from '../../../data/composer-drafts';
 
 vi.mock('../../../../../components/agent-params/ApprovalModeSelector', () => ({ default: () => null }));
 vi.mock('../../../../../components/agent-params/ModeSelector', () => ({ default: () => null }));
@@ -42,6 +47,7 @@ const welcomeRef = React.createRef<{ setText: (text: string) => void }>();
 let workspace: string | undefined;
 let mode: 'welcome' | 'main' | 'worker';
 const draftKey = () => composerDraftKey('session-example', mode === 'worker' ? 'worker-example' : undefined);
+const historyKey = () => mode === 'welcome' ? WELCOME_DRAFT_KEY : draftKey();
 
 function Harness() {
   const [text, setText] = useState('');
@@ -212,6 +218,7 @@ describe.each(['welcome', 'main', 'worker'] as const)('%s skill input', (variant
   });
 
   it('closes on Escape without sending or losing input, and requires a fresh slash to reopen', async () => {
+    act(() => useComposerDraftStore.getState().recordHistory(historyKey(), 'Previous request'));
     await type('/al');
     const position = input().selectionStart;
     await key('Escape');
@@ -224,6 +231,7 @@ describe.each(['welcome', 'main', 'worker'] as const)('%s skill input', (variant
     await type(' /');
     await key('ArrowUp');
     expect(rows()[2]!.getAttribute('aria-selected')).toBe('true');
+    expect(input().value).toContain('/');
     await key('ArrowDown');
     expect(rows()[0]!.getAttribute('aria-selected')).toBe('true');
   });
@@ -304,6 +312,83 @@ describe.each(['welcome', 'main', 'worker'] as const)('%s skill input', (variant
     await type(' /');
     expect(availableSkills).toHaveBeenLastCalledWith('/workspace/example-other');
     expect(rows()[0]!.textContent).toContain('new-skill');
+  });
+});
+
+describe.each(['welcome', 'main', 'worker'] as const)('%s input history', (variant) => {
+  beforeEach(async () => {
+    mode = variant;
+    const { recordHistory } = useComposerDraftStore.getState();
+    recordHistory(historyKey(), 'First request');
+    recordHistory(historyKey(), 'Second request');
+    await render();
+    await act(async () => input().focus());
+  });
+
+  it('walks backward and forward, then restores the pending draft', async () => {
+    await restore('Draft in progress');
+    await caret(input().value.length);
+
+    expect((await key('ArrowUp')).defaultPrevented).toBe(true);
+    expect(input().value).toBe('Second request');
+    await key('ArrowUp');
+    expect(input().value).toBe('First request');
+    await key('ArrowUp');
+    expect(input().value).toBe('First request');
+    await key('ArrowDown');
+    expect(input().value).toBe('Second request');
+    await key('ArrowDown');
+    expect(input().value).toBe('Draft in progress');
+    expect((await key('ArrowDown')).defaultPrevented).toBe(false);
+  });
+
+  it('preserves native multiline, selection, modifier, and IME behavior', async () => {
+    await restore('First line\nSecond line');
+    await caret(input().value.length);
+    expect((await key('ArrowUp')).defaultPrevented).toBe(false);
+    expect(input().value).toBe('First line\nSecond line');
+
+    await caret(3);
+    expect((await key('ArrowUp', { shiftKey: true })).defaultPrevented).toBe(false);
+    expect((await key('ArrowUp', { ctrlKey: true })).defaultPrevented).toBe(false);
+    await caret(0, 3);
+    expect((await key('ArrowUp')).defaultPrevented).toBe(false);
+    await caret(0);
+    expect((await key('ArrowUp', { isComposing: true })).defaultPrevented).toBe(false);
+    expect(input().value).toBe('First line\nSecond line');
+  });
+
+  it('leaves history navigation after the recalled value is edited', async () => {
+    await caret(0);
+    await key('ArrowUp');
+    await type('!');
+
+    expect(input().value).toBe('Second request!');
+    expect((await key('ArrowDown')).defaultPrevented).toBe(false);
+    expect(input().value).toBe('Second request!');
+  });
+
+  it('keeps multiline cursor movement native while history navigation is active', async () => {
+    await act(async () => useComposerDraftStore.setState((state) => ({
+      histories: { ...state.histories, [historyKey()]: ['Older request', 'Top line\nBottom line'] },
+    })));
+    await caret(0);
+    await key('ArrowUp');
+    expect(input().value).toBe('Top line\nBottom line');
+
+    expect((await key('ArrowUp')).defaultPrevented).toBe(false);
+    expect(input().value).toBe('Top line\nBottom line');
+    await caret(0);
+    await key('ArrowUp');
+    expect(input().value).toBe('Older request');
+    await key('ArrowDown');
+    expect(input().value).toBe('Top line\nBottom line');
+
+    await caret(0);
+    expect((await key('ArrowDown')).defaultPrevented).toBe(false);
+    await caret(input().value.length);
+    await key('ArrowDown');
+    expect(input().value).toBe('');
   });
 });
 

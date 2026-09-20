@@ -28,6 +28,7 @@ export interface ComposerAttachmentState {
 }
 
 export const WELCOME_DRAFT_KEY = 'welcome';
+export const COMPOSER_HISTORY_LIMIT = 50;
 
 /** 新增输入区选项在这里声明默认值，并通过 patchSettings 更新，即可共享保留/重置规则。 */
 export interface ComposerDraftSettings {
@@ -62,6 +63,7 @@ const EMPTY_ATTACHMENTS: ComposerAttachmentState = Object.freeze({
 });
 
 const EMPTY_SKILLS: readonly string[] = Object.freeze([]);
+const EMPTY_HISTORY: readonly string[] = Object.freeze([]);
 
 function emptyDraft(): ComposerDraftValue {
   return { text: '', edit: {}, skills: EMPTY_SKILLS, attachments: EMPTY_ATTACHMENTS };
@@ -81,12 +83,14 @@ function disposeImages(images: readonly AttachmentImage[]): void {
 export interface ComposerDraftStore {
   readonly drafts: Readonly<Record<string, ComposerDraftValue>>;
   readonly versions: Readonly<Record<string, number>>;
+  readonly histories: Readonly<Record<string, readonly string[]>>;
   /** 只记录页面审批控件的主动选择，驻留内存，软件重启后恢复 confirm。 */
   readonly defaults: ComposerDraftSettings;
   readonly selectApprovalMode: (mode: ApprovalMode) => void;
   readonly patchSettings: (key: string, patch: Partial<ComposerDraftSettings>, version: number) => void;
   readonly resetDraft: (key: string, settings?: Partial<ComposerDraftSettings>) => void;
   readonly setDraft: (key: string, text: string) => void;
+  readonly recordHistory: (key: string, text: string) => void;
   readonly setSkills: (key: string, skills: readonly string[]) => void;
   readonly appendFiles: (key: string, additions: readonly AttachmentFile[]) => void;
   readonly removeAttachment: (key: string, id: string) => void;
@@ -96,6 +100,7 @@ export interface ComposerDraftStore {
 export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
   drafts: {},
   versions: {},
+  histories: {},
   defaults: DEFAULT_COMPOSER_SETTINGS,
 
   selectApprovalMode: (approvalMode) => set((state) => ({
@@ -142,6 +147,18 @@ export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
       drafts[key] = { ...current, text, edit: {} };
     }
     return { drafts };
+  }),
+
+  recordHistory: (key, text) => set((state) => {
+    if (!text.trim()) return state;
+    const current = state.histories[key] ?? EMPTY_HISTORY;
+    if (current.at(-1) === text) return state;
+    return {
+      histories: {
+        ...state.histories,
+        [key]: [...current, text].slice(-COMPOSER_HISTORY_LIMIT),
+      },
+    };
   }),
 
   setSkills: (key, names) => set((state) => {
@@ -268,6 +285,7 @@ export function clearAllComposerDrafts(): void {
   useComposerDraftStore.setState({
     drafts: {},
     versions: Object.fromEntries([...keys].map((key) => [key, (state.versions[key] ?? 0) + 1])),
+    histories: {},
   });
 }
 
@@ -280,6 +298,15 @@ export function clearAgentComposerDrafts(agentId: string): void {
   for (const key of Object.keys(state.drafts)) {
     if (key === composerDraftKey(agentId) || key.startsWith(`worker:${agentId}:`)) state.resetDraft(key);
   }
+  const histories = { ...useComposerDraftStore.getState().histories };
+  let changed = false;
+  for (const key of Object.keys(histories)) {
+    if (key === composerDraftKey(agentId) || key.startsWith(`worker:${agentId}:`)) {
+      delete histories[key];
+      changed = true;
+    }
+  }
+  if (changed) useComposerDraftStore.setState({ histories });
 }
 
 let nextAttachment = 0;
@@ -567,6 +594,7 @@ export async function submitComposerDraft(
   const draft = useComposerDraftStore.getState().drafts[key] ?? emptyDraft();
   const version = getComposerDraftVersion(key);
   const ok = await withAttachmentSubmission(key, (images, files) => submit(draft, images, files));
+  if (ok) useComposerDraftStore.getState().recordHistory(key, draft.text);
   if (ok && getComposerDraftVersion(key) === version && useComposerDraftStore.getState().drafts[key]?.edit === draft.edit) {
     useComposerDraftStore.getState().resetDraft(key);
   }

@@ -363,10 +363,13 @@ describe('welcome composer lifecycle', () => {
     expect(composer().value).toBe('Inspect the sample');
     expect(composer().images).toHaveLength(1);
     expect(composer().skills).toEqual(['sample-guide', 'sample-table']);
+    expect(useComposerDraftStore.getState().histories[WELCOME_DRAFT_KEY]).toBeUndefined();
 
     onStart.mockResolvedValue({ kind: 'started', agentId: 'agent-a' });
     await act(async () => { await composer().onSubmit(); });
     expectFresh();
+    expect(useComposerDraftStore.getState().histories[WELCOME_DRAFT_KEY]).toEqual(['Inspect the sample']);
+    expect(useComposerDraftStore.getState().histories[composerDraftKey('agent-a')]).toEqual(['Inspect the sample']);
   });
 
   it('does not apply a late folder selection or successful submission to a new draft', async () => {

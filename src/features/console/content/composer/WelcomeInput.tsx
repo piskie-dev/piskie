@@ -4,6 +4,7 @@ import { formatModelReference, useInferenceStore } from '../../../../store/infer
 import { useAttachmentDraft } from '../../attachments';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 import {
+  composerDraftKey,
   submitComposerDraft,
   useComposerDraft,
   useComposerDraftSettings,
@@ -77,6 +78,9 @@ export const WelcomeInput: React.FC<{
             mcpPrewarmToken,
           });
           started = outcome.kind === 'started';
+          if (outcome.kind === 'started') {
+            useComposerDraftStore.getState().recordHistory(composerDraftKey(outcome.agentId), snapshot.text);
+          }
           return started;
         } finally { prewarm.settle(mcpPrewarmToken, started); }
       });

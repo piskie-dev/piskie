@@ -52,6 +52,7 @@ import { ModelPicker } from './ModelPicker';
 import { useComposerSettings } from './useComposerSettings';
 import { SkillTags } from '../SkillTags';
 import { SkillPicker } from './SkillPicker';
+import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import { WorkspaceBar } from './WorkspaceBar';
 import styles from './conversationComposer.module.css';
@@ -215,8 +216,14 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     const [draft, setDraft] = useComposerDraft(draftKey);
     const [skills, setSkills] = useComposerSkills(draftKey);
     const version = useComposerDraftVersion(draftKey);
+    const history = useComposerHistory({
+      draftKey,
+      draftIdentity: `${draftKey}:${version}`,
+      value: draft,
+      onChange: setDraft,
+    });
     const skillComposer = useSkillComposer({
-      value: draft, onChange: setDraft, skills, onSkillsChange: setSkills, workspace,
+      value: draft, onChange: history.onChange, skills, onSkillsChange: setSkills, workspace,
       draftIdentity: `${draftKey}:${version}`,
       enabled: !workerId || workspace !== undefined,
     });
@@ -275,6 +282,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (onSkillKeyDown(event)) return;
+        if (history.onKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           void submit();
@@ -287,7 +295,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           event.currentTarget.blur();
         }
       },
-      [onSkillKeyDown, submit],
+      [history, onSkillKeyDown, submit],
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
@@ -360,8 +368,9 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             aria-label={t('sessionWorkbenchUi.composer.instructionPlaceholder', { name: targetName })}
             className={styles.textarea}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => history.onChange(event.target.value)}
             onKeyDown={onKeyDown}
+            onPointerDown={history.resetNavigation}
             onPaste={(event) => { skillComposer.onPasteOrDrop(); attachments.handlePaste(event); }}
             onDragOver={attachments.handleDragOver}
             onDrop={(event) => { skillComposer.onPasteOrDrop(); attachments.handleDrop(event); }}

@@ -25,10 +25,12 @@ import { ModelReasoningControl } from '../../../../components/shared';
 import { getAvailableModelOptions, useInferenceStore } from '../../../../store/inferenceStore';
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
 import type { PresentationText } from '../../../../i18n/presentationText';
+import { WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { WorkspaceBar } from './WorkspaceBar';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { SkillTags } from '../SkillTags';
 import { SkillPicker } from './SkillPicker';
+import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import styles from './welcomeComposer.module.css';
 
@@ -105,7 +107,10 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
       [aiModels, availableAiTargets, inferenceConfig],
     );
 
-    const skillComposer = useSkillComposer({ value, onChange, skills, onSkillsChange, workspace: workspacePath, draftIdentity });
+    const history = useComposerHistory({ draftKey: WELCOME_DRAFT_KEY, draftIdentity, value, onChange });
+    const skillComposer = useSkillComposer({
+      value, onChange: history.onChange, skills, onSkillsChange, workspace: workspacePath, draftIdentity,
+    });
     const { onKeyDown: onSkillKeyDown } = skillComposer;
     const hasAttachments = images.length > 0 || files.length > 0;
     const attachmentCount = images.length + files.length;
@@ -114,12 +119,13 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (onSkillKeyDown(event)) return;
+        if (history.onKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           onSubmit();
         }
       },
-      [onSubmit, onSkillKeyDown],
+      [history, onSubmit, onSkillKeyDown],
     );
 
     const onReasoningChange = useCallback(
@@ -199,8 +205,9 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 aria-label={placeholder}
                 className={styles.textarea}
                 value={value}
-                onChange={(event) => onChange(event.target.value)}
+                onChange={(event) => history.onChange(event.target.value)}
                 onKeyDown={onKeyDown}
+                onPointerDown={history.resetNavigation}
                 onPaste={(event) => { skillComposer.onPasteOrDrop(); onPaste(event); }}
                 onDragOver={onDragOver}
                 onDrop={(event) => { skillComposer.onPasteOrDrop(); onDrop(event); }}

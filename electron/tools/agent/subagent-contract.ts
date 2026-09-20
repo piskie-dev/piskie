@@ -7,7 +7,7 @@ const fields = {
   subject: nonempty.max(40).describe('整个 Assignment 的简短显示标题（trim 后 1-40 字符）'),
   prompt: nonempty.describe('交给 Worker 的任务或问题'),
   skills: z.array(nonempty).describe('需要加载的 Skill 名称列表（可选），取自 <available_skills> 或 tool_search 返回结果'),
-  browserEnvironmentId: nonempty.describe('浏览器 Worker 且绑定了浏览器环境池时必填；必须是池中的真实环境 ID（清单见文末 <browser_environments>）。一个环境同时只能给一个 Worker，被占用时先 subagent_stop 旧 Worker，否则创建会失败'),
+  browserEnvironmentId: nonempty.describe('浏览器 Worker 且绑定了浏览器环境池时必填；必须是池中的真实环境 ID（清单见文末 <browser_environments>）。一个浏览器环境同一时间只能由一个 Worker 使用。同一网站或连续业务的后续任务，优先复用已有 Worker。'),
 };
 
 export const subagentSchema = z.strictObject({

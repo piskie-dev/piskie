@@ -66,6 +66,7 @@ function previewSourcePath(status: NodeStatus, image: ImageItemPublicState): str
   if (image.status !== 'completed') return undefined;
   if (status === 'approved') return image.outputPath;
   if (
+    status === 'generating' ||
     status === 'preview' ||
     status === 'pending_approval' ||
     status === 'regenerating' ||
@@ -117,7 +118,16 @@ const Tile = memo<TileProps>(
         onClick={selectable ? onToggle : undefined}
       >
         {dataUrl ? (
-          <img src={dataUrl} className={styles.thumb} alt={image.prompt || t('sessionWorkbenchUi.imageReview.title')} />
+          <img
+            src={dataUrl}
+            className={styles.thumb}
+            alt={image.prompt || t('sessionWorkbenchUi.imageReview.title')}
+            data-previewable={!selectable && onPreview ? 'true' : undefined}
+            onClick={!selectable && onPreview ? (event) => {
+              event.stopPropagation();
+              onPreview(dataUrl);
+            } : undefined}
+          />
         ) : image.status === 'generating' ? (
           // Gemini 式生成占位：灰底 + 白色波带斜向流过（样式见 .waves；无 spinner，波纹即状态）
           <span className={styles.waves} aria-hidden="true" />
