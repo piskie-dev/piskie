@@ -8,6 +8,7 @@ export interface ArtifactRef {
 }
 
 export interface RunContext {
+  usage?: import('../../../shared/types/model-usage.js').UsageAttribution;
   runId: string;
   traceId: string;
   signal: AbortSignal;

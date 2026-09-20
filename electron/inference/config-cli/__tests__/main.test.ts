@@ -187,6 +187,7 @@ describe('piskie config CLI', () => {
           { id: 'inference-selections' },
           { id: 'mcp' },
           { id: 'model-catalog' },
+          { id: 'model-usage' },
           { id: 'proxies' },
           { id: 'schedules' },
           { id: 'task-definitions' },

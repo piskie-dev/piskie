@@ -41,6 +41,7 @@ export interface AgentInferenceBackoff {
 }
 
 export interface AgentInferenceOptions {
+  usage?: import('../../../shared/types/model-usage.js').UsageAttribution;
   requestId: string;
   logicalStartedAt: number;
   signal?: AbortSignal;
@@ -108,7 +109,8 @@ export class DefaultAgentInferencePort implements AgentInferencePort {
     const mapped = await this.mapRequest(request, signal, effectiveReasoning.selection);
     const runId = `ai-${createUuid()}`;
     const traceId = `ai:${runId}`;
-    const run = this.gateway.open(mapped, { runId, traceId, signal });
+    const run = this.gateway.open(mapped, { runId, traceId, signal,
+      usage: { ...options.usage, purpose: options.usage?.purpose ?? 'inference', requestId: options.requestId } });
     const result = await collectAiResult(this.observeEvents(run.events, options), target, traceId);
     const durations = await run.statistics;
     const content: ContentBlock[] = [];

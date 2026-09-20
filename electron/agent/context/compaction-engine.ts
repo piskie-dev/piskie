@@ -107,6 +107,7 @@ export class CompactionEngine {
         },
         {
           requestId: `compaction-${createUuid()}`,
+          usage: { purpose: 'compaction' },
           logicalStartedAt,
           signal,
         }

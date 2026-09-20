@@ -10,10 +10,12 @@ import type { AiEvent, AiGateway, AiRequest, AiResult, AiRunHandle } from './con
 import { collectAiResult } from './result-reducer.js';
 import { executeAiRun, type AiRunDependencies } from './run-machine.js';
 import { AIRequestInfoCollector, type AiRunStatistics } from './request-info-collector.js';
+import type { AiUsageObserverFactory } from './usage-observer.js';
 export class DefaultAiGateway implements AiGateway {
   constructor(
     private readonly snapshots: RuntimeSnapshotStore,
-    private readonly dependencies: Partial<AiRunDependencies> = {}
+    private readonly dependencies: Partial<AiRunDependencies> = {},
+    private readonly usageObserver?: AiUsageObserverFactory,
   ) {}
 
   open(request: AiRequest, context: RunContext): AiRunHandle {
@@ -62,15 +64,26 @@ export class DefaultAiGateway implements AiGateway {
       return;
     }
 
-    yield* executeAiRun({
-      request,
-      context,
-      target,
-      policy: snapshot.policies.ai,
-      dependencies: this.dependencies,
-      onAttemptStarted: (at) =>
-        safelyCollectStatistics(() => collector.onAttemptStarted(at), undefined),
-    });
+    const observer = safelyCollectStatistics(() => this.usageObserver?.(request, context, target), undefined);
+    try {
+      const events = executeAiRun({
+        request,
+        context,
+        target,
+        policy: snapshot.policies.ai,
+        dependencies: this.dependencies,
+        onAttemptStarted: (at, attempt) => {
+          safelyCollectStatistics(() => collector.onAttemptStarted(at), undefined);
+          safelyCollectStatistics(() => observer?.attemptStarted(at, attempt), undefined);
+        },
+      });
+      for await (const event of events) {
+        safelyCollectStatistics(() => observer?.event(event), undefined);
+        yield event;
+      }
+    } finally {
+      try { await observer?.close(Date.now()); } catch { /* Observability never fails a model call. */ }
+    }
   }
 
   private observeRun(

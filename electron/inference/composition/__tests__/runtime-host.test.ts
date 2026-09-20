@@ -106,6 +106,7 @@ describe('InferenceRuntimeHost', () => {
       'inference-selections',
       'mcp',
       'model-catalog',
+      'model-usage',
       'proxies',
       'schedules',
       'task-definitions',

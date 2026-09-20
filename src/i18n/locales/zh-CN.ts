@@ -2,8 +2,10 @@
  * 中文翻译
  */
 import guideContent from './guides.zh-CN';
+import modelUsage from './model-usage.zh-CN';
 
 export default {
+  modelUsage,
   clipboardUi: {
     copyImage: '复制图片',
     copying: '复制中…',
@@ -229,6 +231,7 @@ export default {
 
     // 标签页
     tabs: {
+      modelUsage: '模型用量',
       logs: '系统日志',
       about: '关于',
     },
