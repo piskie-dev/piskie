@@ -15,12 +15,17 @@ import { publishGlobalMcpSnapshot } from '../../mcp/bridge/injection.js';
 import { mcpConnectionManager } from '../../mcp/runtime/index.js';
 import { reconcileConfiguredProxyTransports } from '../../core/proxy/proxy-resolver.js';
 import type { ConfigDomainIntegrations } from '../domains/integrations.js';
+import type { ShortcutPlatform } from '../../../shared/shortcuts.js';
 
-export function createElectronConfigDomainIntegrations(webSearch: ConfigDomainIntegrations['webSearch']): ConfigDomainIntegrations {
+export function createElectronConfigDomainIntegrations(
+  webSearch: ConfigDomainIntegrations['webSearch'],
+  shortcutPlatform: ShortcutPlatform,
+): ConfigDomainIntegrations {
   return {
     webSearch,
     workerPreferences: { listTypes: () => listWorkerTypes(specRegistry) },
     appSettings: {
+      shortcutPlatform,
       resolveInitialLanguage: () => resolveInitialAppLanguage(
         app.getPreferredSystemLanguages()[0] ?? app.getLocale(),
       ),

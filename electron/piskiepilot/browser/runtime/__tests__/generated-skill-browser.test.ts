@@ -107,6 +107,7 @@ describe('generated Browser Skill facade', () => {
       'hover',
       'fill',
       'select',
+      'typeText',
       'press',
       'waitFor',
       'extractText',
@@ -671,9 +672,67 @@ describe('generated Browser Skill facade', () => {
     ).rejects.toThrow('timed out after 0ms');
   });
 
-  it('waits for page events from key presses and observes the newly selected page', async () => {
+  it.each(['  Example 中文😀\nNext paragraph\n\nEnd  ', '   ', '\n', ''])(
+    'types unchanged text %j under the browser lock and observes the resulting selected page',
+    async (text) => {
+      const nextPage = makePage();
+      nextPage.url.mockReturnValue('https://example.test/next');
+      nextPage.title.mockResolvedValue('Next');
+      context.waitForAction.mockImplementationOnce(async (action: () => Promise<unknown>) => {
+        await action();
+        context.getSelectedPage.mockReturnValue(nextPage);
+      });
+
+      await expect(runtime().page.typeText(text)).resolves.toEqual({
+        url: 'https://example.test/next',
+        title: 'Next',
+      });
+      expect(page.keyboard.type).toHaveBeenCalledExactlyOnceWith(text);
+      expect(nextPage.keyboard.type).not.toHaveBeenCalled();
+      expect(page.keyboard.press).not.toHaveBeenCalled();
+      expect(page.bringToFront).not.toHaveBeenCalled();
+      expect(page.evaluateHandle).not.toHaveBeenCalled();
+      expect(context.waitForAction).toHaveBeenCalledOnce();
+      expect(mocks.runExclusive).toHaveBeenCalledExactlyOnceWith(
+        'browser-bound-by-host', expect.any(Function), controller.signal
+      );
+    }
+  );
+
+  it.each(['before the lock', 'waiting for the lock', 'after typing'])(
+    'honors text input cancellation %s',
+    async (stage) => {
+      if (stage === 'before the lock') {
+        controller.abort();
+      } else if (stage === 'waiting for the lock') {
+        mocks.runExclusive.mockImplementationOnce(async (browserId, operation) => {
+          controller.abort();
+          return operation({ automation: mocks.getContext(browserId), browser: {} });
+        });
+      } else {
+        page.keyboard.type.mockImplementationOnce(async () => { controller.abort(); });
+      }
+
+      await expect(runtime().page.typeText('example')).rejects.toThrow(
+        'Browser Skill call was cancelled'
+      );
+      expect(page.keyboard.type).toHaveBeenCalledTimes(stage === 'after typing' ? 1 : 0);
+      expect(mocks.runExclusive).toHaveBeenCalledTimes(stage === 'before the lock' ? 0 : 1);
+    }
+  );
+
+  it('propagates a typing failure without replaying partially entered text', async () => {
+    const failure = new Error('keyboard transport failed');
+    page.keyboard.type.mockRejectedValueOnce(failure);
+
+    await expect(runtime().page.typeText('example')).rejects.toBe(failure);
+    expect(page.keyboard.type).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a single-key press unchanged and observes the newly selected page', async () => {
     const browser = runtime();
     const nextPage = makePage();
+    const keyboardActions = recordKeyboardActions(page);
     nextPage.url.mockReturnValue('https://example.test/next');
     nextPage.title.mockResolvedValue('Next');
     context.waitForAction.mockImplementationOnce(
@@ -688,9 +747,61 @@ describe('generated Browser Skill facade', () => {
       title: 'Next',
     });
     expect(page.keyboard.press).toHaveBeenCalledWith('Enter');
+    expect(keyboardActions).toEqual(['press:Enter']);
     expect(context.waitForAction).toHaveBeenCalledOnce();
     expect(mocks.pressKey).not.toHaveBeenCalled();
     await expect(browser.page.press('   ')).rejects.toThrow('press key cannot be empty');
+  });
+
+  it('presses Control+A in order', async () => {
+    const keyboardActions = recordKeyboardActions(page);
+
+    await runtime().page.press('Control+A');
+
+    expect(keyboardActions).toEqual(['down:Control', 'press:A', 'up:Control']);
+    expect(context.waitForAction).toHaveBeenCalledOnce();
+  });
+
+  it('releases Control+Shift+R modifiers in reverse order', async () => {
+    const keyboardActions = recordKeyboardActions(page);
+
+    await runtime().page.press('Control+Shift+R');
+
+    expect(keyboardActions).toEqual([
+      'down:Control',
+      'down:Shift',
+      'press:R',
+      'up:Shift',
+      'up:Control',
+    ]);
+  });
+
+  it('parses the plus key in Control++', async () => {
+    const keyboardActions = recordKeyboardActions(page);
+
+    await runtime().page.press('Control++');
+
+    expect(keyboardActions).toEqual(['down:Control', 'press:+', 'up:Control']);
+  });
+
+  it('releases held modifiers when the primary key press fails', async () => {
+    const keyboardActions = recordKeyboardActions(page);
+    page.keyboard.press.mockImplementationOnce(async (key: string) => {
+      keyboardActions.push(`press:${key}`);
+      throw new Error('keyboard transport failed');
+    });
+
+    await expect(runtime().page.press('Control+Shift+R')).rejects.toThrow(
+      'keyboard transport failed'
+    );
+
+    expect(keyboardActions).toEqual([
+      'down:Control',
+      'down:Shift',
+      'press:R',
+      'up:Shift',
+      'up:Control',
+    ]);
   });
 
   it('honors cancellation before touching BrowserManager and reports wait timeouts', async () => {
@@ -786,10 +897,29 @@ function makePage() {
     url: vi.fn(() => 'https://example.test/current'),
     title: vi.fn(async () => 'Example'),
     bringToFront: vi.fn(async () => undefined),
-    keyboard: { press: vi.fn(async () => undefined) },
+    keyboard: {
+      down: vi.fn(async (_key: string) => undefined),
+      press: vi.fn(async (_key: string) => undefined),
+      up: vi.fn(async (_key: string) => undefined),
+      type: vi.fn(async (_text: string) => undefined),
+    },
     evaluateHandle: vi.fn(),
     evaluate: vi.fn(),
   };
+}
+
+function recordKeyboardActions(page: ReturnType<typeof makePage>): string[] {
+  const actions: string[] = [];
+  page.keyboard.down.mockImplementation(async (key: string) => {
+    actions.push(`down:${key}`);
+  });
+  page.keyboard.press.mockImplementation(async (key: string) => {
+    actions.push(`press:${key}`);
+  });
+  page.keyboard.up.mockImplementation(async (key: string) => {
+    actions.push(`up:${key}`);
+  });
+  return actions;
 }
 
 function makeHandle(element: ReturnType<typeof makeElement> | null) {

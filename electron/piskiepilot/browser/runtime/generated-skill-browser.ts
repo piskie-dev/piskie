@@ -3,6 +3,7 @@ import {
   type ConnectedBrowserSession,
 } from '../core/browser/browser-manager.js';
 import { BrowserOperations } from '../core/browser/browser-operations.js';
+import { parseKeyCombination, typeKeyboardText } from '../core/session/keyboard.js';
 
 type BrowserSession = ConnectedBrowserSession['automation'];
 type BrowserPage = ReturnType<BrowserSession['getSelectedPage']>;
@@ -119,6 +120,14 @@ export interface GeneratedSkillPage {
     value: string,
     options?: BrowserActionOptions
   ): Promise<BrowserPageObservation>;
+  /**
+   * Type Unicode text at the selected page's current focus/selection, replacing selected
+   * text without focusing or clearing a field. Set the focus/selection before calling.
+   * Passes text unchanged, including spaces and newlines; empty text sends no input.
+   * Newlines act as Enter and may trigger page actions. This is not full IME
+   * simulation; verify application state and saving separately.
+   */
+  typeText(text: string): Promise<BrowserPageObservation>;
   /** Send a Puppeteer-compatible key or key combination to the selected page. */
   press(key: string): Promise<BrowserPageObservation>;
   /** Wait until a structured locator, text, or URL condition matches. */
@@ -250,6 +259,7 @@ export function createGeneratedBrowserSkillRuntime(
     hover: facade.hover.bind(facade),
     fill: facade.fill.bind(facade),
     select: facade.select.bind(facade),
+    typeText: facade.typeText.bind(facade),
     press: facade.press.bind(facade),
     waitFor: facade.waitFor.bind(facade),
     extractText: facade.extractText.bind(facade),
@@ -384,11 +394,31 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
     );
   }
 
+  async typeText(text: string): Promise<BrowserPageObservation> {
+    return this.#withLockedContext(async (page, context) => {
+      await context.waitForAction(() => typeKeyboardText(page.keyboard, text));
+      return observe(context.getSelectedPage());
+    });
+  }
+
   async press(key: string): Promise<BrowserPageObservation> {
     if (!key.trim()) throw new Error('Browser Skill press key cannot be empty');
+    const [primaryKey, ...modifiers] = parseKeyCombination(key);
     return this.#withLockedContext(async (page, context) => {
-      type PuppeteerKey = Parameters<typeof page.keyboard.press>[0];
-      await context.waitForAction(() => page.keyboard.press(key as PuppeteerKey));
+      await context.waitForAction(async () => {
+        const heldModifiers: typeof modifiers = [];
+        try {
+          for (const modifier of modifiers) {
+            await page.keyboard.down(modifier);
+            heldModifiers.push(modifier);
+          }
+          await page.keyboard.press(primaryKey);
+        } finally {
+          for (let index = heldModifiers.length - 1; index >= 0; index -= 1) {
+            await page.keyboard.up(heldModifiers[index]);
+          }
+        }
+      });
       return observe(context.getSelectedPage());
     });
   }

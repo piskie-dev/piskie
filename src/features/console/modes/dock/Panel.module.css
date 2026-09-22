@@ -42,6 +42,13 @@
   content-visibility: hidden;
 }
 
+.panel[data-shortcut-owner='true'] {
+  border-color: color-mix(in srgb, var(--cyber-primary) 42%, var(--line-2));
+  box-shadow:
+    var(--shadow-card-active),
+    inset 0 0 0 1px color-mix(in srgb, var(--cyber-primary) 12%, transparent);
+}
+
 /*
  * 顶部状态线（重设计）：旧版是恒在的 4px 实心条（无状态时一条发白的灰条，
  * 用户 2026-08-05 反馈突兀）。现在**默认无色**，有语气时才浮现一条两端渐隐的

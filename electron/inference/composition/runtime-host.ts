@@ -32,6 +32,7 @@ import type {
 } from '../../config/host/config-host.js';
 import type { ConfigDomainRevisionChangedEvent } from '../../../shared/types/config.js';
 import type { ConfigDomainIntegrations } from '../../config/domains/integrations.js';
+import { normalizeShortcutPlatform } from '../../../shared/shortcuts.js';
 
 export interface InferenceRuntimeHostOptions {
   rootDirectory: string;
@@ -146,6 +147,7 @@ export class InferenceRuntimeHost {
         inference: this.control,
         selections: this.selections,
         integrations: options.configIntegrations,
+        shortcutPlatform: normalizeShortcutPlatform(process.platform),
         onSelectionsChanged: options.onSelectionsChanged,
         onHistoryMaintenanceError: options.onReloadError,
       },

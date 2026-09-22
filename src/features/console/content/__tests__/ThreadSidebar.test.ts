@@ -68,6 +68,8 @@ const button = (label: string) => {
 const groupNames = () => [...container.querySelectorAll('button[aria-expanded]')]
   .filter((node) => node.hasAttribute('draggable')).map((node) => node.textContent);
 const rowCount = () => container.querySelectorAll('[role="button"]').length;
+const visibleAgentIds = () => [...container.querySelectorAll<HTMLElement>('[data-agent-id]')]
+  .map((node) => node.dataset.agentId);
 async function render(next: Partial<ThreadSidebarProps> = {}) {
   props = { ...props, ...next };
   await act(async () => root.render(createElement(ThreadSidebar, props)));
@@ -126,7 +128,12 @@ beforeEach(() => {
   });
   useUIStore.persist.setOptions({ storage: createJSONStorage(() => localStorage) });
   localStorage.clear();
-  useUIStore.setState({ expandedWorkspaceGroups: [], workspaceGroupOrder: [], consoleSelection: null });
+  useUIStore.setState({
+    expandedWorkspaceGroups: [],
+    workspaceGroupOrder: [],
+    pinnedAgentRunIds: [],
+    consoleSelection: null,
+  });
   historyState.ready = true;
   attentionState.attentionByAgentId = {};
   consoleActions.markRead.mockClear();
@@ -281,6 +288,35 @@ describe('workspace navigation', () => {
     expect(rowCount()).toBe(0);
   });
 
+  it('pins and unpins a session within its workspace and keeps it in the five-row preview', async () => {
+    const rows = Array.from({ length: 6 }, (_, index) => (
+      history(`row-${index}`, '/sample/alpha', 6 - index)
+    ));
+    await render({ history: rows, selectedAgentId: 'row-5' });
+    await click('alpha');
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4', 'row-5']);
+
+    await act(async () => container.querySelector<HTMLButtonElement>(
+      '[data-agent-id="row-5"] button[aria-haspopup="menu"]',
+    )!.click());
+    await click('置顶');
+
+    expect(visibleAgentIds()).toEqual(['row-5', 'row-0', 'row-1', 'row-2', 'row-3']);
+    expect(container.querySelector('[data-agent-id="row-5"]')?.getAttribute('data-pinned')).toBe('true');
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual(['row-5']);
+    expect(JSON.parse(localStorage.getItem('piskie-ui-storage')!).state.pinnedAgentRunIds).toEqual(['row-5']);
+
+    await act(async () => container.querySelector<HTMLButtonElement>(
+      '[data-agent-id="row-5"] button[aria-haspopup="menu"]',
+    )!.click());
+    await click('取消置顶');
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4', 'row-5']);
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual([]);
+
+    await render({ selectedAgentId: null });
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4']);
+  });
+
   it('clears search on explicit navigation so the opened workspace remains visible', async () => {
     await render({ onNewSession: () => useUIStore.getState().setConsoleSelection({ kind: 'empty' }) });
     await search('beta');
@@ -299,9 +335,9 @@ describe('workspace navigation', () => {
     expect(rowCount()).toBe(0);
     await click('alpha');
     const written = JSON.parse(localStorage.getItem('piskie-ui-storage')!);
-    expect(written.version).toBe(4);
+    expect(written.version).toBe(5);
     expect(Object.keys(written.state).sort()).toEqual([
-      'consoleMode', 'expandedWorkspaceGroups', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder',
+      'consoleMode', 'expandedWorkspaceGroups', 'pinnedAgentRunIds', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder',
     ]);
   });
 

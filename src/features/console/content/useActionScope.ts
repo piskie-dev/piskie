@@ -1,12 +1,10 @@
 /**
- * useActionScope —— 把面板注册成**键盘焦点作用域**，让 cell 上声明的 `shortcut` 真正可用。
+ * useActionScope —— 把面板注册成**键盘焦点作用域**，让 cell 的后台化动作可用快捷键触发。
  *
  * ## 补的是哪个缺口
  *
- * `data/keyboard` 早就实现了作用域路由（`registerScope` / `focusScope`），
- * `TranscriptAction.shortcut` 也早就带着 `'mod+b'`（`data/cells/toolCell.ts`），
- * 但**中间这一层一直没人写**：没有任何组件调用 `registerScope`，
- * 于是 `mod+b` 在两个模式里都不响应 —— dock 只能点按钮，thread 连按钮都没有。
+ * Transcript action 只声明业务动作，实际键位由共享 catalog 与用户设置派生。
+ * 面板把该命令注册到应用级路由，保证改键与禁用即时生效。
  *
  * ## 为什么不是全局绑定
  *
@@ -19,15 +17,20 @@
  *
  * ## 分派规则
  *
- * 从流水**尾部往前**找第一个声明了该 combo 且 `enabled` 的动作。
+ * 从流水**尾部往前**找第一个可用的后台化动作。
  * 取尾部是有意的：并行工具调用时用户指的总是最新那条。
  */
 
-import { useCallback, useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
-import { focusScope, registerScope } from '../data/keyboard';
+import {
+  activateFocusedShortcutScope,
+  registerShortcutBinding,
+  useShortcutScope,
+  type ShortcutScope,
+} from '@/shortcuts';
+import { useEffectiveConsoleShortcut } from '../data/shortcuts';
 
 export interface ActionScopeOptions {
   /** 面板身份；同一时刻只有一个作用域生效，故必须在同屏面板间唯一 */
@@ -35,9 +38,8 @@ export interface ActionScopeOptions {
   readonly nodes: readonly TranscriptNode[];
   /** 命中后执行；与点击同一入口，避免键盘/鼠标两套语义漂移 */
   readonly onAction: (cell: TranscriptNode, action: TranscriptAction) => void;
-  /** 说明文案，供将来的快捷键面板列出 */
-  readonly description?: string;
-  readonly combo?: string;
+  /** Dock 用同一次面板交互更新 active primary owner。 */
+  readonly onActivateOwner?: () => void;
 }
 
 export interface ActionScopeHandlers {
@@ -46,17 +48,18 @@ export interface ActionScopeHandlers {
 }
 
 /**
- * 从尾部找第一个声明了该 combo 的可用动作。
+ * 从尾部找第一个可用的后台化动作。
  * 导出仅为单测（纯函数，无 DOM 依赖）。
  */
 export function findShortcutAction(
   nodes: readonly TranscriptNode[],
-  combo: string,
 ): { node: TranscriptNode; action: TranscriptAction } | null {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const node = nodes[index];
     if (!node || node.kind !== 'tool') continue;
-    const action = node.actions.find((item) => item.shortcut === combo && item.enabled);
+    const action = node.actions.find((item) => (
+      item.kind === 'promote-to-background' && item.enabled
+    ));
     if (action) return { node, action };
   }
   return null;
@@ -66,11 +69,9 @@ export function useActionScope({
   scopeId,
   nodes,
   onAction,
-  description,
-  combo = 'mod+b',
+  onActivateOwner,
 }: ActionScopeOptions): ActionScopeHandlers {
-  const { t } = useTranslation();
-  const resolvedDescription = description ?? t('sessionWorkbenchUi.action.promoteToBackground');
+  const shortcut = useEffectiveConsoleShortcut('tool.promoteToBackground');
   /**
    * 绑定的 `run` 必须读到**最新**的 cells 与 handler，但又不能因它们变化就重注册
    * （流水每来一条消息都在变，重注册会在高频更新时反复增删 Map 条目）。
@@ -85,21 +86,35 @@ export function useActionScope({
     latest.current = { nodes, onAction };
   }, [nodes, onAction]);
 
+  const routerScopeId = `console-action:${scopeId}`;
+  const scope = useMemo<ShortcutScope>(() => ({
+    id: routerScopeId,
+    layer: 'focused-control-fallback',
+    blocksLowerLayers: 'none',
+    bindings: [],
+  }), [routerScopeId]);
+  useShortcutScope(scope);
   useEffect(() => {
-    const dispose = registerScope(scopeId, [
-      {
-        combo,
-        description: resolvedDescription,
-        run: () => {
-          const hit = findShortcutAction(latest.current.nodes, combo);
-          if (hit) latest.current.onAction(hit.node, hit.action);
-        },
+    if (!shortcut) return;
+    return registerShortcutBinding(routerScopeId, {
+      id: `${routerScopeId}:promote-to-background`,
+      commandId: 'tool.promoteToBackground',
+      combo: shortcut.physicalCombo,
+      enabled: () => findShortcutAction(latest.current.nodes) !== null,
+      allowInEditable: true,
+      handling: 'execute',
+      defaultBehavior: 'prevent',
+      execute: () => {
+        const hit = findShortcutAction(latest.current.nodes);
+        if (hit) latest.current.onAction(hit.node, hit.action);
       },
-    ]);
-    return dispose;
-  }, [combo, resolvedDescription, scopeId]);
+    });
+  }, [routerScopeId, shortcut]);
 
-  const claim = useCallback(() => focusScope(scopeId), [scopeId]);
+  const claim = useCallback(() => {
+    activateFocusedShortcutScope(routerScopeId);
+    onActivateOwner?.();
+  }, [onActivateOwner, routerScopeId]);
 
   return { onPointerDownCapture: claim, onFocusCapture: claim };
 }

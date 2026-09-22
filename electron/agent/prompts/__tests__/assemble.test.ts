@@ -529,7 +529,7 @@ describe('assemble L0-L5 组装规则', () => {
     expect(builder).toContain('导致关键操作被跳过的调用，不能证明该操作分支有效');
     expect(builder).toContain('Locators are resolved from the current DOM for every operation');
     expect(builder).toContain('browser accessibility snapshot roles such as `StaticText`');
-    expect(builder).toContain('Actions require an actionable DOM target');
+    expect(builder).toContain('Locator actions require an actionable DOM target');
     expect(builder).toContain('回报 platform capability gap');
     expect(builder).toContain('report a platform capability gap');
   });

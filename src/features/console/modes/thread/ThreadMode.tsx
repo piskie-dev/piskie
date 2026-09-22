@@ -28,10 +28,10 @@ import {
 } from '../../content/fileReviewTarget';
 import { ThreadView } from './ThreadView';
 import { useConsoleActions } from '../../data/actions';
+import { useShortcutScope, type ShortcutScope } from '@/shortcuts';
 import { useImageNodes } from '../../data/useImageNodes';
 import type { HistoryRow, SessionRow } from '../../data/sessionRow';
 import { buildSessionMenu, type SessionMenuSource } from '../../data/sessionMenu';
-import { useGlobalBinding } from '../../data/useKeyboard';
 import { useAgentVM, useWorkerVM } from '../../data/vm';
 import { RightPanel } from './RightPanel';
 import { availablePanels, resolveSelectedPanel, type PanelKey } from './panels';
@@ -234,8 +234,38 @@ export const ThreadMode = memo<ThreadModeProps>(
     const closeReview = useCallback(() => closePanel('review'), [closePanel]);
     const backToMain = useCallback(() => setTabWorkerId(undefined), []);
 
-    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.closePanel', { name: t('sessionWorkbenchUi.panels.review') }), closeReview, reviewVisible);
-    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.backToMain'), backToMain, !!activeWorkerId && !reviewVisible);
+    const reviewScope = useMemo<ShortcutScope>(() => ({
+      id: 'console-thread-review',
+      layer: 'mode-transient',
+      blocksLowerLayers: 'none',
+      bindings: [{
+        id: 'console-thread-review:dismiss',
+        commandId: 'ui.dismissCurrentLayer',
+        combo: 'escape',
+        enabled: () => true,
+        allowInEditable: true,
+        handling: 'execute',
+        defaultBehavior: 'prevent',
+        execute: closeReview,
+      }],
+    }), [closeReview]);
+    const workerNavigationScope = useMemo<ShortcutScope>(() => ({
+      id: 'console-thread-worker-navigation',
+      layer: 'mode-navigation',
+      blocksLowerLayers: 'none',
+      bindings: [{
+        id: 'console-thread-worker-navigation:back',
+        commandId: 'ui.dismissCurrentLayer',
+        combo: 'escape',
+        enabled: () => true,
+        allowInEditable: true,
+        handling: 'execute',
+        defaultBehavior: 'prevent',
+        execute: backToMain,
+      }],
+    }), [backToMain]);
+    useShortcutScope(reviewScope, reviewVisible);
+    useShortcutScope(workerNavigationScope, !!activeWorkerId && !reviewVisible);
 
     const railActions = (
       <>
@@ -328,6 +358,7 @@ export const ThreadMode = memo<ThreadModeProps>(
                 fileChangesOpen={fileChangesOpen}
                 onToggleFileChanges={toggleFileChanges}
                 onOpenWorker={selectTab}
+                deferEscapeFallback={reviewVisible}
               />
             ) : emptyState}
           </div>

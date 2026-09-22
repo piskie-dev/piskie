@@ -59,6 +59,7 @@ function fakePage(url: string) {
       down: vi.fn(async () => undefined),
       press: vi.fn(async () => undefined),
       up: vi.fn(async () => undefined),
+      type: vi.fn(async () => undefined),
     },
   }) as unknown as Page & { setUrl(value: string): void };
   return { page, frame, client, fileChooser, handle, locator, root, stableDomHandle };
@@ -178,6 +179,69 @@ describe('BrowserAutomationSession', () => {
       dialog: { type: 'prompt', message: 'Continue?' },
     });
     expect(current.locator.click).toHaveBeenCalledOnce();
+    session.dispose();
+  });
+
+  it.each(['  Hello 中文😀\nSecond paragraph\n\nEnd  ', '   ', '\n', ''])(
+    'types unchanged text %j on the selected page and returns its action receipt',
+    async (text) => {
+      const first = fakePage('https://example.test/first');
+      const selected = fakePage('https://example.test/selected');
+      const session = await BrowserAutomationSession.create(fakeBrowser([first.page, selected.page]));
+      await session.selectPageByIndex(1);
+      const waitForAction = vi.spyOn(session, 'waitForAction');
+
+      await expect(session.typeText(text)).resolves.toMatchObject({
+        navigated: false,
+        domSettled: true,
+        openedPageIds: [],
+        closedPageIds: [],
+      });
+      expect(selected.page.keyboard.type).toHaveBeenCalledExactlyOnceWith(text);
+      expect(first.page.keyboard.type).not.toHaveBeenCalled();
+      expect(selected.page.keyboard.press).not.toHaveBeenCalled();
+      expect(selected.locator.click).not.toHaveBeenCalled();
+      expect(selected.locator.fill).not.toHaveBeenCalled();
+      expect(waitForAction).toHaveBeenCalledOnce();
+      session.dispose();
+    }
+  );
+
+  it.each(['before typing', 'after typing', 'typing failure'])(
+    'surfaces an unhandled dialog %s',
+    async (stage) => {
+      const current = fakePage('https://example.test');
+      const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+      const dialog = fakeDialog('alert');
+      if (stage === 'before typing') {
+        current.page.emit('dialog', dialog);
+      } else {
+        vi.mocked(current.page.keyboard.type).mockImplementationOnce(async () => {
+          current.page.emit('dialog', dialog);
+          if (stage === 'typing failure') throw new Error('keyboard transport failed');
+        });
+      }
+
+      await expect(session.typeText('a')).rejects.toMatchObject({
+        name: 'BrowserDialogOpenError',
+        dialog: { type: 'alert', message: 'Continue?' },
+      });
+      expect(current.page.keyboard.type).toHaveBeenCalledTimes(stage === 'before typing' ? 0 : 1);
+      expect(current.page.evaluateHandle).not.toHaveBeenCalled();
+      await session.handleDialog('dismiss');
+      expect(dialog.dismiss).toHaveBeenCalledOnce();
+      session.dispose();
+    }
+  );
+
+  it('propagates a typing failure without replaying partially entered text', async () => {
+    const current = fakePage('https://example.test');
+    const failure = new Error('keyboard transport failed');
+    vi.mocked(current.page.keyboard.type).mockRejectedValueOnce(failure);
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+
+    await expect(session.typeText('example')).rejects.toBe(failure);
+    expect(current.page.keyboard.type).toHaveBeenCalledOnce();
     session.dispose();
   });
 

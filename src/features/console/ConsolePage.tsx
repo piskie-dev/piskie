@@ -174,14 +174,13 @@ const ConsoleShellView: React.FC = () => {
     onNewTemplate: useCallback(() => setTaskEditor({ kind: 'create' }), []),
   });
 
-  // Esc 的第三级由模式各自注册（`useGlobalBinding`），壳只挂监听与 ⌘\
+  // 页面级显示模式命令由应用快捷键路由分派。
   useConsoleKeyboard({
     toggleModeEnabled: hasActiveSession,
     onToggleMode: useCallback(
       () => shell.setMode(shell.mode === 'dock' ? 'thread' : 'dock'),
       [shell],
     ),
-    onEscape: useCallback(() => false, []),
   });
 
   /**

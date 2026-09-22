@@ -12,6 +12,7 @@ import { createElectronConfigDomainIntegrations } from '../../config/host/electr
 import type { AgentService, AgentServiceRuntimeBindings } from '../../services/agent.service.js';
 import type { RuntimeComponent } from '../component-manifest.js';
 import type { SchedulePort } from '../../tools/types.js';
+import { normalizeShortcutPlatform } from '../../../shared/shortcuts.js';
 
 export interface InferenceComponentState {
   bindings?: AgentServiceRuntimeBindings;
@@ -59,7 +60,10 @@ export function createInferenceComponent(options: {
             error,
           }),
         },
-        configIntegrations: createElectronConfigDomainIntegrations({ publish: (config) => options.search.publish(config) }),
+        configIntegrations: createElectronConfigDomainIntegrations(
+          { publish: (config) => options.search.publish(config) },
+          normalizeShortcutPlatform(process.platform),
+        ),
         openAi: { resolveFetch: resolveElectronInferenceFetch },
         anthropic: { resolveFetch: resolveElectronInferenceFetch },
         imageHttp: { resolveFetch: resolveElectronInferenceFetch },

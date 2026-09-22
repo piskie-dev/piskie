@@ -11,7 +11,30 @@ import type { AIRequestInfo } from './context.js';
 import type { UserFileRef } from './user-input.js';
 export type { UserFileRef, UserMessageInput } from './user-input.js';
 import type { AIErrorType } from '../constants/index.js';
+import type { ShortcutOverrides } from '../shortcuts.js';
 export type { AgentRunBindings, StandardTaskBindings } from './task-bindings.js';
+export type {
+  ConfigurableShortcutCatalogEntry,
+  ConfigurableShortcutCommandId,
+  FixedShortcutCatalogEntry,
+  FixedShortcutCommandId,
+  ParsedShortcutCombo,
+  PhysicalShortcut,
+  ReservedShortcutCatalogEntry,
+  ReservedShortcutCommandId,
+  ShortcutCatalogEntry,
+  ShortcutCommandId,
+  ShortcutComboValidation,
+  ShortcutComboValidationCode,
+  ShortcutEventLike,
+  ShortcutModifier,
+  ShortcutOverrideValidationCode,
+  ShortcutOverrideValidationIssue,
+  ShortcutOverrides,
+  ShortcutParseErrorCode,
+  ShortcutPlatform,
+  ShortcutScope,
+} from '../shortcuts.js';
 export type {
   ReasoningEffort,
   ReasoningSelection,
@@ -588,6 +611,7 @@ export interface AppSettings {
   navPrismSpot: { x: number; y: number } | null;
   backgroundImage: string | null;
   backgroundMaskOpacity: number;
+  shortcuts: ShortcutOverrides;
 }
 
 // ============================================================

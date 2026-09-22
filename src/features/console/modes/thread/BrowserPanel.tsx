@@ -116,7 +116,8 @@ export const BrowserPanel = memo(({ target, state }: { target: AgentTarget; stat
                 submit();
                 event.currentTarget.blur();
               }
-              if (event.key === 'Escape') {
+              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                event.preventDefault();
                 setDraft(state.url);
                 event.currentTarget.blur();
               }

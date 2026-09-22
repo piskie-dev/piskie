@@ -5,6 +5,15 @@
 import type { AppSettings } from '../types/index.js';
 import { APP_BG_MASK_DEFAULT } from './theme-background.js';
 
+export {
+  CONFIGURABLE_SHORTCUT_COMMAND_IDS,
+  DEFAULT_SHORTCUTS,
+  FIXED_SHORTCUT_COMMAND_IDS,
+  RESERVED_SHORTCUT_COMMAND_IDS,
+  SHORTCUT_CATALOG,
+  SHORTCUT_CATALOG_ENTRIES,
+} from '../shortcuts.js';
+
 // ============================================================
 // Agent 配置常量
 // ============================================================
@@ -70,4 +79,5 @@ export const DEFAULT_SETTINGS = {
   navPrismSpot: null,
   backgroundImage: null,
   backgroundMaskOpacity: APP_BG_MASK_DEFAULT,
+  shortcuts: {},
 } satisfies AppSettings;

@@ -208,6 +208,11 @@ export function createElectronPiskieClient(options: {
         readOne: (key) => request(CONFIGURATION_OPERATIONS.readSetting, key),
         write: (key, value) => request(CONFIGURATION_OPERATIONS.writeSetting, key, value),
         writeAll: (settings) => request(CONFIGURATION_OPERATIONS.writeSettings, settings),
+        writeShortcut: (commandId, override) => request(
+          CONFIGURATION_OPERATIONS.writeShortcut,
+          commandId,
+          override,
+        ),
         reset: () => request(CONFIGURATION_OPERATIONS.resetSettings),
         developmentFeatures: () => request(CONFIGURATION_OPERATIONS.developmentFeatures),
       },

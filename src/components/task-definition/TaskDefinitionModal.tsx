@@ -28,6 +28,10 @@ import {
   type PresentationText,
 } from '../../i18n/presentationText';
 import { useRendererRuntime } from '../../renderer-runtime/hooks';
+import {
+  ShortcutOverlayParentProvider,
+  useDismissShortcutScope,
+} from '../../shortcuts';
 import { LoadoutRail } from './LoadoutRail';
 import {
   blankDraft,
@@ -70,6 +74,12 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const dialogRef = useNativeDialog(open, onClose);
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'task-definition-modal',
+    active: open,
+    blocksLowerLayers: 'all',
+    handling: 'delegate-dismiss',
+  });
   const nameId = useId();
   const docId = useId();
   const editing = editingDefinition !== undefined;
@@ -208,7 +218,11 @@ export const TaskDefinitionModal: React.FC<TaskDefinitionModalProps> = ({
           </div>
 
           {/* ── 右栏：装备栏。随弹层重开重挂载，展开态/环境拉取一并归零 ── */}
-          {open && <LoadoutRail draft={draft} patch={patch} mcp={mcpCatalog} />}
+          {open && (
+            <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+              <LoadoutRail draft={draft} patch={patch} mcp={mcpCatalog} />
+            </ShortcutOverlayParentProvider>
+          )}
         </div>
 
         <footer className={styles.foot}>

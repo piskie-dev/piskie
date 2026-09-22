@@ -112,6 +112,19 @@ describe('buildThreadRows', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.lastActiveAt).toBe('2026-07-20T00:00:00.000Z');
   });
+
+  it('projects the persisted pin preference onto live and historical rows', () => {
+    const rows = buildThreadRows({
+      sessions: [session({ agentId: 'live' })],
+      history: [record({ agentId: 'past' })],
+      pinnedAgentRunIds: ['live', 'past'],
+    });
+
+    expect(rows.map((row) => [row.agentId, row.pinned])).toEqual([
+      ['live', true],
+      ['past', true],
+    ]);
+  });
 });
 
 describe('sortThreadRows', () => {
@@ -147,6 +160,25 @@ describe('sortThreadRows', () => {
     expect(sortThreadRows(historyRows).map((row) => row.agentId)).toEqual([
       'newer',
       'older',
+    ]);
+  });
+
+  it('places pinned rows first and keeps the existing order within each pin state', () => {
+    const rows = buildThreadRows({
+      sessions: [session({ agentId: 'live', createdAt: '2026-01-01T00:00:00.000Z' })],
+      history: [
+        record({ agentId: 'pinned-older', lastActiveAt: '2026-01-02T00:00:00.000Z' }),
+        record({ agentId: 'newer', lastActiveAt: '2026-07-26T00:00:00.000Z' }),
+        record({ agentId: 'pinned-newer', lastActiveAt: '2026-07-20T00:00:00.000Z' }),
+      ],
+      pinnedAgentRunIds: ['pinned-older', 'pinned-newer'],
+    });
+
+    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual([
+      'pinned-newer',
+      'pinned-older',
+      'live',
+      'newer',
     ]);
   });
 });

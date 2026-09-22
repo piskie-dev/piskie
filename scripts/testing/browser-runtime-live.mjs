@@ -30,6 +30,7 @@ import {
   waitFor as waitForBrowserCore,
 } from '../../dist-electron/electron/piskiepilot/browser/skills/browser/index.js';
 import { setPilotRoot } from '../../dist-electron/electron/piskiepilot/paths.js';
+import { serveTextInputFixture, verifyTextInput } from './browser-type-text-fixture.mjs';
 
 if (process.env.PISKIE_BROWSER_LIVE !== '1') {
   throw new Error('Set PISKIE_BROWSER_LIVE=1 to run the real Fingerprint Chromium smoke test.');
@@ -60,6 +61,7 @@ const server = createServer((request, response) => {
     }, 250);
     return;
   }
+  if (serveTextInputFixture(request, response)) return;
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   response.end(`<!doctype html>
     <html><head><title>Runtime fixture</title></head><body>
@@ -404,6 +406,8 @@ try {
   assert.equal((await generated.listPages()).length, 1);
   mark('generated-skill');
 
+  await verifyTextInput(managerBrowserId, generated, origin);
+
   const managerGeneration = await BrowserManager.runExclusive(
     managerBrowserId,
     async ({ automation, browser: managedBrowser }) => {
@@ -454,6 +458,10 @@ try {
       'browser-network-list-and-get',
       'disconnect-reconnect',
       'generated-skill-stable-locator',
+      'core-and-sdk-type-text-selection-unicode-emoji',
+      'core-and-sdk-type-text-paragraphs-whitespace-empty',
+      'contenteditable-trusted-input-events-and-application-state',
+      'contenteditable-local-save-and-reload',
       'browser-manager-recovery',
     ],
   }, null, 2)}\n`);

@@ -13,6 +13,15 @@ import { useEffect } from 'react';
 
 import { registerGlobalBinding } from './keyboard';
 
+export {
+  useFocusedShortcutScope,
+  useShortcutBinding,
+  useShortcutListener,
+  useShortcutOwner,
+  useShortcutScope,
+  useShortcutScopeActivators,
+} from '../../../shortcuts';
+
 export function useGlobalBinding(
   combo: string,
   description: string,

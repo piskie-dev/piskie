@@ -38,6 +38,7 @@ import { LogDesk } from './desks/LogDesk';
 import { LookDesk } from './desks/LookDesk';
 import { ProviderDesk } from './desks/ProviderDesk';
 import { ProxyDesk } from './desks/ProxyDesk';
+import { ShortcutsDesk } from './desks/ShortcutsDesk';
 import { TuningDesk } from './desks/TuningDesk';
 import { ModelForge } from './forge/ModelForge';
 import { PresetForge } from './forge/PresetForge';
@@ -46,7 +47,7 @@ import { matchVendor, type GatewayKind, type VendorSpec } from './data/vendor-at
 import styles from './deck.module.css';
 
 const SECTS: readonly DeckSect[] = [
-  'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'kernel', 'logs', 'guides', 'about',
+  'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'shortcuts', 'kernel', 'logs', 'guides', 'about',
 ];
 
 /** 旧 /settings 的 ?tab= 值映射 */
@@ -253,6 +254,7 @@ export const PrefDeckPage: React.FC = () => {
     }
     if (sect === 'account') return <AccountDesk />;
     if (sect === 'look') return <LookDesk onFlash={onFlash} />;
+    if (sect === 'shortcuts') return <ShortcutsDesk />;
     if (sect === 'kernel') return <KernelDesk onFlash={onFlash} />;
     if (sect === 'logs') return <LogDesk onFlash={onFlash} />;
     if (sect === 'guides') return <GuideDesk />;

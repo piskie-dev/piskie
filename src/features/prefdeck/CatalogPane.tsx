@@ -14,6 +14,7 @@ import {
   Globe,
   Chrome,
   Image as ImageIcon,
+  Keyboard,
   Palette,
   Plus,
   ScrollText,
@@ -36,7 +37,7 @@ export interface CatalogProviderItem {
 export type DeckSect =
   | 'ai' | 'image' | 'ai-tuning' | 'image-tuning'
   | 'web-search' | 'web-search-settings'
-  | 'proxy' | 'account' | 'look' | 'kernel' | 'logs' | 'guides' | 'about';
+  | 'proxy' | 'account' | 'look' | 'shortcuts' | 'kernel' | 'logs' | 'guides' | 'about';
 
 export interface CatalogPaneProps {
   readonly searchProviders: readonly { id: string; title: string; active: boolean }[];
@@ -160,6 +161,7 @@ export const CatalogPane: React.FC<CatalogPaneProps> = ({
         <div className={styles.branch}>{t('settings.catalog.applicationGroup')}</div>
         {plainLeaf('account', <UserRound size={15} />, t('settings.catalog.account'))}
         {plainLeaf('look', <Palette size={15} />, t('settings.catalog.appearance'))}
+        {plainLeaf('shortcuts', <Keyboard size={15} />, t('settings.catalog.shortcuts'))}
         {plainLeaf('kernel', <Chrome size={15} />, t('settings.catalog.browserRuntime'))}
         {plainLeaf('logs', <ScrollText size={15} />, t('settings.tabs.logs'))}
         {plainLeaf('guides', <BookOpen size={15} />, t('guides.library'))}

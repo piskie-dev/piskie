@@ -1,14 +1,22 @@
-import { act, createElement } from 'react';
+import { act, createElement, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import i18n from 'i18next';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ImageLightbox from '../ImageLightbox';
+import {
+  mountShortcutListener,
+  resetShortcutRegistry,
+  useShortcutOwner,
+  useShortcutScope,
+  type ShortcutScope,
+} from '@/shortcuts';
 
 let dom: JSDOM;
 let container: HTMLDivElement;
 let root: Root;
+let disposeListener: () => void;
 
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -35,13 +43,17 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await i18n.changeLanguage('zh-CN');
+  resetShortcutRegistry();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+  disposeListener = mountShortcutListener(dom.window as unknown as Window);
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  disposeListener();
+  resetShortcutRegistry();
   container.remove();
 });
 
@@ -131,5 +143,60 @@ describe('ImageLightbox context navigation', () => {
     await act(async () => button('上一张图片')?.click());
     expect(currentPicture()?.getAttribute('src')).toBe(urls[0]);
     expect(currentCounter()).toBe('1 / 3');
+  });
+
+  it('delegates the first Escape to the native dialog and interrupts only on the second', async () => {
+    const interrupt = vi.fn();
+    const Harness = () => {
+      const [preview, setPreview] = useState<{
+        readonly urls: readonly string[];
+        readonly index: number;
+      } | null>({
+        urls: ['https://example.test/preview.png'],
+        index: 0,
+      });
+      const scope = useMemo<ShortcutScope>(() => ({
+        id: 'test-primary-owner',
+        layer: 'active-primary-action',
+        blocksLowerLayers: 'none',
+        bindings: [{
+          id: 'test-primary-owner:interrupt',
+          commandId: 'agent.interruptCurrent',
+          combo: 'escape',
+          enabled: () => true,
+          allowInEditable: true,
+          handling: 'execute',
+          defaultBehavior: 'prevent',
+          execute: interrupt,
+        }],
+      }), []);
+      useShortcutScope(scope);
+      useShortcutOwner(scope.id);
+      return createElement(ImageLightbox, {
+        preview,
+        onClose: () => setPreview(null),
+      });
+    };
+    await act(async () => root.render(createElement(Harness)));
+    const dialog = container.querySelector('dialog')!;
+    const first = new dom.window.KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    });
+    await act(async () => dialog.dispatchEvent(first));
+    expect(first.defaultPrevented).toBe(false);
+    expect(interrupt).not.toHaveBeenCalled();
+
+    const cancel = new dom.window.Event('cancel', { bubbles: false, cancelable: true });
+    await act(async () => dialog.dispatchEvent(cancel));
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(dialog.hasAttribute('open')).toBe(false);
+    expect(interrupt).not.toHaveBeenCalled();
+
+    const second = new dom.window.KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    });
+    await act(async () => dom.window.dispatchEvent(second));
+    expect(second.defaultPrevented).toBe(true);
+    expect(interrupt).toHaveBeenCalledOnce();
   });
 });

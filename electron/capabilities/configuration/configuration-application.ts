@@ -5,12 +5,19 @@ import type { ConfigHost } from '../../config/host/config-host.js';
 import {
   applyConfigPatch,
   escapeConfigPointer,
+  mutateConfig,
   patchConfigFields,
 } from '../../config/host/config-mutations.js';
 import { resolveProxyAgent } from '../../core/proxy/proxy-resolver.js';
 import type { AppConfigStore } from '../../core/storage/app-config-store.js';
 import { getProxyPoolSnapshot } from '../../core/storage/proxy-config-store.js';
 import { DEFAULT_SETTINGS } from '../../../shared/constants/index.js';
+import {
+  DEFAULT_SHORTCUTS,
+  type ConfigurableShortcutCommandId,
+  type ShortcutOverrides,
+} from '../../../shared/shortcuts.js';
+import type { WritableAppSettingKey } from '../../../shared/electron-contracts/configuration.js';
 import type {
   AppSettings,
   ConfigPlan,
@@ -109,7 +116,7 @@ export class ConfigurationApplication {
     return this.dependencies.settings.getSettings()[key];
   }
 
-  async writeSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void> {
+  async writeSetting<K extends WritableAppSettingKey>(key: K, value: AppSettings[K]): Promise<void> {
     await applyConfigPatch(this.dependencies.host, 'app-settings', [{
       op: 'replace',
       path: `/${escapeConfigPointer(key)}`,
@@ -117,7 +124,9 @@ export class ConfigurationApplication {
     }]);
   }
 
-  async writeSettings(settings: Partial<AppSettings>): Promise<void> {
+  async writeSettings(
+    settings: Partial<Pick<AppSettings, WritableAppSettingKey>>,
+  ): Promise<void> {
     const current = await this.dependencies.host.show<{ revision: number } & AppSettings>(
       'app-settings',
     );
@@ -131,6 +140,24 @@ export class ConfigurationApplication {
       })),
       current.revision,
     );
+  }
+
+  async writeShortcut(
+    commandId: ConfigurableShortcutCommandId,
+    override: string | null,
+  ): Promise<void> {
+    await mutateConfig<AppSettings>(this.dependencies.host, 'app-settings', (current) => {
+      const shortcuts: ShortcutOverrides = { ...current.shortcuts };
+      const hasOverride = Object.hasOwn(shortcuts, commandId);
+      if (override === DEFAULT_SHORTCUTS[commandId]) {
+        if (!hasOverride) return [];
+        delete shortcuts[commandId];
+      } else {
+        if (hasOverride && shortcuts[commandId] === override) return [];
+        shortcuts[commandId] = override;
+      }
+      return [{ op: 'add', path: '/shortcuts', value: shortcuts }];
+    });
   }
 
   async resetSettings(): Promise<void> {

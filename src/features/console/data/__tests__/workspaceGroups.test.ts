@@ -98,6 +98,26 @@ describe('groupByWorkspace', () => {
     expect(groups[0]?.rows.map((item) => item.agentId)).toEqual(['e', 'w']);
   });
 
+  it('applies pins inside each workspace without changing workspace order', () => {
+    const rows = buildThreadRows({
+      sessions: [
+        session({ agentId: 'alpha-new', workspace: '/w/alpha', createdAt: '2026-07-25T00:00:00.000Z' }),
+        session({ agentId: 'alpha-pinned', workspace: '/w/alpha', createdAt: '2026-07-01T00:00:00.000Z' }),
+        session({ agentId: 'beta-new', workspace: '/w/beta', createdAt: '2026-07-26T00:00:00.000Z' }),
+        session({ agentId: 'beta-old', workspace: '/w/beta', createdAt: '2026-07-02T00:00:00.000Z' }),
+      ],
+      history: [],
+      pinnedAgentRunIds: ['alpha-pinned'],
+    });
+
+    const groups = groupByWorkspace(rows, DEFAULT_WORKSPACE);
+    expect(groups.map((group) => group.key)).toEqual(['/w/beta', '/w/alpha']);
+    expect(groups.find((group) => group.key === '/w/alpha')?.rows.map((item) => item.agentId))
+      .toEqual(['alpha-pinned', 'alpha-new']);
+    expect(groups.find((group) => group.key === '/w/beta')?.rows.map((item) => item.agentId))
+      .toEqual(['beta-new', 'beta-old']);
+  });
+
   it('path 只在非缺省工作区时有值', () => {
     const groups = groupByWorkspace(
       [row({ agentId: 'a' }), row({ agentId: 'b', workspace: '/w/p' })],

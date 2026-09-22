@@ -3,7 +3,7 @@
  *
  * 浏览器负责的部分不自己写：
  * - **焦点陷阱**与 inert 背景：`showModal()` 自带
- * - **Esc 关闭**：close request 自带（且**先于**应用级键盘路由，正是键盘优先级链的第一级）
+ * - **Esc 关闭**：路由只委托 dismiss，浏览器随后执行原生 close request
  * - **点外关闭**：`closedby="any"`，不需要 `document.mousedown` 监听 + 浮层白名单排除
  * - **top layer**：无需 z-index 管理
  *
@@ -12,6 +12,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 
+import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import { acquireOverlay } from './overlayPresence';
 import styles from './overlay.module.css';
 
@@ -39,6 +40,12 @@ export const Dialog: React.FC<DialogProps> = ({
 }) => {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'console-dialog',
+    active: open,
+    handling: 'delegate-dismiss',
+    blocksLowerLayers: 'all',
+  });
 
   // 声明式 light-dismiss：点遮罩与 Esc 都关（Chromium 134+，本项目 148）。
   // 用 setAttribute 而非 JSX 属性——eslint 的 react/no-unknown-property 尚不认识 closedby，
@@ -82,12 +89,14 @@ export const Dialog: React.FC<DialogProps> = ({
       className={`${styles.dialog} ${className ?? ''}`}
       style={width ? ({ '--dialog-width': `${width}px` } as React.CSSProperties) : undefined}
     >
-      {title && (
-        <header className={styles.dialogHeader} id={titleId}>
-          {title}
-        </header>
-      )}
-      <div className={`${styles.dialogBody} ${bodyClassName ?? ''}`}>{children}</div>
+      <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+        {title && (
+          <header className={styles.dialogHeader} id={titleId}>
+            {title}
+          </header>
+        )}
+        <div className={`${styles.dialogBody} ${bodyClassName ?? ''}`}>{children}</div>
+      </ShortcutOverlayParentProvider>
     </dialog>
   );
 };

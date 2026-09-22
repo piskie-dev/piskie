@@ -13,6 +13,7 @@ import { ChevronRight, CircleHelp, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { SetupGuide } from '../../../shared/types/setup-guide';
+import { useDismissShortcutScope } from '../../shortcuts';
 import styles from './dossier.module.css';
 
 const visit = (url: string): void => {
@@ -84,6 +85,12 @@ export const HandbookPopover: React.FC<{ readonly guide: SetupGuide }> = ({ guid
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
+
+  useDismissShortcutScope({
+    scopeIdPrefix: 'im-handbook-popover',
+    active: open,
+    onDismiss: () => setOpen(false),
+  });
 
   useEffect(() => {
     if (!open) return;

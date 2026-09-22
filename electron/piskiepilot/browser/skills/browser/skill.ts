@@ -60,6 +60,13 @@ const skill = defineTrustedBrowserSkill({
         return ok(await ctx.browser.core.fillByUid(browserContext(params, ctx)));
       },
     },
+    typeText: {
+      description: "Type Unicode text at the currently selected page's current focus/selection, replacing selected text without focusing or clearing a field. Set the focus/selection before calling. Passes text unchanged, including spaces and newlines; empty text sends no input. Newlines act as Enter and may trigger page actions. This is not full IME simulation; verify application state and saving separately. Returns a fresh snapshot.",
+      params: z.object({ "text": z.string().describe("Text to type unchanged at the current focus/selection; spaces and newlines are preserved.") }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.typeText(browserContext(params, ctx)));
+      },
+    },
     pressKey: {
       description: "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations). Examples: \"Enter\", \"Control+A\", \"Control++\", \"Control+Shift+R\". Modifiers: Control, Shift, Alt, Meta",
       params: z.object({ "key": z.string().describe("A key or a combination. Examples: \"Enter\", \"Tab\", \"Escape\", \"Control+A\", \"Control+Shift+R\", \"PageDown\", \"ArrowUp\". Available modifiers: Control, Shift, Alt, Meta"), "count": num(z.gte(1)).default(1).describe("Number of times to press the key (deprecated, use count=1 and call multiple times if needed)") }),

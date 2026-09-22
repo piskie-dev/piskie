@@ -13,6 +13,7 @@ import type {
   ConfigChangeImpact,
   ConfigValidationReport,
 } from '../types/config.js';
+import type { ConfigurableShortcutCommandId } from '../shortcuts.js';
 import type {
   ProxyProfile,
   ProxyProbeResult,
@@ -63,6 +64,7 @@ export const CONFIGURATION_OPERATIONS = Object.freeze({
   readSetting: 'configuration.settings.readOne',
   writeSetting: 'configuration.settings.write',
   writeSettings: 'configuration.settings.writeAll',
+  writeShortcut: 'configuration.settings.writeShortcut',
   resetSettings: 'configuration.settings.reset',
   developmentFeatures: 'configuration.settings.developmentFeatures',
   readProxy: 'configuration.proxy.read',
@@ -79,11 +81,14 @@ export const CONFIGURATION_TOPICS = Object.freeze({
 export interface SettingsClient {
   read(): Promise<AppSettings>;
   readOne<K extends keyof AppSettings>(key: K): Promise<AppSettings[K]>;
-  write<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void>;
-  writeAll(settings: Partial<AppSettings>): Promise<void>;
+  write<K extends WritableAppSettingKey>(key: K, value: AppSettings[K]): Promise<void>;
+  writeAll(settings: Partial<Pick<AppSettings, WritableAppSettingKey>>): Promise<void>;
+  writeShortcut(commandId: ConfigurableShortcutCommandId, override: string | null): Promise<void>;
   reset(): Promise<void>;
   developmentFeatures(): Promise<boolean>;
 }
+
+export type WritableAppSettingKey = Exclude<keyof AppSettings, 'shortcuts'>;
 
 export interface ProxyClient {
   read(): Promise<ProxyPoolSnapshot>;

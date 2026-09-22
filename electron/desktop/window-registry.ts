@@ -1,4 +1,5 @@
 import { appLog } from '@electron/observability/logging/app-log.js';
+import { isElectronReservedShortcut } from '@shared/shortcuts.js';
 import { createUuid } from '@shared/utils/identifiers.js';
 
 import path from 'node:path';
@@ -443,13 +444,11 @@ export class WindowRegistry implements DesktopPresentationPort {
       if (!this.isAllowedRendererUrl(nextUrl)) event.preventDefault();
     });
     window.webContents.on('before-input-event', (event, input) => {
-      const modifier = this.options.platform === 'darwin' ? input.meta : input.control;
-      if (modifier && ['r', 'f', 'g', 'p'].includes(input.key.toLowerCase()))
-        event.preventDefault();
-      if (!options.development && input.key === 'F12') event.preventDefault();
-      if (!options.development && modifier && input.shift && input.key.toLowerCase() === 'i') {
-        event.preventDefault();
-      }
+      if (isElectronReservedShortcut(
+        input,
+        this.options.platform,
+        options.development,
+      )) event.preventDefault();
     });
     window.webContents.on('did-fail-load', (_event, code, description, _url) => {
       if (options.development || code === -3) return;

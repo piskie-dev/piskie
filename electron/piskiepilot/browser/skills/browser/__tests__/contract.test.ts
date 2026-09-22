@@ -74,6 +74,7 @@ const mocks = vi.hoisted(() => {
     uploadFileByUid: vi.fn(async () => undefined),
     handleDialog: vi.fn(async () => undefined),
     waitForTextOnPage: vi.fn(async () => undefined),
+    typeText: vi.fn(async () => receipt),
     pressKey: vi.fn(async () => receipt),
     newPage: vi.fn(async () => page),
     closePageByIndex: vi.fn(async () => undefined),
@@ -189,7 +190,7 @@ describe('browser public contract', () => {
     });
   });
 
-  it('freezes all 30 function names and top-level input fields', () => {
+  it('freezes all 31 function names and top-level input fields', () => {
     const actual = Object.fromEntries(
       Object.entries(browserCoreSkill.functions).map(([name, definition]) => {
         const schema = z.toJSONSchema(definition.params, { target: 'draft-7', io: 'input' });
@@ -204,6 +205,7 @@ describe('browser public contract', () => {
       takeSnapshot: { properties: ['verbose'], required: [] },
       clickByUid: { properties: ['dblClick', 'uid'], required: ['uid'] },
       fillByUid: { properties: ['uid', 'value'], required: ['uid', 'value'] },
+      typeText: { properties: ['text'], required: ['text'] },
       pressKey: { properties: ['count', 'key'], required: ['key'] },
       navigateTo: { properties: ['ignoreCache', 'timeout', 'type', 'url'], required: [] },
       goBack: { properties: [], required: [] },
@@ -242,6 +244,30 @@ describe('browser public contract', () => {
       setWindowBounds: { properties: ['bounds'], required: ['bounds'] },
     });
   });
+
+  it.each(['  Example 中文😀\nNext paragraph  ', '   ', '\n', ''])(
+    'types unchanged text %j through the public skill and returns a fresh snapshot',
+    async (text) => {
+      const signal = new AbortController().signal;
+      const definition = browserCoreSkill.functions.typeText;
+
+      await expect(definition.run(definition.params.parse({ text }), {
+        browserId: 'browser-a',
+        signal,
+        log: vi.fn(),
+        browser: { core: browserCore } as never,
+      })).resolves.toEqual({
+        ok: true,
+        text: `Successfully typed text\n\n${embeddedSnapshot}`,
+      });
+      expect(mocks.runExclusive).toHaveBeenCalledExactlyOnceWith(
+        'browser-a', expect.any(Function), signal
+      );
+      expect(mocks.automation.typeText).toHaveBeenCalledExactlyOnceWith(text);
+      expect(mocks.automation.takeSnapshot).toHaveBeenCalledExactlyOnceWith(false);
+      expect(mocks.automation.consumePageChanges).toHaveBeenCalledOnce();
+    }
+  );
 
   it('preserves standalone and post-action snapshot text', async () => {
     await expect(browserCore.takeSnapshot({ browserId: 'browser-a' })).resolves.toBe(

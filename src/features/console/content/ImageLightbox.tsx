@@ -10,6 +10,7 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CopyActionButton } from '@/components/shared/CopyActionButton';
 import { copyImage } from '@/services/clipboard';
+import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import styles from './ImageLightbox.module.css';
 
 interface ImageLightboxProps {
@@ -34,6 +35,12 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const activeThumbRef = useRef<HTMLButtonElement>(null);
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'console-image-lightbox',
+    active: preview !== null,
+    handling: 'delegate-dismiss',
+    blocksLowerLayers: 'all',
+  });
   const [selection, setSelection] = useState<{
     readonly preview: ImageLightboxProps['preview'];
     readonly index: number;
@@ -109,27 +116,28 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
       onKeyDown={handleKeyDown}
       aria-label={t('sessionWorkbenchUi.lightbox.title')}
     >
-      <div className={styles.toolbar}>
-        <CopyActionButton
-          className={styles.copy}
-          contentKey={copyKey}
-          label={t('clipboardUi.copyImage')}
-          disabled={!imageUrl}
-          iconOnly
-          onCopy={() => copyImage({ kind: 'url', url: imageUrl!, name: imageName })}
-        />
-        <button
-          type="button"
-          className={styles.dismiss}
-          onClick={onClose}
-          aria-label={t('sessionWorkbenchUi.lightbox.close')}
-        >
-          <X size={14} aria-hidden="true" />
-        </button>
-      </div>
+      <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+        <div className={styles.toolbar}>
+          <CopyActionButton
+            className={styles.copy}
+            contentKey={copyKey}
+            label={t('clipboardUi.copyImage')}
+            disabled={!imageUrl}
+            iconOnly
+            onCopy={() => copyImage({ kind: 'url', url: imageUrl!, name: imageName })}
+          />
+          <button
+            type="button"
+            className={styles.dismiss}
+            onClick={onClose}
+            aria-label={t('sessionWorkbenchUi.lightbox.close')}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
 
-      <div className={styles.browser} data-multiple={count > 1 ? 'true' : undefined}>
-        <div className={styles.stage}>
+        <div className={styles.browser} data-multiple={count > 1 ? 'true' : undefined}>
+          <div className={styles.stage}>
           {count > 1 && (
             <button
               type="button"
@@ -163,32 +171,33 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
               aria-label={t('sessionWorkbenchUi.lightbox.next')}
             />
           )}
-        </div>
-
-        {preview && count > 1 && (
-          <div className={styles.filmstrip} aria-label={t('sessionWorkbenchUi.lightbox.thumbnails')}>
-            <span className={styles.counter} aria-live="polite">
-              {activeIndex + 1} / {count}
-            </span>
-            <div className={styles.rail}>
-              {preview.urls.map((url, index) => (
-                <button
-                  key={`${url}:${index}`}
-                  ref={index === activeIndex ? activeThumbRef : undefined}
-                  type="button"
-                  className={styles.thumbnail}
-                  data-active={index === activeIndex ? 'true' : undefined}
-                  onClick={() => select(index)}
-                  aria-label={t('sessionWorkbenchUi.lightbox.openImage', { index: index + 1 })}
-                  aria-current={index === activeIndex ? 'true' : undefined}
-                >
-                  <img src={url} alt="" draggable={false} />
-                </button>
-              ))}
-            </div>
           </div>
-        )}
-      </div>
+
+          {preview && count > 1 && (
+            <div className={styles.filmstrip} aria-label={t('sessionWorkbenchUi.lightbox.thumbnails')}>
+              <span className={styles.counter} aria-live="polite">
+                {activeIndex + 1} / {count}
+              </span>
+              <div className={styles.rail}>
+                {preview.urls.map((url, index) => (
+                  <button
+                    key={`${url}:${index}`}
+                    ref={index === activeIndex ? activeThumbRef : undefined}
+                    type="button"
+                    className={styles.thumbnail}
+                    data-active={index === activeIndex ? 'true' : undefined}
+                    onClick={() => select(index)}
+                    aria-label={t('sessionWorkbenchUi.lightbox.openImage', { index: index + 1 })}
+                    aria-current={index === activeIndex ? 'true' : undefined}
+                  >
+                    <img src={url} alt="" draggable={false} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </ShortcutOverlayParentProvider>
     </dialog>
   );
 };

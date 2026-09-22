@@ -181,6 +181,15 @@ export async function selectPage(params: BrowserCallContext & {
   });
 }
 
+export async function typeText(params: BrowserCallContext & {
+  text: string;
+}): Promise<string> {
+  return runBrowserCore(params, async (automation) => {
+    await automation.typeText(params.text);
+    return finalize(automation, 'Successfully typed text', { snapshot: true });
+  });
+}
+
 export async function pressKey(params: BrowserCallContext & {
   key: string;
   count?: number;

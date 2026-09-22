@@ -29,6 +29,30 @@ describe('configuration settings boundary', () => {
     expect(writeSettings.input.safeParse([{ backgroundMaskOpacity: 1 }]).success).toBe(false);
   });
 
+  it('accepts only known, legal, non-conflicting shortcut overrides', () => {
+    const writeShortcut = controller.operations.find(
+      (operation) => operation.id === CONFIGURATION_OPERATIONS.writeShortcut,
+    )!;
+
+    expect(writeShortcut.input.safeParse(['agent.interruptCurrent', null]).success).toBe(true);
+    expect(writeShortcut.input.safeParse([
+      'console.toggleLayout',
+      'primary+shift+l',
+    ]).success).toBe(true);
+    expect(writeShortcut.input.safeParse(['retired.shortcut', 'primary+shift+l']).success)
+      .toBe(false);
+
+    for (const [commandId, override] of [
+      ['agent.interruptCurrent', 'b'],
+      ['agent.interruptCurrent', 'primary+c'],
+      ['agent.interruptCurrent', 'primary+r'],
+      ['console.toggleLayout', 'primary+b'],
+    ]) {
+      expect(writeShortcut.input.safeParse([commandId, override]).success).toBe(false);
+    }
+    expect(writeShortcut.input.safeParse(['agent.interruptCurrent', false]).success).toBe(false);
+  });
+
   it('exposes every current setting through single-field operations', () => {
     const readSetting = controller.operations.find(
       (operation) => operation.id === CONFIGURATION_OPERATIONS.readSetting,
@@ -39,6 +63,7 @@ describe('configuration settings boundary', () => {
 
     expect(readSetting.input.safeParse(['navPrismSpot']).success).toBe(true);
     expect(readSetting.input.safeParse(['autoCheckAndDownloadUpdates']).success).toBe(true);
+    expect(readSetting.input.safeParse(['shortcuts']).success).toBe(true);
     expect(writeSetting.input.safeParse(['autoCheckAndDownloadUpdates', false]).success).toBe(true);
     expect(writeSetting.input.safeParse(['navPrismSpot', { x: 12, y: 34 }]).success).toBe(true);
     expect(writeSetting.input.safeParse([
@@ -49,6 +74,10 @@ describe('configuration settings boundary', () => {
     expect(writeSetting.input.safeParse(['backgroundMaskOpacity', 0.99]).success).toBe(true);
     expect(writeSetting.input.safeParse(['backgroundMaskOpacity', 0]).success).toBe(false);
     expect(writeSetting.input.safeParse(['backgroundMaskOpacity', 1]).success).toBe(false);
+    expect(writeSetting.input.safeParse(['shortcuts', false]).success).toBe(false);
+    expect(writeSetting.input.safeParse(['theme', {
+      'agent.interruptCurrent': null,
+    }]).success).toBe(false);
     expect(readSetting.input.safeParse(['retiredSetting']).success).toBe(false);
   });
 });

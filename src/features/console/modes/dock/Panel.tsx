@@ -41,6 +41,7 @@ export interface PanelProps {
   readonly fidelity?: Fidelity;
   readonly children: React.ReactNode;
   readonly className?: string;
+  readonly shortcutOwner?: boolean;
   /**
    * 键盘焦点作用域的认领钩子（`content/useActionScope` 的返回值直接铺开）。
    * 走**捕获**阶段：面板内的菜单、卡片大量 `stopPropagation`，冒泡阶段收不到。
@@ -65,12 +66,14 @@ export const Panel = memo<PanelProps>(
     fidelity = 'visible',
     children,
     className,
+    shortcutOwner,
     onPointerDownCapture,
     onFocusCapture,
   }) => (
     <section
       className={`${styles.panel} ${className ?? ''}`}
       data-fidelity={fidelity}
+      data-shortcut-owner={shortcutOwner ? 'true' : undefined}
       onPointerDownCapture={onPointerDownCapture}
       onFocusCapture={onFocusCapture}
     >

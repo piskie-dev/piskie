@@ -17,7 +17,7 @@
  * 自动增高走 `field-sizing: content`，不写 JS 测高。
  */
 
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowUp,
@@ -36,6 +36,14 @@ import {
 import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ContextUsage } from '../../../../../shared/types/token';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
+import { matchesShortcut } from '../../../../../shared/shortcuts';
+import {
+  useShortcutOwner,
+  useShortcutBinding,
+  useShortcutScope,
+  type ShortcutBinding,
+  type ShortcutScope,
+} from '../../../../shortcuts';
 import { useAttachmentDraft } from '../../attachments';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 import { composerDraftKey, submitComposerDraft, useComposerDraft, useComposerDraftVersion, useComposerSkills } from '../../data/composer-drafts';
@@ -55,6 +63,10 @@ import { SkillPicker } from './SkillPicker';
 import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import { WorkspaceBar } from './WorkspaceBar';
+import { activePrimaryOwnerId } from '../activePrimaryOwner';
+import type { ActionTarget } from '../../data/actions';
+import { useEffectiveConsoleShortcut } from '../../data/shortcuts';
+import { resolveInterruptPresentation } from './interruptPresentation';
 import styles from './conversationComposer.module.css';
 
 // ==================== 通用的药丸下拉（计划 / 审批共用） ====================
@@ -186,6 +198,9 @@ export interface ConversationComposerProps {
   readonly canPause: boolean;
   readonly onPreviewImage?: (src: string) => void;
   readonly stopping?: boolean;
+  readonly isShortcutOwner?: boolean;
+  /** A higher mode layer (for example Review) owns Esc before textarea blur. */
+  readonly deferEscapeFallback?: boolean;
   /** 成功才清空草稿和附件。 */
   readonly onSubmit: (payload: MessagePayload) => Promise<boolean>;
   readonly onInterrupt: () => Promise<void>;
@@ -207,10 +222,14 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     canPause,
     onPreviewImage,
     stopping = false,
+    isShortcutOwner = false,
+    deferEscapeFallback = false,
     onSubmit,
     onInterrupt,
   }) => {
     const { t } = useTranslation();
+    const target = useMemo<ActionTarget>(() => ({ agentId, workerId }), [agentId, workerId]);
+    const interruptShortcut = useEffectiveConsoleShortcut('agent.interruptCurrent');
     const draftKey = composerDraftKey(agentId, workerId);
     // 文字与附件共享目标键，切模块/切任务回来仍在，也不会跨目标串稿。
     const [draft, setDraft] = useComposerDraft(draftKey);
@@ -229,6 +248,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     });
     const { anchorRef, textareaRef, options: skillOptions, textareaProps, onKeyDown: onSkillKeyDown } = skillComposer;
     const submitting = useRef(false);
+    const interrupting = useRef(false);
     const [pendingAction, setPendingAction] = useState<ComposerPendingAction>(null);
     const attachments = useAttachmentDraft(draftKey, setDraft);
     const [submitError, setSubmitError] = useState<PresentationText>();
@@ -242,12 +262,6 @@ export const ConversationComposer = memo<ConversationComposerProps>(
       pendingAction,
     );
     const controlsDisabled = stopping || pendingAction !== null;
-    const actionLabel = mainAction.kind === 'interrupt'
-      ? workerId
-        ? t('sessionWorkbenchUi.composer.interruptWorker')
-        : t('sessionWorkbenchUi.composer.interruptRun')
-      : t('sessionWorkbenchUi.composer.send');
-
     const submit = useCallback(async () => {
       if (stopping || submitting.current || pendingAction !== null || (!draft.trim() && !attachments.hasAttachments && skills.length === 0)) return;
       submitting.current = true;
@@ -270,14 +284,66 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     }, [attachments, draft, draftKey, onSubmit, pendingAction, skills, stopping]);
 
     const interrupt = useCallback(async () => {
-      if (stopping || !canPause || pendingAction !== null) return;
+      if (interrupting.current || stopping || !canPause || pendingAction !== null) return;
+      interrupting.current = true;
       setPendingAction('interrupt');
       try {
         await onInterrupt();
       } finally {
+        interrupting.current = false;
         setPendingAction(null);
       }
     }, [canPause, onInterrupt, pendingAction, stopping]);
+
+    const interruptPresentation = resolveInterruptPresentation(
+      target,
+      mainAction,
+      isShortcutOwner,
+      interruptShortcut,
+    );
+    const interruptRef = useRef(interrupt);
+    useEffect(() => {
+      interruptRef.current = interrupt;
+    }, [interrupt]);
+    const interruptScopeId = `console-interrupt:${activePrimaryOwnerId(target)}`;
+    const interruptScope = useMemo<ShortcutScope>(() => ({
+      id: interruptScopeId,
+      layer: 'active-primary-action',
+      blocksLowerLayers: 'none',
+      bindings: [],
+    }), [interruptScopeId]);
+    const interruptBinding = useMemo<ShortcutBinding>(() => ({
+      id: `${interruptScopeId}:interrupt`,
+      commandId: 'agent.interruptCurrent',
+      combo: interruptPresentation.shortcut?.physicalCombo ?? 'escape',
+      enabled: () => !interrupting.current,
+      allowInEditable: true,
+      handling: 'execute',
+      defaultBehavior: 'prevent',
+      execute: () => void interruptRef.current(),
+    }), [interruptPresentation.shortcut?.physicalCombo, interruptScopeId]);
+    const shortcutActive = interruptPresentation.shortcut !== null;
+    useShortcutScope(interruptScope, isShortcutOwner);
+    useShortcutBinding(interruptScopeId, interruptBinding, shortcutActive);
+    useShortcutOwner(interruptScopeId, shortcutActive);
+
+    const interruptLabel = workerId
+      ? t('sessionWorkbenchUi.composer.interruptWorker')
+      : t('sessionWorkbenchUi.composer.interruptRun');
+    const actionLabel = mainAction.kind === 'sending'
+      ? t('sessionWorkbenchUi.composer.sending')
+      : mainAction.kind === 'interrupt' && mainAction.disabled
+        ? t('sessionWorkbenchUi.composer.interrupting')
+        : mainAction.kind === 'interrupt'
+          ? interruptLabel
+          : t('sessionWorkbenchUi.composer.send');
+    const tooltipTitle = interruptPresentation.displayShortcut
+      ? t(workerId
+          ? 'sessionWorkbenchUi.composer.interruptWorkerWithShortcut'
+          : 'sessionWorkbenchUi.composer.interruptRunWithShortcut', {
+          shortcut: interruptPresentation.displayShortcut,
+        })
+      : actionLabel;
 
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -288,14 +354,18 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           void submit();
           return;
         }
-        // Esc 链的第一级：焦点在输入框里时先退出输入，再按一次才回主会话 tab
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+          const shortcut = interruptPresentation.shortcut;
+          if (deferEscapeFallback
+            || (shortcut && matchesShortcut(event.nativeEvent, shortcut.canonical, shortcut.platform))) {
+            return;
+          }
           event.preventDefault();
           event.stopPropagation();
           event.currentTarget.blur();
         }
       },
-      [history, onSkillKeyDown, submit],
+      [deferEscapeFallback, history, interruptPresentation.shortcut, onSkillKeyDown, submit],
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
@@ -425,7 +495,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           />
 
           <Tooltip
-            title={actionLabel}
+            title={tooltipTitle}
             enterDelay={100}
           >
             <button
@@ -434,6 +504,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
               onClick={mainAction.kind === 'interrupt' ? () => void interrupt() : () => void submit()}
               disabled={mainAction.disabled}
               aria-label={actionLabel}
+              aria-keyshortcuts={interruptPresentation.ariaShortcut ?? undefined}
             >
               {mainAction.kind === 'sending' ? (
                 <Loader2 size={14} className="animate-spin" />

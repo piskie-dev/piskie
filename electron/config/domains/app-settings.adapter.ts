@@ -6,6 +6,8 @@ import {
   isThemeBackgroundUrl,
 } from '../../../shared/constants/theme-background.js';
 import type { AppSettings } from '../../../shared/types/index.js';
+import type { ShortcutOverrides, ShortcutPlatform } from '../../../shared/shortcuts.js';
+import { validateShortcutOverrides } from '../../../shared/shortcuts.js';
 import type { ConfigDomainIntegrations } from './integrations.js';
 import { createManagedDomain } from './domain-factory.js';
 
@@ -46,6 +48,25 @@ const backgroundMaskOpacitySchema = z.number().min(APP_BG_MASK_MIN).max(APP_BG_M
   .describe('Background readability mask opacity.')
   .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'The background mask updates immediately.' } });
 
+const shortcutOverrideShape = {
+  'agent.interruptCurrent': z.string().max(80).nullable().optional()
+    .describe('Keyboard shortcut override for interrupting the active Agent or Worker; null disables it.')
+    .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'The active Agent interrupt shortcut updates immediately.' } }),
+  'console.toggleLayout': z.string().max(80).nullable().optional()
+    .describe('Keyboard shortcut override for switching the Console view; null disables it.')
+    .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'The Console view shortcut updates immediately.' } }),
+  'tool.promoteToBackground': z.string().max(80).nullable().optional()
+    .describe('Keyboard shortcut override for moving an eligible foreground tool to the background; null disables it.')
+    .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'The tool backgrounding shortcut updates immediately.' } }),
+};
+
+export const appShortcutOverridesSchema = z.strictObject(shortcutOverrideShape)
+  .describe('User overrides for configurable application keyboard shortcuts.')
+  .meta({ 'x-piskie': { applyMode: 'immediate', changeImpact: 'Keyboard shortcuts update immediately.' } });
+
+const persistedShortcutOverridesSchema = z.object(shortcutOverrideShape)
+  .default({});
+
 export const appSettingsWriteSchema = z.strictObject({
   theme: themeSchema,
   language: languageSchema,
@@ -55,6 +76,7 @@ export const appSettingsWriteSchema = z.strictObject({
   navPrismSpot: navPrismSpotSchema,
   backgroundImage: backgroundImageSchema,
   backgroundMaskOpacity: backgroundMaskOpacitySchema,
+  shortcuts: appShortcutOverridesSchema,
 });
 
 export const appSettingsReadSchema = z.strictObject({
@@ -68,9 +90,22 @@ export const appSettingsReadSchema = z.strictObject({
   navPrismSpot: navPrismSpotSchema.default(DEFAULT_SETTINGS.navPrismSpot),
   backgroundImage: backgroundImageSchema.default(DEFAULT_SETTINGS.backgroundImage),
   backgroundMaskOpacity: backgroundMaskOpacitySchema.default(DEFAULT_SETTINGS.backgroundMaskOpacity),
+  shortcuts: appShortcutOverridesSchema,
 });
 
-const appSettingsPersistedSchema = appSettingsReadSchema.refine(
+export const appSettingsPersistedSchema = z.object({
+  revision: z.number().int().nonnegative().describe('Monotonic app-settings revision.'),
+  theme: themeSchema,
+  language: languageSchema,
+  autoCheckAndDownloadUpdates: autoCheckAndDownloadUpdatesSchema
+    .default(DEFAULT_SETTINGS.autoCheckAndDownloadUpdates),
+  navEdgeDockEnabled: navEdgeDockEnabledSchema.default(DEFAULT_SETTINGS.navEdgeDockEnabled),
+  navPrismEnabled: navPrismEnabledSchema.default(DEFAULT_SETTINGS.navPrismEnabled),
+  navPrismSpot: navPrismSpotSchema.default(DEFAULT_SETTINGS.navPrismSpot),
+  backgroundImage: backgroundImageSchema.default(DEFAULT_SETTINGS.backgroundImage),
+  backgroundMaskOpacity: backgroundMaskOpacitySchema.default(DEFAULT_SETTINGS.backgroundMaskOpacity),
+  shortcuts: persistedShortcutOverridesSchema,
+}).refine(
   (settings) => settings.navEdgeDockEnabled || settings.navPrismEnabled,
   {
     path: ['navEdgeDockEnabled'],
@@ -80,23 +115,27 @@ const appSettingsPersistedSchema = appSettingsReadSchema.refine(
 
 type AppSettingsWrite = z.infer<typeof appSettingsWriteSchema>;
 type AppSettingsRead = z.infer<typeof appSettingsReadSchema>;
-type AppSettingsDocument = AppSettingsRead;
+type AppSettingsDocument = z.infer<typeof appSettingsPersistedSchema>;
 
 export function createAppSettingsDomain(
   rootDirectory: string,
   integration: ConfigDomainIntegrations['appSettings'],
 ) {
+  const persistedSchema = withShortcutValidation(
+    appSettingsPersistedSchema,
+    integration.shortcutPlatform,
+  );
   return createManagedDomain<AppSettingsDocument, AppSettingsRead, AppSettingsWrite>(rootDirectory, {
     contract: {
       id: 'app-settings',
       title: 'Application settings',
-      description: 'User-visible theme, language, update, navigation and background preferences.',
-      schemaVersion: 3,
+      description: 'User-visible theme, language, update, navigation, background and shortcut preferences.',
+      schemaVersion: 4,
       readSchema: appSettingsReadSchema,
       writeSchema: appSettingsWriteSchema,
       capabilities: ['show', 'plan', 'validate', 'apply', 'verify', 'history', 'rollback'],
     },
-    codec: { parse: (raw) => appSettingsPersistedSchema.parse(raw) },
+    codec: { parse: (raw) => persistedSchema.parse(raw) },
     bootstrap: () => ({
       revision: 0,
       ...structuredClone(DEFAULT_SETTINGS),
@@ -114,10 +153,33 @@ export function createAppSettingsDomain(
               path: '/navEdgeDockEnabled',
               message: 'At least one navigation surface must remain enabled.',
             }];
+        for (const issue of validateShortcutOverrides(candidate.shortcuts, integration.shortcutPlatform)) {
+          issues.push({
+            stage: 'semantic' as const,
+            code: `APP_SETTINGS_SHORTCUT_${issue.code.replaceAll('-', '_').toUpperCase()}`,
+            path: `/shortcuts/${escapePointerToken(issue.commandId)}`,
+            message: issue.message,
+          });
+        }
         return { valid: issues.length === 0, issues };
       },
       publish: (candidate, context) => integration.publish(toAppSettings(candidate), context),
     },
+  });
+}
+
+function withShortcutValidation<T extends z.ZodType<AppSettingsDocument>>(
+  schema: T,
+  platform: ShortcutPlatform,
+) {
+  return schema.superRefine((settings, context) => {
+    for (const issue of validateShortcutOverrides(settings.shortcuts, platform)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['shortcuts', issue.commandId],
+        message: issue.message,
+      });
+    }
   });
 }
 
@@ -131,5 +193,10 @@ function toAppSettings(document: AppSettingsDocument): AppSettings {
     navPrismSpot: document.navPrismSpot,
     backgroundImage: document.backgroundImage,
     backgroundMaskOpacity: document.backgroundMaskOpacity,
+    shortcuts: structuredClone(document.shortcuts) as ShortcutOverrides,
   };
+}
+
+function escapePointerToken(value: string): string {
+  return value.replaceAll('~', '~0').replaceAll('/', '~1');
 }

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useRendererRuntime, useContextInspectorResource } from '../../renderer-runtime/hooks';
 import { Divider } from '../console/chrome/Divider';
+import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '../../shortcuts';
 import { ContextLedger } from './ContextLedger';
 import { ContextTimeline } from './ContextTimeline';
 import { LocalInspector } from './LocalInspector';
@@ -53,6 +54,12 @@ export function ContextInspector({
   const inspectorRef = useRef<HTMLElement>(null);
   /* 原 antd Drawer 改原生 <dialog>(top layer + ::backdrop):开合受控同步 */
   const drawerRef = useRef<HTMLDialogElement>(null);
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'context-inspector-dialog',
+    active: open,
+    handling: 'delegate-dismiss',
+    blocksLowerLayers: 'all',
+  });
 
   useEffect(() => {
     const dialog = drawerRef.current;
@@ -178,8 +185,9 @@ export function ContextInspector({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      {open && (
-      <div className={styles.drawerFrame}>
+      <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+        {open && (
+        <div className={styles.drawerFrame}>
         <header className={styles.drawerHeader}>
           <div className={styles.drawerTitle}>
             <div className={styles.titleCopy}>
@@ -317,8 +325,9 @@ export function ContextInspector({
           <StatePanel title={t('contextUi.empty')} />
         )}
       </div>
-      </div>
-      )}
+        </div>
+        )}
+      </ShortcutOverlayParentProvider>
     </dialog>
   );
 }

@@ -3,8 +3,9 @@
  * 页内右侧滑入：scrim 点击关闭、Esc 关闭、底部动作槽。
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDismissShortcutScope } from '../../../shortcuts';
 import { ActPill } from '../glyphs/ActPill';
 import styles from '../studio.module.css';
 
@@ -20,13 +21,12 @@ export const SheetShell: React.FC<SheetShellProps> = (props) => {
   const { onClose } = props;
   const { t } = useTranslation();
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useDismissShortcutScope({
+    scopeIdPrefix: 'environment-sheet',
+    active: true,
+    blocksLowerLayers: 'all',
+    onDismiss: onClose,
+  });
 
   return (
     <>

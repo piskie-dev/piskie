@@ -11,9 +11,10 @@
  * - 帧尺寸未知（首帧未到）时不转发：没有坐标基准，发过去就是错位点击。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import type { RemoteInputEvent } from '../../../../../shared/types/stream';
+import { useShortcutScope, type ShortcutScope } from '@/shortcuts';
 import { buttonNameOf, modifiersOf, toKeyEvent, toPageCoords, type FrameSize } from './remoteInput';
 
 interface RemoteInputOptions {
@@ -29,11 +30,23 @@ interface RemoteInputHandlers {
   readonly onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   readonly onKeyUp: (event: React.KeyboardEvent<HTMLElement>) => void;
+  readonly onFocus: () => void;
+  readonly onBlur: () => void;
   readonly onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
 export function useRemoteInput(options: RemoteInputOptions): RemoteInputHandlers {
   const { enabled, frameSize, send } = options;
+  const rawScopeId = useId();
+  const shortcutScopeId = `console-remote-input:${rawScopeId}`;
+  const [focused, setFocused] = useState(false);
+  const shortcutScope = useMemo<ShortcutScope>(() => ({
+    id: shortcutScopeId,
+    layer: 'exclusive-input',
+    blocksLowerLayers: 'all',
+    bindings: [],
+  }), [shortcutScopeId]);
+  useShortcutScope(shortcutScope, enabled && focused);
 
   const hostRef = useRef<HTMLElement | null>(null);
   // 事件回调里要读最新值，但不该因为它变化而重绑监听
@@ -111,7 +124,7 @@ export function useRemoteInput(options: RemoteInputOptions): RemoteInputHandlers
 
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
     if (!latest.current.enabled) return;
-    // 全局快捷键（切模式/搜索等）留给应用，不劫持
+    // 维持既有远端映射；未转发的组合由 exclusive-input scope 阻断本地业务命令。
     if (event.metaKey || event.ctrlKey) {
       if (event.key !== 'a' && event.key !== 'c' && event.key !== 'v' && event.key !== 'x') return;
     }
@@ -136,6 +149,8 @@ export function useRemoteInput(options: RemoteInputOptions): RemoteInputHandlers
     // 右键已作为 mousePressed 转发进页面，本地菜单不该再弹
     if (latest.current.enabled) event.preventDefault();
   }, []);
+  const onFocus = useCallback(() => setFocused(true), []);
+  const onBlur = useCallback(() => setFocused(false), []);
 
   // ref 回调只登记节点：React 18 的 ref 回调不支持返回清理函数（那是 19 的能力），
   // 监听放 effect 里才有对称的解绑
@@ -176,5 +191,15 @@ export function useRemoteInput(options: RemoteInputOptions): RemoteInputHandlers
     return () => host.removeEventListener('wheel', onWheel);
   }, [host, coordsOf]);
 
-  return { ref, onPointerDown, onPointerMove, onPointerUp, onKeyDown, onKeyUp, onContextMenu };
+  return {
+    ref,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onKeyDown,
+    onKeyUp,
+    onFocus,
+    onBlur,
+    onContextMenu,
+  };
 }

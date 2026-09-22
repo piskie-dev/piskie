@@ -7,9 +7,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_SETTINGS } from '../../shared/constants';
 import type { AppSettings } from '../../shared/types';
+import type { ConfigurableShortcutCommandId } from '../../shared/shortcuts';
 import { changeLanguage } from '../i18n';
 
 type Theme = AppSettings['theme'];
+type WritableAppSettings = Partial<Omit<AppSettings, 'shortcuts'>>;
 
 const UI_STORAGE_NAME = 'piskie-ui-storage';
 
@@ -46,6 +48,8 @@ interface UIStore {
   expandedWorkspaceGroups: string[];
   /** 按真实分组 key 记忆顺序；空数组表示尚未初始化。 */
   workspaceGroupOrder: string[];
+  /** 置顶会话的 AgentRun ID；排序仅在各自工作区分组内生效。 */
+  pinnedAgentRunIds: string[];
   /** 隐形左坞开关（默认开启；与 navPrismEnabled 至少保留一个）。 */
   navEdgeDockEnabled: boolean;
   /** 自由棱镜开关（默认开启；与 navEdgeDockEnabled 至少保留一个）。 */
@@ -62,11 +66,24 @@ interface UIStore {
   toggleWorkspaceGroup: (key: string) => void;
   expandWorkspaceGroup: (key: string) => void;
   setWorkspaceGroupOrder: (order: string[]) => void;
+  toggleAgentRunPin: (agentId: string) => void;
   setSettings: (settings: AppSettings) => void;
 
   // Actions - 业务操作
   fetchSettings: () => Promise<void>;
-  updateSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  updateSettings: (settings: WritableAppSettings) => Promise<boolean>;
+  updateShortcut: (
+    commandId: ConfigurableShortcutCommandId,
+    override: string | null,
+  ) => Promise<boolean>;
+}
+
+let settingsOperationQueue: Promise<void> = Promise.resolve();
+
+function enqueueSettingsOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = settingsOperationQueue.then(operation, operation);
+  settingsOperationQueue = result.then(() => undefined, () => undefined);
+  return result;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -84,6 +101,7 @@ export const useUIStore = create<UIStore>()(
       backgroundIsLight: null,
       expandedWorkspaceGroups: [],
       workspaceGroupOrder: [],
+      pinnedAgentRunIds: [],
       navEdgeDockEnabled: DEFAULT_SETTINGS.navEdgeDockEnabled,
       navPrismEnabled: DEFAULT_SETTINGS.navPrismEnabled,
       navPrismSpot: DEFAULT_SETTINGS.navPrismSpot,
@@ -103,11 +121,16 @@ export const useUIStore = create<UIStore>()(
         set((state) => ({ expandedWorkspaceGroups: [...state.expandedWorkspaceGroups, key] }));
       },
       setWorkspaceGroupOrder: (order) => set({ workspaceGroupOrder: order }),
+      toggleAgentRunPin: (agentId) => set((state) => ({
+        pinnedAgentRunIds: state.pinnedAgentRunIds.includes(agentId)
+          ? state.pinnedAgentRunIds.filter((item) => item !== agentId)
+          : [...state.pinnedAgentRunIds, agentId],
+      })),
       setBackgroundMaskOpacity: (opacity) => set({ backgroundMaskOpacity: opacity }),
       setBackgroundIsLight: (isLight) => set({ backgroundIsLight: isLight }),
 
       // Actions - 业务操作
-      fetchSettings: async () => {
+      fetchSettings: () => enqueueSettingsOperation(async () => {
         try {
           const settings = await window.piskie.configuration.settings.read();
           set((state) => projectAppSettings(state, settings));
@@ -117,38 +140,50 @@ export const useUIStore = create<UIStore>()(
         } catch (error) {
           console.error('Failed to fetch settings:', error);
         }
-      },
+      }),
 
-      updateSettings: async (newSettings) => {
+      updateSettings: (newSettings) => enqueueSettingsOperation(async () => {
         try {
           const currentSettings = get().settings ?? DEFAULT_SETTINGS;
           const changes = changedAppSettings(currentSettings, newSettings);
           if (Object.keys(changes).length === 0) return true;
           await window.piskie.configuration.settings.writeAll(changes);
-          const updatedSettings = { ...currentSettings, ...changes };
+          const updatedSettings = await window.piskie.configuration.settings.read();
           set((state) => projectAppSettings(state, updatedSettings));
-          if (changes.language) {
-            await changeLanguage(changes.language);
+          if (updatedSettings.language !== currentSettings.language) {
+            await changeLanguage(updatedSettings.language);
           }
           return true;
         } catch (error) {
           console.error('Failed to update settings:', error);
           return false;
         }
-      },
+      }),
+
+      updateShortcut: (commandId, override) => enqueueSettingsOperation(async () => {
+        try {
+          await window.piskie.configuration.settings.writeShortcut(commandId, override);
+          const settings = await window.piskie.configuration.settings.read();
+          set((state) => projectAppSettings(state, settings));
+          return true;
+        } catch (error) {
+          console.error('Failed to update shortcut:', error);
+          return false;
+        }
+      }),
     }),
     {
       name: UI_STORAGE_NAME,
-      version: 4,
+      version: 5,
       /**
-       * v4 工作区默认收起，退役 collapsedWorkspaceGroups；旧数据不能推断哪些组
+       * v5 增加工作区内会话置顶偏好。v4 工作区默认收起，退役 collapsedWorkspaceGroups；旧数据不能推断哪些组
        * 曾被手动展开，因此按新的默认值初始化。读取只投影当前字段。
        * 导航与背景偏好由 app-settings 持久化，localStorage 中的旧值直接忽略。
        */
       migrate: (persisted, version) => readPersistedUIState(persisted, version) as never,
       merge: (persisted, current) => ({
         ...current,
-        ...readPersistedUIState(persisted, 4),
+        ...readPersistedUIState(persisted, 5),
       }),
       partialize: selectPersistedUIState,
     }
@@ -162,6 +197,7 @@ export type PersistedUIState = Pick<
   | 'consoleMode'
   | 'expandedWorkspaceGroups'
   | 'workspaceGroupOrder'
+  | 'pinnedAgentRunIds'
 >;
 
 export function selectPersistedUIState(state: PersistedUIState): PersistedUIState {
@@ -171,6 +207,7 @@ export function selectPersistedUIState(state: PersistedUIState): PersistedUIStat
     consoleMode: state.consoleMode,
     expandedWorkspaceGroups: state.expandedWorkspaceGroups,
     workspaceGroupOrder: state.workspaceGroupOrder,
+    pinnedAgentRunIds: state.pinnedAgentRunIds,
   };
 }
 
@@ -197,6 +234,11 @@ export function readPersistedUIState(value: unknown, version: number): Partial<P
       next[key] = [...new Set(keys)];
     }
   }
+  const pinnedAgentRunIds = state.pinnedAgentRunIds;
+  if (version >= 5 && Array.isArray(pinnedAgentRunIds)
+    && pinnedAgentRunIds.every((item) => typeof item === 'string')) {
+    next.pinnedAgentRunIds = [...new Set(pinnedAgentRunIds)];
+  }
 
   return next;
 }
@@ -218,20 +260,32 @@ function projectAppSettings(state: UIStore, settings: AppSettings): Partial<UISt
 
 function changedAppSettings(
   current: AppSettings,
-  candidate: Partial<AppSettings>,
-): Partial<AppSettings> {
+  candidate: WritableAppSettings,
+): WritableAppSettings {
   const changes: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(candidate) as Array<[keyof AppSettings, unknown]>) {
     if (value === undefined || appSettingValuesEqual(current[key], value)) continue;
     changes[key] = value;
   }
-  return changes as Partial<AppSettings>;
+  return changes as WritableAppSettings;
 }
 
 function appSettingValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
-  const leftSpot = left as Partial<NavPrismSpot>;
-  const rightSpot = right as Partial<NavPrismSpot>;
-  return leftSpot.x === rightSpot.x && leftSpot.y === rightSpot.y;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => appSettingValuesEqual(value, right[index]));
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => (
+      Object.hasOwn(rightRecord, key)
+      && appSettingValuesEqual(leftRecord[key], rightRecord[key])
+    ));
 }

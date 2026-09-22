@@ -14,7 +14,19 @@
 
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, FolderOpen, History, Pause, Pencil, Plus, Square, Trash2 } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  FolderOpen,
+  History,
+  Pause,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Square,
+  Trash2,
+} from 'lucide-react';
 
 import { useUIStore } from '../../../store/uiStore';
 
@@ -48,7 +60,7 @@ const HISTORY_MENU_ICON = {
   delete: <Trash2 size={12} />,
 } as const;
 
-export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead';
+export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead' | 'pin' | 'unpin';
 
 export interface WorkspaceTreeProps {
   readonly groups: readonly WorkspaceGroup[];
@@ -84,7 +96,11 @@ const Row = memo<{
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
     : undefined;
 
-  const items: MenuItemDescriptor[] = live
+  const items: MenuItemDescriptor[] = [{
+    key: row.pinned ? 'unpin' : 'pin',
+    label: t(`sessionWorkbenchUi.sessionMenu.${row.pinned ? 'unpin' : 'pin'}`),
+    icon: row.pinned ? <PinOff size={12} /> : <Pin size={12} />,
+  }, ...(live
     ? buildSessionMenu({ ...menuSourceOf(row.agentId), renamable: true }).map((item) => ({
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'workspace' ? 'openWorkspace' : item.key === 'trace' ? 'viewTrace' : item.key}`),
@@ -95,7 +111,7 @@ const Row = memo<{
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'open' ? 'openRecord' : item.key === 'trace' ? 'viewTrace' : item.key}`),
         icon: HISTORY_MENU_ICON[item.key],
-      }));
+      })))];
 
   if (unread) items.push({ key: 'markRead', label: t('sessionWorkbenchUi.sessionMenu.markRead'), icon: <Check size={12} /> });
 
@@ -104,8 +120,14 @@ const Row = memo<{
       ref={ref}
       className={styles.row}
       data-agent-id={row.agentId}
-      aria-label={[row.label, unread ? t('sessionWorkbenchUi.sidebar.unread') : '', live?.working ? t('sessionWorkbenchUi.agentActivity.working') : ''].filter(Boolean).join(', ')}
+      aria-label={[
+        row.label,
+        row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : '',
+        unread ? t('sessionWorkbenchUi.sidebar.unread') : '',
+        live?.working ? t('sessionWorkbenchUi.agentActivity.working') : '',
+      ].filter(Boolean).join(', ')}
       data-live={live ? 'true' : undefined}
+      data-pinned={row.pinned ? 'true' : undefined}
       data-selected={selected ? 'true' : undefined}
       role="button"
       tabIndex={0}
@@ -119,8 +141,13 @@ const Row = memo<{
       }}
       title={row.label}
     >
-      <span className={styles.activitySlot} title={activity}>
-        {live?.working && <OrbIndicator size={14} variant="expanding" />}
+      <span
+        className={styles.activitySlot}
+        title={[activity, row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : ''].filter(Boolean).join(' · ')}
+      >
+        {live?.working
+          ? <OrbIndicator size={14} variant="expanding" />
+          : row.pinned ? <Pin size={10} aria-hidden /> : null}
       </span>
 
       <span className={styles.rowLabel} title={row.label}>{row.label}</span>

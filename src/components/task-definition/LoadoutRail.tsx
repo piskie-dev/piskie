@@ -25,6 +25,7 @@ import { Check, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { resolveBrowserEnvironmentPurpose } from '../../../shared/utils/browser-environment';
+import { useDismissShortcutScope } from '../../shortcuts';
 import { useBrowserEnvironmentStore } from '../../store/browserEnvironmentStore';
 import { Toggle } from './controls';
 import { nudgeMcp, type TaskDraft } from './task-draft';
@@ -119,6 +120,12 @@ export const LoadoutRail: React.FC<{
     });
   }, [after]);
 
+  useDismissShortcutScope({
+    scopeIdPrefix: 'task-loadout-flyout',
+    active: shown !== null,
+    onDismiss: closeFly,
+  });
+
   const switchFly = useCallback(
     (key: FlyKey) => {
       setAnim('arm');
@@ -149,19 +156,6 @@ export const LoadoutRail: React.FC<{
     document.addEventListener('click', onDocumentClick);
     return () => document.removeEventListener('click', onDocumentClick);
   }, [closeFly]);
-
-  // Esc:浮层开着时先关浮层(捕获期拦下,阻止原生 dialog 的 close request)
-  useEffect(() => {
-    if (!shown) return;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeFly();
-    };
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [shown, closeFly]);
 
   // 定位:浮层顶对齐锚定牌(越界收敛),锚点光点对准牌头;行级联序号
   useLayoutEffect(() => {

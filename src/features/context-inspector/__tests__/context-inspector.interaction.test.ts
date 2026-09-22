@@ -20,6 +20,13 @@ import type { CompactionHistoryView } from '@shared/types/context';
 import type { ContextSnapshot } from '@shared/types/token';
 import { RendererRuntimeContext } from '@/renderer-runtime/renderer-runtime-context';
 import type { RendererRuntime } from '@/renderer-runtime/renderer-runtime';
+import {
+  activateShortcutOwner,
+  mountShortcutListener,
+  registerShortcutScope,
+  resetShortcutRegistry,
+  type ShortcutScope,
+} from '@/shortcuts';
 import { ContextInspector } from '../ContextInspector';
 import { createContextInspectorResource, type ContextInspectorResource } from '../context-inspector-resource';
 import styles from '../context-inspector.module.css';
@@ -84,6 +91,51 @@ afterAll(() => {
 });
 
 describe('ContextInspector reading during refresh', () => {
+  it('blocks a custom Agent interrupt shortcut while its modal is open', async () => {
+    const interrupt = vi.fn();
+    const scope: ShortcutScope = {
+      id: 'context-inspector-test-owner',
+      layer: 'active-primary-action',
+      blocksLowerLayers: 'none',
+      bindings: [{
+        id: 'context-inspector-test-owner:interrupt',
+        commandId: 'agent.interruptCurrent',
+        combo: 'ctrl+shift+x',
+        enabled: () => true,
+        allowInEditable: true,
+        handling: 'execute',
+        defaultBehavior: 'prevent',
+        execute: interrupt,
+      }],
+    };
+    resetShortcutRegistry();
+    const disposeScope = registerShortcutScope(scope);
+    activateShortcutOwner(scope.id);
+    const disposeListener = mountShortcutListener(dom.window as unknown as Window);
+
+    try {
+      await render();
+      const input = element<HTMLInputElement>('input');
+      input.focus();
+      const event = new dom.window.KeyboardEvent('keydown', {
+        key: 'X',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => input.dispatchEvent(event));
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(interrupt).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(input);
+    } finally {
+      disposeListener();
+      disposeScope();
+      resetShortcutRegistry();
+    }
+  });
+
   it('keeps the scrolled ledger in place while an append refresh starts and completes', async () => {
     await render();
     const viewport = ledger();

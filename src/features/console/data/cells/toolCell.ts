@@ -363,5 +363,5 @@ function resolveToolInteraction(
  */
 function resolveActions(callId: string, state: ToolState): readonly TranscriptAction[] {
   if (state.phase !== 'running') return [];
-  return [{ kind: 'promote-to-background', shortcut: 'mod+b', enabled: true, callId }];
+  return [{ kind: 'promote-to-background', enabled: true, callId }];
 }
