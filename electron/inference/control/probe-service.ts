@@ -17,6 +17,7 @@ import { DefaultImageGateway } from '../image/public-gateway.js';
 import type { InferenceConfig } from './config-schema.js';
 
 export interface InferenceProbeServiceOptions {
+  usageObserver?: import('../ai/usage-observer.js').AiUsageObserverFactory;
   drivers: DriverRegistry;
   journal: ImageJobJournal;
   now?: () => Date;
@@ -71,7 +72,7 @@ export class InferenceProbeService {
     const probeSnapshot = singleAttemptSnapshot(snapshot);
     const runtime = new RuntimeSnapshotStore();
     runtime.publish(probeSnapshot);
-    const aiGateway = new DefaultAiGateway(runtime);
+    const aiGateway = new DefaultAiGateway(runtime, {}, this.options.usageObserver);
     const imageGateway = new DefaultImageGateway(runtime, this.options.journal);
     const receipts: ProbeReceipt[] = [];
 
@@ -95,6 +96,7 @@ export class InferenceProbeService {
     const probeId = `probe:${target.ref.providerId}:${target.ref.modelId}:${createUuid()}`;
     const context: RunContext = {
       runId: probeId,
+      usage: { purpose: 'test', requestId: probeId },
       traceId: probeId,
       signal,
       ...(target.ai && { deadlineAt: Date.now() + this.aiSmokeTimeoutMs }),
