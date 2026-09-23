@@ -2,8 +2,10 @@
  * English translations
  */
 import guideContent from './guides.en-US';
+import modelUsage from './model-usage.en-US';
 
 export default {
+  modelUsage,
   clipboardUi: {
     copyImage: 'Copy image',
     copying: 'Copying…',
@@ -268,6 +270,7 @@ export default {
 
     // Tabs
     tabs: {
+      modelUsage: 'Model usage',
       logs: 'System Logs',
       about: 'About',
     },

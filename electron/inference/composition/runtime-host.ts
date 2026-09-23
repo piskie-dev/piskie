@@ -31,8 +31,10 @@ import type {
   ConfigHostLifecycleReport,
 } from '../../config/host/config-host.js';
 import type { ConfigDomainRevisionChangedEvent } from '../../../shared/types/config.js';
-import type { ConfigDomainIntegrations } from '../../config/domains/integrations.js';
+import { emptyConfigDomainIntegrations, type ConfigDomainIntegrations } from '../../config/domains/integrations.js';
 import { normalizeShortcutPlatform } from '../../../shared/shortcuts.js';
+import { ModelUsageService } from '../../observability/usage/model-usage-service.js';
+import type { ModelUsageConfig } from '../../../shared/types/model-usage.js';
 
 export interface InferenceRuntimeHostOptions {
   rootDirectory: string;
@@ -73,6 +75,7 @@ export interface InferenceRuntimeStartupIssue {
 }
 
 export class InferenceRuntimeHost {
+  readonly usage: ModelUsageService;
   readonly paths;
   readonly repository: InferenceConfigRepository;
   readonly selections: InferenceSelectionStore;
@@ -94,6 +97,7 @@ export class InferenceRuntimeHost {
   private readonly now: () => Date;
 
   constructor(private readonly options: InferenceRuntimeHostOptions) {
+    this.usage = new ModelUsageService(options.rootDirectory, () => this.configHost.show<ModelUsageConfig>('model-usage'));
     this.now = options.now ?? (() => new Date());
     this.paths = {
       ...inferenceConfigPaths(options.rootDirectory),
@@ -132,6 +136,7 @@ export class InferenceRuntimeHost {
       onError: options.remoteCatalog?.onError,
     });
     this.control = new InferenceControlPlane({
+      usageObserver: this.usage.observe,
       repository: this.repository,
       drivers: this.drivers,
       journal: this.journal,
@@ -144,8 +149,10 @@ export class InferenceRuntimeHost {
         rootDirectory: options.rootDirectory,
         inference: this.control,
         selections: this.selections,
-        integrations: options.configIntegrations,
-        shortcutPlatform: normalizeShortcutPlatform(process.platform),
+        integrations: {
+          ...(options.configIntegrations ?? emptyConfigDomainIntegrations(normalizeShortcutPlatform(process.platform))),
+          modelUsage: { publish: (config) => this.usage.configure(config) },
+        },
         onSelectionsChanged: options.onSelectionsChanged,
         onHistoryMaintenanceError: options.onReloadError,
       },
@@ -155,7 +162,7 @@ export class InferenceRuntimeHost {
       },
     );
     if (options.onConfigChanged) this.configHost.subscribe(options.onConfigChanged);
-    this.aiGateway = new DefaultAiGateway(this.control.runtime);
+    this.aiGateway = new DefaultAiGateway(this.control.runtime, {}, this.usage.observe);
     this.imageGateway = new DefaultImageGateway(this.control.runtime, this.journal);
   }
 
@@ -215,6 +222,7 @@ export class InferenceRuntimeHost {
       issues.push(startupIssue('watchers', cause));
       this.notifyReloadError(cause);
     }
+    await this.usage.start();
     return {
       ...(bootstrap && { bootstrap }),
       ...(currentRevision !== undefined && { currentRevision }),
@@ -239,6 +247,7 @@ export class InferenceRuntimeHost {
   }
 
   async close(): Promise<void> {
+    await this.usage.close();
     await this.remoteCatalog.close();
     this.configWatcher?.close();
     this.configWatcher = undefined;

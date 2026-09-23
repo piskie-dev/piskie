@@ -61,6 +61,7 @@ export function projectInferenceRuntime(
         const compiledAi = compileAiDefaults(compiled, catalogModel);
         target = {
           ...compiled,
+          providerName: provider.displayName,
           ...(compiledAi && { ai: compiledAi }),
           modelDefinition: catalogModel,
           ...(catalogModel.reasoning && {

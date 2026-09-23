@@ -32,6 +32,8 @@ export interface CompiledAiTarget {
 }
 
 export interface CompiledTarget {
+  providerName?: string;
+  protocol?: string;
   ref: ModelTarget;
   driverId: string;
   upstreamModel: string;

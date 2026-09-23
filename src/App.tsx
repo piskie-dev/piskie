@@ -24,6 +24,7 @@ function WorkspaceShell() {
       <Routes>
         <Route path="/console" element={<ConsolePage />} />
         <Route path="/agents" element={<AgentManagementPage />} />
+        <Route path="/usage" element={<Navigate to="/preferences?sect=model-usage" replace />} />
         <Route path="/schedules" element={<SchedulesPage />} />
         <Route path="/market" element={<Market />} />
         <Route path="/skills" element={<Navigate to="/market?view=installed" replace />} />

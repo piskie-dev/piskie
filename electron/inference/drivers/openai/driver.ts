@@ -137,6 +137,7 @@ function compileTarget(
   const base = {
     ref: target,
     driverId: 'openai',
+    protocol: providerOptions.wireApi === 'responses' ? 'openai-responses' : 'openai-chat',
     upstreamModel: input.binding.upstreamId,
     catalogId: input.binding.catalogId,
     configRevision: input.configRevision,

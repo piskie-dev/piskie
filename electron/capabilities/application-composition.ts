@@ -38,6 +38,7 @@ import { MessagingApplication } from './messaging/messaging-application.js';
 import { createMessagingController } from './messaging/messaging-controller.js';
 import { ObservabilityApplication } from './observability/observability-application.js';
 import { createObservabilityController } from './observability/observability-controller.js';
+import { createUsageController } from './observability/usage-controller.js';
 import { PilotApplication } from './pilot/pilot-application.js';
 import { createPilotController } from './pilot/pilot-controller.js';
 import { createRuntimeController } from './runtime/runtime-controller.js';
@@ -204,6 +205,7 @@ export function createApplicationComposition(options: {
       ...pilot.operations,
       ...messaging.operations,
       ...observability.operations,
+      ...createUsageController(capabilities.inference.inferenceHost.usage, options.presentation),
       ...desktop.operations,
     ],
     topics: [

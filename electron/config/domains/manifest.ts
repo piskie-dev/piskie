@@ -19,6 +19,7 @@ import { createModelCatalogDomain } from './model-catalog.adapter.js';
 import { createWebSearchDomain } from './web-search.adapter.js';
 import { createWorkerPreferencesDomain } from './worker-preferences.adapter.js';
 import { createProxiesDomain } from './proxies.adapter.js';
+import { createModelUsageDomain } from './model-usage.adapter.js';
 import { createSchedulesDomain } from './schedules.adapter.js';
 
 export interface ConfigDomainManifestContext {
@@ -55,6 +56,7 @@ export class ConfigDomainManifestError extends Error {
 
 /** The only production registration source for Config Domains. */
 export const CONFIG_DOMAIN_MANIFEST = {
+  'model-usage': managed((context) => createModelUsageDomain(context.rootDirectory, context.integrations.modelUsage?.publish)),
   'worker-preferences': managed((context) => createWorkerPreferencesDomain(
     context.rootDirectory, context.inference, context.readDomain, context.integrations.workerPreferences,
   )),

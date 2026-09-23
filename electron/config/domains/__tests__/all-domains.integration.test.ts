@@ -600,6 +600,7 @@ describe('all managed Config Domains', () => {
       'inference-selections',
       'mcp',
       'model-catalog',
+      'model-usage',
       'proxies',
       'schedules',
       'task-definitions',

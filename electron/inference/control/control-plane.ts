@@ -52,6 +52,7 @@ export class ConfigControlError extends Error {
 }
 
 export interface InferenceControlPlaneOptions {
+  usageObserver?: import('../ai/usage-observer.js').AiUsageObserverFactory;
   repository: InferenceConfigRepository;
   drivers: DriverRegistry;
   runtime?: RuntimeSnapshotStore;
@@ -112,6 +113,7 @@ export class InferenceControlPlane {
       remote: options.remoteCatalog,
     });
     this.probes = options.probes ?? new InferenceProbeService({
+      usageObserver: options.usageObserver,
       drivers: options.drivers,
       journal: options.journal ?? new ImageJobJournal(options.repository.paths.imageJobDirectory, this.now),
       now: this.now,

@@ -14,6 +14,7 @@ import { appLog } from '@electron/observability/logging/app-log.js';
  */
 
 import type { AgentInferencePort } from '../inference/application/agent-inference-port.js';
+import { attributedInferencePort } from '../inference/application/attributed-inference-port.js';
 import {
   formatModelTarget,
   parseModelTargetReference,
@@ -162,7 +163,13 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     // === 核心字段初始化 ===
     this.id = config.id;
     this.mainAgentId = this.options.mainAgentId;
-    this.inference = config.inference;
+    this.inference = attributedInferencePort(config.inference, () => ({
+      mainAgentId: this.mainAgentId, agentId: this.id,
+      agentType: this.id === this.mainAgentId ? 'main' : this._spec.name,
+      runName: this.id === this.mainAgentId ? this.options.runConfig?.name
+        : this.conversationStore.readHeader(this.mainAgentId)?.runConfig.name,
+      purpose: 'inference',
+    }));
     this.pilotPorts = config.pilotPorts;
     this.conversationStore = config.conversationStore;
     this.runtimeObserver = config.observer;

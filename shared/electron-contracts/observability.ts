@@ -1,13 +1,22 @@
 import type {
   AgentIncident,
   AgentIncidentChange,
+  AppSettings,
   SystemLogFileSummary,
   SystemLogQuery,
   LogQueryResponse,
   Occupancy,
 } from '../types/index.js';
+import type { UsageCleanupPreview, UsageFilter, UsagePage, UsageRecord, UsageReport, UsageSort, UsageStorageStatus } from '../types/model-usage.js';
 
 export const OBSERVABILITY_OPERATIONS = Object.freeze({
+  usageQuery: 'observability.usage.query',
+  usagePage: 'observability.usage.page',
+  usageDetail: 'observability.usage.detail',
+  usageStatus: 'observability.usage.status',
+  usageExport: 'observability.usage.export',
+  usagePreview: 'observability.usage.previewCleanup',
+  usageCleanup: 'observability.usage.cleanup',
   clearIncident: 'observability.incidents.clear',
   clearIncidents: 'observability.incidents.clearAll',
   querySystemLogs: 'observability.systemLogs.query',
@@ -55,6 +64,16 @@ interface ClientLogsClient {
 }
 
 export interface ObservabilityClient {
+  readonly modelUsage: {
+    query(filter: UsageFilter): Promise<UsageReport>;
+    page(snapshotId: string, offset: number, sort: UsageSort, descending: boolean): Promise<UsagePage>;
+    detail(snapshotId: string, id: string): Promise<{ record: UsageRecord; related: UsageRecord[] }>;
+    status(): Promise<UsageStorageStatus>;
+    /** Returns null when the user cancels the save dialog. */
+    export(snapshotId: string, language: AppSettings['language']): Promise<{ exportedCount: number; fileName: string } | null>;
+    previewCleanup(days: number | null, all: boolean): Promise<UsageCleanupPreview>;
+    cleanup(all: boolean, confirmed: boolean): Promise<UsageCleanupPreview>;
+  };
   readonly incidents: IncidentsClient;
   readonly systemLogs: SystemLogsClient;
   readonly occupancy: OccupancyClient;
