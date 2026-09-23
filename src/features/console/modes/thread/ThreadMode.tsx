@@ -85,7 +85,9 @@ export const ThreadMode = memo<ThreadModeProps>(
     const { t } = useTranslation();
     const gridRef = useRef<HTMLDivElement>(null);
     const threadsRef = useRef<HTMLDivElement>(null);
+    const centerRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
+    const browserLayoutAnchors = useMemo(() => [threadsRef, centerRef], []);
     const [tabWorkerId, setTabWorkerId] = useState<string | undefined>(undefined);
 
     /** 顶栏 worker 定位请求 ⇒ 切到那个 tab（判据是 requestId，理由同 dock 侧注释） */
@@ -322,7 +324,7 @@ export const ThreadMode = memo<ThreadModeProps>(
           />
         </div>
 
-        <div className={styles.center}>
+        <div ref={centerRef} className={styles.center}>
           {!sessionsCollapsed && (
           <div className={styles.dividerStart}>
             <Divider
@@ -395,6 +397,7 @@ export const ThreadMode = memo<ThreadModeProps>(
               onPreviewImage={onPreviewImage}
               browserState={browserState}
               browserTarget={browserTarget}
+              browserLayoutAnchors={browserLayoutAnchors}
               topRailActions={railActions}
             />
           )}

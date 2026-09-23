@@ -16,6 +16,7 @@ import { useIncidentStore } from '../../store';
 import { IncidentIndicator, selectVisibleIncidents } from '../incidents';
 import { useMessagingStore } from '../../store/messagingStore';
 import { PendingPopover } from '../imdossier/PendingPopover';
+import { MessagingHealthCue } from '../imdossier/MessagingHealthCue';
 import KernelDownloadIndicator from '../../components/KernelDownloadIndicator';
 import { createConsoleHeaderAction } from '../console/shell/headerAction';
 import { isMacOSPlatform } from '../../utils/platform';
@@ -142,6 +143,7 @@ export const SkyBar: React.FC = () => {
       <div className={styles.deck}>
         <UpdateIndicator />
         <KernelDownloadIndicator />
+        <MessagingHealthCue onOpen={() => navigate('/messaging')} />
 
         {senderAuthorizationCount > 0 && (
           <PendingPopover jumpHint="#/messaging" align="end" />

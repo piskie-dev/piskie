@@ -310,8 +310,8 @@ export class AgentConversationContext {
     content: string | ContentBlock[],
     subtype: MessageSubtype = 'user_input',
     details: Partial<Pick<EnhancedMessage, 'id' | 'timestamp' | 'metadata' | 'instructions'>> = {},
-  ): void {
-    this.recordMessage({ role: 'user', content, subtype }, details);
+  ): EnhancedMessage {
+    return this.recordMessage({ role: 'user', content, subtype }, details);
   }
 
   /** 恢复通知必须先落盘，持久化失败时不能暴露为内存事实。 */

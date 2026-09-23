@@ -52,6 +52,8 @@ interface ComposerDraftValue {
   /** Changes only for user edits, not capture or preview preparation. */
   readonly edit: object;
   readonly skills: readonly string[];
+  /** 待随下一条消息加入当前会话的浏览器环境（仅主会话草稿使用）。 */
+  readonly browserEnvironmentIds: readonly string[];
   readonly attachments: ComposerAttachmentState;
   /** 已有会话的运行设置由会话 owner 提供，只有待创建会话在草稿中保存设置。 */
   readonly settings?: ComposerDraftSettings;
@@ -63,14 +65,24 @@ const EMPTY_ATTACHMENTS: ComposerAttachmentState = Object.freeze({
 });
 
 const EMPTY_SKILLS: readonly string[] = Object.freeze([]);
+const EMPTY_ENVIRONMENTS: readonly string[] = Object.freeze([]);
 const EMPTY_HISTORY: readonly string[] = Object.freeze([]);
 
 function emptyDraft(): ComposerDraftValue {
-  return { text: '', edit: {}, skills: EMPTY_SKILLS, attachments: EMPTY_ATTACHMENTS };
+  return { text: '', edit: {}, skills: EMPTY_SKILLS, browserEnvironmentIds: EMPTY_ENVIRONMENTS, attachments: EMPTY_ATTACHMENTS };
 }
 
 function hasAttachments(attachments: ComposerAttachmentState): boolean {
   return attachments.images.length > 0 || attachments.files.length > 0;
+}
+
+/** 草稿的每一部分都空了才从账上删除；settings 属于待创建会话，有值就不算空。 */
+function isBlankDraft(draft: ComposerDraftValue): boolean {
+  return draft.text === ''
+    && draft.skills.length === 0
+    && draft.browserEnvironmentIds.length === 0
+    && !hasAttachments(draft.attachments)
+    && !draft.settings;
 }
 
 function disposeImages(images: readonly AttachmentImage[]): void {
@@ -92,6 +104,7 @@ export interface ComposerDraftStore {
   readonly setDraft: (key: string, text: string) => void;
   readonly recordHistory: (key: string, text: string) => void;
   readonly setSkills: (key: string, skills: readonly string[]) => void;
+  readonly setBrowserEnvironmentIds: (key: string, environmentIds: readonly string[]) => void;
   readonly appendFiles: (key: string, additions: readonly AttachmentFile[]) => void;
   readonly removeAttachment: (key: string, id: string) => void;
   readonly clearAttachments: (key: string) => void;
@@ -141,10 +154,11 @@ export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
     if (current.text === text) return state;
 
     const drafts = { ...state.drafts };
-    if (text === '' && current.skills.length === 0 && !hasAttachments(current.attachments) && !current.settings) {
+    const next = { ...current, text, edit: {} };
+    if (isBlankDraft(next)) {
       delete drafts[key];
     } else {
-      drafts[key] = { ...current, text, edit: {} };
+      drafts[key] = next;
     }
     return { drafts };
   }),
@@ -165,10 +179,24 @@ export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
     const current = state.drafts[key] ?? emptyDraft();
     const skills = [...new Set(names)];
     const drafts = { ...state.drafts };
-    if (skills.length === 0 && current.text === '' && !hasAttachments(current.attachments) && !current.settings) {
+    const next = { ...current, skills, edit: {} };
+    if (isBlankDraft(next)) {
       delete drafts[key];
     } else {
-      drafts[key] = { ...current, skills, edit: {} };
+      drafts[key] = next;
+    }
+    return { drafts };
+  }),
+
+  setBrowserEnvironmentIds: (key, environmentIds) => set((state) => {
+    const current = state.drafts[key] ?? emptyDraft();
+    const browserEnvironmentIds = [...new Set(environmentIds.filter((id) => id.length > 0))];
+    const drafts = { ...state.drafts };
+    const next = { ...current, browserEnvironmentIds, edit: {} };
+    if (isBlankDraft(next)) {
+      delete drafts[key];
+    } else {
+      drafts[key] = next;
     }
     return { drafts };
   }),
@@ -203,10 +231,11 @@ export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
     if (removed) disposeImages([removed]);
     const attachments = { images, files };
     const drafts = { ...state.drafts };
-    if (current.text === '' && current.skills.length === 0 && !hasAttachments(attachments) && !current.settings) {
+    const next = { ...current, attachments, edit: {} };
+    if (isBlankDraft(next)) {
       delete drafts[key];
     } else {
-      drafts[key] = { ...current, attachments, edit: {} };
+      drafts[key] = next;
     }
     return { drafts };
   }),
@@ -216,7 +245,7 @@ export const useComposerDraftStore = create<ComposerDraftStore>((set) => ({
     if (current) disposeImages(current.attachments.images);
 
     const drafts = { ...state.drafts };
-    if (!current || (current.text === '' && current.skills.length === 0 && !current.settings)) {
+    if (!current || isBlankDraft({ ...current, attachments: EMPTY_ATTACHMENTS })) {
       delete drafts[key];
     } else {
       drafts[key] = { ...current, attachments: EMPTY_ATTACHMENTS, edit: {} };
@@ -246,6 +275,17 @@ export function useComposerSkills(key: string): [readonly string[], (skills: rea
     if (getComposerDraftVersion(key) === version) setSkills(key, names);
   }, [key, setSkills, version]);
   return [skills, setForKey];
+}
+
+/** 主会话草稿中待发送的浏览器环境选择，形如 useState。 */
+export function useComposerBrowserEnvironmentIds(key: string): [readonly string[], (environmentIds: readonly string[]) => void] {
+  const environmentIds = useComposerDraftStore((state) => state.drafts[key]?.browserEnvironmentIds ?? EMPTY_ENVIRONMENTS);
+  const setBrowserEnvironmentIds = useComposerDraftStore((state) => state.setBrowserEnvironmentIds);
+  const version = useComposerDraftVersion(key);
+  const setForKey = useCallback((ids: readonly string[]) => {
+    if (getComposerDraftVersion(key) === version) setBrowserEnvironmentIds(key, ids);
+  }, [key, setBrowserEnvironmentIds, version]);
+  return [environmentIds, setForKey];
 }
 
 export function useComposerDraftSettings(key: string): [ComposerDraftSettings, (patch: Partial<ComposerDraftSettings>) => void] {

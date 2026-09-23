@@ -38,6 +38,7 @@ import type { ImagePreviewHandler } from '@/components/image-preview/renderedIma
 import { ImageThumbnail } from './ImageThumbnail';
 import { FileAttachments } from './FileAttachments';
 import { SkillTags } from './SkillTags';
+import { BrowserEnvironmentTags } from './BrowserEnvironmentTags';
 import { OrbIndicator } from './OrbIndicator';
 import type { QuestionAnswerItem, ToolCellArtifact } from '../data/toolArtifacts';
 import {
@@ -575,7 +576,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
 
       return (
         <div className={styles.cell}>
-          {(cell.text || cell.skills?.length || cell.skillLoadErrors?.length) && <div className={styles.userRow}>
+          {(cell.text || cell.skills?.length || cell.skillLoadErrors?.length || cell.browserEnvironmentIds?.length) && <div className={styles.userRow}>
             <div className={styles.bubble}>
               {cell.skills && <SkillTags skills={cell.skills} />}
               {cell.text && <div>{cell.text}</div>}
@@ -585,6 +586,13 @@ export const ThreadCell = memo<ThreadCellProps>(({
                     <div key={name}>{t('sessionWorkbenchUi.composer.skills.loadFailed', { name, error })}</div>
                   ))}
                 </div>
+              )}
+              {!!cell.browserEnvironmentIds?.length && (
+                <BrowserEnvironmentTags
+                  state="joined"
+                  environmentIds={cell.browserEnvironmentIds}
+                  standalone={!cell.text && !cell.skills?.length && !cell.skillLoadErrors?.length}
+                />
               )}
             </div>
           </div>}

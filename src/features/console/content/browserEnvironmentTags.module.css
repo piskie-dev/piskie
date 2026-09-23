@@ -1,0 +1,32 @@
+.tags {
+  composes: tags from './skillTags.module.css';
+  min-inline-size: 0;
+}
+
+.tag {
+  composes: tag from './skillTags.module.css';
+}
+
+.tagName {
+  composes: name from './skillTags.module.css';
+}
+
+.tagRemove {
+  composes: remove from './skillTags.module.css';
+}
+
+.tags[data-state='pending'] .tag {
+  border-color: color-mix(in srgb, var(--status-waiting) 40%, var(--line-2));
+  background: color-mix(in srgb, var(--status-waiting) 10%, var(--surface-2));
+}
+
+.tags[data-state='pending'] .tag > svg {
+  color: var(--status-waiting);
+}
+
+.context {
+  color: var(--cyber-text-muted);
+  font-size: 11.5px;
+  line-height: 24px;
+  white-space: nowrap;
+}

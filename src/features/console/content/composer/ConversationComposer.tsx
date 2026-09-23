@@ -46,7 +46,15 @@ import {
 } from '../../../../shortcuts';
 import { useAttachmentDraft } from '../../attachments';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
-import { composerDraftKey, submitComposerDraft, useComposerDraft, useComposerDraftVersion, useComposerSkills } from '../../data/composer-drafts';
+import {
+  composerDraftKey,
+  submitComposerDraft,
+  useComposerBrowserEnvironmentIds,
+  useComposerDraft,
+  useComposerDraftVersion,
+  useComposerSkills,
+} from '../../data/composer-drafts';
+import type { ConversationBrowserResources } from '../../data/vm';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { Popover } from '../../chrome/Popover';
 import { Tooltip } from '../../chrome/Tooltip';
@@ -59,7 +67,9 @@ import {
 import { ModelPicker } from './ModelPicker';
 import { useComposerSettings } from './useComposerSettings';
 import { SkillTags } from '../SkillTags';
+import { BrowserEnvironmentTags } from '../BrowserEnvironmentTags';
 import { SkillPicker } from './SkillPicker';
+import { SessionBrowserControl } from './SessionBrowserControl';
 import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import { WorkspaceBar } from './WorkspaceBar';
@@ -196,6 +206,10 @@ export interface ConversationComposerProps {
   readonly contextUsage?: ContextUsage;
   readonly sourceVersion: number;
   readonly canPause: boolean;
+  /** 底部浏览器资源位：主会话可添加环境；浏览器 Worker 只读；缺省不渲染。 */
+  readonly browserResources?: ConversationBrowserResources;
+  /** 从"使用中"的环境跳到对应 Worker */
+  readonly onOpenWorker?: (workerId: string) => void;
   readonly onPreviewImage?: (src: string) => void;
   readonly stopping?: boolean;
   readonly isShortcutOwner?: boolean;
@@ -220,6 +234,8 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     contextUsage,
     sourceVersion,
     canPause,
+    browserResources,
+    onOpenWorker,
     onPreviewImage,
     stopping = false,
     isShortcutOwner = false,
@@ -234,6 +250,8 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     // 文字与附件共享目标键，切模块/切任务回来仍在，也不会跨目标串稿。
     const [draft, setDraft] = useComposerDraft(draftKey);
     const [skills, setSkills] = useComposerSkills(draftKey);
+    // 待加入会话的浏览器环境：和 Skill 一样进草稿，随下一条消息发送，失败时保留。
+    const [pendingEnvironmentIds, setPendingEnvironmentIds] = useComposerBrowserEnvironmentIds(draftKey);
     const version = useComposerDraftVersion(draftKey);
     const history = useComposerHistory({
       draftKey,
@@ -255,15 +273,17 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     const settings = useComposerSettings(agentId, workerId, model);
     const modeIds = useModeOptions(agentSpec, !workerId);
     const hasAttachments = attachments.hasAttachments;
+    const hasPendingEnvironments = pendingEnvironmentIds.length > 0;
     const mainAction = resolveComposerMainAction(
-      Boolean(draft.trim()) || hasAttachments || skills.length > 0,
+      Boolean(draft.trim()) || hasAttachments || skills.length > 0 || hasPendingEnvironments,
       canPause,
       stopping,
       pendingAction,
     );
     const controlsDisabled = stopping || pendingAction !== null;
     const submit = useCallback(async () => {
-      if (stopping || submitting.current || pendingAction !== null || (!draft.trim() && !attachments.hasAttachments && skills.length === 0)) return;
+      if (stopping || submitting.current || pendingAction !== null
+        || (!draft.trim() && !attachments.hasAttachments && skills.length === 0 && pendingEnvironmentIds.length === 0)) return;
       submitting.current = true;
       setSubmitError(undefined);
       setPendingAction('send');
@@ -271,6 +291,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         const ok = await submitComposerDraft(draftKey, (snapshot, images, files) => onSubmit({
           text: snapshot.text,
           skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
+          browserEnvironmentIds: snapshot.browserEnvironmentIds.length > 0 ? [...snapshot.browserEnvironmentIds] : undefined,
           images,
           files: files.map(({ name, path, kind }) => ({ name, path, ...(kind && { kind }) })),
         }));
@@ -281,7 +302,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         submitting.current = false;
         setPendingAction(null);
       }
-    }, [attachments, draft, draftKey, onSubmit, pendingAction, skills, stopping]);
+    }, [attachments, draft, draftKey, onSubmit, pendingAction, pendingEnvironmentIds, skills, stopping]);
 
     const interrupt = useCallback(async () => {
       if (interrupting.current || stopping || !canPause || pendingAction !== null) return;
@@ -393,6 +414,12 @@ export const ConversationComposer = memo<ConversationComposerProps>(
               onRemove={(name) => setSkills(skills.filter((skill) => skill !== name))} />
           </div>
         )}
+        {hasPendingEnvironments && (
+          <div className={styles.attachments}>
+            <BrowserEnvironmentTags state="pending" environmentIds={pendingEnvironmentIds}
+              onRemove={(id) => setPendingEnvironmentIds(pendingEnvironmentIds.filter((item) => item !== id))} />
+          </div>
+        )}
         {hasAttachments && (
           <div className={styles.attachments}>
             {attachments.images.map((image) => (
@@ -485,6 +512,23 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             disabled={controlsDisabled}
             ariaLabel={t('sessionWorkbenchUi.composer.approvalMode')}
           />
+
+          {/* 浏览器资源位：主会话可添加环境，浏览器 Worker 只读；非浏览器 Worker 不出现 */}
+          {browserResources?.kind === 'session' && (
+            <SessionBrowserControl
+              mode="session"
+              agentId={agentId}
+              joinedIds={browserResources.environmentIds}
+              pendingIds={pendingEnvironmentIds}
+              workers={browserResources.workers}
+              onPendingChange={setPendingEnvironmentIds}
+              onOpenWorker={onOpenWorker}
+              disabled={controlsDisabled}
+            />
+          )}
+          {browserResources?.kind === 'worker' && (
+            <SessionBrowserControl mode="worker" environmentId={browserResources.environmentId} />
+          )}
 
           <span className={styles.spacer} />
 

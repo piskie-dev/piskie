@@ -25,7 +25,7 @@ import {
   resolvePresentationText,
   type PresentationText,
 } from '../../i18n/presentationText';
-import { useInferenceStore } from '../../store/inferenceStore';
+import { getAvailableModelOptions, useInferenceStore } from '../../store/inferenceStore';
 import { useProxyStore } from '../../store/proxyStore';
 import { CatalogPane, type CatalogProviderItem, type DeckSect } from './CatalogPane';
 import { AboutDesk } from './desks/AboutDesk';
@@ -121,6 +121,8 @@ export const PrefDeckPage: React.FC = () => {
   } | null>(null);
   const [presetGateway, setPresetGateway] = useState<GatewayKind | null>(null);
   const [forge, setForge] = useState<ForgeSession | null>(null);
+  const [exploreHint, setExploreHint] = useState<{ providerId: string; id: number } | null>(null);
+  const hintSequence = React.useRef(0);
   const [proxyForge, setProxyForge] = useState<{ editing?: ProxyProfile } | null>(null);
   const [shot, setShot] = useState<string | null>(null);
   const shotRef = React.useRef<HTMLDialogElement>(null);
@@ -155,13 +157,15 @@ export const PrefDeckPage: React.FC = () => {
   const onFlash = useCallback((text: PresentationText, tone: 'halt' | 'hold' | 'calm' = 'calm') => {
     setFlash({ text, tone });
   }, []);
+  const dismissExploreHint = useCallback(() => setExploreHint(null), [setExploreHint]);
 
   const gotoSect = useCallback((next: DeckSect) => {
+    if (next !== 'ai') dismissExploreHint();
     const params = new URLSearchParams(location.search);
     params.delete('tab');
     params.set('sect', next);
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
-  }, [location.pathname, location.search, navigate]);
+  }, [dismissExploreHint, location.pathname, location.search, navigate]);
 
   /** 网关供应商目录:驱动支持该网关;有模型时须有该网关的模型 */
   const catalogOf = useCallback((gateway: GatewayKind): CatalogProviderItem[] => {
@@ -244,6 +248,12 @@ export const PrefDeckPage: React.FC = () => {
           onVanish={() => setPicked((current) => ({ ...current, [gateway]: null }))}
           onFlash={onFlash}
           onShowImage={setShot}
+          exploreHintId={exploreHint?.providerId === providerId ? exploreHint.id : null}
+          onDismissExploreHint={dismissExploreHint}
+          onOpenExplore={() => {
+            dismissExploreHint();
+            navigate('/agents?type=explore');
+          }}
         />
       );
     }
@@ -311,6 +321,7 @@ export const PrefDeckPage: React.FC = () => {
         picked={{ ai: effectivePicked('ai'), image: effectivePicked('image') }}
         onSect={gotoSect}
         onProvider={(gateway, providerId) => {
+          dismissExploreHint();
           setPicked((current) => ({ ...current, [gateway]: providerId }));
           gotoSect(gateway);
         }}
@@ -347,9 +358,18 @@ export const PrefDeckPage: React.FC = () => {
           catalogDefinitions={catalogModels[forge.gateway]}
           providerNames={Object.values(config?.providers ?? {}).map((provider) => provider.displayName)}
           onClose={() => setForge(null)}
-          onSaved={(providerId) => {
+          onSaved={(providerId, modelId) => {
             setPicked((current) => ({ ...current, [forge.gateway]: providerId }));
             gotoSect(forge.gateway);
+            if (forge.gateway === 'ai' && !forge.modelId) {
+              const { config: savedConfig, models: savedModels, availableTargets } = useInferenceStore.getState();
+              const options = getAvailableModelOptions(savedConfig, savedModels.ai, availableTargets.ai)
+                .flatMap((group) => group.options);
+              if (options.length >= 2 && options.some((option) =>
+                option.target.providerId === providerId && option.target.modelId === modelId)) {
+                setExploreHint({ providerId, id: ++hintSequence.current });
+              }
+            }
           }}
           onFlash={onFlash}
         />

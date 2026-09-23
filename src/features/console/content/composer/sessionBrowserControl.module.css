@@ -1,0 +1,377 @@
+/**
+ * 会话浏览器控件 —— 输入框底部工具行的浏览器资源位。
+ *
+ * 触发器沿用工具行药丸的尺寸语汇（与模式 / 审批药丸并排），面板走 `chrome/Popover`
+ * （原生 popover，light-dismiss 由浏览器承担）；列表限高可滚，配置详情只读。
+ * 全部走 tokens 变量，零硬编码彩色（`check:styles` 棘轮）。
+ */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-block-size: 24px;
+  max-inline-size: 180px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 浏览器 Worker：绑定不可改，控件只是读数 */
+.trigger[data-readonly='true'] {
+  cursor: default;
+}
+
+.trigger[data-readonly='true']:hover {
+  background: transparent;
+}
+
+.triggerIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--cyber-text-muted);
+}
+
+.trigger[data-pending='true'] .triggerIcon {
+  color: var(--status-waiting);
+}
+
+.triggerLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cyber-text-muted);
+}
+
+.trigger[data-named='true'] .triggerLabel {
+  color: var(--cyber-text);
+}
+
+.triggerChevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
+}
+
+@container (max-width: 379px) {
+  .trigger {
+    gap: 2px;
+    min-inline-size: 32px;
+    max-inline-size: 32px;
+    padding-inline: 3px;
+  }
+
+  .trigger .triggerLabel,
+  .trigger .triggerChevron {
+    display: none;
+  }
+}
+
+/* ── 面板 ── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  inline-size: 320px;
+  max-inline-size: calc(100vw - 24px);
+  padding: 10px;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 30px;
+  padding-inline: 9px;
+  border: 1px solid var(--line-1);
+  border-radius: 9px;
+  background: var(--cyber-bg);
+  color: var(--cyber-text-muted);
+}
+
+.searchBox:focus-within {
+  border-color: color-mix(in srgb, var(--cyber-primary) 45%, transparent);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cyber-text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.searchInput::placeholder {
+  color: color-mix(in srgb, var(--cyber-text-muted) 60%, transparent);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: 8px;
+  max-block-size: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.sectionLabel {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  padding: 5px 6px 3px;
+  background: var(--cyber-surface);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--cyber-text-muted) 80%, transparent);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 34px;
+  padding-inline: 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.row:hover {
+  background: var(--surface-2);
+}
+
+.dot {
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--cyber-text-muted);
+}
+
+.dot[data-tone='blue'] { background: var(--status-running); }
+.dot[data-tone='orange'] { background: var(--status-waiting); }
+.dot[data-tone='default'] { background: var(--status-error); }
+
+.rowMain {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cyber-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rowMain:disabled {
+  cursor: default;
+}
+
+.rowName,
+.rowMeta {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.rowMeta {
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+.usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  max-inline-size: 45%;
+  min-block-size: 22px;
+  padding-inline: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.usage {
+  background: color-mix(in srgb, var(--cyber-primary) 10%, transparent);
+  color: var(--cyber-primary);
+  cursor: pointer;
+}
+
+button.usage:hover {
+  background: color-mix(in srgb, var(--cyber-primary) 18%, transparent);
+}
+
+.usage[data-kind='external'] {
+  color: var(--status-waiting);
+}
+
+.usageLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.toggle[aria-pressed='true'] {
+  color: var(--status-waiting);
+}
+
+.badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-waiting) 16%, transparent);
+  color: var(--status-waiting);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-block-size: 48px;
+  padding: 8px;
+  color: var(--cyber-text-muted);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* ── 只读配置详情 ── */
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detailsHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+}
+
+.back:hover {
+  background: var(--surface-2);
+  color: var(--cyber-text);
+}
+
+.detailsTitle {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--cyber-text);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: var(--surface-1);
+  font-size: 11.5px;
+}
+
+.facts dt {
+  color: var(--cyber-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--cyber-text);
+}
+
+.readOnlyNote {
+  font-size: 10.5px;
+  color: var(--cyber-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger {
+    transition: none;
+  }
+}

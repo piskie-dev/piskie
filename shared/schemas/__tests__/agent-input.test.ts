@@ -77,6 +77,16 @@ describe('agentInputRequestSchema（生产边界）', () => {
     expect(result.files).toStrictEqual([file]);
   });
 
+  it('browserEnvironmentIds 去重、去空白，非字符串成员被拒', () => {
+    const result = agentInputRequestSchema.parse({
+      source: 'user', content: '', browserEnvironmentIds: [' environment-a ', 'environment-a', 'environment-b'],
+    });
+    expect(result.browserEnvironmentIds).toEqual(['environment-a', 'environment-b']);
+    expect(agentInputRequestSchema.safeParse({ source: 'user', content: '', browserEnvironmentIds: [''] }).success).toBe(false);
+    expect(agentInputRequestSchema.safeParse({ source: 'user', content: '', browserEnvironmentIds: [42] }).success).toBe(false);
+    expect(agentInputRequestSchema.safeParse({ source: 'user', content: '', browserEnvironmentIds: 'environment-a' }).success).toBe(false);
+  });
+
   it('priority 越界被拒', () => {
     const result = agentInputRequestSchema.safeParse({
       source: 'user',

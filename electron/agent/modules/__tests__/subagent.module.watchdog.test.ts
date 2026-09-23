@@ -461,6 +461,7 @@ describe('SubagentModule resume boundaries', () => {
       getConversationStore: () => headerStore.store,
       appendConversationEntry: vi.fn(),
       emitStateChange: vi.fn(),
+      getBrowserEnvironmentIds: () => [],
     } as unknown as AgentHost;
     module.init(host, moduleConfig('shared-worker'));
 
@@ -528,6 +529,7 @@ describe('SubagentModule resume boundaries', () => {
       getConversationStore: () => headerStore.store,
       appendConversationEntry: vi.fn(),
       emitStateChange: vi.fn(),
+      getBrowserEnvironmentIds: () => [],
     } as unknown as AgentHost;
     module.init(host, moduleConfig('failed-handoff-worker'));
 

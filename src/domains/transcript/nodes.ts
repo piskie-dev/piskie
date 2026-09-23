@@ -125,6 +125,8 @@ export interface UserNode extends TranscriptNodeBase {
   readonly parentSentAt?: number;
   readonly skills?: readonly string[];
   readonly skillLoadErrors?: readonly { readonly name: string; readonly error: string }[];
+  /** Browser environments joined by this message, not the session's accumulated set. */
+  readonly browserEnvironmentIds?: readonly string[];
   readonly text?: string;
   readonly images?: readonly CellMedia[];
   readonly files?: readonly TranscriptFileRef[];
@@ -251,6 +253,8 @@ export interface NoticeNode extends TranscriptNodeBase {
   readonly text: string;
   readonly images?: readonly CellMedia[];
   readonly eventType?: string;
+  /** Subagent event time, which can precede delivery to the parent conversation. */
+  readonly eventAt?: number;
   readonly errorType?: string;
   readonly badge?: TranscriptBadge;
 }

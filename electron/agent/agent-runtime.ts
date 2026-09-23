@@ -34,7 +34,9 @@ import type {
   AgentRunHeader,
   ChildSnapshot,
   PendingAgentEventView,
+  UserMessageMetadata,
 } from '../../shared/types/agent-control.js';
+import type { UserMessageInput } from '../../shared/types/user-input.js';
 import type {
   AgentInputEvent,
   AgentInputRequest,
@@ -78,6 +80,9 @@ import { agentIncidentStore } from '../observability/incidents/agent-incident-st
 import { AgentConversationContext } from './context/index.js';
 import { loadAgentInstructions } from './context/agent-instructions.js';
 import { loadSelectedSkills } from './context/selected-skills.js';
+import { describeJoinedBrowserEnvironments } from './context/session-browser-environments.js';
+import { uniqueBrowserEnvironmentIds } from '../../shared/schemas/browser-environment-selection.js';
+import { browserEnvironmentRuntime } from '../services/browser-environment-runtime.js';
 import { app } from 'electron';
 import type { CatalogSnapshot, FinalToolFace } from '../tools/catalog.js';
 import { occupancyRegistry } from '../core/occupancy/index.js';
@@ -131,12 +136,23 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   private browserSkillCandidatePin?: BrowserSkillCandidatePin;
   private modelBoundaryProjectionRevision = 0;
   private modelBoundaryProjectionKey?: string;
+  /**
+   * 当前会话的浏览器环境集合 = 开场 runConfig 绑定 ∪ 已持久化用户消息中加入的 ID。
+   * 只在内存中维护；恢复时从持久化的 UserMsgEntry.metadata 重建，不回写 runConfig.bindings。
+   */
+  private readonly sessionBrowserEnvironmentIds = new Set<string>();
 
   constructor(config: AgentRuntimeConfig) {
     super();
 
     this._spec = config.spec;
     this.options = config.options;
+    const bindings = this.options.runConfig?.bindings;
+    if (bindings?.type === 'standard') {
+      for (const id of uniqueBrowserEnvironmentIds(bindings.boundEnvironmentIds)) {
+        this.sessionBrowserEnvironmentIds.add(id);
+      }
+    }
     this.role = createRole(this._spec.role);
     this.createdAt = new Date();
 
@@ -238,17 +254,45 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         workspace: this.getEffectiveWorkspace(),
         defaultWorkspaceDir: pathsService.getDefaultWorkspaceDir(),
       }).then((selection) => {
-        this.context.addUserMessage(content, input.subtype, {
-          ...selection,
-          metadata: { ...selection.metadata, ...(userInput ? { userInput } : {}) },
-        });
-        if (userInput) this.context.flush();
+        this.commitUserMessage(content, input, userInput, selection);
       });
     }
-    this.context.addUserMessage(content, input.subtype, {
-      ...(userInput ? { metadata: { userInput } } : {}),
+    this.commitUserMessage(content, input, userInput);
+  }
+
+  /**
+   * 技能教学与浏览器环境说明合并进同一条 UserMsgEntry 的 instructions；metadata 只放 ID。
+   * 环境 ID 在消息落盘成功后才进入会话集合——落盘失败则集合不变，等下次重试。
+   */
+  private commitUserMessage(
+    content: string | ContentBlock[],
+    input: AgentUserInput,
+    userInput: UserMessageInput | undefined,
+    skills?: { metadata: UserMessageMetadata; instructions: string },
+  ): void {
+    const joined = describeJoinedBrowserEnvironments(
+      input.browserEnvironmentIds,
+      (id) => browserEnvironmentRuntime.getEnvironment(id),
+    );
+    const instructions = [skills?.instructions, joined?.instructions].filter(Boolean).join('\n\n');
+    const metadata: UserMessageMetadata = {
+      ...skills?.metadata,
+      ...joined?.metadata,
+      ...(userInput ? { userInput } : {}),
+    };
+    const message = this.context.addUserMessage(content, input.subtype, {
+      ...(instructions ? { instructions } : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     });
-    if (userInput) this.context.flush();
+    if (userInput || joined) this.context.flush();
+    if (joined && message.persisted) {
+      for (const id of joined.metadata.browserEnvironmentIds ?? []) this.sessionBrowserEnvironmentIds.add(id);
+      this.emitStateChange();
+    }
+  }
+
+  getBrowserEnvironmentIds(): readonly string[] {
+    return [...this.sessionBrowserEnvironmentIds];
   }
 
   addDurableUserMessage(text: string, tag?: MessageSubtype, messageId?: string): void {
@@ -366,6 +410,7 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
             runMetrics: childState.runMetrics,
             conversationLength: childState.conversationLength,
             browserId: childBrowserMod?.getBrowserId(),
+            browserEnvironmentId: childConfig?.browserEnvironmentId,
             skills: childBrowserMod?.config?.skills,
             // Worker 图片审核节点：child 自身 ImageModule 的即时投影
             imageNodes: childState.imageNodes,
@@ -432,6 +477,8 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       ...this.getActivityState(),
       conversationLength: this.conversationStore.count(this.mainAgentId, this.id),
       children,
+      // 会话当前浏览器环境集合：开场绑定 ∪ 用户中途加入；只投影，不回写 runConfig。
+      browserEnvironmentIds: [...this.sessionBrowserEnvironmentIds],
       agentSpec: this._spec.name,
       runConfig: runConfig ?? defaultRunConfig(this._spec.name),
       createdAt: this.createdAt.toISOString(),
@@ -456,7 +503,9 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
    */
   protected applyEvents(events: AgentInputEvent[]): void | Promise<void> {
     for (const [index, event] of events.entries()) {
-      if (event.source === 'user' && !event.uiSubmission && event.skills?.length) {
+      // 显式选择（技能 / 浏览器环境）是新的用户输入，不参与 ask_user / MCP 答案配对。
+      if (event.source === 'user' && !event.uiSubmission
+        && (event.skills?.length || this.acceptsBrowserEnvironmentIds(event))) {
         return Promise.resolve(this.defaultProcessEvent(event))
           .then(() => this.applyEvents(events.slice(index + 1)));
       }
@@ -1136,13 +1185,6 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
     const customTools = this.mergedCustomTools();
     const domains = new Set<'local' | 'browser'>(['local']);
     if (activation.resourceIds.browserId && activation.browser) domains.add('browser');
-    const metadata = activation.runConfig?.bindings;
-    const browserEnvironmentIds =
-      metadata?.type === 'standard' && Array.isArray(metadata.boundEnvironmentIds)
-        ? metadata.boundEnvironmentIds.filter(
-            (id): id is string => typeof id === 'string' && id.length > 0
-          )
-        : [];
     return Object.freeze({
       scope: activation.agentType === 'worker' ? 'subagent' : 'main',
       agentType: activation.agentType,
@@ -1154,9 +1196,6 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
       excluded: new Set(this._spec.tools?.exclude ?? []),
       domains,
       subagentTypes: Object.freeze(specRegistry.getWorkersForParent(this._spec.name)),
-      subagentResources: Object.freeze({
-        browserEnvironmentIds: Object.freeze([...new Set(browserEnvironmentIds)]),
-      }),
     });
   }
 
@@ -1202,10 +1241,17 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   // 默认事件处理
   // ============================================================
 
+  /** 只有顶层主会话的普通用户输入能把浏览器环境加入会话；Worker 输入不具备该能力。 */
+  private acceptsBrowserEnvironmentIds(event: AgentInputEvent): boolean {
+    return event.source === 'user' && !event.uiSubmission
+      && this._spec.role !== 'worker' && (event.browserEnvironmentIds?.length ?? 0) > 0;
+  }
+
   private defaultProcessEvent(event: AgentInputEvent): void | Promise<void> {
     const skills = event.source === 'user' && !event.uiSubmission ? event.skills : undefined;
+    const browserEnvironmentIds = this.acceptsBrowserEnvironmentIds(event) ? event.browserEnvironmentIds : undefined;
     const hasImages = (event.images?.length ?? 0) > 0;
-    if (!event.content && !hasImages && !event.files?.length && !skills?.length) return;
+    if (!event.content && !hasImages && !event.files?.length && !skills?.length && !browserEnvironmentIds?.length) return;
 
     // 系统事件（postSystemEvent factory）：
     // start 是纯触发器（初始上下文已由 role.onStart 注入，不重复落痕）；
@@ -1232,7 +1278,9 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
         ? contentStr
         : `<agent_input source="${event.source}"${event.priority === 'high' ? ' priority="high"' : ''} ts="${ts}">\n${neutralizeClosing('agent_input', contentStr)}\n</agent_input>`;
 
-    return this.addUserMessage({ text: messageText, files: event.files, images: event.images, skills, subtype });
+    return this.addUserMessage({
+      text: messageText, files: event.files, images: event.images, skills, browserEnvironmentIds, subtype,
+    });
   }
 
   // ============================================================
@@ -1240,6 +1288,15 @@ export class AgentRuntime extends AgentEngine implements AgentHost {
   // ============================================================
 
   async replayConversation(entries: ConversationEntry[]): Promise<void> {
+    // 会话浏览器环境集合从全部历史重建：压缩摘要之前的消息不重放，但其中加入的环境仍属于本会话。
+    for (const entry of entries) {
+      if (entry.t !== 'msg' || entry.role !== 'user') continue;
+      const ids = entry.metadata?.browserEnvironmentIds;
+      if (!Array.isArray(ids)) continue;
+      for (const id of uniqueBrowserEnvironmentIds(ids.filter((id): id is string => typeof id === 'string'))) {
+        this.sessionBrowserEnvironmentIds.add(id);
+      }
+    }
     let lastSummaryIdx = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
       if (entries[i].t === 'summary') {

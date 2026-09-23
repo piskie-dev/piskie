@@ -20,7 +20,6 @@ import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
 import ApprovalModeSelector from '../../../../components/agent-params/ApprovalModeSelector';
 import ModeSelector from '../../../../components/agent-params/ModeSelector';
-import BrowserEnvironmentBindingPicker from '../../../../components/BrowserEnvironmentBindingPicker';
 import { ModelReasoningControl } from '../../../../components/shared';
 import { getAvailableModelOptions, useInferenceStore } from '../../../../store/inferenceStore';
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
@@ -29,10 +28,14 @@ import { WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { WorkspaceBar } from './WorkspaceBar';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { SkillTags } from '../SkillTags';
+import { BrowserEnvironmentTags } from '../BrowserEnvironmentTags';
+import { SessionBrowserControl } from './SessionBrowserControl';
 import { SkillPicker } from './SkillPicker';
 import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import styles from './welcomeComposer.module.css';
+
+const EMPTY_ENVIRONMENT_IDS: readonly string[] = [];
 
 export interface WelcomeComposerProps {
   readonly value: string;
@@ -158,6 +161,12 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                   onRemove={(name) => onSkillsChange(skills.filter((skill) => skill !== name))} />
               </div>
             )}
+            {environmentIds.length > 0 && (
+              <div className={styles.attachments}>
+                <BrowserEnvironmentTags state="pending" environmentIds={environmentIds}
+                  onRemove={(id) => onEnvironmentIdsChange(environmentIds.filter((item) => item !== id))} />
+              </div>
+            )}
             {hasAttachments && (
               <div className={styles.attachments}>
                 {images.map((image) => (
@@ -239,13 +248,14 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 </div>
 
                 <div className={styles.secondaryControls}>
-                  <div className={`${styles.controlPill} ${styles.resourceControl}`} data-composer-control="true">
-                    <BrowserEnvironmentBindingPicker
-                      value={environmentIds}
-                      onChange={onEnvironmentIdsChange}
-                      compact
-                    />
-                  </div>
+                  {/* 与主会话同一个控件：这里没有已加入集合，选中项就是开场绑定 */}
+                  <SessionBrowserControl
+                    mode="session"
+                    joinedIds={EMPTY_ENVIRONMENT_IDS}
+                    pendingIds={environmentIds}
+                    onPendingChange={(ids) => onEnvironmentIdsChange([...ids])}
+                    disabled={sending}
+                  />
 
                   {hasAttachments && (
                     <div className={styles.attachmentPill} data-composer-control="true">

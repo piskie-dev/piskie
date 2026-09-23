@@ -169,6 +169,8 @@ export interface AgentControlState extends AgentActivityState {
   imageNodes?: ImageNodePublicState[];
   /** 当前 Main 独占 MCP Session Runtime 的可丢弃只读投影。 */
   mcp?: AgentMcpView;
+  /** 当前会话的浏览器环境集合：开场绑定 ∪ 用户消息中途加入；Runtime 内存态的只读投影。 */
+  browserEnvironmentIds?: string[];
 }
 
 /**
@@ -197,6 +199,8 @@ export interface ChildControlState extends AgentActivityState {
   contextUsage?: ContextUsage;
   conversationLength: number;
   browserId?: string;
+  /** 创建时 SubagentConfig 指定的浏览器环境；未指定 = 临时浏览器。 */
+  browserEnvironmentId?: string;
   skills?: string[];
   /** 生图审核节点投影（Worker 图片节点连接到对应 Worker） */
   imageNodes?: ImageNodePublicState[];
@@ -299,6 +303,8 @@ export interface UserMessageMetadata {
   userInput?: import('./user-input.js').UserMessageInput;
   skills?: string[];
   skillLoadErrors?: Array<{ name: string; error: string }>;
+  /** 随本条消息加入当前会话的浏览器环境 ID；只存 ID，名称与用途读取时解析。 */
+  browserEnvironmentIds?: string[];
 }
 
 export interface UserMsgEntry extends MsgEntryBase {

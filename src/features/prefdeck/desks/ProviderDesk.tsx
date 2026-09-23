@@ -12,7 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@/services/clipboard';
-import { Copy, Eye, EyeOff, Pencil, Plug2, Plus, Star } from 'lucide-react';
+import { ArrowRight, Copy, Eye, EyeOff, Pencil, Plug2, Plus, Star } from 'lucide-react';
 
 import type {
   InferenceModelBinding,
@@ -26,7 +26,8 @@ import {
   resolvePresentationText,
   type PresentationText,
 } from '../../../i18n/presentationText';
-import { useInferenceStore, type InferenceGatewayKind } from '../../../store/inferenceStore';
+import { getAvailableModelOptions, useInferenceStore, type InferenceGatewayKind } from '../../../store/inferenceStore';
+import { useWorkerPreferencesStore } from '../../agents/worker-preferences-store';
 import { useProxyStore } from '../../../store/proxyStore';
 import { modelReasoningSummary } from '../../../utils/reasoning-options';
 import { BrandMark } from '../bits/BrandMark';
@@ -37,6 +38,7 @@ import { pickWire, readWirePact, stampWire } from '../data/wire-contract';
 import styles from '../deck.module.css';
 
 const DIRECT_LINE = '__direct__';
+const EXPLORE_HINT_DISABLED_KEY = 'piskie-explore-model-hint-disabled';
 
 interface ProbeOutcome {
   phase: 'testing' | 'passed' | 'failed';
@@ -52,6 +54,9 @@ export interface ProviderDeskProps {
   readonly onVanish: () => void;
   readonly onFlash: (text: PresentationText, tone?: 'halt' | 'hold' | 'calm') => void;
   readonly onShowImage: (dataUrl: string) => void;
+  readonly exploreHintId?: number | null;
+  readonly onDismissExploreHint?: () => void;
+  readonly onOpenExplore: () => void;
 }
 
 export const ProviderDesk: React.FC<ProviderDeskProps> = ({
@@ -61,12 +66,28 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
   onVanish,
   onFlash,
   onShowImage,
+  exploreHintId = null,
+  onDismissExploreHint,
+  onOpenExplore,
 }) => {
   const { t } = useTranslation();
   const config = useInferenceStore((s) => s.config);
   const descriptor = useInferenceStore((s) => s.descriptors?.inference ?? null);
   const selections = useInferenceStore((s) => s.selections);
   const catalogModels = useInferenceStore((s) => s.models);
+  const availableAiTargets = useInferenceStore((s) => s.availableTargets.ai);
+  const inferenceError = useInferenceStore((s) => s.error);
+  const workerPreferences = useWorkerPreferencesStore((s) => s.document);
+  const workerTypes = useWorkerPreferencesStore((s) => s.types);
+  const workerLoadError = useWorkerPreferencesStore((s) => s.loadError);
+  const workerLoading = useWorkerPreferencesStore((s) => s.loading);
+  const workerSaving = useWorkerPreferencesStore((s) => s.saving);
+  const exploreDraft = useWorkerPreferencesStore((s) => s.drafts.explore);
+  const [readyHintId, setReadyHintId] = useState<number | null>(null);
+  const [hintDisabled, setHintDisabled] = useState(() => {
+    try { return window.localStorage.getItem(EXPLORE_HINT_DISABLED_KEY) === '1'; }
+    catch { return false; }
+  });
   const isApplying = useInferenceStore((s) => s.isApplying);
   const updateProvider = useInferenceStore((s) => s.updateProvider);
   const removeProvider = useInferenceStore((s) => s.removeProvider);
@@ -92,6 +113,27 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
   useEffect(() => {
     if (!proxyPool) void fetchProxyPool();
   }, [proxyPool, fetchProxyPool]);
+
+  useEffect(() => {
+    if (gateway !== 'ai' || exploreHintId === null || hintDisabled) return;
+    let active = true;
+    void useWorkerPreferencesStore.getState().refresh().then(() => {
+      if (!active) return;
+      const state = useWorkerPreferencesStore.getState();
+      if (state.loadError || !state.document || !state.types.some((entry) => entry.type === 'explore')
+        || state.document.profiles.explore?.inference || state.drafts.explore) {
+        onDismissExploreHint?.();
+      } else {
+        setReadyHintId(exploreHintId);
+      }
+    });
+    return () => { active = false; };
+  }, [gateway, exploreHintId, hintDisabled, onDismissExploreHint]);
+
+  useEffect(() => {
+    if (gateway === 'ai' && exploreHintId !== null && readyHintId === exploreHintId
+      && workerPreferences?.profiles.explore?.inference) onDismissExploreHint?.();
+  }, [gateway, exploreHintId, readyHintId, workerPreferences, onDismissExploreHint]);
 
   useEffect(() => {
     if (!armedKill) return;
@@ -131,6 +173,18 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
   const currentModelId = selections?.[gateway]?.providerId === providerId
     ? selections[gateway]!.modelId
     : undefined;
+  const showExploreHint = gateway === 'ai' && exploreHintId !== null && readyHintId === exploreHintId
+    && !workerLoading && !workerLoadError && !workerSaving && !isApplying && !inferenceError && !hintDisabled && workerPreferences
+    && workerTypes.some((entry) => entry.type === 'explore') && !exploreDraft
+    && !workerPreferences.profiles.explore?.inference
+    && getAvailableModelOptions(config, catalogModels.ai, availableAiTargets)
+      .reduce((count, group) => count + group.options.length, 0) >= 2;
+  const disableExploreHint = () => {
+    try { window.localStorage.setItem(EXPLORE_HINT_DISABLED_KEY, '1'); }
+    catch { /* Keep the preference for this window if storage is unavailable. */ }
+    setHintDisabled(true);
+    onDismissExploreHint?.();
+  };
   const wirePact = gateway === 'ai' && provider.driver === 'openai' ? readWirePact(descriptor) : undefined;
   const storedKey = peekKey(provider.connection.auth);
 
@@ -332,6 +386,23 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
       </div>
 
       <div className={styles.deskBody}>
+        {showExploreHint && (
+          <div className={styles.exploreHint} role="status">
+            <div className={styles.exploreHintCopy}>
+              <strong>{t('agentManagement.exploreHint.title')}</strong>
+              <p>{t('agentManagement.exploreHint.description')}</p>
+            </div>
+            <div className={styles.exploreHintActions}>
+              <button type="button" className={`${styles.btn} ${styles.btnQuiet}`} onClick={onOpenExplore}>
+                {t('agentManagement.exploreHint.review')}
+                <ArrowRight size={14} />
+              </button>
+              <button type="button" className={`${styles.btn} ${styles.btnQuiet}`} onClick={disableExploreHint}>
+                {t('agentManagement.exploreHint.dontRemind')}
+              </button>
+            </div>
+          </div>
+        )}
         <div className={styles.slab}>
           <div className={styles.slabCap}>{t('settings.provider.connection')}</div>
 

@@ -135,7 +135,7 @@ export interface ModelForgeProps {
   readonly catalogDefinitions: readonly InferenceModelDefinition[];
   readonly providerNames: readonly string[];
   readonly onClose: () => void;
-  readonly onSaved: (providerId: string) => void;
+  readonly onSaved: (providerId: string, modelId: string) => void;
   readonly onFlash: (text: PresentationText, tone?: 'halt' | 'hold' | 'calm') => void;
 }
 
@@ -532,7 +532,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         : isNewProvider
           ? 'settings.modelForge.providerAdded'
           : 'settings.modelForge.modelAdded'));
-      onSaved(targetProviderId);
+      onSaved(targetProviderId, trimmedModelId);
       onClose();
     } catch (error) {
       setFault(presentationFromError(

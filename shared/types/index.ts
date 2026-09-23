@@ -365,7 +365,7 @@ export interface SubagentConfig {
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
   skills?: string[];
-  /** 浏览器 Worker 绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
+  /** 浏览器 Worker 绑定的环境 ID；必须属于所属主会话当前的浏览器环境集合（开场绑定 + 用户中途加入）。 */
   browserEnvironmentId?: string;
   /** Worker-specific settings; never mutate the parent run snapshot. */
   advancedSettings?: TaskAdvancedSettings;
@@ -666,6 +666,8 @@ export interface AgentInputEvent {
   files?: UserFileRef[];
   /** 本条用户消息显式选择的技能名称。 */
   skills?: string[];
+  /** 本条用户消息加入当前会话的浏览器环境 ID（仅顶层主会话的普通用户输入消费）。 */
+  browserEnvironmentIds?: string[];
   /** 可选的优先级提示（AI 参考，不强制） */
   priority?: 'high' | 'normal' | 'low';
   /** 可选的元数据 */

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserEnvironment } from '@shared/types';
 import type { ProxyProfile } from '@shared/types/proxy';
-import { occupancyKey, type Occupancy } from '@shared/types/occupancy';
+import type { Occupancy } from '@shared/types/occupancy';
 import { useBrowserEnvironmentStore } from '../../../store/browserEnvironmentStore';
 import { useOccupancyStore } from '../../../store/occupancyStore';
 import {
@@ -40,48 +40,8 @@ export interface FleetActions {
   scrap(envId: string): Promise<boolean>;
 }
 
-/** 运行中环境的占用登记（Agent 占用时环境只读） */
-export function occupantOf(occupancies: Occupancy[], envId: string): Occupancy | undefined {
-  return occupancies.find((item) => item.key === occupancyKey('browserEnvironment', envId));
-}
-
-/** 代理显示名（Program 事实行用） */
-type EnvironmentTranslator = (key: string) => string;
-
-export function proxyLabelOf(
-  proxies: ProxyProfile[],
-  proxyId: string | undefined,
-  translate: EnvironmentTranslator,
-): string {
-  if (!proxyId) return translate('environmentUi.identity.directConnection');
-  const proxy = proxies.find((item) => item.id === proxyId);
-  return proxy
-    ? `${proxy.name} · ${proxy.protocol.toUpperCase()}`
-    : translate('environmentUi.identity.directConnection');
-}
-
-/** 身份策略压成一句话（预监/主屏的 quiet 描述） */
-export function identityLineOf(env: BrowserEnvironment, translate: EnvironmentTranslator): string {
-  const policy = env.identityPolicy;
-  const tz =
-    policy.timezone.mode === 'custom'
-      ? policy.timezone.value
-      : policy.timezone.mode === 'real'
-        ? translate('environmentUi.identity.timezoneLocal')
-        : translate('environmentUi.identity.timezoneIp');
-  const lang = policy.language.mode === 'custom'
-    ? policy.language.value
-    : translate('environmentUi.identity.languageIp');
-  const os =
-    policy.platform === 'windows'
-      ? 'Windows'
-      : policy.platform === 'macos'
-        ? 'macOS'
-        : policy.platform === 'linux'
-          ? 'Linux'
-          : translate('environmentUi.identity.platformLocal');
-  return `${tz} · ${lang} · ${os}`;
-}
+// 占用查询与字段格式器与会话输入框的浏览器控件共用，定义在 utils。
+export { identityLineOf, occupantOf, proxyLabelOf } from '../../../utils/browserEnvironmentPresentation';
 
 export function useFleet(): FleetSnapshot & FleetActions {
   const [proxies, setProxies] = useState<ProxyProfile[]>([]);

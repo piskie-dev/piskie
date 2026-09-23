@@ -49,7 +49,6 @@ export function createInferenceComponent(options: {
       host = new InferenceRuntimeHost({
         rootDirectory: options.userDataDirectory,
         remoteCatalog: {
-          autoRefresh: true,
           baseUrl: process.env.PISKIE_MODEL_CATALOG_BASE_URL ?? 'https://www.piskie.dev',
           clientVersion: app.getVersion(),
           fetch: (input, init) => net.fetch(input instanceof Request ? input : String(input), init),

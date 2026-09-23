@@ -9,6 +9,7 @@ import { TranscriptProjector } from '@/domains/transcript/projector';
 import { createTranscriptSession } from '@/domains/transcript/transcript-session';
 import { projectLiveNodes } from '@/domains/transcript/live-generation';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
+import { buildTranscriptRows } from '../../data/transcriptRows';
 import type { WorkerRef } from '../../data/vm';
 import type { TranscriptProps } from '../Transcript';
 import { clearTranscriptPresentationMemory } from '../transcriptPresentationMemory';
@@ -270,8 +271,16 @@ describe('workers in collapsed processes', () => {
     .map((element) => element.dataset.workerSummary);
   const originalButton = (id: string) => container.querySelector<HTMLButtonElement>(`[data-node-id="${id}"] button`);
   const summaryButton = (id: string) => container.querySelector<HTMLButtonElement>(`[data-worker-summary="${id}"] button`);
+  const workerEvent = (
+    id: string, type: 'message' | 'completed' | 'failed' | 'user_stopped',
+    eventAt: number, receivedAt: number,
+  ): MsgEntry => ({
+    t: 'msg', role: 'user', subtype: 'subagent_notification',
+    id: `event-${id}-${receivedAt}`, ts: receivedAt,
+    content: `<subagent_event id="${id}" type="${type}" ts="${new Date(eventAt).toISOString()}">Sample update</subagent_event>`,
+  });
 
-  it.each([[1000, '用时 7秒'], [0, '执行过程']] as const)(
+  it.each([[1000, '用时 7秒 · 2 个子流程未结束'], [0, '执行过程']] as const)(
     'reuses active worker rows below %s, then restores the original order and navigation',
     async (startedAt, label) => {
       await renderEntries(entries(startedAt), { workers });
@@ -322,17 +331,205 @@ describe('workers in collapsed processes', () => {
     const beta = summaryButton('worker-beta-call');
     await render({ ...props, workers: workers.map((worker) => worker.id === 'worker-alpha' ? { ...worker, status: 'waiting' } : worker) });
     expect(summaryIds()).toEqual(['worker-beta-call']);
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(summaryButton('worker-beta-call')).toBe(beta);
     for (const status of ['waiting', 'interrupted', 'stopping'] as const) {
       await render({ ...props, workers: workers.map((worker) => ({ ...worker, status })) });
       expect(summaryIds()).toEqual([]);
       expect(group('process')!.textContent).toBe('用时 7秒');
     }
+    expect(buildTranscriptRows(nodes, responses, true).rows.find((row) => row.kind === 'process')?.workerProgress?.unfinished).toBe(3);
+    await click(toggle('process'));
+    expect(toggle('process')!.textContent).toBe('用时 7秒');
+    await click(toggle('process'));
+    expect(toggle('process')!.textContent).toBe('用时 7秒');
     await render(props);
     expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束');
     await render({ ...props, workers: [] });
     expect(summaryIds()).toEqual([]);
     expect(group('process')!.textContent).toBe('用时 7秒');
+  });
+
+  it.each([
+    [7000, '用时 7秒'],
+    [8500, '用时 7秒'],
+    [9000, '用时 7秒 · 本轮总用时 8秒'],
+  ] as const)('shows a total only when a Worker ending at %s extends the displayed time', async (lastEventAt, expected) => {
+    const { session, append, show } = await start(entries());
+    append(workerEvent('worker-complete', 'completed', 5000, 16000));
+    append(workerEvent('worker-alpha', 'completed', 6000, 17000));
+    append(workerEvent('worker-beta', 'completed', lastEventAt, 18000));
+    await show({ processSettled: true, workers: [] });
+    expect(toggle('process')!.textContent).toBe(expected);
+    session.close();
+  });
+
+  it('does not show a total without Workers', async () => {
+    await renderEntries([
+      user(), assistant('sample-work', [call('sample-tool')]), result('sample-tool'),
+      assistant('sample-final', 'Final reply', 8000),
+    ], { processSettled: true, workers: [] });
+    expect(toggle('process')!.textContent).toBe('用时 7秒');
+  });
+
+  it('counts persisted terminal events and uses event time, not delayed delivery time, for total elapsed', async () => {
+    const { session, append, show } = await start(entries());
+    await show({ processSettled: true, workers });
+    const header = toggle('process')!;
+    expect(header.textContent).toBe('用时 7秒 · 2 个子流程未结束');
+
+    append(workerEvent('worker-complete', 'completed', 5000, 16000));
+    await show({ processSettled: true, workers });
+    expect(header.textContent).toBe('用时 7秒 · 2 个子流程未结束');
+    expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+
+    append(workerEvent('worker-alpha', 'message', 8500, 16500));
+    append(workerEvent('worker-alpha', 'completed', 9000, 17000));
+    await show({ processSettled: true, workers });
+    expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+    expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
+    await show({ processSettled: true, workers: [] });
+    expect(header.textContent).toBe('用时 7秒');
+    append(workerEvent('worker-beta', 'completed', 12000, 18000));
+    await show({ processSettled: true, workers: [] });
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 11秒');
+
+    await show({ activeStartedAt: 19000, workers: [] });
+    expect(header.textContent).toBe('用时 7秒');
+    append(assistant('sample-followup-final', 'Final update', 20000));
+    await show({ processSettled: true, workers: [] });
+    expect(header.textContent).toBe('用时 19秒');
+    session.close();
+  });
+
+  it('distinguishes failed and stopped workers from successful completion', async () => {
+    const { session, append, show } = await start(entries());
+    await show({ processSettled: true, workers });
+    append(workerEvent('worker-complete', 'completed', 5000, 9000));
+    append(workerEvent('worker-alpha', 'failed', 10000, 11000));
+    await show({ processSettled: true, workers });
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个子流程未结束 · 1 个失败');
+    expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+    append(workerEvent('worker-beta', 'user_stopped', 12000, 13000));
+    await show({ processSettled: true, workers });
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个失败 · 1 个已停止 · 本轮总用时 11秒');
+    session.close();
+  });
+
+  it('resets the count for same-turn follow-up but does not assign a later turn to the original process', async () => {
+    const { session, append, show } = await start([
+      user(), assistant('sample-work', [
+        call('sample-worker-call', 'subagent', { subject: 'Sample work', type: 'local-worker' }),
+      ]), result('sample-worker-call', 'subagentId: sample-worker'), assistant('sample-final', 'Done', 8000),
+    ]);
+    await show({ processSettled: true });
+    const header = toggle('process')!;
+    append(workerEvent('sample-worker', 'completed', 9000, 10000));
+    await show({ processSettled: true });
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 8秒');
+
+    append(assistant('sample-reassignment', [
+      call('sample-send', 'send_event', { targetId: 'sample-worker', message: 'Continue the sample.' }),
+    ], 11000));
+    append({ ...result('sample-send'), ts: 12000 });
+    await show({ processSettled: true });
+    expect(header.textContent).toBe('用时 7秒');
+    append(workerEvent('sample-worker', 'completed', 13000, 14000));
+    await show({ processSettled: true });
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 12秒');
+    append(assistant('sample-followup-final', 'Follow-up done', 14000));
+    await show({ processSettled: true });
+    expect(header.textContent).toBe('用时 13秒');
+
+    append({ ...user(15000), id: 'next-sample-user' });
+    append(assistant('sample-next-task', [
+      call('sample-send-again', 'send_event', { targetId: 'sample-worker', message: 'New sample.' }),
+    ], 16000));
+    append({ ...result('sample-send-again'), ts: 17000 });
+    append(workerEvent('sample-worker', 'completed', 19000, 20000));
+    await show({ processSettled: true });
+    expect(header.textContent).toBe('用时 13秒');
+    session.close();
+  });
+
+  it('shows a re-dispatched active worker below the next unfinished process without duplicating its creation row', async () => {
+    const { session, append, show } = await start([
+      user(), assistant('sample-create', [
+        call('sample-worker-call', 'subagent', { subject: 'Sample task', type: 'local-worker' }),
+      ]), result('sample-worker-call', 'Worker created: Sample task\nsubagentId: sample-worker'),
+      assistant('sample-first-final', 'First reply', 8000),
+    ]);
+    const waitingWorkers: readonly WorkerRef[] = [{
+      id: 'sample-worker', subject: 'Sample task', type: 'local-worker', status: 'waiting',
+    }];
+    const runningWorkers: readonly WorkerRef[] = waitingWorkers.map((worker) => ({ ...worker, status: 'running' }));
+    await show({ processSettled: true, workers: waitingWorkers });
+    append(workerEvent('sample-worker', 'completed', 9000, 9000));
+    append({ ...user(10000), id: 'sample-next-user' });
+    append(assistant('sample-check', [call('sample-check-call')], 10500));
+    append({ ...result('sample-check-call'), ts: 10700 });
+    append(assistant('sample-redispatch', [
+      call('sample-send', 'send_event', { type: 'message', targetId: 'sample-worker', message: 'Continue the sample.' }),
+    ], 11000));
+    append({ ...result('sample-send', '事件已发送到子流程: sample-worker。'), ts: 12000 });
+    await show({ toolsActive: true, workers: runningWorkers });
+    expect(container.querySelector('[data-group-id="process:sample-next-user"]')).toBeNull();
+
+    append({ ...user(13000), id: 'sample-third-user' });
+    await show({ toolsActive: true, workers: runningWorkers });
+    const first = container.querySelector<HTMLElement>('[data-group-id="process:sample-user"]')!;
+    const next = container.querySelector<HTMLElement>('[data-group-id="process:sample-next-user"]')!;
+    expect(next.querySelector('button')?.textContent).toContain('执行过程');
+    const summary = next.querySelector<HTMLButtonElement>('[data-worker-summary="sample-worker-call"] button');
+    expect(summary).not.toBeNull();
+    expect(first.querySelector('[data-worker-summary]')).toBeNull();
+    expect(summary?.dataset.live).toBe('true');
+    await click(summary ?? null);
+    expect(openWorker).toHaveBeenCalledExactlyOnceWith('sample-worker');
+    expect(next.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+
+    await click(first.querySelector('button'));
+    expect(first.querySelector('[data-node-id="sample-worker-call"]')).not.toBeNull();
+    expect(originalButton('sample-worker-call')?.outerHTML).toBe(summary?.outerHTML);
+    await click(originalButton('sample-worker-call'));
+    expect(openWorker.mock.calls).toEqual([['sample-worker'], ['sample-worker']]);
+    await click(next.querySelector('button'));
+    expect(next.querySelector('[data-transcript-group="tools"]')).not.toBeNull();
+    await click(next.querySelector('[data-transcript-group="tools"] > button'));
+    expect(next.querySelector('[data-node-id="sample-send"]')).not.toBeNull();
+    expect(next.querySelector('[data-worker-summary]')).toBeNull();
+    await click(next.querySelector('button'));
+    await show({ toolsActive: true, workers: waitingWorkers });
+    expect(next.querySelector('[data-worker-summary]')).toBeNull();
+    session.close();
+  });
+
+  it('leaves an active worker with its original process when the later directed send fails', async () => {
+    const { session, append, show } = await start([
+      user(), assistant('sample-create', [
+        call('sample-worker-call', 'subagent', { subject: 'Sample task', type: 'local-worker' }),
+      ]), result('sample-worker-call', 'Worker created: Sample task\nsubagentId: sample-worker'),
+      assistant('sample-first-final', 'First reply', 8000),
+    ]);
+    const runningWorkers: readonly WorkerRef[] = [{
+      id: 'sample-worker', subject: 'Sample task', type: 'local-worker', status: 'running',
+    }];
+    await show({ processSettled: true, workers: runningWorkers });
+    append({ ...user(10000), id: 'sample-next-user' });
+    append(assistant('sample-redispatch', [
+      call('sample-send', 'send_event', { type: 'message', targetId: 'sample-worker', message: 'Continue the sample.' }),
+    ], 11000));
+    append({ ...result('sample-send', 'Event not delivered.'), ts: 12000, ok: false });
+    await show({ toolsActive: true, workers: runningWorkers });
+    append({ ...user(13000), id: 'sample-third-user' });
+    await show({ toolsActive: true, workers: runningWorkers });
+
+    const first = container.querySelector<HTMLElement>('[data-group-id="process:sample-user"]')!;
+    const next = container.querySelector<HTMLElement>('[data-group-id="process:sample-next-user"]')!;
+    expect(first.querySelector('[data-worker-summary="sample-worker-call"]')).not.toBeNull();
+    expect(next.querySelector('[data-worker-summary]')).toBeNull();
+    session.close();
   });
 
   it.each([300, 3500])('opens the chosen worker without expanding or scrolling the process at scrollTop %s', async (scrollTop) => {
@@ -387,6 +584,16 @@ describe('workers in collapsed processes', () => {
     expect(group('process')!.querySelector('[data-live]')).toBeNull();
     expect(group('process')!.querySelector(`.${activeTextStyles.text}`)).toBeNull();
   });
+
+  it('keeps the original elapsed label when an older worker result has no id to associate', async () => {
+    await renderEntries([
+      user(), assistant('sample-work', [
+        call('sample-legacy-call', 'subagent', { subject: 'Sample work', type: 'local-worker' }),
+      ]), result('sample-legacy-call', 'Worker created: Sample work'),
+      assistant('sample-final', 'Done', 8000),
+    ], { workers: [], processSettled: true });
+    expect(toggle('process')!.textContent).toBe('用时 7秒');
+  });
 });
 
 describe('resuming a settled process', () => {
@@ -414,13 +621,13 @@ describe('resuming a settled process', () => {
     await show({ processSettled: true, workers: activeWorkers });
     const process = group('process')!;
     const header = toggle('process')!;
-    expect(header.textContent).toBe('用时 7秒');
+    expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(process.dataset.groupId).toBe('process:sample-user');
     if (open) await click(header);
     const expectRetained = () => {
       expect(group('process')).toBe(process);
       expect(toggle('process')).toBe(header);
-      expect(header.textContent).toBe('用时 7秒');
+      expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
       expect(header.getAttribute('aria-expanded')).toBe(String(open));
       expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(1);
       expect(process.querySelector('[data-worker-summary="sample-worker-call"]') !== null).toBe(!open);
@@ -483,7 +690,7 @@ describe('resuming a settled process', () => {
     expect(group('process')).toBe(process);
     expect(toggle('process')).toBe(header);
     expect(header.getAttribute('aria-expanded')).toBe(String(open));
-    expect(header.textContent).toBe('用时 19秒');
+    expect(header.textContent).toBe('用时 19秒 · 1 个子流程未结束');
     expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(1);
     expect(outsideIds()).toEqual(['sample-user', 'sample-latest-final-text', 'sample-latest-final-text-1']);
     if (open) {
@@ -556,7 +763,7 @@ describe('resuming a settled process', () => {
       expect(process).toBe(previousProcess);
       expect(header).toBe(previousHeader);
     }
-    expect(header.textContent).toBe('执行过程');
+    expect(header.textContent).toBe('执行过程 · 用时 10秒 · 1 个子流程未结束');
     expect(header.getAttribute('aria-expanded')).toBe(String(open));
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user']);
     if (!open) {
@@ -579,7 +786,7 @@ describe('resuming a settled process', () => {
     append(assistant('sample-next-final', 'Independent answer.', 18000));
     await show({ processSettled: true, workers: activeWorkers });
     expect(group('process')).toBe(process);
-    expect(header.textContent).toBe('执行过程');
+    expect(header.textContent).toBe('执行过程 · 用时 10秒 · 1 个子流程未结束');
     expect(header.getAttribute('aria-expanded')).toBe('true');
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-final']);
     session.close();
@@ -653,14 +860,14 @@ describe('resuming a settled process', () => {
     append(assistant('sample-next-work', [call('sample-next-tool')]));
     await show({ toolsActive: true });
     expect(toggle('process')).toBe(header);
-    expect(header!.textContent).toBe('执行过程');
+    expect(header!.textContent).toBe('执行过程 · 用时 11秒');
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-tool']);
     append(result('sample-next-tool'));
     append(assistant('sample-next-final', 'Independent reply', 19000));
     await show({ processSettled: true });
     const processes = [...container.querySelectorAll<HTMLElement>('[data-transcript-group="process"]')];
     expect(processes.map((element) => element.dataset.groupId)).toEqual(['process:sample-user', 'process:sample-next-user']);
-    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual(['执行过程', '用时 4秒']);
+    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual(['执行过程 · 用时 11秒', '用时 4秒']);
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-final']);
     await click(header);
     expect(group('process')!.contains(node('sample-first-final'))).toBe(true);
@@ -692,7 +899,7 @@ describe('user input during execution', () => {
     await show({ toolsActive: true, workers: activeWorkers });
     const process = group('process')!;
     const header = toggle('process')!;
-    expect(header.textContent).toBe('执行过程');
+    expect(header.textContent).toBe('执行过程 · 用时 2秒 · 1 个子流程未结束');
     expect(header.getAttribute('aria-expanded')).toBe('false');
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user']);
     expect(container.textContent).not.toContain('Inspecting the first sample.');
@@ -739,7 +946,7 @@ describe('user input during execution', () => {
     await show({ processSettled: true, workers: activeWorkers });
     const processes = [...container.querySelectorAll<HTMLElement>('[data-transcript-group="process"]')];
     expect(processes.map((element) => element.dataset.groupId)).toEqual(['process:sample-user', 'process:sample-next-user']);
-    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual(['执行过程', '用时 5秒']);
+    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual(['执行过程 · 用时 2秒 · 1 个子流程未结束', '用时 5秒']);
     expect(header.getAttribute('aria-expanded')).toBe('true');
     expect(processes[1]!.querySelector('button')!.getAttribute('aria-expanded')).toBe('false');
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-final']);
@@ -748,7 +955,7 @@ describe('user input during execution', () => {
     expect(process.querySelector('[data-worker-summary="sample-worker-call"]')).not.toBeNull();
     await show({ processSettled: true, workers: defaultWorkers });
     expect(process.querySelector('[data-worker-summary]')).toBeNull();
-    expect(header.textContent).toBe('执行过程');
+    expect(header.textContent).toBe('执行过程 · 用时 2秒');
     expect(header.getAttribute('aria-expanded')).toBe('false');
     session.close();
   });
@@ -779,7 +986,7 @@ describe('user input during execution', () => {
     if (!batched) await show({ toolsActive: true });
     append(nextUser());
     await show({ toolsActive: true });
-    expect(toggle('process')!.textContent).toBe('执行过程');
+    expect(toggle('process')!.textContent).toBe('执行过程 · 用时 8秒');
     expect(toggle('process')!.getAttribute('aria-expanded')).toBe('false');
     expect(outsideIds()).toEqual(['sample-user', 'sample-next-user']);
     await click(toggle('process'));

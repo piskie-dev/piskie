@@ -80,9 +80,6 @@ export type FinalToolFace = Readonly<{
   excluded: ReadonlySet<string>;
   domains: ReadonlySet<SkillDomain>;
   subagentTypes?: readonly SubagentTypeDescriptor[];
-  subagentResources?: Readonly<{
-    browserEnvironmentIds: readonly string[];
-  }>;
 }>;
 
 export type CatalogProjection = Readonly<{
@@ -227,7 +224,6 @@ class FrozenCatalogSnapshot implements CatalogSnapshot {
       agentType: this.face.agentType,
       searchCapabilities: this.face.searchCapabilities,
       subagentTypes: this.face.subagentTypes ?? [],
-      subagentResources: this.face.subagentResources ?? { browserEnvironmentIds: [] },
     }) ?? {
       schema: def.schema,
       description: typeof def.description === 'function' ? def.description(this.face.agentType) : def.description,

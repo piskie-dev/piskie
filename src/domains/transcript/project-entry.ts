@@ -152,6 +152,8 @@ function buildUserNode(
     ...(entry.role === 'user' && entry.metadata?.skills?.length ? { skills: entry.metadata.skills } : {}),
     ...(entry.role === 'user' && entry.metadata?.skillLoadErrors?.length
       ? { skillLoadErrors: entry.metadata.skillLoadErrors } : {}),
+    ...(origin === 'user' && entry.role === 'user' && entry.metadata?.browserEnvironmentIds?.length
+      ? { browserEnvironmentIds: entry.metadata.browserEnvironmentIds } : {}),
     tone: userTone(origin),
     interaction,
     defaultExpanded: false,
@@ -207,6 +209,7 @@ function buildNoticeNode(
     images,
     ...(presentation.badge && { badge: presentation.badge }),
     ...(presentation.eventType && { eventType: presentation.eventType }),
+    ...(presentation.eventAt !== undefined && { eventAt: presentation.eventAt }),
     ...(presentation.errorType && { errorType: presentation.errorType }),
     tone: presentation.tone,
     interaction,

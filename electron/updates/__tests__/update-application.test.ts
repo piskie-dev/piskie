@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { UpdateApplication, classifyUpdateError } from '../update-application.js';
 import type { UpdateProvider, UpdateProviderEvent } from '../update-provider.js';
@@ -19,10 +19,6 @@ class FakeUpdateProvider implements UpdateProvider {
     this.listener?.(event);
   }
 }
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe('UpdateApplication', () => {
   it('keeps development and unpackaged clients inert', async () => {
@@ -49,7 +45,6 @@ describe('UpdateApplication', () => {
     const application = new UpdateApplication({
       currentVersion: '0.1.0',
       provider,
-      initialDelayMs: 60_000,
       now: () => Date.parse('2026-09-03T08:00:00.000Z'),
     });
     application.start();
@@ -69,7 +64,6 @@ describe('UpdateApplication', () => {
     const application = new UpdateApplication({
       currentVersion: '0.1.0',
       provider,
-      initialDelayMs: 60_000,
     });
     const observed: unknown[] = [];
     application.changes.subscribe((status) => observed.push(status));
@@ -103,83 +97,6 @@ describe('UpdateApplication', () => {
     application.dispose();
   });
 
-  it('checks after the startup delay and then on the six-hour cadence', async () => {
-    vi.useFakeTimers();
-    const provider = new FakeUpdateProvider();
-    provider.checkForUpdates.mockImplementation(async () => {
-      provider.emit({ type: 'not-available' });
-    });
-    const application = new UpdateApplication({
-      currentVersion: '0.1.0',
-      provider,
-    });
-
-    application.start();
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(provider.checkForUpdates).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1_000);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
-    application.dispose();
-  });
-
-  it('stops automatic checks while disabled, keeps manual checks, and resumes once', async () => {
-    vi.useFakeTimers();
-    const provider = new FakeUpdateProvider();
-    provider.checkForUpdates.mockImplementation(async () => {
-      provider.emit({ type: 'not-available' });
-    });
-    const application = new UpdateApplication({
-      currentVersion: '0.1.0',
-      provider,
-      initialDelayMs: 100,
-      intervalMs: 1_000,
-    });
-
-    application.start();
-    await vi.advanceTimersByTimeAsync(100);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(1);
-
-    application.setAutoCheckAndDownloadEnabled(false);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(1);
-    await application.check();
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
-
-    application.setAutoCheckAndDownloadEnabled(true);
-    application.setAutoCheckAndDownloadEnabled(true);
-    expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(99);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(provider.checkForUpdates).toHaveBeenCalledTimes(3);
-    expect(vi.getTimerCount()).toBe(1);
-    application.dispose();
-  });
-
-  it('starts without an automatic timer when the persisted preference is disabled', async () => {
-    vi.useFakeTimers();
-    const provider = new FakeUpdateProvider();
-    provider.checkForUpdates.mockImplementation(async () => {
-      provider.emit({ type: 'not-available' });
-    });
-    const application = new UpdateApplication({
-      currentVersion: '0.1.0',
-      provider,
-      autoCheckAndDownloadEnabled: false,
-    });
-
-    application.start();
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1_000);
-    expect(provider.checkForUpdates).not.toHaveBeenCalled();
-    await application.check();
-    expect(provider.checkForUpdates).toHaveBeenCalledOnce();
-    application.dispose();
-  });
 });
 
 describe('classifyUpdateError', () => {

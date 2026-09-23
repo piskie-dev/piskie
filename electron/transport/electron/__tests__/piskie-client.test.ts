@@ -74,6 +74,19 @@ describe('createElectronPiskieClient', () => {
     expect(request).toHaveBeenCalledWith(INFERENCE_OPERATIONS.refreshCatalog, []);
   });
 
+  it('lets inference probes use the gateway timeout instead of the transport default', async () => {
+    const request = vi.fn(async () => []);
+    const client = createElectronPiskieClient({ getPathForFile: vi.fn(),
+      transport: { request } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux',
+    });
+    const input = { level: 'smoke' as const, target: { providerId: 'sample', modelId: 'image' } };
+
+    await client.inference.probe(input);
+
+    expect(request).toHaveBeenCalledWith(INFERENCE_OPERATIONS.probe, [input], { timeoutMs: 0 });
+  });
+
   it('keeps the account wait open while bounding regular account requests', async () => {
     const request = vi.fn(async () => ({ state: 'signed-out' }));
     const transport = {

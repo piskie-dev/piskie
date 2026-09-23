@@ -59,7 +59,7 @@ const electron = vi.hoisted(() => {
   }
 
   class FakeBrowserWindow {
-    readonly webContents = new MiniEmitter();
+    readonly webContents = Object.assign(new MiniEmitter(), { getZoomFactor: vi.fn(() => 1) });
     readonly contentView = {
       addChildView: vi.fn(),
       removeChildView: vi.fn(),
@@ -146,6 +146,27 @@ describe('scoped embedded browser lifetimes', () => {
     expect(window.contentView.addChildView).toHaveBeenLastCalledWith(first);
     expect(first.webContents.loadURL).toHaveBeenCalledOnce();
     expect(first.webContents.close).not.toHaveBeenCalled();
+    registry.dispose();
+  });
+
+  it('maps CSS rectangles to view DIPs at page zoom, including after hiding and showing', () => {
+    const { registry, window } = fixture();
+    registry.open(main);
+    const view = electron.FakeWebContentsView.latest!;
+    const rect = { x: 1547.7778, y: 60, width: 230, height: 400 };
+    window.webContents.getZoomFactor.mockReturnValue(1.125);
+    registry.setBounds(main, rect);
+    registry.setVisible(main, true);
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 1741, y: 68, width: 259, height: 450 });
+
+    registry.setVisible(main, false);
+    registry.setVisible(main, true);
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 1741, y: 68, width: 259, height: 450 });
+
+    // A display scale factor alone does not change renderer CSS pixels vs window DIPs.
+    window.webContents.getZoomFactor.mockReturnValue(1);
+    registry.setBounds(main, { x: 1770, y: 60, width: 230, height: 400 });
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 1770, y: 60, width: 230, height: 400 });
     registry.dispose();
   });
 

@@ -277,7 +277,8 @@ describe('assemble L0-L5 组装规则', () => {
     // 强制全覆盖已废止：绑定池只约束"用池内环境"，不要求每个环境都派发
     expect(prompt).not.toContain('required_coverage');
     expect(prompt).not.toContain('全覆盖');
-    expect(prompt).toContain('必须使用清单中的真实 ID');
+    expect(prompt).toContain('必须使用其中的真实 ID');
+    expect(prompt).toContain('已加入当前会话');
   });
 
   it('顶层智能体管理措辞按 canManageAgentRuns 门控', () => {

@@ -52,7 +52,7 @@ export function BrowserGuideFrame({ phase, time, scrollProgress = 0 }: BusinessF
         phase < 4
           ? 'ForgeSheet/ForgeFields/SheetFrame'
           : phase >= 6
-            ? 'WelcomeComposer/BrowserEnvironmentBindingPicker'
+            ? 'WelcomeComposer/SessionBrowserControl'
             : 'ProgramMonitor'
       }
     >

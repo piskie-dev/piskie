@@ -9,7 +9,7 @@
  *
  * 长列表两道闸：
  * - 默认收起，手动展开态持久化；搜索临时展开匹配组；
- * - 每组默认列前 {@link GROUP_PREVIEW_LIMIT} 条及选中项，可展开全部并收起。
+ * - 每组默认列全部置顶项、前 {@link GROUP_PREVIEW_LIMIT} 条未置顶项及选中项，可展开全部并收起。
  */
 
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
@@ -95,10 +95,12 @@ const Row = memo<{
   const activity = live
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
     : undefined;
+  const pinKey = row.pinned ? 'unpin' : 'pin';
+  const pinLabel = t(`sessionWorkbenchUi.sessionMenu.${pinKey}`);
 
   const items: MenuItemDescriptor[] = [{
-    key: row.pinned ? 'unpin' : 'pin',
-    label: t(`sessionWorkbenchUi.sessionMenu.${row.pinned ? 'unpin' : 'pin'}`),
+    key: pinKey,
+    label: pinLabel,
     icon: row.pinned ? <PinOff size={12} /> : <Pin size={12} />,
   }, ...(live
     ? buildSessionMenu({ ...menuSourceOf(row.agentId), renamable: true }).map((item) => ({
@@ -153,7 +155,22 @@ const Row = memo<{
       <span className={styles.rowLabel} title={row.label}>{row.label}</span>
 
       <span className={styles.dotSlot} data-unread={unread || undefined} aria-hidden />
-      <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
+      <div className={styles.rowMeta}>
+        <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
+        <Tooltip title={pinLabel}>
+          <button
+            type="button"
+            className={styles.rowPin}
+            aria-label={pinLabel}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMenuAction(pinKey, row);
+            }}
+          >
+            {row.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+          </button>
+        </Tooltip>
+      </div>
 
       <span className={styles.rowMenu}>
         <MenuButton
@@ -180,7 +197,7 @@ interface GroupProps extends Omit<WorkspaceTreeProps, 'groups' | 'onMoveGroup'> 
   readonly onDragEnd: () => void;
 }
 
-/** 每组默认露出的条数；在跑的排最前，天然不会被藏 */
+/** 每组默认露出的未置顶条数；置顶项始终可见 */
 const GROUP_PREVIEW_LIMIT = 5;
 
 const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf, onMenuAction,
@@ -191,7 +208,12 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
   const open = searching || expandedGroups.includes(group.key);
 
   const [showAll, setShowAll] = useState(false);
-  const previewRows = group.rows.filter((row, index) => index < GROUP_PREVIEW_LIMIT || row.agentId === selectedAgentId);
+  let unpinnedSeen = 0;
+  const previewRows = group.rows.filter((row) => {
+    if (row.pinned) return true;
+    unpinnedSeen += 1;
+    return unpinnedSeen <= GROUP_PREVIEW_LIMIT || row.agentId === selectedAgentId;
+  });
   const hiddenCount = group.rows.length - previewRows.length;
   const visibleRows = showAll || searching ? group.rows : previewRows;
 

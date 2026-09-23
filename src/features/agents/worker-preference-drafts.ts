@@ -62,7 +62,7 @@ export function chooseModel(
 }
 export function draftProblem(
   draft: InferenceDraft,
-  groups: ModelOptGroup[]
+  groups: readonly ModelOptGroup[]
 ): 'chooseModel' | 'modelUnavailable' | 'reasoningInvalid' | undefined {
   if (draft.mode !== 'fixed') return;
   if (!draft.target) return 'chooseModel';

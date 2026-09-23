@@ -310,11 +310,6 @@
   max-width: 208px;
 }
 
-.resourceControl {
-  padding-inline: 8px;
-}
-
-
 .attachmentPill {
   gap: 6px;
   padding-inline: var(--welcome-control-padding-x);

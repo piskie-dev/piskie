@@ -53,9 +53,7 @@ export interface InferenceRuntimeHostOptions {
   onConfigChanged?: (event: ConfigDomainRevisionChangedEvent) => void;
   onClose?: () => void | Promise<void>;
   configIntegrations?: ConfigDomainIntegrations;
-  remoteCatalog?: Partial<Pick<RemoteCatalogOptions, 'baseUrl' | 'clientVersion' | 'fetch' | 'keys' | 'onError'>> & {
-    autoRefresh?: boolean;
-  };
+  remoteCatalog?: Partial<Pick<RemoteCatalogOptions, 'baseUrl' | 'clientVersion' | 'fetch' | 'keys' | 'onError'>>;
 }
 
 export interface InferenceRuntimeStartupResult {
@@ -217,7 +215,6 @@ export class InferenceRuntimeHost {
       issues.push(startupIssue('watchers', cause));
       this.notifyReloadError(cause);
     }
-    if (this.options.remoteCatalog?.autoRefresh) this.remoteCatalog.start();
     return {
       ...(bootstrap && { bootstrap }),
       ...(currentRevision !== undefined && { currentRevision }),

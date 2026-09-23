@@ -28,6 +28,10 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
   if (row.kind === 'node') return renderNode(row.node);
 
   const open = openGroups.has(row.id);
+  const activeWorkers = row.kind === 'process' ? row.workerCards.filter((node) => {
+    const worker = workers?.find((candidate) => candidate.id === node.workerId);
+    return worker && isActiveStatus(worker.status);
+  }) : [];
   let text: string;
   let running = false;
   if (row.kind === 'tools') {
@@ -39,9 +43,27 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
     text = summary ? `${title} · ${summary}` : title;
     running = toolsActive;
   } else {
-    text = row.durationMs === undefined
-      ? t('transcript.executionProcess')
-      : t('transcript.elapsedProcess', { elapsed: formatActivityDuration(row.durationMs, t) });
+    const elapsed = row.durationMs ?? row.observedDurationMs;
+    const elapsedDuration = elapsed === undefined ? undefined : formatActivityDuration(elapsed, t);
+    const elapsedText = elapsedDuration === undefined
+      ? undefined
+      : t('transcript.elapsedProcess', { elapsed: elapsedDuration });
+    text = row.durationMs !== undefined
+      ? elapsedText!
+      : [t('transcript.executionProcess'), elapsedText].filter(Boolean).join(' · ');
+    if (elapsed !== undefined && row.workerProgress) {
+      const { failed, stopped, totalDurationMs, unfinishedWorkerNodeIds } = row.workerProgress;
+      const unfinished = activeWorkers.filter((node) => unfinishedWorkerNodeIds.includes(node.id)).length;
+      if (unfinished > 0) text += ` · ${t('transcript.unfinishedWorkers', { count: unfinished })}`;
+      if (failed > 0) text += ` · ${t('transcript.failedWorkers', { count: failed })}`;
+      if (stopped > 0) text += ` · ${t('transcript.stoppedWorkers', { count: stopped })}`;
+      if (totalDurationMs !== undefined) {
+        const totalDuration = formatActivityDuration(totalDurationMs, t);
+        if (totalDuration !== elapsedDuration) {
+          text += ` · ${t('transcript.totalElapsedProcess', { elapsed: totalDuration })}`;
+        }
+      }
+    }
   }
 
   const renderCell = (node: TranscriptNode) => (
@@ -50,12 +72,6 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
     </div>
   );
   const pendingNodes = row.kind === 'tools' ? row.nodes.filter(isPendingTranscriptNode) : [];
-  const activeWorkers = !open && row.kind === 'process' ? row.rows.flatMap((child) => {
-    if (child.kind !== 'node' || child.node.kind !== 'worker') return [];
-    const node = child.node;
-    const worker = workers?.find((candidate) => candidate.id === node.workerId);
-    return worker && isActiveStatus(worker.status) ? [node] : [];
-  }) : [];
 
   return (
     <div className={styles.group} data-transcript-group={row.kind} data-group-id={row.id}>
@@ -96,7 +112,7 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
           ))}
         </div>
       )}
-      {activeWorkers.length > 0 && (
+      {!open && activeWorkers.length > 0 && (
         <div className={styles.groupBody}>
           {activeWorkers.map((node) => (
             <div key={node.id} data-worker-summary={node.id}>

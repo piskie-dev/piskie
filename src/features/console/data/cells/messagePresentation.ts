@@ -52,6 +52,7 @@ export type MessagePresentation =
       readonly badge?: TranscriptBadge;
       readonly defaultExpanded: boolean;
       readonly eventType?: SubagentEventType;
+      readonly eventAt?: number;
       readonly errorType?: string;
       readonly metadata?: readonly PresentationText[];
       readonly detailFile?: string;
@@ -99,6 +100,7 @@ interface NoticeInput {
   readonly text: string;
   readonly summary?: string | PresentationText;
   readonly eventType?: SubagentEventType;
+  readonly eventAt?: number;
   readonly errorType?: string;
   readonly metadata?: readonly PresentationText[];
   readonly detailFile?: string;
@@ -121,6 +123,7 @@ function presentNotice(input: NoticeInput): NoticeMessagePresentation {
     ...(input.summary && { summary: input.summary }),
     ...style,
     ...(input.eventType && { eventType: input.eventType }),
+    ...(input.eventAt !== undefined && { eventAt: input.eventAt }),
     ...(input.errorType && { errorType: input.errorType }),
     ...(input.metadata && input.metadata.length > 0 && { metadata: input.metadata }),
     ...(input.detailFile && { detailFile: input.detailFile }),
@@ -265,6 +268,7 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
     const source = attribute(attributes, 'id') ?? '';
     const rawEventType = attribute(attributes, 'type');
     const eventType = isSubagentEventType(rawEventType) ? rawEventType : undefined;
+    const eventAt = Date.parse(attribute(attributes, 'ts') ?? '');
     const errorType = attribute(attributes, 'error_type');
     const bodyPresentation = parseSubagentEventBody(body);
     return presentNotice({
@@ -273,6 +277,7 @@ function envelopeOverride(text: string): MessagePresentation | undefined {
       summary: bodyPresentation.summary,
       detailFile: bodyPresentation.detailFile,
       eventType,
+      ...(Number.isFinite(eventAt) && { eventAt }),
       errorType,
       metadata: eventMetadata(attributes),
     });

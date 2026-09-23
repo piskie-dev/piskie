@@ -233,7 +233,7 @@ export function createElectronPiskieClient(options: {
       inspectWorkflow: (assetId) => request(INFERENCE_OPERATIONS.inspectWorkflow, assetId),
       detectBindings: (assetId) => request(INFERENCE_OPERATIONS.detectBindings, assetId),
       validateBindings: (input) => request(INFERENCE_OPERATIONS.validateBindings, input),
-      probe: (input) => request(INFERENCE_OPERATIONS.probe, input),
+      probe: (input) => transport.request(INFERENCE_OPERATIONS.probe, [input], { timeoutMs: 0 }),
       artifact: (artifactId) => request(INFERENCE_OPERATIONS.artifact, artifactId),
     },
     capabilities: {

@@ -291,6 +291,24 @@ export class SubagentModule implements AgentModule {
     }
   }
 
+  /**
+   * 浏览器 Worker 的环境成员校验：会话当前集合非空时必须指定其中之一；集合为空时只能省略（临时浏览器）。
+   * 在浏览器环境存在性 / 占用检查之前执行，集合外的 ID 不进入资源解析。
+   */
+  private assertBrowserEnvironmentMembership(browserEnvironmentId: string | undefined): void {
+    const sessionIds = this.host.getBrowserEnvironmentIds();
+    const listing = sessionIds.length ? sessionIds.join(' / ') : '（无）';
+    if (!browserEnvironmentId) {
+      if (sessionIds.length) {
+        throw new Error(`当前会话已有浏览器环境，创建浏览器 Worker 必须指定 browserEnvironmentId，可选：${listing}`);
+      }
+      return;
+    }
+    if (!sessionIds.includes(browserEnvironmentId)) {
+      throw new Error(`浏览器环境 ${browserEnvironmentId} 不在当前会话中，可选：${listing}`);
+    }
+  }
+
   listChildAgents(): AgentEngine[] {
     return Array.from(this.subagents.values()) as unknown as AgentEngine[];
   }
@@ -528,12 +546,12 @@ export class SubagentModule implements AgentModule {
       }
       specRegistry.assertParentMayCreate(this.host.spec.name, spec);
 
-      const bindings = this.runConfig?.bindings;
-      const environmentIds = bindings?.type === 'standard' ? bindings.boundEnvironmentIds ?? [] : [];
       const input = { ...config };
       delete input.advancedSettings;
-      createSubagentSchema(specRegistry.getWorkersForParent(this.host.spec.name), environmentIds)
-        .parse(input);
+      createSubagentSchema(specRegistry.getWorkersForParent(this.host.spec.name)).parse(input);
+      if (spec.modules.includes('browser')) {
+        this.assertBrowserEnvironmentMembership(config.browserEnvironmentId);
+      }
       const parent = structuredClone({ type: spec.name, parentModel: this.host.currentModel, parentReasoning: this.host.reasoningOverride });
       const inherited = inheritedWorkerInference(parent);
       let initialInference = this.resolveWorkerInference

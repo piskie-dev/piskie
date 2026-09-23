@@ -7,6 +7,7 @@
  */
 
 import type { BotStatus } from '../../../../shared/types/im-gateway';
+import type { MessagingConnectionState } from '../../../../shared/electron-contracts/messaging';
 import {
   messageText,
   rawText,
@@ -59,6 +60,23 @@ const STATUS_MESSAGE_KEYS: Record<BotStatus, string> = {
 export function statusText(status: BotStatus | string): PresentationText {
   const key = STATUS_MESSAGE_KEYS[status as BotStatus];
   return key ? messageText(key) : rawText(String(status));
+}
+
+/** The runtime state, not the saved settings, determines whether a bot can receive messages. */
+export function connectionGuidanceKey(
+  { config, status }: MessagingConnectionState,
+  surface: 'roster' | 'dossier',
+): string | null {
+  if (status === 'running') return null;
+  let reason: string = status;
+  if (status === 'stopped') {
+    reason = !config.definitionId
+      ? 'needsTemplate'
+      : SCAN_LOGIN_CHANNELS.has(config.channelType) && !config.pluginAccountId
+        ? 'needsSignIn'
+        : 'needsStart';
+  }
+  return `imPlugin.${surface}.guidance.${reason}`;
 }
 
 /** 私聊策略 → i18n key(顺序即分段器顺序;默认 pairing) */

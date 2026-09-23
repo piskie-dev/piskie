@@ -157,6 +157,45 @@ describe('InferenceProbeService', () => {
     });
   });
 
+  it('uses the configured image operation timeout for smoke probes', async () => {
+    const imagePolicy = testConfig().policies.image;
+    const snapshot: InferenceRuntimeSnapshot = {
+      configRevision: 1,
+      catalogVersion: 'test-image',
+      targets: new Map([['primary', new Map([['image', {
+        ref: { providerId: 'primary', modelId: 'image' },
+        driverId: 'fake-image',
+        upstreamModel: 'wire-image',
+        catalogId: 'custom/image',
+        configRevision: 1,
+        modelDefinition: testModel({ id: 'custom/image', kind: 'image' }),
+        image: {
+          mode: 'synchronous',
+          submit: async function* () {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            yield { kind: 'completed', usage: { imageCount: 1 } } as const;
+          },
+        },
+      }]])]]),
+      policies: { ai: testConfig().policies.ai, image: { ...imagePolicy, operationTimeoutMs: 10 } },
+      createdAt: '2026-08-04T00:00:00.000Z',
+    };
+    const service = await probeService(new DriverRegistry());
+    const run = () => service.run(
+      testConfig(), snapshot, 'smoke',
+      { providerId: 'primary', modelId: 'image' },
+      new AbortController().signal,
+    );
+
+    expect(await run()).toEqual([expect.objectContaining({
+      success: false,
+      error: expect.objectContaining({ localCode: 'IMAGE_OPERATION_TIMEOUT' }),
+    })]);
+
+    snapshot.policies.image.operationTimeoutMs = 1_000;
+    expect(await run()).toEqual([expect.objectContaining({ success: true })]);
+  });
+
   it('uses the compiled Anthropic execution path and stops at message_stop without waiting for EOF', async () => {
     let requestCount = 0;
     let receivedUrl: string | undefined;

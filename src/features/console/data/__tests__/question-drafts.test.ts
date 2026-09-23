@@ -154,6 +154,7 @@ describe('question drafts', () => {
           text: '',
           edit: {},
           skills: [],
+          browserEnvironmentIds: [],
           attachments: {
             files: [],
             images: [{

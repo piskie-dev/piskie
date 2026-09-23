@@ -32,6 +32,7 @@ import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
   projectWorkerTasks,
+  resolveConversationBrowserResources,
   resolveConversationTarget,
   useAgentVM,
   useWorkerVM,
@@ -115,6 +116,7 @@ export const DockPanel = memo<DockPanelProps>(
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const status = worker?.status ?? agent?.status;
     const request = resolveConversationTarget(agent, worker, workerId);
+    const browserResources = resolveConversationBrowserResources(agent, worker, workerId);
 
     const gate = useMemo(
       () =>
@@ -321,6 +323,8 @@ export const DockPanel = memo<DockPanelProps>(
                 contextUsage={request.contextUsage}
                 sourceVersion={request.conversationLength}
                 canPause={request.canPause}
+                browserResources={browserResources}
+                onOpenWorker={onOpenWorker}
                 stopping={request.phase === 'stopping'}
                 isShortcutOwner={primaryOwner.isShortcutOwner}
                 onPreviewImage={onPreviewImage}

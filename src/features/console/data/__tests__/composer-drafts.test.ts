@@ -85,6 +85,36 @@ describe('composer-drafts(输入草稿驻留)', () => {
     expect(useComposerDraftStore.getState().drafts[key]?.text).toBe('Rejected request');
   });
 
+  it('keeps pending browser environments in the draft, deduplicated, until the draft is blank', () => {
+    const key = composerDraftKey('agent-a');
+    const { setBrowserEnvironmentIds, setDraft } = useComposerDraftStore.getState();
+    setBrowserEnvironmentIds(key, ['environment-a', 'environment-a', '', 'environment-b']);
+    expect(useComposerDraftStore.getState().drafts[key]).toMatchObject({
+      text: '', browserEnvironmentIds: ['environment-a', 'environment-b'],
+    });
+
+    setDraft(key, 'Continue on the shop');
+    setDraft(key, '');
+    expect(useComposerDraftStore.getState().drafts[key]?.browserEnvironmentIds).toEqual(['environment-a', 'environment-b']);
+
+    setBrowserEnvironmentIds(key, []);
+    expect(useComposerDraftStore.getState().drafts[key]).toBeUndefined();
+  });
+
+  it('submits pending browser environments with the snapshot and clears them only on success', async () => {
+    const key = composerDraftKey('agent-a');
+    useComposerDraftStore.getState().setBrowserEnvironmentIds(key, ['environment-a']);
+
+    await expect(submitComposerDraft(key, async (snapshot) => {
+      expect(snapshot).toMatchObject({ text: '', browserEnvironmentIds: ['environment-a'] });
+      return false;
+    })).resolves.toBe(false);
+    expect(useComposerDraftStore.getState().drafts[key]?.browserEnvironmentIds).toEqual(['environment-a']);
+
+    await expect(submitComposerDraft(key, async () => true)).resolves.toBe(true);
+    expect(useComposerDraftStore.getState().drafts[key]).toBeUndefined();
+  });
+
   it('文字与附件共享目标记录并可分别清空', () => {
     const key = composerDraftKey('ag-1');
     const { appendFiles, clearAttachments, setDraft } = useComposerDraftStore.getState();

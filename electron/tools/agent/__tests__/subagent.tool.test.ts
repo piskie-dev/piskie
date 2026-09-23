@@ -11,30 +11,33 @@ const types: SubagentTypeDescriptor[] = [
   { name: 'site-scout', description: '侦察网站', assignment: 'work-package', browser: true, skills: false },
 ];
 
-function snapshot(environments: string[] = [], subagentTypes: SubagentTypeDescriptor[] = types) {
+function snapshot(subagentTypes: SubagentTypeDescriptor[] = types) {
   const catalog = new ToolCatalog();
   catalog.register(new SubagentTool(), 'builtin');
   return catalog.snapshot({
     scope: 'main', agentType: 'main', customTools: ['subagent'],
     exposedSkillFunctions: [], excluded: new Set(), domains: new Set(['local']),
-    subagentTypes, subagentResources: { browserEnvironmentIds: environments },
+    subagentTypes,
   });
 }
 
 const question = { type: 'explore', subject: '查明保存入口', prompt: '阅读 /workspace/sample 中的配置保存链路，返回路径与行号。' };
 const assignment = { ...question, type: 'local-worker' };
 
-function validate(raw: unknown, environments: string[] = []) {
-  return parse(snapshot(environments).resolve('subagent')!.contract.schema, raw);
+function validate(raw: unknown) {
+  return parse(snapshot().resolve('subagent')!.contract.schema, raw);
 }
 
 describe('subagent resolved creation contract', () => {
   it('projects registered types and only the fields required by each type', () => {
-    const schema = snapshot(['environment-a']).definitions()[0].input_schema;
+    const schema = snapshot().definitions()[0].input_schema;
     expect(schema.properties.type).toMatchObject({ enum: types.map((type) => type.name) });
     expect(schema.properties).not.toHaveProperty('action');
     expect(schema.properties).not.toHaveProperty('subagentId');
-    expect(schema.properties.browserEnvironmentId).toMatchObject({ enum: ['environment-a'] });
+    // 会话可中途加入环境，所以 schema 只描述字段，成员资格在执行时按实时集合校验。
+    expect(schema.properties.browserEnvironmentId).toMatchObject({ type: 'string' });
+    expect(schema.properties.browserEnvironmentId).not.toHaveProperty('enum');
+    expect(schema.properties.browserEnvironmentId.description).toContain('已加入会话');
     expect(schema.oneOf).toContainEqual({
       properties: { type: { const: 'explore' }, subject: {}, prompt: {} },
       required: ['type', 'subject', 'prompt'], additionalProperties: false,
@@ -42,7 +45,8 @@ describe('subagent resolved creation contract', () => {
     expect(schema.properties.prompt).toMatchObject({ description: '交给 Worker 的任务或问题' });
     expect(schema.properties.type.description).toContain('见工具描述');
     expect(schema.properties.type.description).not.toContain('调查本地材料');
-    expect(snapshot().definitions()[0].input_schema.properties).not.toHaveProperty('browserEnvironmentId');
+    expect(snapshot(types.filter((type) => !type.browser)).definitions()[0].input_schema.properties)
+      .not.toHaveProperty('browserEnvironmentId');
   });
 
   it('lists Worker types in the description body, before the handoff', () => {
@@ -57,12 +61,12 @@ describe('subagent resolved creation contract', () => {
     expect(description).toContain('把新的 Worker 当作一位刚走进房间的聪明同事来交接：它能力完整，可以自主判断；prompt 是它拿到的全部材料。');
     expect(description).not.toContain('Task Board');
     expect(description).not.toMatch(/explore 接收|自包含|action=stop/);
-    expect(snapshot([], types.filter((type) => type.assignment === 'question')).definitions()[0].description)
+    expect(snapshot(types.filter((type) => type.assignment === 'question')).definitions()[0].description)
       .not.toContain('Task Board');
   });
 
   it('keeps a well-formed schema when no Worker type is available', () => {
-    const empty = snapshot([], []);
+    const empty = snapshot([]);
     expect(empty.definitions()[0].input_schema.properties).toHaveProperty('type');
     expect(empty.definitions()[0].description).not.toContain('可用的 Worker 类型');
     expect(parse(empty.resolve('subagent')!.contract.schema, question)).toMatchObject({ ok: false });
@@ -77,7 +81,7 @@ describe('subagent resolved creation contract', () => {
   it.each([
     { taskIds: ['task-a'] }, { skills: ['sample-skill'] }, { browserEnvironmentId: 'environment-a' },
   ])('restricts question input to its declared fields: %j', (extra) => {
-    expect(validate({ ...question, ...extra }, ['environment-a']).ok).toBe(false);
+    expect(validate({ ...question, ...extra }).ok).toBe(false);
   });
 
   it.each([
@@ -96,14 +100,15 @@ describe('subagent resolved creation contract', () => {
     expect(validate({ ...assignment, type: 'site-scout', skills: ['sample-skill'] }).ok).toBe(false);
   });
 
-  it('requires a bound environment only for browser resources', () => {
+  it('accepts any stable environment ID for browser resources and none for local ones', () => {
     const browser = { ...assignment, type: 'browser-worker' };
     expect(validate(browser).ok).toBe(true);
-    expect(validate(browser, ['environment-a']).ok).toBe(false);
-    expect(validate({ ...browser, browserEnvironmentId: 'environment-b' }, ['environment-a']).ok).toBe(false);
-    expect(validate({ ...browser, browserEnvironmentId: 'environment-a' }, ['environment-a']).ok).toBe(true);
-    expect(validate({ ...browser, browserEnvironmentId: 'environment-a' }).ok).toBe(false);
-    expect(validate(assignment, ['environment-a']).ok).toBe(true);
+    expect(validate({ ...browser, browserEnvironmentId: 'environment-a' })).toMatchObject({
+      ok: true, value: { browserEnvironmentId: 'environment-a' },
+    });
+    expect(validate({ ...browser, browserEnvironmentId: 'environment-joined-later' }).ok).toBe(true);
+    expect(validate({ ...browser, browserEnvironmentId: 42 }).ok).toBe(false);
+    expect(validate({ ...assignment, browserEnvironmentId: 'environment-a' }).ok).toBe(false);
   });
 
   it('passes the prepared question to the single creation entry and returns its identity', async () => {

@@ -12,6 +12,7 @@ vi.mock('../../../../renderer-runtime/hooks', () => ({
 }));
 
 import {
+  resolveConversationBrowserResources,
   resolveConversationTarget,
   projectWorkerTasks,
   resolveConversationRequest,
@@ -183,6 +184,53 @@ describe('Worker task projection', () => {
     const updated = { ...board, items: [make('open', 'worker-b'), make('new-work', 'worker-a')] };
     expect(projectWorkerTasks(updated, 'worker-a')).toEqual([updated.items[1]]);
     expect(board.items).toHaveLength(5);
+  });
+});
+
+describe('conversation browser resources', () => {
+  it('projects the session set and each Worker binding from the control state', () => {
+    harness.controlStates['session-example'] = {
+      agentId: 'session-example', phase: 'waiting', currentModel: 'provider::model',
+      runConfig: { name: 'Example session' }, browserEnvironmentIds: ['environment-a', 'environment-b'],
+      children: [
+        { id: 'worker-browser', phase: 'running', currentModel: 'provider::model', type: 'browser-worker',
+          subject: 'Sample browsing', browserId: 'environment-environment-a', browserEnvironmentId: 'environment-a' },
+        { id: 'worker-temporary', phase: 'running', currentModel: 'provider::model', type: 'browser-worker',
+          subject: 'Sample scouting', browserId: 'worker-temporary' },
+        { id: 'worker-local', phase: 'running', currentModel: 'provider::model', type: 'local-worker', subject: 'Sample files' },
+      ],
+    };
+    let agent: AgentVM | null = null;
+    const workers: Record<string, WorkerVM | null> = {};
+    function Probe() {
+      agent = useAgentVM('session-example');
+      workers['worker-browser'] = useWorkerVM('session-example', 'worker-browser');
+      workers['worker-temporary'] = useWorkerVM('session-example', 'worker-temporary');
+      workers['worker-local'] = useWorkerVM('session-example', 'worker-local');
+      return null;
+    }
+    renderToStaticMarkup(createElement(Probe));
+
+    expect(agent!.browserEnvironmentIds).toEqual(['environment-a', 'environment-b']);
+    expect(resolveConversationBrowserResources(agent, null, undefined)).toEqual({
+      kind: 'session', environmentIds: ['environment-a', 'environment-b'], workers: agent!.workers,
+    });
+    expect(resolveConversationBrowserResources(agent, workers['worker-browser'] ?? null, 'worker-browser'))
+      .toEqual({ kind: 'worker', environmentId: 'environment-a' });
+    expect(resolveConversationBrowserResources(agent, workers['worker-temporary'] ?? null, 'worker-temporary'))
+      .toEqual({ kind: 'worker', environmentId: undefined });
+    expect(resolveConversationBrowserResources(agent, workers['worker-local'] ?? null, 'worker-local')).toBeUndefined();
+    expect(resolveConversationBrowserResources(null, null, undefined)).toBeUndefined();
+  });
+
+  it('falls back to an empty session set when the control state predates the field', () => {
+    harness.controlStates['session-legacy'] = {
+      agentId: 'session-legacy', phase: 'waiting', currentModel: 'provider::model', runConfig: { name: 'Legacy' }, children: [],
+    };
+    let agent: AgentVM | null = null;
+    function Probe() { agent = useAgentVM('session-legacy'); return null; }
+    renderToStaticMarkup(createElement(Probe));
+    expect(agent!.browserEnvironmentIds).toEqual([]);
   });
 });
 

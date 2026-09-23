@@ -43,6 +43,7 @@ import { isActive, type Fidelity } from '../../data/visibility';
 import { activityChips, type ActivityChips } from '../../data/activity';
 import {
   projectWorkerTasks,
+  resolveConversationBrowserResources,
   resolveConversationTarget,
   useAgentVM,
   useWorkerVM,
@@ -107,6 +108,7 @@ export const ThreadView = memo<ThreadViewProps>(
     const fileChanges = useFileChanges(workerId ?? agentId, !workerId);
     useMarkSessionRead(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
+    const browserResources = resolveConversationBrowserResources(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const tasks = useMemo(() => workerId
       ? projectWorkerTasks(agent?.taskBoard, workerId)
@@ -318,6 +320,8 @@ export const ThreadView = memo<ThreadViewProps>(
             contextUsage={request.contextUsage}
             sourceVersion={request.conversationLength}
             canPause={request.canPause}
+            browserResources={browserResources}
+            onOpenWorker={onOpenWorker}
             stopping={request.phase === 'stopping'}
             isShortcutOwner={primaryOwner.isShortcutOwner}
             deferEscapeFallback={deferEscapeFallback}

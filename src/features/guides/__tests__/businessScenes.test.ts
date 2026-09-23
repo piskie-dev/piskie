@@ -24,11 +24,14 @@ describe('read-only business scenes', () => {
       expect(beforeOpen.querySelector('[data-guide-target="browser-option"]')).toBeNull();
       for (const document of [opened, beforePick]) {
         expect(document.querySelector('[data-guide-target="browser-option"]')).not.toBeNull();
-        expect(document.querySelector('[data-guide-target="browser-trigger"] [data-tone="blue"]')).toBeNull();
+        expect(document.querySelector('[data-guide-target="browser-tag"]')).toBeNull();
+        expect(document.querySelector('[data-guide-target="browser-trigger"]')?.getAttribute('data-pending')).toBeNull();
       }
       expect(picked.querySelector('[data-guide-target="browser-option"]')).toBeNull();
-      expect(picked.querySelector('[data-guide-target="browser-trigger"] [data-tone="blue"]')?.textContent)
+      // 选中的环境与主会话一样以待发送标签出现在输入区上方，触发器只标记有待发送项
+      expect(picked.querySelector('[data-guide-target="browser-tag"]')?.textContent)
         .toContain(zh.guides.workflows.browser.name);
+      expect(picked.querySelector('[data-guide-target="browser-trigger"]')?.getAttribute('data-pending')).toBe('true');
     } finally { shots.forEach(shot => shot.window.close()); }
   });
 
@@ -120,7 +123,7 @@ describe('read-only business scenes', () => {
     expect(renderToStaticMarkup(createElement(WorkflowFrame, { id: 'browser', elapsed: 14000 })))
       .toContain('data-guide-source="ProgramMonitor"');
     expect(renderToStaticMarkup(createElement(WorkflowFrame, { id: 'browser', elapsed: 24500 })))
-      .toContain('data-guide-source="WelcomeComposer/BrowserEnvironmentBindingPicker"');
+      .toContain('data-guide-source="WelcomeComposer/SessionBrowserControl"');
   });
 
   it.each(['zh-CN', 'en-US'])(

@@ -399,6 +399,37 @@ html[data-theme='light'] .pane {
 .deskBody:hover {
   scrollbar-color: color-mix(in srgb, var(--pd-ink) 28%, transparent) transparent;
 }
+.exploreHint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-left: 2px solid var(--pd-live);
+  background: var(--pd-cell);
+  color: var(--pd-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.exploreHintCopy {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.exploreHint p {
+  margin: 3px 0 0;
+  color: var(--pd-mut);
+  overflow-wrap: anywhere;
+}
+.exploreHint button {
+  white-space: normal;
+}
+.exploreHintActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 .slab {
   border-radius: 14px;

@@ -39,3 +39,16 @@ describe('inference catalog refresh controller', () => {
     });
   });
 });
+
+describe('inference probe controller', () => {
+  it('passes the request cancellation signal to the probe', async () => {
+    const probeCurrent = vi.fn(async () => []);
+    const controller = createInferenceController({ control: { probeCurrent } } as never);
+    const operation = controller.find((entry) => entry.id === INFERENCE_OPERATIONS.probe)!;
+    const input = { level: 'smoke', target: { providerId: 'sample', modelId: 'image' } };
+
+    await operation.execute(context, operation.input.parse([input]));
+
+    expect(probeCurrent).toHaveBeenCalledWith('smoke', input.target, context.signal);
+  });
+});
