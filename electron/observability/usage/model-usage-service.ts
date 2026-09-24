@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createUuid } from '@shared/utils/identifiers.js';
 import type { AppSettings } from '../../../shared/types/index.js';
 import type { ModelUsageConfig, UsageCleanupPreview, UsageDimension, UsageFacets, UsageFilter, UsageGroup, UsagePage, UsageRecord, UsageReport, UsageSort } from '../../../shared/types/model-usage.js';
 import { knownTokens, matchesUsage, summarizeUsage, usageModelTarget, usageRequestKey } from '../../../shared/model-usage.js';
@@ -121,7 +121,7 @@ export class ModelUsageService {
       }
     }, (storage, corruptLines) => {
       const createdAt = this.now();
-      const snapshotId = randomUUID();
+      const snapshotId = createUuid();
       records.sort((a, b) => b.startedAt - a.startedAt || a.id.localeCompare(b.id));
       // At most two immutable snapshots; no persistent index or aggregate files.
       for (const [id, snapshot] of this.snapshots) {

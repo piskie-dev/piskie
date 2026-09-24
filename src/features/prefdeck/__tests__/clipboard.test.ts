@@ -106,7 +106,7 @@ const copyButton = () => container.querySelector<HTMLButtonElement>('[data-copy-
 const click = (element: HTMLElement) => act(async () => element.click());
 async function renderProvider() {
   await act(async () => root.render(createElement(ProviderDesk, {
-    gateway: 'image', providerId: 'sample', onFlash, onShowImage: vi.fn(), onEditModel: vi.fn(), onVanish: vi.fn(),
+    gateway: 'image', providerId: 'sample', onFlash, onShowImage: vi.fn(), onEditModel: vi.fn(), onVanish: vi.fn(), onOpenExplore: vi.fn(),
   })));
 }
 async function renderPreview() {

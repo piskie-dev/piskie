@@ -35,6 +35,8 @@ const OK: ActionResult = { ok: true };
 
 export interface MessagePayload extends UserMessageInput {
   readonly skills?: readonly string[];
+  /** 随本条消息加入当前会话的浏览器环境（仅主会话 composer 传） */
+  readonly browserEnvironmentIds?: readonly string[];
   readonly images?: readonly { data: string; media_type: string }[];
   /** 提交旁路：仅 QuestionGate 作答携带，普通 composer 不传 */
   readonly uiSubmission?: UiSubmission;
@@ -54,6 +56,7 @@ function buildEvent(payload: MessagePayload): AgentInputEvent {
         : undefined,
     uiSubmission: payload.uiSubmission,
     skills: payload.skills?.length ? [...payload.skills] : undefined,
+    browserEnvironmentIds: payload.browserEnvironmentIds?.length ? [...payload.browserEnvironmentIds] : undefined,
   };
 }
 

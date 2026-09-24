@@ -11,7 +11,30 @@ import type { AIRequestInfo } from './context.js';
 import type { UserFileRef } from './user-input.js';
 export type { UserFileRef, UserMessageInput } from './user-input.js';
 import type { AIErrorType } from '../constants/index.js';
+import type { ShortcutOverrides } from '../shortcuts.js';
 export type { AgentRunBindings, StandardTaskBindings } from './task-bindings.js';
+export type {
+  ConfigurableShortcutCatalogEntry,
+  ConfigurableShortcutCommandId,
+  FixedShortcutCatalogEntry,
+  FixedShortcutCommandId,
+  ParsedShortcutCombo,
+  PhysicalShortcut,
+  ReservedShortcutCatalogEntry,
+  ReservedShortcutCommandId,
+  ShortcutCatalogEntry,
+  ShortcutCommandId,
+  ShortcutComboValidation,
+  ShortcutComboValidationCode,
+  ShortcutEventLike,
+  ShortcutModifier,
+  ShortcutOverrideValidationCode,
+  ShortcutOverrideValidationIssue,
+  ShortcutOverrides,
+  ShortcutParseErrorCode,
+  ShortcutPlatform,
+  ShortcutScope,
+} from '../shortcuts.js';
 export type {
   ReasoningEffort,
   ReasoningSelection,
@@ -342,7 +365,7 @@ export interface SubagentConfig {
   prompt: string;
   /** 需要加载的技能列表（可选，加载对应工具和文档） */
   skills?: string[];
-  /** 浏览器 Worker 绑定的环境 ID（仅 boundEnvironmentIds 非空时可用） */
+  /** 浏览器 Worker 绑定的环境 ID；必须属于所属主会话当前的浏览器环境集合（开场绑定 + 用户中途加入）。 */
   browserEnvironmentId?: string;
   /** Worker-specific settings; never mutate the parent run snapshot. */
   advancedSettings?: TaskAdvancedSettings;
@@ -588,6 +611,7 @@ export interface AppSettings {
   navPrismSpot: { x: number; y: number } | null;
   backgroundImage: string | null;
   backgroundMaskOpacity: number;
+  shortcuts: ShortcutOverrides;
 }
 
 // ============================================================
@@ -642,6 +666,8 @@ export interface AgentInputEvent {
   files?: UserFileRef[];
   /** 本条用户消息显式选择的技能名称。 */
   skills?: string[];
+  /** 本条用户消息加入当前会话的浏览器环境 ID（仅顶层主会话的普通用户输入消费）。 */
+  browserEnvironmentIds?: string[];
   /** 可选的优先级提示（AI 参考，不强制） */
   priority?: 'high' | 'normal' | 'low';
   /** 可选的元数据 */

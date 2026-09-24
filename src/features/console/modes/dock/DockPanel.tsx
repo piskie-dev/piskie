@@ -32,6 +32,7 @@ import { useMarkSessionRead } from '../../data/useMarkSessionRead';
 import { isActive, type Fidelity } from '../../data/visibility';
 import {
   projectWorkerTasks,
+  resolveConversationBrowserResources,
   resolveConversationTarget,
   useAgentVM,
   useWorkerVM,
@@ -60,6 +61,7 @@ import threadStyles from '../../content/thread.module.css';
 import reviewStyles from '../../content/FileChangesReview.module.css';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
 import { activityChips, type ActivityChips } from '../../data/activity';
+import { useActivePrimaryOwner } from '../../content/activePrimaryOwner';
 
 export interface DockPanelProps {
   readonly agentId: string;
@@ -87,6 +89,7 @@ export const DockPanel = memo<DockPanelProps>(
     const { t } = useTranslation();
     const active = isActive(fidelity);
     const target = useMemo<ActionTarget>(() => ({ agentId, workerId }), [agentId, workerId]);
+    const primaryOwner = useActivePrimaryOwner(target);
 
     const agent = useAgentVM(agentId);
     const worker = useWorkerVM(workerId ? agentId : undefined, workerId);
@@ -113,6 +116,7 @@ export const DockPanel = memo<DockPanelProps>(
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const status = worker?.status ?? agent?.status;
     const request = resolveConversationTarget(agent, worker, workerId);
+    const browserResources = resolveConversationBrowserResources(agent, worker, workerId);
 
     const gate = useMemo(
       () =>
@@ -187,7 +191,7 @@ export const DockPanel = memo<DockPanelProps>(
     );
 
     /**
-     * 键盘焦点作用域：`mod+b` 转入后台。
+     * 键盘焦点作用域：按当前有效绑定转入后台。
      *
      * dock 同屏可能有多个面板（主面板 + 画布上的 worker 面板），所以作用域按面板取 id，
      * 谁最后被交互过就归谁 —— 用 `:hover` 猜归属在面板重叠或鼠标离开时就失准了。
@@ -196,6 +200,7 @@ export const DockPanel = memo<DockPanelProps>(
       scopeId: `dock:${workerId ?? agentId}`,
       nodes: transcript.nodes,
       onAction: (cell, action) => void runCellAction(cell, action),
+      onActivateOwner: primaryOwner.activateShortcutOwner,
     });
 
     const closeReview = useCallback(() => {
@@ -245,6 +250,7 @@ export const DockPanel = memo<DockPanelProps>(
         {...scope}
         /* `--thread-*` 变量的供给点：ThreadCell 的规则只引用这些变量（见 thread.module.css 头注） */
         className={threadStyles.skin}
+        shortcutOwner={primaryOwner.isShortcutOwner}
         fidelity={fidelity}
         icon={<span title={presentation ? t(presentation.labelKey) : undefined}><TypeIcon size={10} /></span>}
         title={subject}
@@ -317,7 +323,10 @@ export const DockPanel = memo<DockPanelProps>(
                 contextUsage={request.contextUsage}
                 sourceVersion={request.conversationLength}
                 canPause={request.canPause}
+                browserResources={browserResources}
+                onOpenWorker={onOpenWorker}
                 stopping={request.phase === 'stopping'}
+                isShortcutOwner={primaryOwner.isShortcutOwner}
                 onPreviewImage={onPreviewImage}
                 onSubmit={submit}
                 onInterrupt={interrupt}

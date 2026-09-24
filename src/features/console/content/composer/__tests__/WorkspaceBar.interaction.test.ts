@@ -17,7 +17,7 @@ import { clearAllComposerDrafts, composerDraftKey, useComposerDraftStore, WELCOM
 
 vi.mock('../../../../../components/agent-params/ApprovalModeSelector', () => ({ default: () => null }));
 vi.mock('../../../../../components/agent-params/ModeSelector', () => ({ default: () => null }));
-vi.mock('../../../../../components/BrowserEnvironmentBindingPicker', () => ({ default: () => null }));
+vi.mock('../SessionBrowserControl', () => ({ SessionBrowserControl: () => null, PendingBrowserEnvironmentTags: () => null }));
 vi.mock('../../../../../components/shared', () => ({ ModelReasoningControl: () => null }));
 vi.mock('../ModelPicker', () => ({ ModelPicker: () => null }));
 vi.mock('../ContextUsageRing', () => ({ ContextUsageRing: () => null }));

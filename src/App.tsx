@@ -16,6 +16,7 @@ import { ToastHost } from './features/toasts';
 import AppBackground from './components/shared/AppBackground';
 import { ContentLinkHost } from './components/content-links';
 import { useUIStore } from './store';
+import { useShortcutListener } from './shortcuts';
 
 function WorkspaceShell() {
   return (
@@ -51,6 +52,7 @@ function LegacySettingsRedirect() {
 
 function App() {
   const { theme: themeMode } = useUIStore();
+  useShortcutListener();
 
   // 按 themeMode、系统偏好和壁纸明暗共同解析实际主题。
   // auto = 无壁纸跟系统（matchMedia）、有壁纸跟壁纸明暗（backgroundIsLight，

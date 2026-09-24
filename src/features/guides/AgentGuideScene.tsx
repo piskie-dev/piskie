@@ -36,7 +36,11 @@ export function AgentGuideFrame({ phase, time }: BusinessFrameProps) {
   // Fixed mode reveals the field; opening the picker and selecting a model are separate clicks.
   const picked = phase > 3 || (phase === 3 && time >= timing.result);
   const high = phase > 4 || (phase === 4 && time >= timing.click);
-  const saved = phase > 5 || (phase === 5 && time >= timing.result);
+  const saved = picked && (
+    (phase === 3 && time >= timing.result + 350) ||
+    (phase === 4 && (time < timing.click || time >= timing.click + 350)) ||
+    phase > 4
+  );
   const inference = { target, reasoning: high ? { kind: 'effort' as const, effort: 'high' as const } : modelDefaultReasoning(model) };
   const value: InferenceDraft = fixed ? { mode: 'fixed', ...(picked ? inference : {}) } : { mode: 'inherit' };
   // i18n-ignore -- Provider brand name is not translated in the live catalog.

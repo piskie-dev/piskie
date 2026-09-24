@@ -195,6 +195,51 @@ it('releases previews through agent lifetime observations and detaches on shutdo
   expect(release).toHaveBeenCalledOnce();
 });
 
+it('uses the shared reserved shortcut contract for before-input-event', async () => {
+  const { registry, session } = await registryFixture();
+  const reserved = { preventDefault: vi.fn() };
+  session.window.webContents.emit('before-input-event', reserved, {
+    key: 'r',
+    control: true,
+    shift: true,
+    alt: true,
+  });
+  expect(reserved.preventDefault).toHaveBeenCalledOnce();
+
+  const inspect = { preventDefault: vi.fn() };
+  session.window.webContents.emit('before-input-event', inspect, {
+    key: 'i',
+    control: true,
+    shift: true,
+    alt: true,
+  });
+  expect(inspect.preventDefault).toHaveBeenCalledOnce();
+
+  const functionKey = { preventDefault: vi.fn() };
+  session.window.webContents.emit('before-input-event', functionKey, {
+    key: 'F12',
+    meta: true,
+    alt: true,
+  });
+  expect(functionKey.preventDefault).toHaveBeenCalledOnce();
+  await registry.stop('test-complete');
+});
+
+it('keeps production-only reserved shortcuts available during development', async () => {
+  const { registry, session } = await registryFixture(true);
+  const functionKey = { preventDefault: vi.fn() };
+  session.window.webContents.emit('before-input-event', functionKey, { key: 'F12' });
+  expect(functionKey.preventDefault).not.toHaveBeenCalled();
+
+  const reload = { preventDefault: vi.fn() };
+  session.window.webContents.emit('before-input-event', reload, {
+    key: 'r',
+    control: true,
+  });
+  expect(reload.preventDefault).toHaveBeenCalledOnce();
+  await registry.stop('test-complete');
+});
+
 async function registryFixture(development = false): Promise<{
   registry: WindowRegistry;
   session: Awaited<ReturnType<WindowRegistry['createMainWindow']>>;

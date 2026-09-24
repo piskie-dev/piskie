@@ -1,7 +1,7 @@
 import { ChevronDown, Chrome, FileText, FolderOpen, Plus, SendHorizonal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import composer from '../console/content/composer/welcomeComposer.module.css';
-import picker from '../../components/bindingPicker.module.css';
+import control from '../console/content/composer/sessionBrowserControl.module.css';
 import inline from '../../components/agent-params/inlineSelect.module.css';
 import s from './businessScenes.module.css';
 
@@ -37,6 +37,15 @@ export function ComposerPreview({
                 <span className={composer.fileName}>{t('guides.examples.attachment')}</span>
                 <X size={9} />
               </div>
+            </div>
+          )}
+          {selectedBrowser && (
+            <div className={composer.attachments}>
+              <span className={control.tag} data-guide-target="browser-tag">
+                <Chrome size={12} />
+                <span className={control.tagName}>{t('guides.workflows.browser.name')}</span>
+                <span className={control.tagRemove}><X size={11} /></span>
+              </span>
             </div>
           )}
           <div className={composer.textareaWrap}>
@@ -76,17 +85,16 @@ export function ComposerPreview({
                   </span>
                 </span>
                 <span
-                  className={`${composer.controlPill} ${composer.resourceControl}`}
+                  className={control.trigger}
+                  data-pending={selectedBrowser || undefined}
                   data-demo-target={browser || undefined}
                   data-guide-target="browser-trigger"
                 >
-                  <Chrome size={14} />
-                  {selectedBrowser && <span className={picker.tag} data-tone="blue">
-                    <span className="text-xs">{t('guides.workflows.browser.name')}</span>
-                    <span className={picker.tagClose}><X size={10} /></span>
-                  </span>}
-                  <Plus size={11} />
-                  {t(selectedBrowser ? 'sharedUi.browserBinding.add' : 'sharedUi.browserBinding.choose')}
+                  <span className={control.triggerIcon}><Chrome size={12} /></span>
+                  <span className={control.triggerLabel}>
+                    {t(selectedBrowser ? 'sharedUi.browserBinding.add' : 'sharedUi.browserBinding.choose')}
+                  </span>
+                  <ChevronDown size={11} className={control.triggerChevron} />
                 </span>
                 {attachment && (
                   <span className={composer.attachmentPill} data-guide-target="attachment">
@@ -105,10 +113,11 @@ export function ComposerPreview({
         </div>
       </div>
       {pickingBrowser && (
-        <div className={`${picker.menu} ${s.browserPicker}`}>
-          <div className={picker.menuItem} data-guide-target="browser-option">
-            <Chrome size={14} />
-            <span>{t('guides.workflows.browser.name')}</span>
+        <div className={`${control.panel} ${s.browserPicker}`}>
+          <div className={control.row} data-guide-target="browser-option">
+            <span className={control.dot} data-tone="blue" />
+            <span className={control.rowName}>{t('guides.workflows.browser.name')}</span>
+            <span className={control.toggle}><Plus size={13} /></span>
           </div>
         </div>
       )}

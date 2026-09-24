@@ -199,6 +199,11 @@
   cursor: pointer;
 }
 
+.group[data-transcript-group='process'] > .groupToggle {
+  min-block-size: 24px;
+  block-size: auto;
+}
+
 .groupToggle:hover {
   color: var(--cyber-text);
 }
@@ -220,6 +225,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.group[data-transcript-group='process'] > .groupToggle .groupLabel {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .groupCaret {

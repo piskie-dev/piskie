@@ -131,6 +131,8 @@ export interface AgentVM {
   readonly workers: readonly WorkerRef[];
   readonly imageNodeIds: readonly string[];
   readonly mcp?: AgentMcpView;
+  /** 当前会话的浏览器环境集合（开场绑定 ∪ 中途加入）；缺省历史视为空集。 */
+  readonly browserEnvironmentIds: readonly string[];
 }
 
 export interface AskUserVM {
@@ -193,8 +195,11 @@ function projectAgent(
       status: resolveStatus(child),
     })),
     imageNodeIds: (state.imageNodes ?? []).map((node) => node.id),
+    browserEnvironmentIds: state.browserEnvironmentIds ?? EMPTY_ENVIRONMENT_IDS,
   };
 }
+
+const EMPTY_ENVIRONMENT_IDS: readonly string[] = Object.freeze([]);
 
 /**
  * 显示态：在跑的实时态优先，否则点开的磁盘历史预览态
@@ -236,6 +241,8 @@ export interface WorkerVM {
   readonly pendingEvents: readonly PendingAgentEventView[];
   /** 能力位：决定辅助面板出哪些槽（屏幕） */
   readonly browserId?: string;
+  /** 创建时绑定的浏览器环境；浏览器 Worker 未绑定即临时浏览器。 */
+  readonly browserEnvironmentId?: string;
   readonly browserReady: boolean;
   readonly imageNodeIds: readonly string[];
   readonly mcp?: AgentMcpView;
@@ -269,6 +276,7 @@ function projectWorker(
     pendingToolCall: child.pendingToolCall,
     pendingEvents: child.pendingEvents,
     browserId: child.browserId,
+    browserEnvironmentId: child.browserEnvironmentId,
     browserReady: child.browserReady,
     imageNodeIds: (child.imageNodes ?? []).map((node) => node.id),
     mcp: child.mcp,
@@ -312,6 +320,29 @@ export function resolveConversationTarget(
   workerId: string | undefined,
 ): AgentVM | WorkerVM | null {
   return workerId ? worker : agent;
+}
+
+/**
+ * 输入框底部浏览器资源位的取值：主会话 = 当前会话集合（可添加）；
+ * 浏览器 Worker = 自己创建时绑定的环境（只读）；非浏览器 Worker 不出该控件。
+ */
+export type ConversationBrowserResources =
+  | {
+      readonly kind: 'session';
+      readonly environmentIds: readonly string[];
+      readonly workers: readonly WorkerRef[];
+    }
+  | { readonly kind: 'worker'; readonly environmentId?: string };
+
+export function resolveConversationBrowserResources(
+  agent: AgentVM | null,
+  worker: WorkerVM | null,
+  workerId: string | undefined,
+): ConversationBrowserResources | undefined {
+  if (!workerId) {
+    return agent ? { kind: 'session', environmentIds: agent.browserEnvironmentIds, workers: agent.workers } : undefined;
+  }
+  return worker?.browserId ? { kind: 'worker', environmentId: worker.browserEnvironmentId } : undefined;
 }
 
 /** Worker 任务投影：始终从 Parent 权威看板派生，不从 worker 自身取 */

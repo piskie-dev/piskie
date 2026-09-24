@@ -58,14 +58,12 @@ export type TranscriptFileRef = import('@shared/types/user-input').UserFileRef;
  * （`tool:promote-to-background`）。
  *
  * 是**描述符不是闭包**：会话投影因此不依赖 IPC，可作为纯函数直接测试。
- * presenter 把 kind 映射为图标/文案/handler；shortcut 由焦点面板的键盘路由分派。
+ * presenter 把 kind 映射为图标/文案/handler；键位由命令 catalog 与用户设置派生。
  */
 export type TranscriptActionKind = 'promote-to-background';
 
 export interface TranscriptAction {
   readonly kind: TranscriptActionKind;
-  /** 形如 'mod+b'；由焦点面板独占分派，非焦点面板不响应 */
-  readonly shortcut?: string;
   /**
    * 目前恒为 true——点下去才知道该工具是否支持后台化。
    * 后端补"可后台化"标志后在 toolCell.ts 一处收紧。
@@ -127,6 +125,8 @@ export interface UserNode extends TranscriptNodeBase {
   readonly parentSentAt?: number;
   readonly skills?: readonly string[];
   readonly skillLoadErrors?: readonly { readonly name: string; readonly error: string }[];
+  /** Browser environments joined by this message, not the session's accumulated set. */
+  readonly browserEnvironmentIds?: readonly string[];
   readonly text?: string;
   readonly images?: readonly CellMedia[];
   readonly files?: readonly TranscriptFileRef[];
@@ -253,6 +253,8 @@ export interface NoticeNode extends TranscriptNodeBase {
   readonly text: string;
   readonly images?: readonly CellMedia[];
   readonly eventType?: string;
+  /** Subagent event time, which can precede delivery to the parent conversation. */
+  readonly eventAt?: number;
   readonly errorType?: string;
   readonly badge?: TranscriptBadge;
 }

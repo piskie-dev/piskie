@@ -22,6 +22,7 @@ import {
   SCAN_LOGIN_CHANNELS,
   SOLO_BOT_CHANNELS,
   channelMark,
+  connectionGuidanceKey,
   statusText,
 } from './data/channel-facts';
 import { HandbookPopover } from './HandbookPopover';
@@ -61,6 +62,7 @@ export const RosterPane: React.FC<RosterPaneProps> = ({ pickedBotId, onPick, onD
       ? taskDefinitions.find((definition) => definition.definitionId === config.definitionId)
       : undefined;
     const pendingCount = requests.filter((request) => request.botId === config.id).length;
+    const guidanceKey = connectionGuidanceKey(connection, 'roster');
 
     return (
       <div
@@ -90,9 +92,14 @@ export const RosterPane: React.FC<RosterPaneProps> = ({ pickedBotId, onPick, onD
               {template?.name ?? t('imPlugin.roster.templateUnavailable')}
               {pendingCount > 0 && ` · ${t('imPlugin.roster.pendingReviewCount', { count: pendingCount })}`}
             </span>
-          ) : (
+          ) : status !== 'stopped' ? (
             <span className={styles.entryNote} data-warn="true">
               {t('imPlugin.roster.bindingNeededToStart')}
+            </span>
+          ) : null}
+          {guidanceKey && (
+            <span className={styles.entryGuidance} data-s={status}>
+              {t(guidanceKey)}
             </span>
           )}
         </span>

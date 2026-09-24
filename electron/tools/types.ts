@@ -258,7 +258,6 @@ export type ToolContractContext = Readonly<{
   agentType: ToolAgentType;
   searchCapabilities?: SearchCapabilities;
   subagentTypes: readonly SubagentTypeDescriptor[];
-  subagentResources: Readonly<{ browserEnvironmentIds: readonly string[] }>;
 }>;
 
 export type PreviewThunk = () => Promise<PreviewInfo>;

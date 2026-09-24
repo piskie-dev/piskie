@@ -4,14 +4,14 @@
  * 真正的页面是主进程的 WebContentsView（原生视图浮在本组件的占位区域上），
  * 这里只负责三件事：
  * 1. 工具栏（后退/前进/刷新 + 地址栏），状态来自主进程推送；
- * 2. 占位区域测量 → IPC setBounds（ResizeObserver + window resize）；
+ * 2. 占位区域测量 → IPC setBounds（自身和前置栅格列 ResizeObserver + window resize）；
  * 3. 可见性协调：挂载即显示、卸载即隐藏（页面状态在主进程，不丢）；
  *    应用浮层（弹窗/抽屉/灯箱）在场时隐藏视图（overlayPresence，z-order）。
  *
  * 人驱动的干净浏览器：与 agent 的自动化浏览器完全隔离，永不接自动化。
  */
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight, Globe, RotateCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -22,7 +22,11 @@ import styles from './browserPanel.module.css';
 
 const api = () => window.piskie.pilot.embeddedBrowser;
 
-export const BrowserPanel = memo(({ target, state }: { target: AgentTarget; state: EmbeddedBrowserState }) => {
+export const BrowserPanel = memo(({ target, state, layoutAnchors }: {
+  target: AgentTarget;
+  state: EmbeddedBrowserState;
+  layoutAnchors: readonly RefObject<HTMLElement | null>[];
+}) => {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(state.url);
   const [editing, setEditing] = useState(false);
@@ -45,12 +49,16 @@ export const BrowserPanel = memo(({ target, state }: { target: AgentTarget; stat
     report();
     const ro = new ResizeObserver(report);
     ro.observe(host);
+    // The right column can move when earlier grid tracks resize without changing host size.
+    for (const anchor of layoutAnchors) {
+      if (anchor.current) ro.observe(anchor.current);
+    }
     window.addEventListener('resize', report);
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', report);
     };
-  }, [target]);
+  }, [layoutAnchors, target]);
 
   // 可见性：挂载显示、卸载隐藏；浮层在场时让位（z-order）
   useEffect(() => {
@@ -116,7 +124,8 @@ export const BrowserPanel = memo(({ target, state }: { target: AgentTarget; stat
                 submit();
                 event.currentTarget.blur();
               }
-              if (event.key === 'Escape') {
+              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                event.preventDefault();
                 setDraft(state.url);
                 event.currentTarget.blur();
               }

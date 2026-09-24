@@ -63,7 +63,7 @@ beforeEach(async () => {
   publish.mockReset().mockResolvedValue(undefined);
   thumbnail.mockReset().mockResolvedValue(new Blob([pngBytes()], { type: 'image/png' }));
   useComposerDraftStore.setState({ drafts: { sample: {
-    text: '', edit: {}, skills: [], attachments: { images: [first, second], files: [] },
+    text: '', edit: {}, skills: [], browserEnvironmentIds: [], attachments: { images: [first, second], files: [] },
   } } });
   container = document.createElement('div');
   document.body.append(container);

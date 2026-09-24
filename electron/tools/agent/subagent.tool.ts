@@ -22,7 +22,7 @@ export class SubagentTool extends BaseTool<SubagentParams> {
     name: 'subagent', scope: 'main', effects: ['agent-control'], schema: subagentSchema,
     description: DESCRIPTION,
     resolveContract: (_options, context) => ({
-      schema: createSubagentSchema(context.subagentTypes, context.subagentResources.browserEnvironmentIds),
+      schema: createSubagentSchema(context.subagentTypes),
       description: describeSubagent(context.subagentTypes),
     }),
   };

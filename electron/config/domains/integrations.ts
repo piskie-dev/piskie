@@ -8,6 +8,7 @@ import type { MessagingConnectionConfig } from '../../../shared/types/im-gateway
 import type { BotState } from '../../../shared/types/im-gateway.js';
 import type { ProxyPoolSnapshot } from '../../../shared/types/proxy.js';
 import type { Schedule } from '../../../shared/types/schedules.js';
+import type { ShortcutPlatform } from '../../../shared/shortcuts.js';
 import type { ConfigDomainPublishContext } from '../contracts/domain.js';
 import { DEFAULT_SETTINGS } from '../../../shared/constants/index.js';
 
@@ -27,6 +28,7 @@ export interface ConfigDomainIntegrations {
     publish(config: import('../../../shared/types/web-search.js').WebSearchConfig, context: ConfigDomainPublishContext): Promise<void> | void;
   };
   appSettings: {
+    shortcutPlatform: ShortcutPlatform;
     resolveInitialLanguage(): AppSettings['language'];
     publish(settings: AppSettings, context: ConfigDomainPublishContext): Promise<void> | void;
   };
@@ -69,10 +71,13 @@ export interface ConfigDomainIntegrations {
   };
 }
 
-export function emptyConfigDomainIntegrations(): ConfigDomainIntegrations {
+export function emptyConfigDomainIntegrations(
+  shortcutPlatform: ShortcutPlatform = 'linux',
+): ConfigDomainIntegrations {
   return {
     webSearch: { publish: () => undefined },
     appSettings: {
+      shortcutPlatform,
       resolveInitialLanguage: () => DEFAULT_SETTINGS.language,
       publish: () => undefined,
     },

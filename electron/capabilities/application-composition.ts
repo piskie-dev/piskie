@@ -48,6 +48,7 @@ import { AccountApplication } from '../account/account-application.js';
 import { createAccountController } from '../account/account-controller.js';
 import { ElectronAccountCredentialVault } from '../account/credential-store.js';
 import { UpdateApplication } from '../updates/update-application.js';
+import { BackgroundUpdateScheduler } from '../updates/background-update-scheduler.js';
 import { createUpdateController } from '../updates/update-controller.js';
 import type { UpdateProvider } from '../updates/update-provider.js';
 import type { UpdateDisabledReason } from '../../shared/electron-contracts/updates.js';
@@ -174,13 +175,18 @@ export function createApplicationComposition(options: {
     currentVersion: options.app.version,
     provider: options.app.updateProvider,
     disabledReason: options.app.updateDisabledReason,
-    autoCheckAndDownloadEnabled: initialSettings.autoCheckAndDownloadUpdates,
+  });
+  const backgroundUpdates = new BackgroundUpdateScheduler({
+    checkApplication: () => updateApplication.check(),
+    refreshCatalog: () => capabilities.inference.inferenceHost.remoteCatalog.refresh(),
+    applicationChecksEnabled: initialSettings.autoCheckAndDownloadUpdates,
   });
   const unsubscribeUpdateSettings = appConfigStore.changes.subscribe((settings) => {
-    updateApplication.setAutoCheckAndDownloadEnabled(settings.autoCheckAndDownloadUpdates);
+    backgroundUpdates.setApplicationChecksEnabled(settings.autoCheckAndDownloadUpdates);
   });
   const updates = createUpdateController(updateApplication);
   updateApplication.start();
+  backgroundUpdates.start();
 
   const catalog = createControllerCatalog({
     operations: [
@@ -226,6 +232,7 @@ export function createApplicationComposition(options: {
       webSearch.dispose();
       accountApplication.dispose();
       unsubscribeUpdateSettings();
+      backgroundUpdates.dispose();
       updateApplication.dispose();
     },
   });

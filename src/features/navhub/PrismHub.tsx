@@ -10,6 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { NavPrismSpot } from '../../store/uiStore';
+import { useDismissShortcutScope } from '../../shortcuts';
 import type { NavStop } from './nav-stops';
 import styles from './navhub.module.css';
 
@@ -46,23 +47,24 @@ export const PrismHub: React.FC<PrismHubProps> = ({ stops, activePath, onGo, ton
   /** 展开时按棱镜位置算好的扇形坐标(恒朝屏幕中心一侧) */
   const [fanSpots, setFanSpots] = useState<readonly { fx: number; fy: number }[]>([]);
 
+  useDismissShortcutScope({
+    scopeIdPrefix: 'nav-prism',
+    active: open,
+    onDismiss: () => {
+      setOpen(false);
+      if (hubRef.current?.contains(document.activeElement)) prismRef.current?.focus();
+    },
+  });
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        if (hubRef.current?.contains(document.activeElement)) prismRef.current?.focus();
-      }
-    };
     const onDocDown = (event: PointerEvent): void => {
       if (hubRef.current && !hubRef.current.contains(event.target as Node)) setOpen(false);
     };
     const onResize = (): void => { setOpen(false); refreshViewport((value) => value + 1); };
     window.addEventListener('resize', onResize);
-    document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onDocDown);
     return () => {
       window.removeEventListener('resize', onResize);
-      document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDocDown);
     };
   }, []);

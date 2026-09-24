@@ -103,24 +103,6 @@ describe('RemoteCatalogSource', () => {
     expect(fetch.mock.calls[0][1]).toMatchObject({ redirect: 'error', credentials: 'omit', headers: { accept: 'application/json' } });
   });
 
-  it('refreshes in the background after startup and every six hours, then stops on close', async () => {
-    const { source, fetch } = await fixture();
-    await source.initialize();
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    source.start();
-    await vi.advanceTimersByTimeAsync(4_999);
-    expect(fetch).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    await source.refresh();
-    expect(fetch).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
-    await source.refresh();
-    expect(fetch).toHaveBeenCalledTimes(3);
-    await source.close();
-    await vi.advanceTimersByTimeAsync(12 * 60 * 60 * 1000);
-    expect(fetch).toHaveBeenCalledTimes(3);
-  });
-
   it('aborts an in-flight background download when the application closes', async () => {
     const { source, fetch } = await fixture();
     await source.initialize();

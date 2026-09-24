@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useMessagingStore } from '../../store/messagingStore';
 import { resolvePresentationText } from '../../i18n/presentationText';
+import { useDismissShortcutScope } from '../../shortcuts';
 import { sinceText } from './data/channel-facts';
 import styles from './dossier.module.css';
 
@@ -34,6 +35,12 @@ export const PendingPopover: React.FC<PendingPopoverProps> = ({ jumpHint, align 
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
+
+  useDismissShortcutScope({
+    scopeIdPrefix: 'im-pending-popover',
+    active: open,
+    onDismiss: () => setOpen(false),
+  });
 
   useEffect(() => {
     if (!open) return;

@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { browserEnvironmentSelectionSchema } from './browser-environment-selection.js';
 import { skillSelectionSchema } from './skill-selection.js';
 import { userFileRefSchema } from './user-file-ref.js';
 
@@ -64,4 +65,5 @@ export const agentInputRequestSchema = z.object({
   files: z.array(userFileRefSchema).optional(),
   uiSubmission: uiSubmissionSchema.optional(),
   skills: skillSelectionSchema.optional(),
+  browserEnvironmentIds: browserEnvironmentSelectionSchema.optional(),
 });

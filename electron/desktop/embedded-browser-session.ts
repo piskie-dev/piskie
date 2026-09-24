@@ -79,11 +79,16 @@ export class EmbeddedBrowserSession implements EmbeddedBrowserPage {
   }
 
   setBounds(bounds: { x: number; y: number; width: number; height: number }): void {
+    // DOMRect uses the host page's CSS pixels; WebContentsView uses window DIPs.
+    // Page zoom changes their ratio, while display DPR alone does not.
+    const zoom = this.window.webContents.getZoomFactor();
+    const left = Math.round(bounds.x * zoom);
+    const top = Math.round(bounds.y * zoom);
     this.bounds = {
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width: Math.max(0, Math.round(bounds.width)),
-      height: Math.max(0, Math.round(bounds.height)),
+      x: left,
+      y: top,
+      width: Math.max(0, Math.round((bounds.x + bounds.width) * zoom) - left),
+      height: Math.max(0, Math.round((bounds.y + bounds.height) * zoom) - top),
     };
     if (this.visible) this.view?.setBounds(this.bounds);
   }

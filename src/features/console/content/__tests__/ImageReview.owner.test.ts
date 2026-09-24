@@ -25,6 +25,8 @@ let approve: ReturnType<typeof vi.fn>;
 const regenerate = vi.fn();
 const getPathForFile = vi.fn();
 const clipboardAttachments = vi.fn();
+const preview = vi.fn();
+const releasePreview = vi.fn();
 
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -44,10 +46,14 @@ beforeEach(() => {
   regenerate.mockReset().mockResolvedValue(undefined);
   getPathForFile.mockReset().mockReturnValue('/sample/example.pdf');
   clipboardAttachments.mockReset().mockResolvedValue([{ kind: 'file', name: 'example.pdf', path: '/sample/example.pdf', size: 6 }]);
+  preview.mockReset().mockImplementation(async (path: string) => ({
+    kind: 'image', url: `piskie-attachment://preview/${encodeURIComponent(path)}`, mediaType: 'image/png', size: 4,
+  }));
+  releasePreview.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(dom.window, 'piskie', {
     configurable: true,
     value: { agents: { images: { approve, regenerate } }, desktop: {
-      files: { getPathForFile }, system: { clipboardAttachments },
+      files: { getPathForFile, preview, releasePreview }, system: { clipboardAttachments },
     } },
   });
   useInferenceStore.setState({
@@ -84,6 +90,35 @@ async function confirm(target: { agentId: string; workerId?: string }): Promise<
 }
 
 describe('ImageReview Runtime owner', () => {
+  it('renders completed candidates while the remaining images are still generating and opens a preview on click', async () => {
+    const generating: ImageNodePublicState = {
+      ...node,
+      status: 'generating',
+      images: [
+        { id: 'image-1', prompt: 'First sample', outputPath: '/output/first.png', candidatePath: '/candidate/first.png', version: 1, status: 'completed' },
+        { id: 'image-2', prompt: 'Second sample', outputPath: '/output/second.png', candidatePath: '/candidate/second.png', version: 1, status: 'completed' },
+        { id: 'image-3', prompt: 'Third sample', outputPath: '/output/third.png', version: 0, status: 'generating' },
+      ],
+    };
+    const onPreviewImage = vi.fn();
+
+    await act(async () => root.render(createElement(ImageReview, {
+      target: { agentId: 'sample-agent' }, node: generating, onPreviewImage,
+    })));
+
+    expect(container.textContent).toContain('2/3');
+    expect(preview.mock.calls.map(([path]) => path)).toEqual([
+      '/candidate/first.png', '/candidate/second.png',
+    ]);
+    const thumbnails = container.querySelectorAll<HTMLImageElement>('img');
+    expect(thumbnails).toHaveLength(2);
+
+    await act(async () => thumbnails[0]!.click());
+    expect(onPreviewImage).toHaveBeenCalledExactlyOnceWith(
+      'piskie-attachment://preview/%2Fcandidate%2Ffirst.png',
+    );
+  });
+
   it.each(['paste', 'drop'] as const)('includes an ordinary file added by %s in the revision instruction', async (kind) => {
     const editable: ImageNodePublicState = { ...node, status: 'pending_approval', images: [{
       id: 'sample-image', prompt: 'Sample illustration', outputPath: '/sample/illustration.png', version: 1, status: 'completed',

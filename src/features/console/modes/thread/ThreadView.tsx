@@ -43,6 +43,7 @@ import { isActive, type Fidelity } from '../../data/visibility';
 import { activityChips, type ActivityChips } from '../../data/activity';
 import {
   projectWorkerTasks,
+  resolveConversationBrowserResources,
   resolveConversationTarget,
   useAgentVM,
   useWorkerVM,
@@ -50,6 +51,7 @@ import {
 import { ThreadCell } from '../../content/ThreadCell';
 import { McpRuntimeCard } from '../../content/McpRuntimeCard';
 import { AIRequestStatus } from '../../content/AIRequestStatus';
+import { useActivePrimaryOwner } from '../../content/activePrimaryOwner';
 import styles from '../../content/thread.module.css';
 
 export interface ThreadViewProps {
@@ -67,6 +69,7 @@ export interface ThreadViewProps {
   readonly fileChangesOpen?: boolean;
   readonly onToggleFileChanges?: () => void;
   readonly onOpenWorker?: (workerId: string) => void;
+  readonly deferEscapeFallback?: boolean;
 }
 
 export const ThreadView = memo<ThreadViewProps>(
@@ -82,10 +85,12 @@ export const ThreadView = memo<ThreadViewProps>(
     fileChangesOpen,
     onToggleFileChanges,
     onOpenWorker,
+    deferEscapeFallback,
   }) => {
     const { t } = useTranslation();
     const active = isActive(fidelity);
     const target = useMemo<ActionTarget>(() => ({ agentId, workerId }), [agentId, workerId]);
+    const primaryOwner = useActivePrimaryOwner(target);
 
     const agent = useAgentVM(agentId);
     const worker = useWorkerVM(workerId ? agentId : undefined, workerId);
@@ -103,6 +108,7 @@ export const ThreadView = memo<ThreadViewProps>(
     const fileChanges = useFileChanges(workerId ?? agentId, !workerId);
     useMarkSessionRead(active && !workerId ? agentId : undefined);
     const request = resolveConversationTarget(agent, worker, workerId);
+    const browserResources = resolveConversationBrowserResources(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
     const tasks = useMemo(() => workerId
       ? projectWorkerTasks(agent?.taskBoard, workerId)
@@ -169,11 +175,12 @@ export const ThreadView = memo<ThreadViewProps>(
       [actions],
     );
 
-    /** `mod+b`：thread 一个 thread 一个作用域（worker tab 切换时 id 跟着变） */
+    /** Thread 只有一个当前面板；worker tab 切换时焦点作用域 id 跟着变。 */
     const scope = useActionScope({
       scopeId: `thread:${workerId ?? agentId}`,
       nodes: transcript.nodes,
       onAction: (cell, action) => void runCellAction(cell, action),
+      onActivateOwner: primaryOwner.activateShortcutOwner,
     });
 
     const renderNode = useCallback(
@@ -313,7 +320,11 @@ export const ThreadView = memo<ThreadViewProps>(
             contextUsage={request.contextUsage}
             sourceVersion={request.conversationLength}
             canPause={request.canPause}
+            browserResources={browserResources}
+            onOpenWorker={onOpenWorker}
             stopping={request.phase === 'stopping'}
+            isShortcutOwner={primaryOwner.isShortcutOwner}
+            deferEscapeFallback={deferEscapeFallback}
             onPreviewImage={onPreviewImage}
             onSubmit={submit}
             onInterrupt={interrupt}

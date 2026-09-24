@@ -1,4 +1,4 @@
-import type { TranscriptNode, UserNode } from '@/domains/transcript/nodes';
+import type { TranscriptNode, UserNode, WorkerNode } from '@/domains/transcript/nodes';
 import type { TranscriptResponse } from '@/domains/transcript/types';
 
 export type ToolIntervalNode = Extract<TranscriptNode, { kind: 'tool' | 'plan' }>;
@@ -18,8 +18,18 @@ export type TranscriptRow = TranscriptContentRow | {
   readonly kind: 'process';
   readonly id: string;
   readonly rows: readonly TranscriptContentRow[];
+  readonly workerCards: readonly WorkerNode[];
   readonly durationMs?: number;
+  readonly observedDurationMs?: number;
+  readonly workerProgress?: ProcessWorkerProgress;
 };
+
+export interface ProcessWorkerProgress {
+  readonly unfinished: number;
+  readonly failed: number;
+  readonly stopped: number;
+  readonly totalDurationMs?: number;
+}
 
 /** Only fold positions and observed normal completion are retained between renders. */
 export interface ProcessBoundary {
@@ -86,6 +96,108 @@ function durationBetween(start: number | undefined, end: number): number | undef
     : undefined;
 }
 
+type WorkerAction =
+  | { readonly kind: 'sent'; readonly index: number; readonly turnId?: string }
+  | { readonly kind: 'terminal'; readonly index: number; readonly eventType: 'completed' | 'failed' | 'user_stopped'; readonly at: number };
+
+function workerActivity(nodes: readonly TranscriptNode[]): {
+  readonly positions: ReadonlyMap<string, number>;
+  readonly actions: ReadonlyMap<string, readonly WorkerAction[]>;
+  readonly creations: ReadonlyMap<string, WorkerNode>;
+  readonly assignedTurn: ReadonlyMap<string, string | undefined>;
+} {
+  const positions = new Map<string, number>();
+  const actions = new Map<string, WorkerAction[]>();
+  const creations = new Map<string, WorkerNode>();
+  const assignedTurn = new Map<string, string | undefined>();
+  let turnId: string | undefined;
+  const add = (id: string, action: WorkerAction) => {
+    const timeline = actions.get(id) ?? [];
+    timeline.push(action);
+    actions.set(id, timeline);
+  };
+  nodes.forEach((node, index) => {
+    if (node.kind === 'user' && node.origin === 'user') turnId = node.id;
+    if (node.kind === 'worker' && node.workerId) {
+      positions.set(node.id, index);
+      creations.set(node.workerId, node);
+      assignedTurn.set(node.workerId, turnId);
+    }
+    if (node.kind === 'tool' && node.state.phase === 'ok' && node.workerMessage?.targetId) {
+      add(node.workerMessage.targetId, { kind: 'sent', index, turnId });
+      assignedTurn.set(node.workerMessage.targetId, turnId);
+    }
+    if (node.kind === 'notice' && node.source && (
+      node.eventType === 'completed' || node.eventType === 'failed' || node.eventType === 'user_stopped'
+    )) {
+      add(node.source, { kind: 'terminal', index, eventType: node.eventType, at: node.eventAt ?? node.ts });
+    }
+  });
+  return { positions, actions, creations, assignedTurn };
+}
+
+function processWorkerCards(
+  folded: readonly TranscriptNode[],
+  turnId: string | undefined,
+  activity: ReturnType<typeof workerActivity>,
+): WorkerNode[] {
+  const seen = new Set<string>();
+  return folded.flatMap((node) => {
+    const workerId = node.kind === 'worker' ? node.workerId
+      : node.kind === 'tool' && node.state.phase === 'ok' ? node.workerMessage?.targetId : undefined;
+    if (!workerId || seen.has(workerId)) return [];
+    seen.add(workerId);
+    const creation = activity.creations.get(workerId);
+    return creation && activity.assignedTurn.get(workerId) === turnId ? [creation] : [];
+  });
+}
+
+function processWorkerProgress(
+  folded: readonly TranscriptNode[],
+  turnId: string | undefined,
+  start: number | undefined,
+  mainDurationMs: number | undefined,
+  canFinish: boolean,
+  activity: ReturnType<typeof workerActivity>,
+): ProcessWorkerProgress | undefined {
+  const workers = folded.filter((node): node is Extract<TranscriptNode, { kind: 'worker' }> => (
+    node.kind === 'worker' && !!node.workerId
+  ));
+  if (workers.length === 0) return undefined;
+
+  let unfinished = 0;
+  let failed = 0;
+  let stopped = 0;
+  let lastEnd = start !== undefined && mainDurationMs !== undefined ? start + mainDurationMs : undefined;
+  for (const worker of workers) {
+    let terminal: Extract<WorkerAction, { kind: 'terminal' }> | undefined;
+    for (const action of activity.actions.get(worker.workerId) ?? []) {
+      if (action.index <= (activity.positions.get(worker.id) ?? -1)) continue;
+      if (action.kind === 'sent') {
+        // A later user turn can give the same worker a new task; it does not reopen this turn.
+        if (action.turnId !== turnId) break;
+        terminal = undefined;
+      } else if (!terminal) {
+        terminal = action;
+      }
+    }
+    if (!terminal) {
+      unfinished += 1;
+    } else {
+      if (terminal.eventType === 'failed') failed += 1;
+      if (terminal.eventType === 'user_stopped') stopped += 1;
+      lastEnd = Math.max(lastEnd ?? terminal.at, terminal.at);
+    }
+  }
+  const totalDurationMs = unfinished === 0 && canFinish && lastEnd !== undefined
+    ? durationBetween(start, lastEnd)
+    : undefined;
+  return {
+    unfinished, failed, stopped,
+    ...(totalDurationMs !== undefined && { totalDurationMs }),
+  };
+}
+
 export function buildTranscriptRows(
   nodes: readonly TranscriptNode[],
   responses: readonly TranscriptResponse[],
@@ -96,6 +208,7 @@ export function buildTranscriptRows(
   for (const response of responses) lastResponseByUser.set(response.afterUserId, response);
   const rows: TranscriptRow[] = [];
   const boundaries = new Map<string, ProcessBoundary | null>();
+  const activity = workerActivity(nodes);
   let user: UserNode | undefined;
   let segment: TranscriptNode[] = [];
 
@@ -108,7 +221,7 @@ export function buildTranscriptRows(
     let boundary = previous ?? null;
     let collapseAt = previous?.endNodeId ? segment.findIndex((node) => node.id === previous.endNodeId) + 1 : 0;
     const response = lastResponseByUser.get(user?.id);
-    // Historical segments can be inferred on first sight. Elapsed time requires normal completion.
+    // Historical segments can be inferred on first sight. A normal reply supplies the completion time.
     // Awaiting-commit live text is no longer animated but is still incomplete.
     const canConfirm = (current ? settled : !previousBoundaries.has(groupId))
       && !segment.some((node) => node.sourceIndex === -1 || isPendingTranscriptNode(node));
@@ -139,11 +252,25 @@ export function buildTranscriptRows(
     }
     boundaries.set(groupId, boundary);
     if (collapseAt > 0) {
+      const folded = segment.slice(0, collapseAt);
+      // Without a final reply, stop at the last persisted activity, not the next user input.
+      const lastActivityAt = folded.reduce(
+        (latest, node) => node.sourceIndex >= 0 && Number.isFinite(node.ts) ? Math.max(latest, node.ts) : latest,
+        0,
+      );
+      const observedDurationMs = boundary?.durationMs === undefined
+        ? durationBetween(user?.ts, lastActivityAt)
+        : undefined;
       rows.push({
         kind: 'process',
         id: groupId,
-        rows: groupToolIntervals(segment.slice(0, collapseAt)),
+        rows: groupToolIntervals(folded),
+        workerCards: processWorkerCards(folded, user?.id, activity),
         durationMs: boundary?.durationMs,
+        observedDurationMs,
+        workerProgress: processWorkerProgress(
+          folded, user?.id, user?.ts, boundary?.durationMs ?? observedDurationMs, !current || settled, activity,
+        ),
       });
     }
     // The previous final reply and all resumed work stay outside until another boundary is confirmed.

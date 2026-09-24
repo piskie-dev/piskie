@@ -17,6 +17,7 @@ const inputs = {
   takeSnapshot: {},
   clickByUid: { uid: '1_1' },
   fillByUid: { uid: '1_1', value: 'example' },
+  typeText: { text: 'Example 中文😀\n' },
   pressKey: { key: 'Enter' },
   navigateTo: { url: 'https://example.test' },
   goBack: {},

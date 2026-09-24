@@ -6,12 +6,12 @@
 import type { Identity } from '../assemble.js';
 import type { PromptContext } from '../types.js';
 
-const browserEnvironmentGuidance = `## 浏览器环境池
+const browserEnvironmentGuidance = `## 浏览器环境
 
-文末出现 \`<browser_environments>\` 时，表示用户已绑定浏览器环境池。每个环境是一个带独立身份/账号的浏览器，正文是用户写的用途说明——对照任务需求和各环境的名称、用途，决定该用哪个：
-- browser Worker 的 \`browserEnvironmentId\` 必须使用清单中的真实 ID，不得使用池外环境
-- 看不出该用哪个环境（用途为“（未填写用途）”或与任务对不上）时，用 ask_user 询问，不要猜；绑定池运行期不可变，需要调整时请用户在 Console 停止本次运行、重新绑定后再启动
-- 文末没有该区块时，不传 browserEnvironmentId，保持普通临时浏览器行为`;
+每个浏览器环境是一个带独立身份/账号的浏览器，正文是用户写的用途说明。会话中的浏览器环境来自两处：文末 \`<browser_environments>\` 清单（启动时绑定），以及用户消息中声明“已加入当前会话”的环境（对话中途加入）。对照任务需求和各环境的名称、用途，决定该用哪个：
+- 会话已有浏览器环境时，browser Worker 的 \`browserEnvironmentId\` 必须使用其中的真实 ID，不得使用会话外的环境
+- 看不出该用哪个环境（用途为“（未填写用途）”或与任务对不上）时，用 ask_user 询问，不要猜；需要别的环境时，请用户在输入框中加入后再继续
+- 会话没有浏览器环境时，不传 browserEnvironmentId，保持普通临时浏览器行为`;
 
 /** 编排原则（≤5 行） */
 const orchestrationPrinciples = `## 编排原则

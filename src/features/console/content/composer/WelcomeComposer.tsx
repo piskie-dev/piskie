@@ -20,17 +20,22 @@ import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
 import ApprovalModeSelector from '../../../../components/agent-params/ApprovalModeSelector';
 import ModeSelector from '../../../../components/agent-params/ModeSelector';
-import BrowserEnvironmentBindingPicker from '../../../../components/BrowserEnvironmentBindingPicker';
 import { ModelReasoningControl } from '../../../../components/shared';
 import { getAvailableModelOptions, useInferenceStore } from '../../../../store/inferenceStore';
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
 import type { PresentationText } from '../../../../i18n/presentationText';
+import { WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { WorkspaceBar } from './WorkspaceBar';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { SkillTags } from '../SkillTags';
+import { BrowserEnvironmentTags } from '../BrowserEnvironmentTags';
+import { SessionBrowserControl } from './SessionBrowserControl';
 import { SkillPicker } from './SkillPicker';
+import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import styles from './welcomeComposer.module.css';
+
+const EMPTY_ENVIRONMENT_IDS: readonly string[] = [];
 
 export interface WelcomeComposerProps {
   readonly value: string;
@@ -105,7 +110,10 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
       [aiModels, availableAiTargets, inferenceConfig],
     );
 
-    const skillComposer = useSkillComposer({ value, onChange, skills, onSkillsChange, workspace: workspacePath, draftIdentity });
+    const history = useComposerHistory({ draftKey: WELCOME_DRAFT_KEY, draftIdentity, value, onChange });
+    const skillComposer = useSkillComposer({
+      value, onChange: history.onChange, skills, onSkillsChange, workspace: workspacePath, draftIdentity,
+    });
     const { onKeyDown: onSkillKeyDown } = skillComposer;
     const hasAttachments = images.length > 0 || files.length > 0;
     const attachmentCount = images.length + files.length;
@@ -114,12 +122,13 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (onSkillKeyDown(event)) return;
+        if (history.onKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           onSubmit();
         }
       },
-      [onSubmit, onSkillKeyDown],
+      [history, onSubmit, onSkillKeyDown],
     );
 
     const onReasoningChange = useCallback(
@@ -150,6 +159,12 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
               <div className={styles.attachments}>
                 <SkillTags skills={skills} options={skillComposer.options}
                   onRemove={(name) => onSkillsChange(skills.filter((skill) => skill !== name))} />
+              </div>
+            )}
+            {environmentIds.length > 0 && (
+              <div className={styles.attachments}>
+                <BrowserEnvironmentTags state="pending" environmentIds={environmentIds}
+                  onRemove={(id) => onEnvironmentIdsChange(environmentIds.filter((item) => item !== id))} />
               </div>
             )}
             {hasAttachments && (
@@ -199,8 +214,9 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 aria-label={placeholder}
                 className={styles.textarea}
                 value={value}
-                onChange={(event) => onChange(event.target.value)}
+                onChange={(event) => history.onChange(event.target.value)}
                 onKeyDown={onKeyDown}
+                onPointerDown={history.resetNavigation}
                 onPaste={(event) => { skillComposer.onPasteOrDrop(); onPaste(event); }}
                 onDragOver={onDragOver}
                 onDrop={(event) => { skillComposer.onPasteOrDrop(); onDrop(event); }}
@@ -232,13 +248,14 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                 </div>
 
                 <div className={styles.secondaryControls}>
-                  <div className={`${styles.controlPill} ${styles.resourceControl}`} data-composer-control="true">
-                    <BrowserEnvironmentBindingPicker
-                      value={environmentIds}
-                      onChange={onEnvironmentIdsChange}
-                      compact
-                    />
-                  </div>
+                  {/* 与主会话同一个控件：这里没有已加入集合，选中项就是开场绑定 */}
+                  <SessionBrowserControl
+                    mode="session"
+                    joinedIds={EMPTY_ENVIRONMENT_IDS}
+                    pendingIds={environmentIds}
+                    onPendingChange={(ids) => onEnvironmentIdsChange([...ids])}
+                    disabled={sending}
+                  />
 
                   {hasAttachments && (
                     <div className={styles.attachmentPill} data-composer-control="true">

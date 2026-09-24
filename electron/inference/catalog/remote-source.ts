@@ -52,7 +52,6 @@ export class RemoteCatalogSource {
   private document?: CatalogDocument;
   private initialization?: Promise<void>;
   private refreshPromise?: Promise<ModelCatalogUpdateStatus>;
-  private timer?: ReturnType<typeof setTimeout>;
   private readonly abort = new AbortController();
   private currentStatus: ModelCatalogUpdateStatus;
 
@@ -83,28 +82,12 @@ export class RemoteCatalogSource {
     return this.document;
   }
 
-  start(): void {
-    if (this.timer || this.abort.signal.aborted) return;
-    const tick = (): void => {
-      this.timer = undefined;
-      void this.refresh().finally(() => {
-        if (this.abort.signal.aborted) return;
-        this.timer = setTimeout(tick, 6 * 60 * 60 * 1000);
-        this.timer.unref();
-      });
-    };
-    this.timer = setTimeout(tick, 5_000);
-    this.timer.unref();
-  }
-
   refresh(): Promise<ModelCatalogUpdateStatus> {
     this.refreshPromise ??= this.check().finally(() => { this.refreshPromise = undefined; });
     return this.refreshPromise;
   }
 
   async close(): Promise<void> {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
     this.abort.abort();
     await this.refreshPromise;
   }

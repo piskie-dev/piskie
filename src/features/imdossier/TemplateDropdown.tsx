@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { useDismissShortcutScope } from '../../shortcuts';
 import type { TemplateClaim } from './data/template-claims';
 import styles from './dossier.module.css';
 
@@ -38,19 +39,20 @@ export const TemplateDropdown: React.FC<TemplateDropdownProps> = ({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  useDismissShortcutScope({
+    scopeIdPrefix: 'im-template-dropdown',
+    active: open,
+    onDismiss: () => setOpen(false),
+  });
+
   useEffect(() => {
     if (!open) return;
     const onDocClick = (event: MouseEvent): void => {
       if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('click', onDocClick);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('click', onDocClick);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open]);
 

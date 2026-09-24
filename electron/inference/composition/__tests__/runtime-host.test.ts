@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogOverlayDocument } from '../../catalog/contracts.js';
 import {
   bundledCatalogPaths,
@@ -19,6 +19,7 @@ import { undocumentedWritableFields } from '../../../config/core/descriptor-buil
 import { createConfigDomainRegistry } from '../../../config/host/composition.js';
 import { createDefaultControlPlane } from '../../config-cli/main.js';
 import { configFileWriter } from '../../../config/core/atomic-file-writer.js';
+import { emptyConfigDomainIntegrations } from '../../../config/domains/integrations.js';
 
 const directories: string[] = [];
 
@@ -27,6 +28,32 @@ afterEach(async () => {
 });
 
 describe('InferenceRuntimeHost', () => {
+  it('wires usage configuration and lifecycle when other integrations are provided', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-host-'));
+    directories.push(root);
+    const host = new InferenceRuntimeHost({
+      rootDirectory: root,
+      configIntegrations: emptyConfigDomainIntegrations('darwin'),
+    });
+    const configure = vi.spyOn(host.usage, 'configure');
+    const start = vi.spyOn(host.usage, 'start');
+    const close = vi.spyOn(host.usage, 'close');
+    try {
+      expect((await host.initialize()).issues).toEqual([]);
+      expect(start).toHaveBeenCalledOnce();
+      expect(configure).toHaveBeenCalledWith({ schemaVersion: 1, revision: 0, retentionDays: 90 });
+
+      const plan = await host.configHost.createPatchPlan('model-usage', [
+        { op: 'replace', path: '/retentionDays', value: 30 },
+      ]);
+      await host.configHost.apply(plan.id, 0);
+      expect(configure).toHaveBeenLastCalledWith({ schemaVersion: 1, revision: 1, retentionDays: 30 });
+    } finally {
+      await host.close();
+    }
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('bootstraps an empty plaintext domain and atomically reloads an externally committed revision', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'piskie-inference-host-'));
     directories.push(root);

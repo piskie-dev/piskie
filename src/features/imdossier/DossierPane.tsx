@@ -38,6 +38,7 @@ import {
   SOLO_BOT_CHANNELS,
   atRest,
   channelMark,
+  connectionGuidanceKey,
   sinceText,
   statusText,
 } from './data/channel-facts';
@@ -122,6 +123,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   const targetId = isBot ? focus.botId : draftId;
   const bot = connections.find((c) => c.config.id === targetId);
   const persisted = bot?.config;
+  const runGuidanceKey = bot ? connectionGuidanceKey(bot, 'dossier') : null;
 
   const [draftChannel, setDraftChannel] = useState<string | undefined>(
     focus?.kind === 'draft' ? focus.channelId : undefined,
@@ -251,7 +253,9 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
       onDismiss();
       return;
     }
-    if (rest) onFlash(messageText('imPlugin.settingsSaved'), 'calm');
+    if (rest) onFlash(messageText(
+      scanLogin && !loggedIn ? 'imPlugin.dossier.savedNeedsSignIn' : 'imPlugin.dossier.savedNeedsStart',
+    ), 'hold');
     else onFlash(messageText('imPlugin.dossier.savedRestartNotice'), 'hold');
     // 同步失败始终保留输入；成功时也不覆盖等待期间的后续编辑。
     if (result.kind === 'saved-refreshed' && !isBot && formRevision.current === savedRevision) {
@@ -349,7 +353,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
             )}
             {isBot && persisted?.definitionId && <span>{t('imPlugin.dossier.isolatedSessions')}</span>}
           </div>
-          {isBot && bot?.error && persisted?.definitionId && (
+          {isBot && bot?.error && (
             <div className={styles.faultNote} title={bot.error}>
               {bot.error}
             </div>
@@ -419,6 +423,12 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
           </button>
         </span>
       </div>
+
+      {runGuidanceKey && (
+        <div className={styles.runGuidance} role="status" data-s={status}>
+          {t(runGuidanceKey)}
+        </div>
+      )}
 
       {/* ── 正文 ── */}
       <div ref={bodyRef} className={styles.dossBody}>

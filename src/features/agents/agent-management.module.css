@@ -227,12 +227,6 @@
   font-weight: 600;
   margin: 0 0 12px;
 }
-.sectionHeading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
 .strategies {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -454,9 +448,7 @@
 .footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-shrink: 0;
-  gap: 16px;
   border-top: 1px solid var(--line-1);
   padding: 16px 28px;
 }
@@ -560,12 +552,6 @@
   }
   .footerStatus small {
     max-width: 150px;
-  }
-  .footer .button {
-    padding: 8px 10px;
-  }
-  .footer .button svg {
-    display: none;
   }
 }
 

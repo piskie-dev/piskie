@@ -141,6 +141,10 @@
   object-fit: cover;
 }
 
+.thumb[data-previewable='true'] {
+  cursor: zoom-in;
+}
+
 .placeholder {
   display: inline-flex;
   color: var(--cyber-text-muted);

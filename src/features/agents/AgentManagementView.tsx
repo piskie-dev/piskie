@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { HelpCircle, RefreshCw, Search, Undo2, AlertTriangle } from 'lucide-react';
+import { HelpCircle, RefreshCw, Search, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {
   WorkerPreferencesDocument,
@@ -31,6 +31,7 @@ export interface AgentManagementViewProps {
   saving: string | null;
   loadError: string | null;
   modelError: string | null;
+  defaultProviderId?: string;
   saveErrors: Record<string, string>;
   savedType: string | null;
   select: (type: string) => void;
@@ -72,7 +73,7 @@ export function AgentManagementView(props: AgentManagementViewProps) {
   // 已保存的模型不可用时新实例按继承创建；模型设置未被改动前，界面展示这一实际生效状态。
   const degraded =
     savedProblem === 'modelUnavailable' && !inferenceChanged && !props.modelError;
-  const canSave = Boolean(
+  const canRetry = Boolean(
     draft &&
       !draft.conflict &&
       (!inferenceChanged || !problem) &&
@@ -145,19 +146,23 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                     <strong>{typeName(item.type)}</strong>
                     {remark(item.type) && <small className={styles.typeId}>{item.type}</small>}
                     <small>
-                      {pending
-                        ? t('agentManagement.unsaved')
-                        : missing
-                          ? t('agentManagement.removed')
-                          : invalid
-                            ? t(
-                                invalid === 'modelUnavailable'
-                                  ? 'agentManagement.degraded'
-                                  : 'agentManagement.invalid'
-                              )
-                            : document?.profiles[item.type]?.inference
-                              ? t('agentManagement.fixed')
-                              : t('agentManagement.inherit')}
+                      {saving === item.type
+                        ? t('agentManagement.saving')
+                        : props.saveErrors[item.type]
+                          ? t('agentManagement.saveFailed')
+                          : pending
+                            ? t('agentManagement.unsaved')
+                            : missing
+                              ? t('agentManagement.removed')
+                              : invalid
+                                ? t(
+                                    invalid === 'modelUnavailable'
+                                      ? 'agentManagement.degraded'
+                                      : 'agentManagement.invalid'
+                                  )
+                                : document?.profiles[item.type]?.inference
+                                  ? t('agentManagement.fixed')
+                                  : t('agentManagement.inherit')}
                     </small>
                   </span>
                   {pending ? (
@@ -206,7 +211,7 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                       key={entry.type}
                       type={entry.type}
                       value={draft?.displayName ?? savedProfile?.displayName ?? ''}
-                      disabled={!!saving}
+                      disabled={saving === selected}
                       onChange={(displayName) => props.editDisplayName(entry.type, displayName)}
                     />
                   )}
@@ -245,7 +250,7 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                   <div className={styles.actions}>
                     <button
                       className={styles.button}
-                      disabled={!!saving}
+                      disabled={saving === selected}
                       onClick={() => props.discard(selected)}
                     >
                       {t('agentManagement.loadLatest')}
@@ -266,7 +271,7 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                   <p>{t('agentManagement.removedDescription')}</p>
                   <button
                     className={styles.button}
-                    disabled={!!saving}
+                    disabled={saving === selected}
                     onClick={() => edit({ mode: 'remove' })}
                   >
                     {t('agentManagement.clearRemoved')}
@@ -278,10 +283,11 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                     key={selected}
                     value={value}
                     groups={groups}
-                    saving={!!saving}
+                    saving={false}
                     edit={edit}
                     degraded={degraded}
                     modelError={props.modelError}
+                    defaultProviderId={props.defaultProviderId}
                     onConfigureModels={props.onConfigureModels}
                     onRefresh={props.onRefresh}
                   />
@@ -300,6 +306,11 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                 <div className={styles.error} role="alert">
                   <strong>{t('agentManagement.saveFailed')}</strong>
                   <p>{props.saveErrors[selected]}</p>
+                  {canRetry && (
+                    <button className={styles.textButton} onClick={() => void props.save(selected)}>
+                      {t('agentManagement.retry')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -309,11 +320,13 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                   {t(
                     saving === selected
                       ? 'agentManagement.saving'
-                      : props.savedType === selected
-                        ? 'agentManagement.saved'
-                        : draft
-                          ? 'agentManagement.unsaved'
-                          : 'agentManagement.upToDate'
+                      : props.saveErrors[selected]
+                        ? 'agentManagement.saveFailed'
+                        : props.savedType === selected
+                          ? 'agentManagement.saved'
+                          : draft
+                            ? 'agentManagement.unsaved'
+                            : 'agentManagement.upToDate'
                   )}
                 </span>
                 <small>
@@ -323,23 +336,6 @@ export function AgentManagementView(props: AgentManagementViewProps) {
                       : 'agentManagement.newInstancesOnly'
                   )}
                 </small>
-              </div>
-              <div className={styles.actions}>
-                <button
-                  className={styles.button}
-                  disabled={!draft || !!saving}
-                  onClick={() => props.discard(selected)}
-                >
-                  <Undo2 size={14} />
-                  {t('agentManagement.discard')}
-                </button>
-                <button
-                  className={`${styles.button} ${styles.primary}`}
-                  disabled={!canSave}
-                  onClick={() => void props.save(selected)}
-                >
-                  {t('common.save')}
-                </button>
               </div>
             </footer>
           </>

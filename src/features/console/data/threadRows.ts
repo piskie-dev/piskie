@@ -15,6 +15,8 @@ export interface ThreadRow {
   readonly agentId: string;
   readonly label: string;
   readonly workspace?: string;
+  /** 仅改变所属工作区内的展示顺序。 */
+  readonly pinned: boolean;
   /** 排序用；live 行没有历史条目时退回 `createdAt` */
   readonly lastActiveAt: string;
   readonly messages?: AgentRunMessageState;
@@ -39,7 +41,9 @@ export function buildThreadRows(input: {
   readonly sessions: readonly SessionRow[];
   readonly history: readonly HistoryRow[];
   readonly attentionByAgentId?: Readonly<Record<string, AgentRunAttention>>;
+  readonly pinnedAgentRunIds?: readonly string[];
 }): readonly ThreadRow[] {
+  const pinnedAgentRunIds = new Set(input.pinnedAgentRunIds);
   // 防御重复投影只按同一个 AgentRun 去重，不跨 agentId 合并。
   const live = new Map<string, SessionRow>();
   for (const session of input.sessions) {
@@ -56,6 +60,7 @@ export function buildThreadRows(input: {
       agentId: session.agentId,
       label: session.title,
       workspace: session.workspace,
+      pinned: pinnedAgentRunIds.has(session.agentId),
       lastActiveAt: session.createdAt,
       live: session,
     });
@@ -84,6 +89,7 @@ export function buildThreadRows(input: {
       agentId: row.agentId,
       label: row.title,
       workspace: row.workspace,
+      pinned: pinnedAgentRunIds.has(row.agentId),
       lastActiveAt: row.lastActiveAt,
       messages: row.messages,
       history: row,
@@ -97,13 +103,15 @@ export function buildThreadRows(input: {
 }
 
 /**
- * 组内排序：在跑的恒在前（同为在跑时按 phase 细分），其余按最近活跃倒序。
+ * 组内排序：置顶恒在前；同为置顶或未置顶时，在跑的优先（再按 phase 细分），
+ * 其余按最近活跃倒序。
  *
  * 这里不再走 `sortSessionRows`——它只认 `SessionRow` 且不处理 live/history 混排，
  * 但 phase 权重仍取自 `phaseOrder` 同一张表。
  */
 export function sortThreadRows(rows: readonly ThreadRow[]): ThreadRow[] {
   return [...rows].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (!!a.live !== !!b.live) return a.live ? -1 : 1;
 
     if (a.live && b.live) {

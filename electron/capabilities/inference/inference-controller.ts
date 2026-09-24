@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { INFERENCE_OPERATIONS } from '../../../shared/electron-contracts/inference.js';
 import type { InferenceRuntimeHost } from '../../inference/composition/runtime-host.js';
 import { readArtifactPreview } from '../../inference/application/artifact-preview.js';
-import type { OperationDefinition } from '../catalog.js';
+import type { ControllerContext, OperationDefinition } from '../catalog.js';
 import { PublicOperationError } from '../public-errors.js';
 import { args, identifier, plainRecord } from '../validation.js';
 
@@ -61,8 +61,8 @@ export function createInferenceController(host: InferenceRuntimeHost): readonly 
         input.outputNodeIds,
       ),
     ),
-    operation(INFERENCE_OPERATIONS.probe, args([probeSchema]), ([input]) => (
-      host.control.probeCurrent(input.level, input.target)
+    operation(INFERENCE_OPERATIONS.probe, args([probeSchema]), ([input], context) => (
+      host.control.probeCurrent(input.level, input.target, context.signal)
     )),
     operation(INFERENCE_OPERATIONS.artifact, args([identifier]), ([artifactId]) => (
       readArtifactPreview(host.artifacts, artifactId)
@@ -73,12 +73,12 @@ export function createInferenceController(host: InferenceRuntimeHost): readonly 
 function operation(
   id: string,
   input: z.ZodType<unknown[]>,
-  execute: (input: any[]) => unknown,
+  execute: (input: any[], context: ControllerContext) => unknown,
 ): OperationDefinition<unknown[]> {
   return {
     id,
     capability: 'inference',
     input,
-    execute: (_context, value) => execute(value),
+    execute: (context, value) => execute(value, context),
   };
 }

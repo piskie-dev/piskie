@@ -52,6 +52,7 @@ let main: AgentVM = {
   modeId: 'normal',
   createdAt: '2026-01-01T00:00:00.000Z',
   conversationLength: 0,
+  browserEnvironmentIds: [],
   runMetrics: {
     version: 1,
     rounds: 0,

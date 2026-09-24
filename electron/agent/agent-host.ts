@@ -28,6 +28,8 @@ export interface AgentUserInput extends UserMessageInput {
   readonly subtype?: MessageSubtype;
   readonly images?: readonly { data: string; media_type: string }[];
   readonly skills?: readonly string[];
+  /** 随本条输入加入当前会话的浏览器环境 ID。 */
+  readonly browserEnvironmentIds?: readonly string[];
 }
 
 export interface AgentHost {
@@ -48,6 +50,8 @@ export interface AgentHost {
 
   // --- 上下文操作 ---
   addUserMessage(input: AgentUserInput): void | Promise<void>;
+  /** 当前会话的浏览器环境集合（开场绑定 ∪ 已持久化用户消息中加入的）；Worker 创建以此做成员校验。 */
+  getBrowserEnvironmentIds(): readonly string[];
 
   // --- 存储操作 ---
   getConversationStore(): ConversationStore;

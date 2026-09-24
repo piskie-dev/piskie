@@ -10,12 +10,14 @@ import {
 } from '../domains/integrations.js';
 import { createManifestConfigDomains } from '../domains/manifest.js';
 import { ConfigHost, type ConfigHostOptions } from './config-host.js';
+import type { ShortcutPlatform } from '../../../shared/shortcuts.js';
 
 export interface ConfigDomainCompositionDependencies {
   rootDirectory?: string;
   inference: InferenceControlPlane;
   selections?: InferenceSelectionStore;
   integrations?: ConfigDomainIntegrations;
+  shortcutPlatform?: ShortcutPlatform;
   onSelectionsChanged?: (selections: InferenceSelections) => void | Promise<void>;
   onHistoryMaintenanceError?: (error: unknown) => void;
 }
@@ -24,7 +26,8 @@ export function createConfigDomainRegistry(
   dependencies: ConfigDomainCompositionDependencies,
 ): ConfigDomainRegistry {
   const registry = new ConfigDomainRegistry();
-  const integrations = dependencies.integrations ?? emptyConfigDomainIntegrations();
+  const integrations = dependencies.integrations
+    ?? emptyConfigDomainIntegrations(dependencies.shortcutPlatform);
   const readDomain = async (domain: string): Promise<unknown> => {
     const adapter = registry.get(domain);
     if (!adapter.show) throw new Error(`Config domain ${domain} does not support show`);

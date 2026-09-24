@@ -8,6 +8,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDismissShortcutScope } from '../../shortcuts';
 import type { NavStop } from './nav-stops';
 import styles from './navhub.module.css';
 
@@ -21,6 +22,12 @@ export const EdgeDock: React.FC<EdgeDockProps> = ({ stops, activePath, onGo }) =
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
+  useDismissShortcutScope({
+    scopeIdPrefix: 'nav-edge-dock',
+    active: open,
+    onDismiss: () => setOpen(false),
+  });
+
   useEffect(() => {
     /* 滞回边界:贴最左缘(≤2px)展开;越过坞右侧一线(全高有效)即收起——
        不依赖坞自身 mouseleave,沿左区上下移动不会误收 */
@@ -29,14 +36,9 @@ export const EdgeDock: React.FC<EdgeDockProps> = ({ stops, activePath, onGo }) =
       if (event.clientX <= 2) setOpen(true);
       else if (event.clientX > CLOSE_X) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('keydown', onKey);
     };
   }, []);
 

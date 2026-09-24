@@ -399,6 +399,37 @@ html[data-theme='light'] .pane {
 .deskBody:hover {
   scrollbar-color: color-mix(in srgb, var(--pd-ink) 28%, transparent) transparent;
 }
+.exploreHint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  border-left: 2px solid var(--pd-live);
+  background: var(--pd-cell);
+  color: var(--pd-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.exploreHintCopy {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.exploreHint p {
+  margin: 3px 0 0;
+  color: var(--pd-mut);
+  overflow-wrap: anywhere;
+}
+.exploreHint button {
+  white-space: normal;
+}
+.exploreHintActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 .slab {
   border-radius: 14px;
@@ -747,6 +778,152 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
 .rowLine:hover .rowActs,
 .rowActs:focus-within {
   opacity: 1;
+}
+
+/* ── 快捷键设置 ── */
+
+.shortcutSectionTitle {
+  margin: 0 0 8px;
+}
+
+.shortcutRow {
+  min-block-size: 52px;
+  flex-wrap: wrap;
+}
+
+.shortcutRow + .shortcutRow {
+  border-block-start: 1px solid var(--pd-hairline);
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.shortcutLockedRow {
+  color: var(--pd-soft);
+}
+
+.shortcutLockedRow .rowNote {
+  color: var(--pd-mut);
+}
+
+.shortcutControls,
+.shortcutCaptureGroup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.shortcutKeyButton,
+.shortcutReadonlyKeys {
+  inline-size: 204px;
+  min-block-size: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--pd-hairline);
+  border-radius: 8px;
+  background: var(--pd-well);
+  color: var(--pd-ink);
+  font-family: var(--pd-mono);
+  font-size: 11.5px;
+  letter-spacing: 0;
+}
+
+.shortcutKeyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.shortcutKeyButton:hover,
+.shortcutKeyButton:focus-visible {
+  border-color: color-mix(in srgb, var(--pd-beam) 50%, transparent);
+  background: var(--pd-cell-hi);
+  outline: none;
+}
+
+.shortcutKeyButton:disabled {
+  cursor: default;
+  color: var(--pd-mut);
+}
+
+.shortcutKeyButton kbd,
+.shortcutReadonlyKeys kbd {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: inherit;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.shortcutCapture {
+  border-color: color-mix(in srgb, var(--pd-beam) 64%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pd-beam) 14%, transparent);
+}
+
+.shortcutReadonlyKeys {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--pd-mut);
+}
+
+.shortcutSeparator {
+  color: var(--pd-faint);
+}
+
+.shortcutLock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 28px;
+  block-size: 28px;
+  color: var(--pd-mut);
+}
+
+.shortcutIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 30px;
+  block-size: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pd-mut);
+  cursor: pointer;
+}
+
+.shortcutIconButton:hover,
+.shortcutIconButton:focus-visible {
+  border-color: var(--pd-hairline);
+  background: var(--pd-cell-hi);
+  color: var(--pd-ink);
+  outline: none;
+}
+
+.shortcutIconButton:disabled {
+  color: var(--pd-faint);
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+}
+
+.shortcutIssue {
+  flex: 1 0 100%;
+  margin: -3px 0 2px;
+  padding-inline-start: 10px;
+  color: var(--pd-halt);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.shortcutSpin {
+  animation: accountSpin 800ms linear infinite;
 }
 
 /* 单选「使用」点 */
@@ -1379,6 +1556,10 @@ html[data-theme='light'] .textIn input::-webkit-calendar-picker-indicator {
 
 @media (prefers-reduced-motion: reduce) {
   .accountSpin {
+    animation: none;
+  }
+
+  .shortcutSpin {
     animation: none;
   }
 

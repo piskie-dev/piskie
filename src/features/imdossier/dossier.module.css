@@ -475,6 +475,19 @@ html[data-theme='light'] .seal {
   color: var(--imd-halt);
 }
 
+.entryGuidance {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--imd-hold);
+  overflow-wrap: anywhere;
+}
+
+.entryGuidance[data-s='error'],
+.entryGuidance[data-s='stop_failed'] {
+  color: var(--imd-halt);
+}
+
 .entryState {
   flex: 0 0 auto;
   font-family: var(--imd-mono);
@@ -666,6 +679,20 @@ html[data-theme='light'] .seal {
   align-items: center;
   gap: 7px;
   flex: 0 0 auto;
+}
+
+.runGuidance {
+  flex: 0 0 auto;
+  padding: 10px 22px;
+  border-block-end: 1px solid var(--imd-hairline);
+  color: var(--imd-hold);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.runGuidance[data-s='error'],
+.runGuidance[data-s='stop_failed'] {
+  color: var(--imd-halt);
 }
 
 /* ── 档案:正文 ── */

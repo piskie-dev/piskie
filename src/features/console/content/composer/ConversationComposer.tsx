@@ -17,7 +17,7 @@
  * 自动增高走 `field-sizing: content`，不写 JS 测高。
  */
 
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowUp,
@@ -36,9 +36,25 @@ import {
 import type { ApprovalMode, AgentModeId } from '../../../../../shared/types';
 import type { ContextUsage } from '../../../../../shared/types/token';
 import type { ReasoningSelection } from '../../../../../shared/types/reasoning';
+import { matchesShortcut } from '../../../../../shared/shortcuts';
+import {
+  useShortcutOwner,
+  useShortcutBinding,
+  useShortcutScope,
+  type ShortcutBinding,
+  type ShortcutScope,
+} from '../../../../shortcuts';
 import { useAttachmentDraft } from '../../attachments';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
-import { composerDraftKey, submitComposerDraft, useComposerDraft, useComposerDraftVersion, useComposerSkills } from '../../data/composer-drafts';
+import {
+  composerDraftKey,
+  submitComposerDraft,
+  useComposerBrowserEnvironmentIds,
+  useComposerDraft,
+  useComposerDraftVersion,
+  useComposerSkills,
+} from '../../data/composer-drafts';
+import type { ConversationBrowserResources } from '../../data/vm';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
 import { Popover } from '../../chrome/Popover';
 import { Tooltip } from '../../chrome/Tooltip';
@@ -51,9 +67,16 @@ import {
 import { ModelPicker } from './ModelPicker';
 import { useComposerSettings } from './useComposerSettings';
 import { SkillTags } from '../SkillTags';
+import { BrowserEnvironmentTags } from '../BrowserEnvironmentTags';
 import { SkillPicker } from './SkillPicker';
+import { SessionBrowserControl } from './SessionBrowserControl';
+import { useComposerHistory } from './useComposerHistory';
 import { useSkillComposer } from './useSkillComposer';
 import { WorkspaceBar } from './WorkspaceBar';
+import { activePrimaryOwnerId } from '../activePrimaryOwner';
+import type { ActionTarget } from '../../data/actions';
+import { useEffectiveConsoleShortcut } from '../../data/shortcuts';
+import { resolveInterruptPresentation } from './interruptPresentation';
 import styles from './conversationComposer.module.css';
 
 // ==================== 通用的药丸下拉（计划 / 审批共用） ====================
@@ -183,8 +206,15 @@ export interface ConversationComposerProps {
   readonly contextUsage?: ContextUsage;
   readonly sourceVersion: number;
   readonly canPause: boolean;
+  /** 底部浏览器资源位：主会话可添加环境；浏览器 Worker 只读；缺省不渲染。 */
+  readonly browserResources?: ConversationBrowserResources;
+  /** 从"使用中"的环境跳到对应 Worker */
+  readonly onOpenWorker?: (workerId: string) => void;
   readonly onPreviewImage?: (src: string) => void;
   readonly stopping?: boolean;
+  readonly isShortcutOwner?: boolean;
+  /** A higher mode layer (for example Review) owns Esc before textarea blur. */
+  readonly deferEscapeFallback?: boolean;
   /** 成功才清空草稿和附件。 */
   readonly onSubmit: (payload: MessagePayload) => Promise<boolean>;
   readonly onInterrupt: () => Promise<void>;
@@ -204,45 +234,56 @@ export const ConversationComposer = memo<ConversationComposerProps>(
     contextUsage,
     sourceVersion,
     canPause,
+    browserResources,
+    onOpenWorker,
     onPreviewImage,
     stopping = false,
+    isShortcutOwner = false,
+    deferEscapeFallback = false,
     onSubmit,
     onInterrupt,
   }) => {
     const { t } = useTranslation();
+    const target = useMemo<ActionTarget>(() => ({ agentId, workerId }), [agentId, workerId]);
+    const interruptShortcut = useEffectiveConsoleShortcut('agent.interruptCurrent');
     const draftKey = composerDraftKey(agentId, workerId);
     // 文字与附件共享目标键，切模块/切任务回来仍在，也不会跨目标串稿。
     const [draft, setDraft] = useComposerDraft(draftKey);
     const [skills, setSkills] = useComposerSkills(draftKey);
+    // 待加入会话的浏览器环境：和 Skill 一样进草稿，随下一条消息发送，失败时保留。
+    const [pendingEnvironmentIds, setPendingEnvironmentIds] = useComposerBrowserEnvironmentIds(draftKey);
     const version = useComposerDraftVersion(draftKey);
+    const history = useComposerHistory({
+      draftKey,
+      draftIdentity: `${draftKey}:${version}`,
+      value: draft,
+      onChange: setDraft,
+    });
     const skillComposer = useSkillComposer({
-      value: draft, onChange: setDraft, skills, onSkillsChange: setSkills, workspace,
+      value: draft, onChange: history.onChange, skills, onSkillsChange: setSkills, workspace,
       draftIdentity: `${draftKey}:${version}`,
       enabled: !workerId || workspace !== undefined,
     });
     const { anchorRef, textareaRef, options: skillOptions, textareaProps, onKeyDown: onSkillKeyDown } = skillComposer;
     const submitting = useRef(false);
+    const interrupting = useRef(false);
     const [pendingAction, setPendingAction] = useState<ComposerPendingAction>(null);
     const attachments = useAttachmentDraft(draftKey, setDraft);
     const [submitError, setSubmitError] = useState<PresentationText>();
     const settings = useComposerSettings(agentId, workerId, model);
     const modeIds = useModeOptions(agentSpec, !workerId);
     const hasAttachments = attachments.hasAttachments;
+    const hasPendingEnvironments = pendingEnvironmentIds.length > 0;
     const mainAction = resolveComposerMainAction(
-      Boolean(draft.trim()) || hasAttachments || skills.length > 0,
+      Boolean(draft.trim()) || hasAttachments || skills.length > 0 || hasPendingEnvironments,
       canPause,
       stopping,
       pendingAction,
     );
     const controlsDisabled = stopping || pendingAction !== null;
-    const actionLabel = mainAction.kind === 'interrupt'
-      ? workerId
-        ? t('sessionWorkbenchUi.composer.interruptWorker')
-        : t('sessionWorkbenchUi.composer.interruptRun')
-      : t('sessionWorkbenchUi.composer.send');
-
     const submit = useCallback(async () => {
-      if (stopping || submitting.current || pendingAction !== null || (!draft.trim() && !attachments.hasAttachments && skills.length === 0)) return;
+      if (stopping || submitting.current || pendingAction !== null
+        || (!draft.trim() && !attachments.hasAttachments && skills.length === 0 && pendingEnvironmentIds.length === 0)) return;
       submitting.current = true;
       setSubmitError(undefined);
       setPendingAction('send');
@@ -250,6 +291,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         const ok = await submitComposerDraft(draftKey, (snapshot, images, files) => onSubmit({
           text: snapshot.text,
           skills: snapshot.skills.length > 0 ? [...snapshot.skills] : undefined,
+          browserEnvironmentIds: snapshot.browserEnvironmentIds.length > 0 ? [...snapshot.browserEnvironmentIds] : undefined,
           images,
           files: files.map(({ name, path, kind }) => ({ name, path, ...(kind && { kind }) })),
         }));
@@ -260,34 +302,91 @@ export const ConversationComposer = memo<ConversationComposerProps>(
         submitting.current = false;
         setPendingAction(null);
       }
-    }, [attachments, draft, draftKey, onSubmit, pendingAction, skills, stopping]);
+    }, [attachments, draft, draftKey, onSubmit, pendingAction, pendingEnvironmentIds, skills, stopping]);
 
     const interrupt = useCallback(async () => {
-      if (stopping || !canPause || pendingAction !== null) return;
+      if (interrupting.current || stopping || !canPause || pendingAction !== null) return;
+      interrupting.current = true;
       setPendingAction('interrupt');
       try {
         await onInterrupt();
       } finally {
+        interrupting.current = false;
         setPendingAction(null);
       }
     }, [canPause, onInterrupt, pendingAction, stopping]);
 
+    const interruptPresentation = resolveInterruptPresentation(
+      target,
+      mainAction,
+      isShortcutOwner,
+      interruptShortcut,
+    );
+    const interruptRef = useRef(interrupt);
+    useEffect(() => {
+      interruptRef.current = interrupt;
+    }, [interrupt]);
+    const interruptScopeId = `console-interrupt:${activePrimaryOwnerId(target)}`;
+    const interruptScope = useMemo<ShortcutScope>(() => ({
+      id: interruptScopeId,
+      layer: 'active-primary-action',
+      blocksLowerLayers: 'none',
+      bindings: [],
+    }), [interruptScopeId]);
+    const interruptBinding = useMemo<ShortcutBinding>(() => ({
+      id: `${interruptScopeId}:interrupt`,
+      commandId: 'agent.interruptCurrent',
+      combo: interruptPresentation.shortcut?.physicalCombo ?? 'escape',
+      enabled: () => !interrupting.current,
+      allowInEditable: true,
+      handling: 'execute',
+      defaultBehavior: 'prevent',
+      execute: () => void interruptRef.current(),
+    }), [interruptPresentation.shortcut?.physicalCombo, interruptScopeId]);
+    const shortcutActive = interruptPresentation.shortcut !== null;
+    useShortcutScope(interruptScope, isShortcutOwner);
+    useShortcutBinding(interruptScopeId, interruptBinding, shortcutActive);
+    useShortcutOwner(interruptScopeId, shortcutActive);
+
+    const interruptLabel = workerId
+      ? t('sessionWorkbenchUi.composer.interruptWorker')
+      : t('sessionWorkbenchUi.composer.interruptRun');
+    const actionLabel = mainAction.kind === 'sending'
+      ? t('sessionWorkbenchUi.composer.sending')
+      : mainAction.kind === 'interrupt' && mainAction.disabled
+        ? t('sessionWorkbenchUi.composer.interrupting')
+        : mainAction.kind === 'interrupt'
+          ? interruptLabel
+          : t('sessionWorkbenchUi.composer.send');
+    const tooltipTitle = interruptPresentation.displayShortcut
+      ? t(workerId
+          ? 'sessionWorkbenchUi.composer.interruptWorkerWithShortcut'
+          : 'sessionWorkbenchUi.composer.interruptRunWithShortcut', {
+          shortcut: interruptPresentation.displayShortcut,
+        })
+      : actionLabel;
+
     const onKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (onSkillKeyDown(event)) return;
+        if (history.onKeyDown(event)) return;
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
           event.preventDefault();
           void submit();
           return;
         }
-        // Esc 链的第一级：焦点在输入框里时先退出输入，再按一次才回主会话 tab
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+          const shortcut = interruptPresentation.shortcut;
+          if (deferEscapeFallback
+            || (shortcut && matchesShortcut(event.nativeEvent, shortcut.canonical, shortcut.platform))) {
+            return;
+          }
           event.preventDefault();
           event.stopPropagation();
           event.currentTarget.blur();
         }
       },
-      [onSkillKeyDown, submit],
+      [deferEscapeFallback, history, interruptPresentation.shortcut, onSkillKeyDown, submit],
     );
 
     const approvalOptions: readonly PillOption<ApprovalMode>[] = [
@@ -313,6 +412,12 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           <div className={styles.attachments}>
             <SkillTags skills={skills} options={skillOptions}
               onRemove={(name) => setSkills(skills.filter((skill) => skill !== name))} />
+          </div>
+        )}
+        {hasPendingEnvironments && (
+          <div className={styles.attachments}>
+            <BrowserEnvironmentTags state="pending" environmentIds={pendingEnvironmentIds}
+              onRemove={(id) => setPendingEnvironmentIds(pendingEnvironmentIds.filter((item) => item !== id))} />
           </div>
         )}
         {hasAttachments && (
@@ -360,8 +465,9 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             aria-label={t('sessionWorkbenchUi.composer.instructionPlaceholder', { name: targetName })}
             className={styles.textarea}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => history.onChange(event.target.value)}
             onKeyDown={onKeyDown}
+            onPointerDown={history.resetNavigation}
             onPaste={(event) => { skillComposer.onPasteOrDrop(); attachments.handlePaste(event); }}
             onDragOver={attachments.handleDragOver}
             onDrop={(event) => { skillComposer.onPasteOrDrop(); attachments.handleDrop(event); }}
@@ -407,6 +513,23 @@ export const ConversationComposer = memo<ConversationComposerProps>(
             ariaLabel={t('sessionWorkbenchUi.composer.approvalMode')}
           />
 
+          {/* 浏览器资源位：主会话可添加环境，浏览器 Worker 只读；非浏览器 Worker 不出现 */}
+          {browserResources?.kind === 'session' && (
+            <SessionBrowserControl
+              mode="session"
+              agentId={agentId}
+              joinedIds={browserResources.environmentIds}
+              pendingIds={pendingEnvironmentIds}
+              workers={browserResources.workers}
+              onPendingChange={setPendingEnvironmentIds}
+              onOpenWorker={onOpenWorker}
+              disabled={controlsDisabled}
+            />
+          )}
+          {browserResources?.kind === 'worker' && (
+            <SessionBrowserControl mode="worker" environmentId={browserResources.environmentId} />
+          )}
+
           <span className={styles.spacer} />
 
           <ContextUsageRing
@@ -416,7 +539,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
           />
 
           <Tooltip
-            title={actionLabel}
+            title={tooltipTitle}
             enterDelay={100}
           >
             <button
@@ -425,6 +548,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
               onClick={mainAction.kind === 'interrupt' ? () => void interrupt() : () => void submit()}
               disabled={mainAction.disabled}
               aria-label={actionLabel}
+              aria-keyshortcuts={interruptPresentation.ariaShortcut ?? undefined}
             >
               {mainAction.kind === 'sending' ? (
                 <Loader2 size={14} className="animate-spin" />

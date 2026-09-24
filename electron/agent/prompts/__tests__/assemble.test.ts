@@ -277,7 +277,8 @@ describe('assemble L0-L5 组装规则', () => {
     // 强制全覆盖已废止：绑定池只约束"用池内环境"，不要求每个环境都派发
     expect(prompt).not.toContain('required_coverage');
     expect(prompt).not.toContain('全覆盖');
-    expect(prompt).toContain('必须使用清单中的真实 ID');
+    expect(prompt).toContain('必须使用其中的真实 ID');
+    expect(prompt).toContain('已加入当前会话');
   });
 
   it('顶层智能体管理措辞按 canManageAgentRuns 门控', () => {
@@ -529,7 +530,7 @@ describe('assemble L0-L5 组装规则', () => {
     expect(builder).toContain('导致关键操作被跳过的调用，不能证明该操作分支有效');
     expect(builder).toContain('Locators are resolved from the current DOM for every operation');
     expect(builder).toContain('browser accessibility snapshot roles such as `StaticText`');
-    expect(builder).toContain('Actions require an actionable DOM target');
+    expect(builder).toContain('Locator actions require an actionable DOM target');
     expect(builder).toContain('回报 platform capability gap');
     expect(builder).toContain('report a platform capability gap');
   });

@@ -68,11 +68,19 @@ const button = (label: string) => {
 const groupNames = () => [...container.querySelectorAll('button[aria-expanded]')]
   .filter((node) => node.hasAttribute('draggable')).map((node) => node.textContent);
 const rowCount = () => container.querySelectorAll('[role="button"]').length;
+const visibleAgentIds = () => [...container.querySelectorAll<HTMLElement>('[data-agent-id]')]
+  .map((node) => node.dataset.agentId);
 async function render(next: Partial<ThreadSidebarProps> = {}) {
   props = { ...props, ...next };
   await act(async () => root.render(createElement(ThreadSidebar, props)));
 }
 async function click(label: string) { await act(async () => button(label).click()); }
+async function clickMenuItem(label: string) {
+  const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((node) => node.textContent === label);
+  expect(item, label).toBeDefined();
+  await act(async () => item!.click());
+}
 async function search(value: string) {
   const input = container.querySelector('input')!;
   await act(async () => {
@@ -126,7 +134,12 @@ beforeEach(() => {
   });
   useUIStore.persist.setOptions({ storage: createJSONStorage(() => localStorage) });
   localStorage.clear();
-  useUIStore.setState({ expandedWorkspaceGroups: [], workspaceGroupOrder: [], consoleSelection: null });
+  useUIStore.setState({
+    expandedWorkspaceGroups: [],
+    workspaceGroupOrder: [],
+    pinnedAgentRunIds: [],
+    consoleSelection: null,
+  });
   historyState.ready = true;
   attentionState.attentionByAgentId = {};
   consoleActions.markRead.mockClear();
@@ -281,6 +294,87 @@ describe('workspace navigation', () => {
     expect(rowCount()).toBe(0);
   });
 
+  it('pins and unpins a session without taking a recent preview slot', async () => {
+    const rows = Array.from({ length: 6 }, (_, index) => (
+      history(`row-${index}`, '/sample/alpha', 6 - index)
+    ));
+    await render({ history: rows, selectedAgentId: 'row-5' });
+    await click('alpha');
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4', 'row-5']);
+
+    await act(async () => container.querySelector<HTMLButtonElement>(
+      '[data-agent-id="row-5"] button[aria-haspopup="menu"]',
+    )!.click());
+    await clickMenuItem('置顶');
+
+    expect(visibleAgentIds()).toEqual(['row-5', 'row-0', 'row-1', 'row-2', 'row-3', 'row-4']);
+    expect(container.querySelector('[data-agent-id="row-5"]')?.getAttribute('data-pinned')).toBe('true');
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual(['row-5']);
+    expect(JSON.parse(localStorage.getItem('piskie-ui-storage')!).state.pinnedAgentRunIds).toEqual(['row-5']);
+
+    await act(async () => container.querySelector<HTMLButtonElement>(
+      '[data-agent-id="row-5"] button[aria-haspopup="menu"]',
+    )!.click());
+    await clickMenuItem('取消置顶');
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4', 'row-5']);
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual([]);
+
+    await render({ selectedAgentId: null });
+    expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4']);
+  });
+
+  it('keeps five pinned rows visible alongside a new live session and five recent slots', async () => {
+    const pinned = Array.from({ length: 5 }, (_, index) => history(`pinned-${index}`, undefined, 12 - index));
+    const recent = Array.from({ length: 6 }, (_, index) => history(`recent-${index}`, undefined, 6 - index));
+    useUIStore.setState({ pinnedAgentRunIds: pinned.map((row) => row.agentId) });
+    const live = projectActiveAgentRun({
+      agentId: 'sample-live', phase: 'thinking', children: [], runConfig: { name: 'Sample session' },
+    } as unknown as AgentControlSnapshot, 'Example');
+    await render({ sessions: [live], history: [...pinned, ...recent] });
+    await click(defaultLabel);
+
+    const pinnedIds = pinned.map((row) => row.agentId);
+    const recentPreview = ['recent-0', 'recent-1', 'recent-2', 'recent-3'];
+    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview]);
+    expect(button('查看更多（还有 2 条）')).toBeDefined();
+
+    await render({ selectedAgentId: 'recent-5' });
+    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview, 'recent-5']);
+    await click('查看更多（还有 1 条）');
+    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recent.map((row) => row.agentId)]);
+    await click('收起列表');
+    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview, 'recent-5']);
+  });
+
+  it('offers a quick pin action on live and history rows without selecting them', async () => {
+    const live = projectActiveAgentRun({
+      agentId: 'sample-live', phase: 'thinking', children: [], runConfig: { name: 'Sample session' },
+    } as unknown as AgentControlSnapshot, 'Example');
+    await render({ sessions: [live], history: [history('sample-old')], selectedAgentId: null });
+    await click(defaultLabel);
+
+    const quickPin = (agentId: string, label: string) => {
+      const result = container.querySelector<HTMLButtonElement>(
+        `[data-agent-id="${agentId}"] button[aria-label="${label}"]`,
+      );
+      expect(result).not.toBeNull();
+      return result!;
+    };
+
+    await act(async () => quickPin('sample-old', '置顶').click());
+    expect(visibleAgentIds()).toEqual(['sample-old', 'sample-live']);
+    expect(quickPin('sample-old', '取消置顶')).not.toBeNull();
+    expect(props.onSelectHistory).not.toHaveBeenCalled();
+
+    await act(async () => quickPin('sample-live', '置顶').click());
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual(['sample-old', 'sample-live']);
+    expect(props.onSelectSession).not.toHaveBeenCalled();
+
+    await act(async () => quickPin('sample-old', '取消置顶').click());
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual(['sample-live']);
+    expect(visibleAgentIds()).toEqual(['sample-live', 'sample-old']);
+  });
+
   it('clears search on explicit navigation so the opened workspace remains visible', async () => {
     await render({ onNewSession: () => useUIStore.getState().setConsoleSelection({ kind: 'empty' }) });
     await search('beta');
@@ -299,9 +393,9 @@ describe('workspace navigation', () => {
     expect(rowCount()).toBe(0);
     await click('alpha');
     const written = JSON.parse(localStorage.getItem('piskie-ui-storage')!);
-    expect(written.version).toBe(4);
+    expect(written.version).toBe(5);
     expect(Object.keys(written.state).sort()).toEqual([
-      'consoleMode', 'expandedWorkspaceGroups', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder',
+      'consoleMode', 'expandedWorkspaceGroups', 'pinnedAgentRunIds', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder',
     ]);
   });
 

@@ -9,6 +9,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown } from 'lucide-react';
 
+import { useDismissShortcutScope } from '../../../shortcuts';
 import styles from '../deck.module.css';
 
 export interface DeckOption {
@@ -44,19 +45,20 @@ export const DeckSelect: React.FC<DeckSelectProps> = ({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  useDismissShortcutScope({
+    scopeIdPrefix: 'prefdeck-select',
+    active: open,
+    onDismiss: () => setOpen(false),
+  });
+
   useEffect(() => {
     if (!open) return;
     const onDocClick = (event: MouseEvent): void => {
       if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('click', onDocClick);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('click', onDocClick);
-      document.removeEventListener('keydown', onKey);
     };
   }, [open]);
 

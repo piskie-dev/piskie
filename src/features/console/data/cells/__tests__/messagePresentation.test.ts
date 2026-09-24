@@ -137,6 +137,14 @@ describe('信封覆盖', () => {
     });
   });
 
+  it('uses the worker event timestamp even when the parent records the notice later', () => {
+    const [cell] = projectConversationNodes([{
+      t: 'msg', ts: 12000, id: 'sample-event', role: 'user', subtype: 'subagent_notification',
+      content: '<subagent_event id="sample-worker" type="completed" ts="1970-01-01T00:00:09.000Z">Done</subagent_event>',
+    }]);
+    expect(cell).toMatchObject({ kind: 'notice', source: 'sample-worker', ts: 12000, eventAt: 9000 });
+  });
+
   it('文件型子流程事件拆出摘要和详情文件，不暴露 XML 标签', () => {
     const presented = presentUserMessage(
       'subagent_notification',

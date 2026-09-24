@@ -18,14 +18,16 @@ import { AgentTabs, type AgentTabItem } from '../../chrome/AgentTabs';
 import { Divider } from '../../chrome/Divider';
 import { TopRail } from '../../chrome/TopRail';
 import { BrowserScreenView } from '../../content/ScreenView';
+import { ActivePrimaryOwnerProvider } from '../../content/ActivePrimaryOwnerProvider';
 import { DockPanel } from './DockPanel';
 import { ScreenFullscreen, type ScreenFullscreenTarget } from '../../content/ScreenFullscreen';
 import { ThreadSidebar } from '../../content/ThreadSidebar';
 import type { HistoryRow, SessionRow } from '../../data/session';
 import type { SessionMenuSource } from '../../data/sessionMenu';
-import { useGlobalBinding } from '../../data/useKeyboard';
 import { useImageNodes } from '../../data/useImageNodes';
 import { useAgentVM, useWorkerVM } from '../../data/vm';
+import type { ActionTarget } from '../../data/actions';
+import { useShortcutScope, type ShortcutScope } from '@/shortcuts';
 import { DockCanvas } from './canvas/DockCanvas';
 import { useCanvasWorkers } from './canvas/useCanvasWorkers';
 import styles from './workbench.module.css';
@@ -77,6 +79,7 @@ export const DockMode = memo<DockModeProps>(
     const gridRef = useRef<HTMLDivElement>(null);
     const mainColRef = useRef<HTMLDivElement>(null);
     const [focusWorkerId, setFocusWorkerId] = useState<string | null>(null);
+    const [lastPrimaryOwner, setLastPrimaryOwner] = useState<ActionTarget | null>(null);
     const [fullscreen, setFullscreen] = useState<ScreenFullscreenTarget | null>(null);
 
     /**
@@ -90,7 +93,10 @@ export const DockMode = memo<DockModeProps>(
       if (!revealWorker || consumedReveal.current === revealWorker.requestId) return;
       consumedReveal.current = revealWorker.requestId;
       setFocusWorkerId(revealWorker.workerId);
-    }, [revealWorker]);
+      if (selectedAgentId) {
+        setLastPrimaryOwner({ agentId: selectedAgentId, workerId: revealWorker.workerId });
+      }
+    }, [revealWorker, selectedAgentId]);
 
     const agent = useAgentVM(selectedAgentId);
     const worker = useWorkerVM(selectedAgentId, focusWorkerId);
@@ -110,17 +116,54 @@ export const DockMode = memo<DockModeProps>(
       ];
     }, [agent]);
 
-    const selectWorker = useCallback((id?: string) => {
-      if (!id) return;
-      // 再点一次取消选中
-      setFocusWorkerId((current) => (current === id ? null : id));
+    const activePrimaryOwner = useMemo<ActionTarget | null>(() => {
+      if (!selectedAgentId || !agent) return null;
+      if (lastPrimaryOwner?.agentId !== selectedAgentId) return { agentId: selectedAgentId };
+      if (!lastPrimaryOwner.workerId) return lastPrimaryOwner;
+      return agent.workers.some((candidate) => candidate.id === lastPrimaryOwner.workerId)
+        ? lastPrimaryOwner
+        : { agentId: selectedAgentId };
+    }, [agent, lastPrimaryOwner, selectedAgentId]);
+
+    const activatePrimaryOwner = useCallback((target: ActionTarget) => {
+      setLastPrimaryOwner(target);
     }, []);
 
-    const clearFocus = useCallback(() => setFocusWorkerId(null), []);
+    const selectWorker = useCallback((id?: string) => {
+      if (!id || !selectedAgentId) return;
+      // 再点一次取消选中
+      const nextWorkerId = focusWorkerId === id ? null : id;
+      setFocusWorkerId(nextWorkerId);
+      setLastPrimaryOwner({ agentId: selectedAgentId, workerId: nextWorkerId ?? undefined });
+    }, [focusWorkerId, selectedAgentId]);
 
-    // Esc 链的第三级：清除 worker 选中（回主会话）。没有选中就不注册，
-    // 让 Esc 自然落到"无动作"——不做「中断 agent」，避免误触
-    useGlobalBinding('escape', t('sessionWorkbenchUi.panels.clearWorkerSelection'), clearFocus, !!focusWorkerId);
+    const openWorker = useCallback((workerId: string) => {
+      if (!selectedAgentId) return;
+      setFocusWorkerId(workerId);
+      setLastPrimaryOwner({ agentId: selectedAgentId, workerId });
+    }, [selectedAgentId]);
+
+    const clearFocus = useCallback(() => {
+      setFocusWorkerId(null);
+      if (selectedAgentId) setLastPrimaryOwner({ agentId: selectedAgentId });
+    }, [selectedAgentId]);
+
+    const workerNavigationScope = useMemo<ShortcutScope>(() => ({
+      id: 'console-dock-worker-navigation',
+      layer: 'mode-navigation',
+      blocksLowerLayers: 'none',
+      bindings: [{
+        id: 'console-dock-worker-navigation:back',
+        commandId: 'ui.dismissCurrentLayer',
+        combo: 'escape',
+        enabled: () => true,
+        allowInEditable: true,
+        handling: 'execute',
+        defaultBehavior: 'prevent',
+        execute: clearFocus,
+      }],
+    }), [clearFocus]);
+    useShortcutScope(workerNavigationScope, !!focusWorkerId);
 
     /**
      * 画布上的 worker：**未被固定列占用的那些**。
@@ -140,11 +183,12 @@ export const DockMode = memo<DockModeProps>(
     const hasScreen = !!worker?.browserId;
 
     return (
-      <div
-        ref={gridRef}
-        className={styles.dock}
-        data-sessions-collapsed={sessionsCollapsed ? 'true' : undefined}
-      >
+      <ActivePrimaryOwnerProvider owner={activePrimaryOwner} onActivate={activatePrimaryOwner}>
+        <div
+          ref={gridRef}
+          className={styles.dock}
+          data-sessions-collapsed={sessionsCollapsed ? 'true' : undefined}
+        >
         {/* 左栏：全高兄弟节点。内容与 thread 完全一致，
             走共享的 ThreadSidebar（搜索 + 常驻入口 + 工作区会话树） */}
         <aside className={styles.sessions}>
@@ -203,7 +247,7 @@ export const DockMode = memo<DockModeProps>(
                       agentId={selectedAgentId}
                       fidelity="focused"
                       onPreviewImage={onPreviewImage}
-                      onOpenWorker={setFocusWorkerId}
+                      onOpenWorker={openWorker}
                       imageNodes={mainImageNodes}
                     />
                   </div>
@@ -219,7 +263,7 @@ export const DockMode = memo<DockModeProps>(
                           workerId={worker.id}
                           fidelity="visible"
                           onPreviewImage={onPreviewImage}
-                          onOpenWorker={setFocusWorkerId}
+                          onOpenWorker={openWorker}
                           imageNodes={workerImageNodes}
                         />
                       </div>
@@ -254,7 +298,7 @@ export const DockMode = memo<DockModeProps>(
                     workers={canvasWorkers}
                     stopping={agent.phase === 'stopping'}
                     onPreviewImage={onPreviewImage}
-                    onOpenWorker={setFocusWorkerId}
+                    onOpenWorker={openWorker}
                     onFullscreen={(target) => setFullscreen(target)}
                     emptyHint={
                       (agent.workers.length ?? 0) === 0
@@ -275,7 +319,8 @@ export const DockMode = memo<DockModeProps>(
             {...fullscreen}
           />
         )}
-      </div>
+        </div>
+      </ActivePrimaryOwnerProvider>
     );
   },
 );

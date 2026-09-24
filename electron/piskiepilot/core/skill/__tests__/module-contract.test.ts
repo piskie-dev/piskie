@@ -15,14 +15,14 @@ import {
 const FIXED = [
   {
     skill: browserCore,
-    functions: 30,
+    functions: 31,
   },
 ] as const;
 
 const SYSTEM_PARAMS = ['browserId', 'taskId', 'executorId'] as const;
 
 describe('defineSkill module contract', () => {
-  it('publishes exactly the current 30 built-in functions', () => {
+  it('publishes exactly the current 31 built-in functions', () => {
     let total = 0;
     for (const { skill, functions } of FIXED) {
       assertDefinedSkill(skill);
@@ -40,7 +40,7 @@ describe('defineSkill module contract', () => {
       expect(entries.every((entry) => !entry.tool.def.name.includes('.'))).toBe(true);
       total += functions;
     }
-    expect(total).toBe(30);
+    expect(total).toBe(31);
   });
 
   it('keeps all system identifiers out of every fixed function schema', () => {

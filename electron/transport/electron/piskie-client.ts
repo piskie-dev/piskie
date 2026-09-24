@@ -208,6 +208,11 @@ export function createElectronPiskieClient(options: {
         readOne: (key) => request(CONFIGURATION_OPERATIONS.readSetting, key),
         write: (key, value) => request(CONFIGURATION_OPERATIONS.writeSetting, key, value),
         writeAll: (settings) => request(CONFIGURATION_OPERATIONS.writeSettings, settings),
+        writeShortcut: (commandId, override) => request(
+          CONFIGURATION_OPERATIONS.writeShortcut,
+          commandId,
+          override,
+        ),
         reset: () => request(CONFIGURATION_OPERATIONS.resetSettings),
         developmentFeatures: () => request(CONFIGURATION_OPERATIONS.developmentFeatures),
       },
@@ -228,7 +233,7 @@ export function createElectronPiskieClient(options: {
       inspectWorkflow: (assetId) => request(INFERENCE_OPERATIONS.inspectWorkflow, assetId),
       detectBindings: (assetId) => request(INFERENCE_OPERATIONS.detectBindings, assetId),
       validateBindings: (input) => request(INFERENCE_OPERATIONS.validateBindings, input),
-      probe: (input) => request(INFERENCE_OPERATIONS.probe, input),
+      probe: (input) => transport.request(INFERENCE_OPERATIONS.probe, [input], { timeoutMs: 0 }),
       artifact: (artifactId) => request(INFERENCE_OPERATIONS.artifact, artifactId),
     },
     capabilities: {

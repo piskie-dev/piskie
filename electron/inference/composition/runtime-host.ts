@@ -32,6 +32,7 @@ import type {
 } from '../../config/host/config-host.js';
 import type { ConfigDomainRevisionChangedEvent } from '../../../shared/types/config.js';
 import { emptyConfigDomainIntegrations, type ConfigDomainIntegrations } from '../../config/domains/integrations.js';
+import { normalizeShortcutPlatform } from '../../../shared/shortcuts.js';
 import { ModelUsageService } from '../../observability/usage/model-usage-service.js';
 import type { ModelUsageConfig } from '../../../shared/types/model-usage.js';
 
@@ -54,9 +55,7 @@ export interface InferenceRuntimeHostOptions {
   onConfigChanged?: (event: ConfigDomainRevisionChangedEvent) => void;
   onClose?: () => void | Promise<void>;
   configIntegrations?: ConfigDomainIntegrations;
-  remoteCatalog?: Partial<Pick<RemoteCatalogOptions, 'baseUrl' | 'clientVersion' | 'fetch' | 'keys' | 'onError'>> & {
-    autoRefresh?: boolean;
-  };
+  remoteCatalog?: Partial<Pick<RemoteCatalogOptions, 'baseUrl' | 'clientVersion' | 'fetch' | 'keys' | 'onError'>>;
 }
 
 export interface InferenceRuntimeStartupResult {
@@ -151,7 +150,7 @@ export class InferenceRuntimeHost {
         inference: this.control,
         selections: this.selections,
         integrations: {
-          ...(options.configIntegrations ?? emptyConfigDomainIntegrations()),
+          ...(options.configIntegrations ?? emptyConfigDomainIntegrations(normalizeShortcutPlatform(process.platform))),
           modelUsage: { publish: (config) => this.usage.configure(config) },
         },
         onSelectionsChanged: options.onSelectionsChanged,
@@ -223,7 +222,6 @@ export class InferenceRuntimeHost {
       issues.push(startupIssue('watchers', cause));
       this.notifyReloadError(cause);
     }
-    if (this.options.remoteCatalog?.autoRefresh) this.remoteCatalog.start();
     await this.usage.start();
     return {
       ...(bootstrap && { bootstrap }),

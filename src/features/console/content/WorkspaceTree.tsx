@@ -9,12 +9,24 @@
  *
  * 长列表两道闸：
  * - 默认收起，手动展开态持久化；搜索临时展开匹配组；
- * - 每组默认列前 {@link GROUP_PREVIEW_LIMIT} 条及选中项，可展开全部并收起。
+ * - 每组默认列全部置顶项、前 {@link GROUP_PREVIEW_LIMIT} 条未置顶项及选中项，可展开全部并收起。
  */
 
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, FolderOpen, History, Pause, Pencil, Plus, Square, Trash2 } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  FolderOpen,
+  History,
+  Pause,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Square,
+  Trash2,
+} from 'lucide-react';
 
 import { useUIStore } from '../../../store/uiStore';
 
@@ -48,7 +60,7 @@ const HISTORY_MENU_ICON = {
   delete: <Trash2 size={12} />,
 } as const;
 
-export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead';
+export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead' | 'pin' | 'unpin';
 
 export interface WorkspaceTreeProps {
   readonly groups: readonly WorkspaceGroup[];
@@ -83,8 +95,14 @@ const Row = memo<{
   const activity = live
     ? resolvePresentationText(live.activity.text, (key, values) => t(key, values ?? {}))
     : undefined;
+  const pinKey = row.pinned ? 'unpin' : 'pin';
+  const pinLabel = t(`sessionWorkbenchUi.sessionMenu.${pinKey}`);
 
-  const items: MenuItemDescriptor[] = live
+  const items: MenuItemDescriptor[] = [{
+    key: pinKey,
+    label: pinLabel,
+    icon: row.pinned ? <PinOff size={12} /> : <Pin size={12} />,
+  }, ...(live
     ? buildSessionMenu({ ...menuSourceOf(row.agentId), renamable: true }).map((item) => ({
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'workspace' ? 'openWorkspace' : item.key === 'trace' ? 'viewTrace' : item.key}`),
@@ -95,7 +113,7 @@ const Row = memo<{
         ...item,
         label: t(`sessionWorkbenchUi.sessionMenu.${item.key === 'open' ? 'openRecord' : item.key === 'trace' ? 'viewTrace' : item.key}`),
         icon: HISTORY_MENU_ICON[item.key],
-      }));
+      })))];
 
   if (unread) items.push({ key: 'markRead', label: t('sessionWorkbenchUi.sessionMenu.markRead'), icon: <Check size={12} /> });
 
@@ -104,8 +122,14 @@ const Row = memo<{
       ref={ref}
       className={styles.row}
       data-agent-id={row.agentId}
-      aria-label={[row.label, unread ? t('sessionWorkbenchUi.sidebar.unread') : '', live?.working ? t('sessionWorkbenchUi.agentActivity.working') : ''].filter(Boolean).join(', ')}
+      aria-label={[
+        row.label,
+        row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : '',
+        unread ? t('sessionWorkbenchUi.sidebar.unread') : '',
+        live?.working ? t('sessionWorkbenchUi.agentActivity.working') : '',
+      ].filter(Boolean).join(', ')}
       data-live={live ? 'true' : undefined}
+      data-pinned={row.pinned ? 'true' : undefined}
       data-selected={selected ? 'true' : undefined}
       role="button"
       tabIndex={0}
@@ -119,14 +143,34 @@ const Row = memo<{
       }}
       title={row.label}
     >
-      <span className={styles.activitySlot} title={activity}>
-        {live?.working && <OrbIndicator size={14} variant="expanding" />}
+      <span
+        className={styles.activitySlot}
+        title={[activity, row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : ''].filter(Boolean).join(' · ')}
+      >
+        {live?.working
+          ? <OrbIndicator size={14} variant="expanding" />
+          : row.pinned ? <Pin size={10} aria-hidden /> : null}
       </span>
 
       <span className={styles.rowLabel} title={row.label}>{row.label}</span>
 
       <span className={styles.dotSlot} data-unread={unread || undefined} aria-hidden />
-      <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
+      <div className={styles.rowMeta}>
+        <MessageTime timestamp={row.messages?.latestMessage?.timestamp} />
+        <Tooltip title={pinLabel}>
+          <button
+            type="button"
+            className={styles.rowPin}
+            aria-label={pinLabel}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMenuAction(pinKey, row);
+            }}
+          >
+            {row.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+          </button>
+        </Tooltip>
+      </div>
 
       <span className={styles.rowMenu}>
         <MenuButton
@@ -153,7 +197,7 @@ interface GroupProps extends Omit<WorkspaceTreeProps, 'groups' | 'onMoveGroup'> 
   readonly onDragEnd: () => void;
 }
 
-/** 每组默认露出的条数；在跑的排最前，天然不会被藏 */
+/** 每组默认露出的未置顶条数；置顶项始终可见 */
 const GROUP_PREVIEW_LIMIT = 5;
 
 const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf, onMenuAction,
@@ -164,7 +208,12 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
   const open = searching || expandedGroups.includes(group.key);
 
   const [showAll, setShowAll] = useState(false);
-  const previewRows = group.rows.filter((row, index) => index < GROUP_PREVIEW_LIMIT || row.agentId === selectedAgentId);
+  let unpinnedSeen = 0;
+  const previewRows = group.rows.filter((row) => {
+    if (row.pinned) return true;
+    unpinnedSeen += 1;
+    return unpinnedSeen <= GROUP_PREVIEW_LIMIT || row.agentId === selectedAgentId;
+  });
   const hiddenCount = group.rows.length - previewRows.length;
   const visibleRows = showAll || searching ? group.rows : previewRows;
 

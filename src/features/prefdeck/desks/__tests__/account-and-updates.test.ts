@@ -243,6 +243,7 @@ function installPiskie(options: {
   updates?: UpdateClient;
   writeSettings?: (settings: Record<string, unknown>) => Promise<void>;
 }): void {
+  let settings = structuredClone(useUIStore.getState().settings ?? DEFAULT_SETTINGS);
   Object.defineProperty(dom.window, 'piskie', {
     configurable: true,
     value: {
@@ -250,7 +251,12 @@ function installPiskie(options: {
       updates: options.updates ?? updateClient(),
       configuration: {
         settings: {
-          writeAll: options.writeSettings ?? vi.fn(async () => undefined),
+          read: vi.fn(async () => structuredClone(settings)),
+          writeAll: vi.fn(async (changes: Record<string, unknown>) => {
+            await options.writeSettings?.(changes);
+            settings = { ...settings, ...changes } as typeof settings;
+          }),
+          writeShortcut: vi.fn(async () => undefined),
         },
       },
       runtime: { version: '0.1.0' },

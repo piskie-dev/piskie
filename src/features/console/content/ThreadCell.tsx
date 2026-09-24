@@ -35,10 +35,10 @@ import {
 
 import { LinkedMarkdown, LinkedText } from '@/components/content-links';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
-import { isMacOSPlatform } from '@/utils/platform';
 import { ImageThumbnail } from './ImageThumbnail';
 import { FileAttachments } from './FileAttachments';
 import { SkillTags } from './SkillTags';
+import { BrowserEnvironmentTags } from './BrowserEnvironmentTags';
 import { OrbIndicator } from './OrbIndicator';
 import type { QuestionAnswerItem, ToolCellArtifact } from '../data/toolArtifacts';
 import {
@@ -63,6 +63,7 @@ import { ToolTypeIcon } from './ToolTypeIcon';
 import { WorkerCreationRow } from './WorkerCreationRow';
 import type { StatusKey } from '../data/status';
 import type { WorkerRef } from '../data/vm';
+import { useEffectiveConsoleShortcut } from '../data/shortcuts';
 
 const ICON = 14;
 
@@ -80,13 +81,6 @@ const FLOW_EVENT_STATUS_KEYS: Readonly<Record<string, string>> = {
   need_user_action: 'transcript.flowEvent.needsAction',
   stalled: 'transcript.flowEvent.stalled',
 };
-
-/**
- * 「转入后台」的快捷键提示。平台判定复用 `utils/platform`（取主进程的真实
- * `process.platform`），不用 `navigator.platform`。
- * 与 `data/keyboard` 的 `mod`（Cmd 或 Ctrl 都匹配）同义。
- */
-const SHORTCUT_HINT = isMacOSPlatform() ? '⌘B' : 'Ctrl+B';
 
 function toolIcon(cell: ToolNode): React.ReactNode {
   switch (cell.state.phase) {
@@ -527,7 +521,7 @@ export interface ThreadCellProps {
   readonly onOpenFileChange?: (cellId: string) => void;
   /**
    * cell 声明的动作（目前只有执行中工具的「转入后台」）。
-   * 与 `mod+b` 走同一个入口（`content/useActionScope`），键鼠语义不分叉。
+   * 与 `tool.promoteToBackground` 走同一个入口，键鼠语义不分叉。
    */
   readonly onAction?: (cell: TranscriptNode, action: TranscriptAction) => void;
 }
@@ -543,6 +537,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
   onAction,
 }) => {
   const { t } = useTranslation();
+  const promoteShortcut = useEffectiveConsoleShortcut('tool.promoteToBackground');
   const title = t(cell.titleKey, cell.titleArgs ?? {});
   const present = (value: PresentationText): string => (
     resolvePresentationText(value, (key, values) => t(key, values ?? {}))
@@ -581,7 +576,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
 
       return (
         <div className={styles.cell}>
-          {(cell.text || cell.skills?.length || cell.skillLoadErrors?.length) && <div className={styles.userRow}>
+          {(cell.text || cell.skills?.length || cell.skillLoadErrors?.length || cell.browserEnvironmentIds?.length) && <div className={styles.userRow}>
             <div className={styles.bubble}>
               {cell.skills && <SkillTags skills={cell.skills} />}
               {cell.text && <div>{cell.text}</div>}
@@ -591,6 +586,13 @@ export const ThreadCell = memo<ThreadCellProps>(({
                     <div key={name}>{t('sessionWorkbenchUi.composer.skills.loadFailed', { name, error })}</div>
                   ))}
                 </div>
+              )}
+              {!!cell.browserEnvironmentIds?.length && (
+                <BrowserEnvironmentTags
+                  state="joined"
+                  environmentIds={cell.browserEnvironmentIds}
+                  standalone={!cell.text && !cell.skills?.length && !cell.skillLoadErrors?.length}
+                />
               )}
             </div>
           </div>}
@@ -648,9 +650,11 @@ export const ThreadCell = memo<ThreadCellProps>(({
           type="button"
           className={styles.actionAside}
           onClick={() => onAction?.(cell, action)}
-          title={t('transcript.action.promoteToBackgroundWithShortcut', {
-            shortcut: SHORTCUT_HINT,
-          })}
+          title={promoteShortcut
+            ? t('transcript.action.promoteToBackgroundWithShortcut', {
+                shortcut: promoteShortcut.display,
+              })
+            : t('transcript.action.promoteToBackground')}
         >
           {t('transcript.action.promoteToBackground')}
         </button>

@@ -7,6 +7,7 @@ import type {
   ProxyCreateInput,
   ProxyUpdateInput,
 } from '../../../shared/electron-contracts/configuration.js';
+import type { WritableAppSettingKey } from '../../../shared/electron-contracts/configuration.js';
 import type {
   AppSettings,
   ConfigPlanRequest,
@@ -15,6 +16,11 @@ import type {
 import type { OperationDefinition, TopicDefinition } from '../catalog.js';
 import { args, identifier, nonNegativeInteger } from '../validation.js';
 import type { ConfigurationApplication } from './configuration-application.js';
+import {
+  CONFIGURABLE_SHORTCUT_COMMAND_IDS,
+  validateShortcutOverrides,
+  type ConfigurableShortcutCommandId,
+} from '../../../shared/shortcuts.js';
 import {
   APP_BG_MASK_MAX,
   APP_BG_MASK_MIN,
@@ -37,7 +43,18 @@ const probeRequest = z.object({
 });
 const navPrismSpotSchema = z.strictObject({ x: z.number(), y: z.number() }).nullable();
 const backgroundImageSchema = z.string().refine(isThemeBackgroundUrl).nullable();
-const settingsKeySchema = z.enum([
+const settingsReadKeySchema = z.enum([
+  'theme',
+  'language',
+  'autoCheckAndDownloadUpdates',
+  'navEdgeDockEnabled',
+  'navPrismEnabled',
+  'navPrismSpot',
+  'backgroundImage',
+  'backgroundMaskOpacity',
+  'shortcuts',
+]);
+const settingsWriteKeySchema = z.enum([
   'theme',
   'language',
   'autoCheckAndDownloadUpdates',
@@ -65,6 +82,51 @@ const settingValueSchema = z.union([
   backgroundImageSchema,
   z.number().min(APP_BG_MASK_MIN).max(APP_BG_MASK_MAX),
 ]);
+const settingSchemaByKey: Record<z.infer<typeof settingsWriteKeySchema>, z.ZodType> = {
+  theme: z.enum(['light', 'dark', 'auto']),
+  language: z.enum(['zh-CN', 'en-US']),
+  autoCheckAndDownloadUpdates: z.boolean(),
+  navEdgeDockEnabled: z.boolean(),
+  navPrismEnabled: z.boolean(),
+  navPrismSpot: navPrismSpotSchema,
+  backgroundImage: backgroundImageSchema,
+  backgroundMaskOpacity: z.number().min(APP_BG_MASK_MIN).max(APP_BG_MASK_MAX),
+};
+const writeSettingArgsSchema = args([
+  settingsWriteKeySchema,
+  settingValueSchema,
+]).superRefine((input, context) => {
+  const key = settingsWriteKeySchema.safeParse(input[0]);
+  if (!key.success) return;
+  const value = settingSchemaByKey[key.data].safeParse(input[1]);
+  if (value.success) return;
+  for (const issue of value.error.issues) {
+    context.addIssue({
+      code: 'custom',
+      path: [1, ...issue.path],
+      message: issue.message,
+    });
+  }
+});
+const configurableShortcutCommandIdSchema = z.enum(CONFIGURABLE_SHORTCUT_COMMAND_IDS);
+const shortcutOverrideSchema = z.string().max(80).nullable();
+const writeShortcutArgsSchema = args([
+  configurableShortcutCommandIdSchema,
+  shortcutOverrideSchema,
+]).superRefine((input, context) => {
+  const commandId = configurableShortcutCommandIdSchema.safeParse(input[0]);
+  const override = shortcutOverrideSchema.safeParse(input[1]);
+  if (!commandId.success || !override.success) return;
+  for (const issue of validateShortcutOverrides({
+    [commandId.data]: override.data,
+  }, process.platform)) {
+    context.addIssue({
+      code: 'custom',
+      path: [1],
+      message: issue.message,
+    });
+  }
+});
 const proxySchema = z.object({
   name: identifier,
   protocol: z.enum(['http', 'https', 'socks5']),
@@ -121,23 +183,28 @@ export function createConfigurationController(
     operation(CONFIGURATION_OPERATIONS.readSettings, args([]), () => application.readSettings()),
     operation(
       CONFIGURATION_OPERATIONS.readSetting,
-      args([settingsKeySchema]),
+      args([settingsReadKeySchema]),
       ([key]) => application.readSetting(key),
     ),
     operation(
       CONFIGURATION_OPERATIONS.writeSetting,
-      args([
-        settingsKeySchema,
-        settingValueSchema,
-      ]),
+      writeSettingArgsSchema,
       ([key, value]) => application.writeSetting(
-        key as keyof AppSettings,
+        key as WritableAppSettingKey,
         value as never,
       ),
     ),
     operation(CONFIGURATION_OPERATIONS.writeSettings, args([settingsSchema]), ([settings]) => (
-      application.writeSettings(settings as Partial<AppSettings>)
+      application.writeSettings(settings as Partial<Pick<AppSettings, WritableAppSettingKey>>)
     )),
+    operation(
+      CONFIGURATION_OPERATIONS.writeShortcut,
+      writeShortcutArgsSchema,
+      ([commandId, override]) => application.writeShortcut(
+        commandId as ConfigurableShortcutCommandId,
+        override as string | null,
+      ),
+    ),
     operation(CONFIGURATION_OPERATIONS.resetSettings, args([]), () => application.resetSettings()),
     operation(
       CONFIGURATION_OPERATIONS.developmentFeatures,

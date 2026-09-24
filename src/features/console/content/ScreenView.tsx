@@ -123,6 +123,8 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
                 onPointerCancel={input.onPointerUp}
                 onKeyDown={input.onKeyDown}
                 onKeyUp={input.onKeyUp}
+                onFocus={input.onFocus}
+                onBlur={input.onBlur}
                 onContextMenu={input.onContextMenu}
               />
             )}

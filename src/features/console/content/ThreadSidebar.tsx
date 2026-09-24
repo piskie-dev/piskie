@@ -99,15 +99,17 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const historyReady = useHistoryRowsReady();
     const attentionByAgentId = useAgentRunList((state) => state.attentionByAgentId);
     const savedOrder = useUIStore((state) => state.workspaceGroupOrder);
+    const pinnedAgentRunIds = useUIStore((state) => state.pinnedAgentRunIds);
     const expandedGroups = useUIStore((state) => state.expandedWorkspaceGroups);
     const setOrder = useUIStore((state) => state.setWorkspaceGroupOrder);
+    const toggleAgentRunPin = useUIStore((state) => state.toggleAgentRunPin);
     const searching = query.trim().length > 0;
 
     const allGroups = useMemo(() => groupByWorkspace(
-      buildThreadRows({ sessions, history, attentionByAgentId }),
+      buildThreadRows({ sessions, history, attentionByAgentId, pinnedAgentRunIds }),
       t('sessionWorkbenchUi.shell.defaultWorkspace'),
       defaultWorkspacePath,
-    ), [history, sessions, attentionByAgentId, defaultWorkspacePath, t]);
+    ), [history, sessions, attentionByAgentId, pinnedAgentRunIds, defaultWorkspacePath, t]);
     const order = useMemo(
       () => reconcileWorkspaceOrder(savedOrder, allGroups, defaultWorkspacePath),
       [savedOrder, allGroups, defaultWorkspacePath],
@@ -189,6 +191,10 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
 
     const onRowMenu = useCallback(
       (key: ThreadMenuKey, row: ThreadRow) => {
+        if (key === 'pin' || key === 'unpin') {
+          toggleAgentRunPin(row.agentId);
+          return;
+        }
         if (key === 'rename') {
           openRename(row);
           return;
@@ -211,7 +217,7 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
         else if (key === 'trace') void actions.openTrace(record.agentId);
         else if (key === 'delete') void actions.deleteHistory(record.agentId);
       },
-      [actions, onSelectHistory, openRename],
+      [actions, onSelectHistory, openRename, toggleAgentRunPin],
     );
 
     const taskTrigger = (

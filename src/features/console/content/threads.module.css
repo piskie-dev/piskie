@@ -312,13 +312,63 @@
   block-size: 14px;
 }
 
+.rowMeta {
+  display: grid;
+  grid-template-columns: 30px;
+  align-items: center;
+  justify-items: end;
+  inline-size: 30px;
+  block-size: 24px;
+}
+
 .rowTime {
+  grid-area: 1 / 1;
   inline-size: 30px;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--cyber-text-muted);
   text-align: end;
   white-space: nowrap;
+}
+
+.rowPin {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.row:hover .rowPin,
+.row:focus-within .rowPin {
+  visibility: visible;
+  opacity: 1;
+}
+
+.row:hover .rowTime,
+.row:focus-within .rowTime {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rowPin:hover {
+  background: var(--surface-3);
+  color: var(--cyber-text);
+}
+
+.rowPin:focus-visible {
+  outline: 1px solid var(--line-3);
+  outline-offset: -1px;
 }
 
 .rowMenu {

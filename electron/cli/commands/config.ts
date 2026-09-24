@@ -15,6 +15,7 @@ import {
   type ParsedArguments,
   shouldConnectRunningConfigHost,
 } from '../../inference/config-cli/main.js';
+import { normalizeShortcutPlatform } from '../../../shared/shortcuts.js';
 
 /** config 命令组挂载点：按 action 索引 inference 域导出的命令定义表 */
 export const CONFIG_COMMANDS = new Map(
@@ -60,6 +61,7 @@ export async function executeConfigCommand(input: ExecuteConfigCommandInput): Pr
       rootDirectory: root,
       inference,
       selections: selectionStore,
+      shortcutPlatform: normalizeShortcutPlatform(process.platform),
     })))(control, rootDirectory, selections);
   if (definition.requiresState) await host.prepare();
   input.onExecute?.();

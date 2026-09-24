@@ -99,6 +99,7 @@ async function fixture(
       publish: (_config, context) => { publications.push({ domain: context.domain, source: context.source }); },
     },
     appSettings: {
+      shortcutPlatform: 'linux',
       resolveInitialLanguage: () => initialLanguage,
       publish: (_settings, context) => publications.push({ domain: context.domain, source: context.source }),
     },
@@ -355,6 +356,7 @@ describe('all managed Config Domains', () => {
       navPrismSpot: null,
       backgroundImage: null,
       backgroundMaskOpacity: 0.65,
+      shortcuts: {},
     });
     expect(await fs.readFile(
       configDomainStoragePaths(root, 'app-settings').configFile,

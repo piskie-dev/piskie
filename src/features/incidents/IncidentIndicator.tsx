@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentTarget } from '../../../shared/types';
+import { useDismissShortcutScope } from '../../shortcuts';
 import { useIncidentStore } from '../../store/incidentStore';
 import { selectVisibleIncidents } from './selectors';
 import styles from './IncidentIndicator.module.css';
@@ -33,6 +34,12 @@ export function IncidentIndicator({ onFocusTarget }: IncidentIndicatorProps) {
   const [hasNewIncident, setHasNewIncident] = useState(false);
   const [open, setOpen] = useState(false);
   const dockRef = useRef<HTMLSpanElement>(null);
+
+  useDismissShortcutScope({
+    scopeIdPrefix: 'incident-ledger',
+    active: open && visibleIncidents.length > 0,
+    onDismiss: () => setOpen(false),
+  });
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {

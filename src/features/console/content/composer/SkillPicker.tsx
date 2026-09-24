@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { BookOpen, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SKILL_SCOPE_KEYS } from '../skillScope';
+import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import type { SkillComposerController } from './useSkillComposer';
 import styles from './skillPicker.module.css';
 
@@ -9,6 +10,11 @@ export function SkillPicker({ controller }: { readonly controller: SkillComposer
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const { open, anchorRef, close, listId, candidates, activeIndex, loading, error, options } = controller;
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'console-skill-picker',
+    active: open,
+    onDismiss: close,
+  });
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -57,49 +63,51 @@ export function SkillPicker({ controller }: { readonly controller: SkillComposer
 
   if (!open) return null;
   return (
-    <div
-      ref={panelRef}
-      popover="manual"
-      className={styles.panel}
-      onPointerDown={(event) => event.preventDefault()}
-      onMouseDown={(event) => event.preventDefault()}
-      onWheel={(event) => event.stopPropagation()}
-    >
-      <div className={styles.heading} id={`${listId}-title`}>{t('sessionWorkbenchUi.composer.skills.title')}</div>
-      <div id={listId} role="listbox" aria-labelledby={`${listId}-title`} aria-busy={loading} className={styles.list}>
-        {candidates.map((option, index) => (
-          <div
-            key={option.name}
-            id={`${listId}-${index}`}
-            role="option"
-            aria-selected={index === activeIndex}
-            aria-posinset={index + 1}
-            aria-setsize={candidates.length}
-            data-skill-index={index}
-            className={styles.option}
-            title={`${option.name} — ${option.description}`}
-            onPointerMove={() => controller.setHighlight(index)}
-            onClick={() => controller.select(option)}
-          >
-            <BookOpen size={14} className={styles.icon} aria-hidden />
-            <span className={styles.name}>{option.name}</span>
-            <span className={styles.description}>{option.description}</span>
-            <span className={styles.scope}>{t(SKILL_SCOPE_KEYS[option.scope])}</span>
-          </div>
-        ))}
-      </div>
-      {loading ? (
-        <div className={styles.status} role="status"><Loader2 size={14} className="animate-spin" />{t('sessionWorkbenchUi.composer.skills.loading')}</div>
-      ) : error !== null ? (
-        <div className={styles.status} role="alert">
-          <span>{t('sessionWorkbenchUi.composer.skills.queryFailed', { error })}</span>
-          <button type="button" onClick={controller.retry}>{t('sessionWorkbenchUi.composer.skills.retry')}</button>
+    <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+      <div
+        ref={panelRef}
+        popover="manual"
+        className={styles.panel}
+        onPointerDown={(event) => event.preventDefault()}
+        onMouseDown={(event) => event.preventDefault()}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        <div className={styles.heading} id={`${listId}-title`}>{t('sessionWorkbenchUi.composer.skills.title')}</div>
+        <div id={listId} role="listbox" aria-labelledby={`${listId}-title`} aria-busy={loading} className={styles.list}>
+          {candidates.map((option, index) => (
+            <div
+              key={option.name}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              aria-posinset={index + 1}
+              aria-setsize={candidates.length}
+              data-skill-index={index}
+              className={styles.option}
+              title={`${option.name} — ${option.description}`}
+              onPointerMove={() => controller.setHighlight(index)}
+              onClick={() => controller.select(option)}
+            >
+              <BookOpen size={14} className={styles.icon} aria-hidden />
+              <span className={styles.name}>{option.name}</span>
+              <span className={styles.description}>{option.description}</span>
+              <span className={styles.scope}>{t(SKILL_SCOPE_KEYS[option.scope])}</span>
+            </div>
+          ))}
         </div>
-      ) : candidates.length === 0 ? (
-        <div className={styles.status} role="status">{t(options.length === 0
-          ? 'sessionWorkbenchUi.composer.skills.empty'
-          : 'sessionWorkbenchUi.composer.skills.noMatches')}</div>
-      ) : null}
-    </div>
+        {loading ? (
+          <div className={styles.status} role="status"><Loader2 size={14} className="animate-spin" />{t('sessionWorkbenchUi.composer.skills.loading')}</div>
+        ) : error !== null ? (
+          <div className={styles.status} role="alert">
+            <span>{t('sessionWorkbenchUi.composer.skills.queryFailed', { error })}</span>
+            <button type="button" onClick={controller.retry}>{t('sessionWorkbenchUi.composer.skills.retry')}</button>
+          </div>
+        ) : candidates.length === 0 ? (
+          <div className={styles.status} role="status">{t(options.length === 0
+            ? 'sessionWorkbenchUi.composer.skills.empty'
+            : 'sessionWorkbenchUi.composer.skills.noMatches')}</div>
+        ) : null}
+      </div>
+    </ShortcutOverlayParentProvider>
   );
 }

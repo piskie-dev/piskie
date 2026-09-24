@@ -11,6 +11,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 
+import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import styles from './overlay.module.css';
 
 export interface PopoverProps {
@@ -46,8 +47,19 @@ export const Popover: React.FC<PopoverProps> = ({
   className,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
   const rawId = useId();
   const anchorName = `--anchor-${rawId.replace(/[^a-zA-Z0-9-]/g, '')}`;
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'console-popover',
+    active: open,
+    handling: 'execute',
+    onDismiss: onClose,
+  });
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   useEffect(() => {
     const element = ref.current;
@@ -61,14 +73,14 @@ export const Popover: React.FC<PopoverProps> = ({
     }
   }, [open]);
 
-  // light-dismiss / Esc 由浏览器发起，需回流到受控状态
+  // Browser light-dismiss still needs to flow back into the controlled state.
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
 
     const onToggle = (event: Event): void => {
       const { newState } = event as ToggleEvent;
-      if (newState === 'closed') onClose();
+      if (newState === 'closed' && openRef.current) onClose();
     };
 
     element.addEventListener('toggle', onToggle);
@@ -87,7 +99,9 @@ export const Popover: React.FC<PopoverProps> = ({
           positionArea: PLACEMENT_AREA[placement][align],
         }}
       >
-        {children}
+        <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+          {children}
+        </ShortcutOverlayParentProvider>
       </div>
     </>
   );

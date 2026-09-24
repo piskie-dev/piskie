@@ -51,6 +51,10 @@ import {
 } from '../../../store/inferenceStore';
 import { useProxyStore } from '../../../store/proxyStore';
 import {
+  ShortcutOverlayParentProvider,
+  useDismissShortcutScope,
+} from '../../../shortcuts';
+import {
   getSelectableReasoningOptions,
   reasoningOptionKey,
   reasoningSelectionLabel,
@@ -131,7 +135,7 @@ export interface ModelForgeProps {
   readonly catalogDefinitions: readonly InferenceModelDefinition[];
   readonly providerNames: readonly string[];
   readonly onClose: () => void;
-  readonly onSaved: (providerId: string) => void;
+  readonly onSaved: (providerId: string, modelId: string) => void;
   readonly onFlash: (text: PresentationText, tone?: 'halt' | 'hold' | 'calm') => void;
 }
 
@@ -150,6 +154,12 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
 }) => {
   const { t } = useTranslation();
   const dialogRef = useNativeDialog(true, onClose);
+  const shortcutScopeId = useDismissShortcutScope({
+    scopeIdPrefix: 'model-forge-modal',
+    active: true,
+    blocksLowerLayers: 'all',
+    handling: 'delegate-dismiss',
+  });
   const addProvider = useInferenceStore((s) => s.addProvider);
   const upsertProviderModel = useInferenceStore((s) => s.upsertProviderModel);
   const upsertCatalogModel = useInferenceStore((s) => s.upsertCatalogModel);
@@ -522,7 +532,7 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         : isNewProvider
           ? 'settings.modelForge.providerAdded'
           : 'settings.modelForge.modelAdded'));
-      onSaved(targetProviderId);
+      onSaved(targetProviderId, trimmedModelId);
       onClose();
     } catch (error) {
       setFault(presentationFromError(
@@ -553,7 +563,8 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
         </button>
       </div>
 
-      <div className={styles.forgeBody}>
+      <ShortcutOverlayParentProvider scopeId={shortcutScopeId}>
+        <div className={styles.forgeBody}>
         {isNewProvider && (
           <section className={styles.forgeSect}>
             <div className={styles.sectCap}>{t('settings.modelForge.connectionSection')}</div>
@@ -891,7 +902,8 @@ export const ModelForge: React.FC<ModelForgeProps> = ({
             />
           </section>
         )}
-      </div>
+        </div>
+      </ShortcutOverlayParentProvider>
 
       <div className={styles.forgeFoot}>
         <Toggle on={enabled} ariaLabel={t('settings.modelForge.enableModel')} onFlip={setEnabled} />

@@ -8,7 +8,11 @@
  * exposing it under the transport-free session API.
  */
 
-import type { KeyInput } from 'puppeteer-core';
+import type { Keyboard, KeyInput } from 'puppeteer-core';
+
+export function typeKeyboardText(keyboard: Keyboard, text: string): Promise<void> {
+  return keyboard.type(text);
+}
 
 // Keep this list in lockstep with chrome-devtools-mcp@1.7.0. Validation must
 // happen before any modifier is pressed, as it does upstream.

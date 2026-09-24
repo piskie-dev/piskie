@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import '@/i18n';
 import { NO_REASONING } from '@shared/ai-model-catalog';
 import type { InferenceModelDefinition, InferenceProviderInstance } from '@shared/types/inference';
+import { dispatchShortcutEvent, resetShortcutRegistry } from '@/shortcuts';
 import { useInferenceStore } from '@/store/inferenceStore';
 import { useProxyStore } from '@/store/proxyStore';
 import { vendorsFor } from '../../data/vendor-atlas';
@@ -57,6 +58,7 @@ beforeAll(() => {
 beforeEach(async () => {
   await i18n.changeLanguage('en-US');
   vi.clearAllMocks();
+  resetShortcutRegistry();
   useInferenceStore.setState({
     refresh: vi.fn(async () => undefined),
     refreshCatalog,
@@ -74,6 +76,7 @@ afterEach(async () => {
   container.remove();
   useInferenceStore.setState(originalInference, true);
   useProxyStore.setState(originalProxy, true);
+  resetShortcutRegistry();
 });
 
 afterAll(() => {
@@ -85,6 +88,7 @@ async function render(
   editing = false,
   gateway: 'ai' | 'image' = 'ai',
   onFlash = vi.fn(),
+  onClose = vi.fn(),
 ): Promise<void> {
   const binding = { catalogId: saved.id, upstreamId: 'example-model', enabled: true, options: {} };
   await act(async () => root.render(createElement(ModelForge, {
@@ -94,7 +98,7 @@ async function render(
     editingModelId: editing ? 'example-model' : undefined,
     definitions: gateway === 'ai' ? [saved] : [],
     catalogDefinitions: gateway === 'ai' ? [system] : [],
-    providerNames: [], onClose: vi.fn(), onSaved: vi.fn(), onFlash,
+    providerNames: [], onClose, onSaved: vi.fn(), onFlash,
   })));
 }
 
@@ -104,6 +108,29 @@ const button = (label: string) => [...container.querySelectorAll('button')]
 const ariaButton = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 
 describe('ModelForge catalog and saved model views', () => {
+  it('dismisses a nested select before delegating Escape to the parent modal', async () => {
+    const onClose = vi.fn();
+    await render(false, 'ai', vi.fn(), onClose);
+    await act(async () => ariaButton('Tools').click());
+    expect(container.querySelector('[role="listbox"]')).toBeTruthy();
+
+    const childPreventDefault = vi.fn();
+    let childResult: ReturnType<typeof dispatchShortcutEvent> | undefined;
+    await act(async () => {
+      childResult = dispatchShortcutEvent({ key: 'Escape', preventDefault: childPreventDefault });
+    });
+    expect(childResult).toMatchObject({ kind: 'executed' });
+    expect(childPreventDefault).toHaveBeenCalledOnce();
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    const parentPreventDefault = vi.fn();
+    const parentResult = dispatchShortcutEvent({ key: 'Escape', preventDefault: parentPreventDefault });
+    expect(parentResult).toMatchObject({ kind: 'delegated' });
+    expect(parentPreventDefault).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('refreshes the official catalog from both AI and image add-model dialogs', async () => {
     const onFlash = vi.fn();
     await render(false, 'ai', onFlash);

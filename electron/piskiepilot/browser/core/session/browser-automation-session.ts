@@ -19,7 +19,7 @@ import {
   type Page,
 } from 'puppeteer-core';
 import { ActionWaiter, type ActionReceipt, type ActionWaitOptions, type DialogObservation } from './action-waiter.js';
-import { parseKeyCombination } from './keyboard.js';
+import { parseKeyCombination, typeKeyboardText } from './keyboard.js';
 import type { ConsoleObservation } from './page-collector.js';
 import { PageRegistry, type PageChangeSet, type RegisteredPage } from './page-registry.js';
 import {
@@ -253,6 +253,20 @@ export class BrowserAutomationSession {
     for (const element of elements) {
       receipt = await this.fillByUid(element.uid, element.value);
     }
+    return receipt;
+  }
+
+  async typeText(text: string): Promise<ActionReceipt> {
+    this.throwIfDialogOpen();
+    const page = this.getSelectedPage();
+    let receipt: ActionReceipt;
+    try {
+      receipt = await this.waitForAction(() => typeKeyboardText(page.keyboard, text));
+    } catch (error) {
+      this.throwIfDialogOpen();
+      throw error;
+    }
+    this.#throwIfUnhandledDialog(receipt);
     return receipt;
   }
 

@@ -179,6 +179,24 @@ describe('thread preview controls', () => {
     expect(address()?.value).toBe('');
   });
 
+  it('consumes Escape while cancelling an address edit', async () => {
+    await render();
+    await click('Open preview link');
+    const input = address()!;
+    Object.assign(input, { attachEvent: vi.fn(), detachEvent: vi.fn() });
+    await act(async () => input.focus());
+    const escape = new dom.window.KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => input.dispatchEvent(escape));
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(input);
+  });
+
   it('keeps conversation visibility separate and rejects a retired subscription update', async () => {
     await render();
     await click('Open preview link');

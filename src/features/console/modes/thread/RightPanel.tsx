@@ -13,7 +13,7 @@
  * 可见 tab 的清单与关闭集都由模式层（`ThreadMode`）持有：它要用同一份信息决定整栏出不出。
  */
 
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useMemo, type RefObject } from 'react';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { FileDiff, Globe, Monitor, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -70,6 +70,7 @@ export interface RightPanelProps {
   readonly onPreviewImage?: ImagePreviewHandler;
   readonly browserState: EmbeddedBrowserState;
   readonly browserTarget: AgentTarget;
+  readonly browserLayoutAnchors: readonly RefObject<HTMLElement | null>[];
   readonly topRailActions?: React.ReactNode;
 }
 
@@ -85,6 +86,7 @@ export const RightPanel = memo<RightPanelProps>(
     onPreviewImage,
     browserState,
     browserTarget,
+    browserLayoutAnchors,
     topRailActions,
   }) => {
     const { t } = useTranslation();
@@ -156,6 +158,7 @@ export const RightPanel = memo<RightPanelProps>(
                 key={`${browserTarget.agentId}|${browserTarget.workerId ?? ''}`}
                 target={browserTarget}
                 state={browserState}
+                layoutAnchors={browserLayoutAnchors}
               />
             </div>
           ) : selected === 'review' ? (
