@@ -4,6 +4,7 @@ import type { ConfigHost } from '../../config/host/config-host.js';
 import {
   applyConfigPatch,
   escapeConfigPointer,
+  mutateConfig,
   patchConfigFields,
 } from '../../config/host/config-mutations.js';
 import type { BrowserControlPort } from '../../core/pilot/pilot-manager.js';
@@ -17,7 +18,7 @@ import type { BrowserEnvironmentRuntime } from '../../services/browser-environme
 import type { ScreenService } from '../../services/screen.service.js';
 import type { ScreenStreamService } from '../../services/screen-stream.service.js';
 import type { DesktopPresentationPort } from '../../desktop/desktop-presentation-port.js';
-import { createUuid } from '@shared/utils/identifiers.js';
+import { createCompactId, createUuid } from '@shared/utils/identifiers.js';
 import type {
   BrowserEnvironment,
   CreateBrowserEnvironmentRequest,
@@ -49,7 +50,6 @@ export class PilotApplication {
   }
 
   async createEnvironment(input: CreateBrowserEnvironmentRequest): Promise<BrowserEnvironment> {
-    const id = createUuid();
     const value = {
       ...input,
       identityPolicy: input.identityPolicy ?? {
@@ -58,16 +58,19 @@ export class PilotApplication {
         language: { mode: 'ip' },
       },
     };
-    const result = await applyConfigPatch<{
+    let id = '';
+    const result = (await mutateConfig<{
       revision: number;
       environments: Record<string, Omit<BrowserEnvironment, 'id'>>;
-    }>(this.dependencies.config, 'browser-profiles', [
-      {
-        op: 'add',
-        path: `/environments/${escapeConfigPointer(id)}`,
-        value,
-      },
-    ]);
+    }>(this.dependencies.config, 'browser-profiles', (current) => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const candidate = `br-${createCompactId()}`;
+        if (Object.hasOwn(current.environments, candidate)) continue;
+        id = candidate;
+        return [{ op: 'add', path: `/environments/${escapeConfigPointer(id)}`, value }];
+      }
+      throw new Error('无法分配唯一浏览器环境 ID');
+    }))!;
     return { id, ...result.current.environments[id] } as BrowserEnvironment;
   }
 

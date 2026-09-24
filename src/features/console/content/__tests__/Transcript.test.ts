@@ -280,7 +280,7 @@ describe('workers in collapsed processes', () => {
     content: `<subagent_event id="${id}" type="${type}" ts="${new Date(eventAt).toISOString()}">Sample update</subagent_event>`,
   });
 
-  it.each([[1000, '用时 7秒 · 2 个子流程未结束'], [0, '执行过程']] as const)(
+  it.each([[1000, '用时 7秒 · 2 个子流程未结束'], [0, '执行过程 · 2 个子流程未结束']] as const)(
     'reuses active worker rows below %s, then restores the original order and navigation',
     async (startedAt, label) => {
       await renderEntries(entries(startedAt), { workers });
@@ -388,7 +388,7 @@ describe('workers in collapsed processes', () => {
     append(workerEvent('worker-alpha', 'completed', 9000, 17000));
     await show({ processSettled: true, workers });
     expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
-    expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
+    expect(header.textContent).toBe('用时 7秒 · 2 个子流程未结束');
     await show({ processSettled: true, workers: [] });
     expect(header.textContent).toBe('用时 7秒');
     append(workerEvent('worker-beta', 'completed', 12000, 18000));
@@ -409,11 +409,11 @@ describe('workers in collapsed processes', () => {
     append(workerEvent('worker-complete', 'completed', 5000, 9000));
     append(workerEvent('worker-alpha', 'failed', 10000, 11000));
     await show({ processSettled: true, workers });
-    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个子流程未结束 · 1 个失败');
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束 · 1 个失败');
     expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
     append(workerEvent('worker-beta', 'user_stopped', 12000, 13000));
     await show({ processSettled: true, workers });
-    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个失败 · 1 个已停止 · 本轮总用时 11秒');
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束 · 1 个失败 · 1 个已停止 · 本轮总用时 11秒');
     session.close();
   });
 
@@ -503,6 +503,27 @@ describe('workers in collapsed processes', () => {
     await show({ toolsActive: true, workers: waitingWorkers });
     expect(next.querySelector('[data-worker-summary]')).toBeNull();
     session.close();
+  });
+
+  it('counts a visible re-dispatched worker in a settled process without a new creation row', async () => {
+    await renderEntries([
+      user(), assistant('sample-create', [
+        call('sample-worker-call', 'subagent', { subject: 'Sample task', type: 'local-worker' }),
+      ]), result('sample-worker-call', 'subagentId: sample-worker'),
+      assistant('sample-first-final', 'First reply', 8000),
+      { ...user(10000), id: 'sample-next-user' },
+      assistant('sample-redispatch', [
+        call('sample-send', 'send_event', { type: 'message', targetId: 'sample-worker', message: 'Continue the sample.' }),
+      ], 11000),
+      { ...result('sample-send', 'Event delivered to worker: sample-worker.'), ts: 12000 },
+      assistant('sample-next-final', 'Second reply', 13000),
+    ], {
+      processSettled: true,
+      workers: [{ id: 'sample-worker', subject: 'Sample task', type: 'local-worker', status: 'running' }],
+    });
+    const process = container.querySelector<HTMLElement>('[data-group-id="process:sample-next-user"]')!;
+    expect(process.querySelector('[data-worker-summary="sample-worker-call"]')).not.toBeNull();
+    expect(process.querySelector('button')?.textContent).toBe('用时 3秒 · 1 个子流程未结束');
   });
 
   it('leaves an active worker with its original process when the later directed send fails', async () => {

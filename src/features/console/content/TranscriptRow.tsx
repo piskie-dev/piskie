@@ -51,10 +51,11 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
     text = row.durationMs !== undefined
       ? elapsedText!
       : [t('transcript.executionProcess'), elapsedText].filter(Boolean).join(' · ');
+    if (activeWorkers.length > 0) {
+      text += ` · ${t('transcript.unfinishedWorkers', { count: activeWorkers.length })}`;
+    }
     if (elapsed !== undefined && row.workerProgress) {
-      const { failed, stopped, totalDurationMs, unfinishedWorkerNodeIds } = row.workerProgress;
-      const unfinished = activeWorkers.filter((node) => unfinishedWorkerNodeIds.includes(node.id)).length;
-      if (unfinished > 0) text += ` · ${t('transcript.unfinishedWorkers', { count: unfinished })}`;
+      const { failed, stopped, totalDurationMs } = row.workerProgress;
       if (failed > 0) text += ` · ${t('transcript.failedWorkers', { count: failed })}`;
       if (stopped > 0) text += ` · ${t('transcript.stoppedWorkers', { count: stopped })}`;
       if (totalDurationMs !== undefined) {

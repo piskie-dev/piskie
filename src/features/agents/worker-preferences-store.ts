@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import type { ConfigDescriptor } from '../../../shared/types/config';
 import type {
+  WorkerPreferences,
   WorkerPreferencesDocument,
   WorkerTypeDescriptor,
 } from '../../../shared/types/worker-preferences';
+import type { ModelOptGroup } from '../../store/inferenceStore';
 import { applyConfigFieldChanges } from '../config/config-transaction';
 import {
+  draftProblem,
   fromProfile,
   preferenceMutations,
   reconcileDrafts,
@@ -34,6 +37,7 @@ interface State {
   discard: (type: string) => void;
   rebase: (type: string) => void;
   save: (type: string) => Promise<void>;
+  configureAutosave: (groups: ModelOptGroup[], modelError: string | null) => void;
 }
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -43,6 +47,50 @@ const typePriority = new Map([
   ['explore', 2],
 ]);
 let refreshTail: Promise<void> = Promise.resolve();
+let autosaveContext: { groups: ModelOptGroup[]; modelError: string | null } | null = null;
+const autosaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let pendingWrite: { type: string; profile?: WorkerPreferences } | undefined;
+
+function expectedProfile(
+  profile: WorkerPreferences | undefined,
+  draft: WorkerDraft
+): WorkerPreferences | undefined {
+  if (draft.value.mode === 'remove') return undefined;
+  const next = { ...profile };
+  if (draft.displayName.trim()) next.displayName = draft.displayName.trim();
+  else delete next.displayName;
+  if (draft.value.mode === 'inherit') delete next.inference;
+  else if (draft.value.target && draft.value.reasoning)
+    next.inference = { target: draft.value.target, reasoning: draft.value.reasoning };
+  return Object.keys(next).length ? next : undefined;
+}
+
+function eligibleForAutosave(state: State, type: string): boolean {
+  const draft = state.drafts[type];
+  if (
+    !autosaveContext || !state.document || !state.descriptor || state.loading || state.saving ||
+    state.loadError || state.saveErrors[type] || !draft || draft.conflict
+  ) return false;
+  const inferenceChanged = !sameValue(draft.value, fromProfile(state.document.profiles[type]));
+  return !inferenceChanged || draft.value.mode !== 'fixed' ||
+    (!autosaveContext.modelError && !draftProblem(draft.value, autosaveContext.groups));
+}
+
+function scheduleAutosave(type: string): void {
+  clearTimeout(autosaveTimers.get(type));
+  autosaveTimers.delete(type);
+  if (!eligibleForAutosave(useWorkerPreferencesStore.getState(), type)) return;
+  autosaveTimers.set(type, setTimeout(() => {
+    autosaveTimers.delete(type);
+    if (eligibleForAutosave(useWorkerPreferencesStore.getState(), type))
+      void useWorkerPreferencesStore.getState().save(type);
+  }, 350));
+}
+
+function schedulePendingAutosaves(): void {
+  for (const type of Object.keys(useWorkerPreferencesStore.getState().drafts)) scheduleAutosave(type);
+}
+
 export const useWorkerPreferencesStore = create<State>((set, get) => ({
   document: null,
   descriptor: null,
@@ -81,7 +129,7 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
           descriptor,
           types,
           loadError: null,
-          drafts: reconcileDrafts(state.drafts, document.profiles),
+          drafts: reconcileDrafts(state.drafts, document.profiles, pendingWrite),
           selected:
             types.some((entry) => entry.type === state.selected) ||
             document.profiles[state.selected]
@@ -92,28 +140,40 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
         set({ loadError: errorText(error) });
       } finally {
         set({ loading: false });
+        schedulePendingAutosaves();
       }
     });
     refreshTail = task;
     return task;
   },
   select: (selected) => set({ selected, savedType: null }),
-  edit: (type, value) => set((state) => editDraft(state, type, { value })),
-  editDisplayName: (type, displayName) => set((state) => editDraft(state, type, { displayName })),
+  edit: (type, value) => {
+    set((state) => editDraft(state, type, { value }));
+    scheduleAutosave(type);
+  },
+  editDisplayName: (type, displayName) => {
+    set((state) => editDraft(state, type, { displayName }));
+    scheduleAutosave(type);
+  },
   discard: (type) =>
     set((state) => {
+      clearTimeout(autosaveTimers.get(type));
+      autosaveTimers.delete(type);
       const drafts = { ...state.drafts };
       delete drafts[type];
       const saveErrors = { ...state.saveErrors };
       delete saveErrors[type];
       return { drafts, saveErrors, savedType: null };
     }),
-  rebase: (type) =>
+  rebase: (type) => {
     set((state) => {
       const draft = state.drafts[type];
       if (!draft) return state;
       const latest = state.document?.profiles[type];
+      const saveErrors = { ...state.saveErrors };
+      delete saveErrors[type];
       return {
+        saveErrors,
         drafts: {
           ...state.drafts,
           [type]: {
@@ -130,7 +190,13 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
           },
         },
       };
-    }),
+    });
+    scheduleAutosave(type);
+  },
+  configureAutosave: (groups, modelError) => {
+    autosaveContext = { groups, modelError };
+    schedulePendingAutosaves();
+  },
   save: async (type) => {
     if (get().saving) return;
     set({ saving: type, savedType: null });
@@ -140,9 +206,18 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
       const draft = drafts[type];
       if (loadError) throw new Error(loadError);
       if (!document || !descriptor || !draft || draft.conflict) return;
+      if (autosaveContext) {
+        const inferenceChanged = !sameValue(draft.value, fromProfile(document.profiles[type]));
+        if (
+          inferenceChanged && draft.value.mode === 'fixed' &&
+          (autosaveContext.modelError || draftProblem(draft.value, autosaveContext.groups))
+        ) return;
+      }
       const changes = preferenceMutations(type, document.profiles[type], draft);
-      if (changes.length)
+      if (changes.length) {
+        pendingWrite = { type, profile: expectedProfile(document.profiles[type], draft) };
         await applyConfigFieldChanges('worker-preferences', descriptor, document.revision, changes);
+      }
       await get().refresh();
       if (get().loadError) throw new Error(get().loadError!);
       set((state) => {
@@ -154,7 +229,9 @@ export const useWorkerPreferencesStore = create<State>((set, get) => ({
       set((state) => ({ saveErrors: { ...state.saveErrors, [type]: errorText(error) } }));
       await get().refresh();
     } finally {
+      pendingWrite = undefined;
       set({ saving: null });
+      schedulePendingAutosaves();
     }
   },
 }));
@@ -164,7 +241,7 @@ function editDraft(
   type: string,
   updates: Partial<Pick<WorkerDraft, 'value' | 'displayName'>>
 ): Partial<State> {
-  if (state.saving || !state.document) return state;
+  if (!state.document) return state;
   const base = state.document.profiles[type];
   const draft: WorkerDraft = {
     ...(state.drafts[type] ?? {
@@ -178,6 +255,7 @@ function editDraft(
   const drafts = { ...state.drafts };
   if (
     !draft.conflict &&
+    state.saving !== type &&
     sameValue(draft.value, fromProfile(base)) &&
     draft.displayName.trim() === (base?.displayName ?? '')
   )

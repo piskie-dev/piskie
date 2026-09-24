@@ -195,11 +195,13 @@ export const PrefDeckPage: React.FC = () => {
   const imageCatalog = catalogOf('image');
   const catalogs: Record<GatewayKind, readonly CatalogProviderItem[]> = { ai: aiCatalog, image: imageCatalog };
 
-  /** 有效选中:失效(删除/过滤掉)时回落首个 */
+  /** 未手选或手选项失效时，跟随已读取的默认模型供应商。 */
   const effectivePicked = (gateway: GatewayKind): string | null => {
     const list = catalogs[gateway];
     const current = picked[gateway];
     if (current && list.some((item) => item.id === current)) return current;
+    const defaultProviderId = selections?.[gateway]?.providerId;
+    if (defaultProviderId && list.some((item) => item.id === defaultProviderId)) return defaultProviderId;
     return list[0]?.id ?? null;
   };
 

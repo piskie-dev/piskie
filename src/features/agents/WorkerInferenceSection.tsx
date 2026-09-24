@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Bot, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Bot, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatModelReference, type ModelOptGroup } from '../../store/inferenceStore';
 import {
@@ -19,6 +19,7 @@ interface Props {
   /** 已保存的模型当前不可用：新实例按继承创建，界面按继承展示并保留原目标供重选。 */
   degraded?: boolean;
   modelError: string | null;
+  defaultProviderId?: string;
   onConfigureModels: () => void;
   onRefresh: () => void;
 }
@@ -102,12 +103,7 @@ export function WorkerInferenceSection(props: Props) {
       {value.mode === 'fixed' && !degraded && (
         <>
           <section className={styles.section}>
-            <div className={styles.sectionHeading}>
-              <h3>{t('agentManagement.model')}</h3>
-              <button className={styles.textButton} onClick={props.onConfigureModels}>
-                {t('agentManagement.configureModels')}
-              </button>
-            </div>
+            <h3>{t('agentManagement.model')}</h3>
             <button
               className={styles.modelSelect}
               disabled={!!saving}
@@ -125,7 +121,7 @@ export function WorkerInferenceSection(props: Props) {
                     t('agentManagement.configuredOnly')}
                 </small>
               </span>
-              <ChevronDown size={16} />
+              <Settings size={16} aria-hidden="true" />
             </button>
             {problem === 'chooseModel' && <p className={styles.note}>{problemText}</p>}
             {props.modelError && (
@@ -218,6 +214,8 @@ export function WorkerInferenceSection(props: Props) {
         open={modelOpen}
         groups={groups}
         selected={model?.value}
+        selectedProviderId={value.mode === 'fixed' ? value.target?.providerId : undefined}
+        defaultProviderId={props.defaultProviderId}
         onSelect={(option) => edit(chooseModel(value, option))}
         onClose={() => setModelOpen(false)}
         onConfigureModels={props.onConfigureModels}

@@ -13,6 +13,8 @@ interface Props {
   open: boolean;
   groups: ModelOptGroup[];
   selected?: string;
+  selectedProviderId?: string;
+  defaultProviderId?: string;
   onSelect: (option: ModelOption) => void;
   onClose: () => void;
   onConfigureModels: () => void;
@@ -42,12 +44,18 @@ export function WorkerModelDialog(props: Props) {
 export function WorkerModelPicker(props: Omit<Props, 'open'> & { autoFocus?: boolean }) {
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState('');
-  const [provider, setProvider] = useState<string | null>(null);
+  // undefined follows the preferred provider; null is an explicit "all providers" choice.
+  const [provider, setProvider] = useState<string | null | undefined>(undefined);
   const providers = props.groups.flatMap((group) => {
     const first = group.options[0];
     return first ? [{ ...group, id: first.target.providerId }] : [];
   });
-  const activeProvider = providers.some((group) => group.id === provider) ? provider : null;
+  const preferredProviderId = props.selectedProviderId ?? props.defaultProviderId;
+  const preferredProvider = providers.find((group) => group.id === preferredProviderId)?.id ?? null;
+  const activeProvider = provider === undefined
+    ? preferredProvider
+    : provider === null || providers.some((group) => group.id === provider)
+      ? provider : preferredProvider;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matches = providers
     .filter((group) => activeProvider === null || group.id === activeProvider)
@@ -65,7 +73,7 @@ export function WorkerModelPicker(props: Omit<Props, 'open'> & { autoFocus?: boo
   const close = () => {
     props.onClose();
     setQuery('');
-    setProvider(null);
+    setProvider(undefined);
   };
   const capabilityLabels = {
     tools: t('agentManagement.modelPicker.tools'),

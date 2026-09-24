@@ -12,11 +12,12 @@ export function AgentManagementPage() {
   const config = useInferenceStore((s) => s.config);
   const models = useInferenceStore((s) => s.models.ai);
   const targets = useInferenceStore((s) => s.availableTargets.ai);
+  const defaultProviderId = useInferenceStore((s) => s.selections?.ai?.providerId);
   const inferenceError = useInferenceStore((s) => s.error);
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { types, select } = state;
+  const { types, select, configureAutosave } = state;
   const groups = useMemo(
     () => getAvailableModelOptions(config, models, targets),
     [config, models, targets]
@@ -25,6 +26,9 @@ export function AgentManagementPage() {
     void useWorkerPreferencesStore.getState().refresh();
     void useInferenceStore.getState().refresh();
   }, []);
+  useEffect(() => {
+    configureAutosave(groups, inferenceError ? resolvePresentationText(inferenceError, t) : null);
+  }, [groups, inferenceError, configureAutosave, t]);
   useEffect(() => {
     if (new URLSearchParams(location.search).get('type') !== 'explore') return;
     if (!types.some((entry) => entry.type === 'explore')) return;
@@ -42,6 +46,7 @@ export function AgentManagementPage() {
       <AgentManagementView
         {...state}
         groups={groups}
+        defaultProviderId={defaultProviderId}
         modelError={inferenceError ? resolvePresentationText(inferenceError, t) : null}
         onConfigureModels={() => navigate('/preferences?sect=ai')}
         onRefresh={() => {

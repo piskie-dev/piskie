@@ -54,7 +54,7 @@ describe('read-only business scenes', () => {
     } finally { shots.forEach(shot => shot.window.close()); }
   });
 
-  it('reveals the model field before opening the picker, then returns with defaults before editing and saving', () => {
+  it('reveals the model field before opening the picker, then automatically saves the selected reasoning', () => {
     const shot = (elapsed: number) => new JSDOM(renderToStaticMarkup(
       createElement(WorkflowFrame, { id: 'agents', elapsed }),
     ));
@@ -65,8 +65,8 @@ describe('read-only business scenes', () => {
     const beforePick = shot(8649);
     const picked = shot(9000);
     const configured = shot(11500);
-    const beforeSave = shot(13649);
-    const saved = shot(14000);
+    const pending = shot(11400);
+    const saved = shot(11500);
     const ending = shot(14999);
     try {
       expect(inherited.window.document.querySelector(`.${agent.strategy}[aria-pressed="true"]`)?.textContent)
@@ -77,7 +77,7 @@ describe('read-only business scenes', () => {
         expect(document.querySelector(`.${agent.modelSelect} strong`)?.textContent).toBe('请选择模型');
         expect(document.querySelector(`.${picker.model}`)).toBeNull();
         expect(document.querySelector(`.${agent.reasoningOptions}`)).toBeNull();
-        expect(document.querySelector(`.${agent.footer} .${agent.primary}`)?.hasAttribute('disabled')).toBe(true);
+        expect(document.querySelector(`.${agent.footer} button`)).toBeNull();
       }
       for (const frame of [opened, beforePick]) {
         expect(frame.window.document.querySelector(`.${picker.model}`)?.textContent).toContain('Claude Sonnet 4.6');
@@ -87,15 +87,12 @@ describe('read-only business scenes', () => {
       expect(picked.window.document.querySelector(`.${agent.reasoningOptions} [aria-pressed="true"]`)?.textContent).toBe('中');
       expect(configured.window.document.querySelector(`.${agent.reasoningOptions} [aria-pressed="true"]`)?.textContent)
         .toBe('高');
-      expect(configured.window.document.querySelector(`.${agent.footer} .${agent.primary}`)?.hasAttribute('disabled'))
-        .toBe(false);
-      expect(beforeSave.window.document.querySelector(`.${agent.footer} .${agent.primary}`)?.hasAttribute('disabled')).toBe(false);
-      expect(saved.window.document.querySelector(`.${agent.footer} .${agent.primary}`)?.hasAttribute('disabled'))
-        .toBe(true);
+      expect(pending.window.document.querySelector(`.${agent.footer}`)?.textContent).toContain('有未保存修改');
+      expect(saved.window.document.querySelector(`.${agent.footer} button`)).toBeNull();
       expect(saved.window.document.querySelector(`.${agent.footer}`)?.textContent).toContain('已保存');
       expect(ending.window.document.querySelector(`.${agent.footer}`)?.textContent).toContain('已保存');
     } finally {
-      for (const frame of [inherited, fixed, beforeOpen, opened, beforePick, picked, configured, beforeSave, saved, ending]) frame.window.close();
+      for (const frame of [inherited, fixed, beforeOpen, opened, beforePick, picked, configured, pending, saved, ending]) frame.window.close();
     }
   });
 

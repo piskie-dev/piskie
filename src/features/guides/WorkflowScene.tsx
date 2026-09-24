@@ -25,7 +25,6 @@ const AGENT_TARGETS = [
   `.${agent.modelSelect}`,
   `.${picker.model}`,
   `.${agent.reasoningOptions} button:last-child`,
-  `.${agent.footer} .${agent.primary}`,
 ];
 
 export function WorkflowScene({ id }: { readonly id: WorkflowId }) {
@@ -54,8 +53,8 @@ export function WorkflowFrame({
     <SceneStage
       id={id}
       {...frame}
-      fadeIn={id !== 'browser' || frame.phase === 0}
-      continuousCursor={id === 'agents' || (id === 'browser' && frame.phase >= 6)}
+      fadeIn={id === 'agents' ? frame.phase === 0 : id !== 'browser' || frame.phase === 0}
+      continuousCursor={(id === 'agents' && frame.phase < 5) || (id === 'browser' && frame.phase >= 6)}
       cursorTiming={id === 'agents'
         ? AGENT_GUIDE_TIMING
         : id === 'browser' && frame.phase >= 6

@@ -61,6 +61,24 @@ describe('locale contracts', () => {
     }
   });
 
+  it('resolves singular and plural browser and worker counts in both languages', async () => {
+    const cases = [
+      ['sharedUi.browserBinding.session.joinedMessageOnly', 'Added 1 browser', 'Added 2 browsers', '已加入 1 个浏览器', '已加入 2 个浏览器'],
+      ['transcript.unfinishedWorkers', '1 worker not finished', '2 workers not finished', '1 个子流程未结束', '2 个子流程未结束'],
+      ['transcript.failedWorkers', '1 failed', '2 failed', '1 个失败', '2 个失败'],
+      ['transcript.stoppedWorkers', '1 stopped', '2 stopped', '1 个已停止', '2 个已停止'],
+    ] as const;
+
+    for (const [key, englishOne, englishOther, chineseOne, chineseOther] of cases) {
+      await i18n.changeLanguage('en-US');
+      expect(i18n.t(key, { count: 1 })).toBe(englishOne);
+      expect(i18n.t(key, { count: 2 })).toBe(englishOther);
+      await i18n.changeLanguage('zh-CN');
+      expect(i18n.t(key, { count: 1 })).toBe(chineseOne);
+      expect(i18n.t(key, { count: 2 })).toBe(chineseOther);
+    }
+  });
+
   it('re-resolves product copy across locale changes while preserving raw facts', async () => {
     const product = messageText('imPlugin.connectionState.live');
     const raw = rawText('Bot Alpha / external-status');

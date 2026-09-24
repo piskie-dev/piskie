@@ -106,18 +106,23 @@ export function inferenceMutations(
 }
 export function reconcileDrafts(
   drafts: Record<string, WorkerDraft>,
-  profiles: Record<string, WorkerPreferences>
+  profiles: Record<string, WorkerPreferences>,
+  acknowledged?: { type: string; profile?: WorkerPreferences }
 ): Record<string, WorkerDraft> {
   return Object.fromEntries(
     Object.entries(drafts).flatMap(([type, draft]) => {
       const latest = profiles[type];
+      const current =
+        acknowledged?.type === type && sameValue(latest, acknowledged.profile)
+          ? { ...draft, base: structuredClone(latest), conflict: false }
+          : draft;
       if (
-        (sameValue(draft.value, fromProfile(latest)) &&
-          draft.displayName.trim() === (latest?.displayName ?? '')) ||
-        (draft.value.mode === 'remove' && !latest)
+        (sameValue(current.value, fromProfile(latest)) &&
+          current.displayName.trim() === (latest?.displayName ?? '')) ||
+        (current.value.mode === 'remove' && !latest)
       )
         return [];
-      return [[type, { ...draft, conflict: draft.conflict || !sameValue(draft.base, latest) }]];
+      return [[type, { ...current, conflict: current.conflict || !sameValue(current.base, latest) }]];
     })
   );
 }

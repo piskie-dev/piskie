@@ -26,7 +26,6 @@ export type TranscriptRow = TranscriptContentRow | {
 
 export interface ProcessWorkerProgress {
   readonly unfinished: number;
-  readonly unfinishedWorkerNodeIds: readonly string[];
   readonly failed: number;
   readonly stopped: number;
   readonly totalDurationMs?: number;
@@ -167,7 +166,6 @@ function processWorkerProgress(
   if (workers.length === 0) return undefined;
 
   let unfinished = 0;
-  const unfinishedWorkerNodeIds: string[] = [];
   let failed = 0;
   let stopped = 0;
   let lastEnd = start !== undefined && mainDurationMs !== undefined ? start + mainDurationMs : undefined;
@@ -185,7 +183,6 @@ function processWorkerProgress(
     }
     if (!terminal) {
       unfinished += 1;
-      unfinishedWorkerNodeIds.push(worker.id);
     } else {
       if (terminal.eventType === 'failed') failed += 1;
       if (terminal.eventType === 'user_stopped') stopped += 1;
@@ -196,7 +193,7 @@ function processWorkerProgress(
     ? durationBetween(start, lastEnd)
     : undefined;
   return {
-    unfinished, unfinishedWorkerNodeIds, failed, stopped,
+    unfinished, failed, stopped,
     ...(totalDurationMs !== undefined && { totalDurationMs }),
   };
 }
