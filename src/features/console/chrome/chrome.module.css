@@ -198,9 +198,7 @@
   }
 }
 
-/* ── 溢出菜单（MenuButton）──
-   取代 AntD `Dropdown` 的 menu：一组描述符渲染成按钮列，
-   开合与 light-dismiss 由 `Popover` 的原生 popover 承担。 */
+/* ── Shared button/context menus ── */
 
 .menuTrigger {
   display: inline-flex;
@@ -223,19 +221,32 @@
   color: var(--cyber-text);
 }
 
+.menuPopover {
+  box-sizing: border-box;
+  max-inline-size: calc(100vw - 16px);
+  max-block-size: calc(100dvh - 16px);
+}
+
 .menuList {
   display: flex;
   flex-direction: column;
-  min-inline-size: 152px;
+  box-sizing: border-box;
+  min-inline-size: min(152px, calc(100vw - 18px));
+  max-inline-size: min(320px, calc(100vw - 18px));
+  max-block-size: calc(100dvh - 18px);
   padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menuItem {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
+  inline-size: 100%;
   min-block-size: 28px;
-  padding-inline: 8px;
+  padding: 5px 8px;
   border: 0;
   border-radius: var(--radius-badge);
   background: transparent;
@@ -246,11 +257,51 @@
   transition: background-color 150ms ease;
 }
 
-.menuItem:hover {
+.menuItem:hover:not(:disabled) {
   background: var(--surface-2);
 }
 
-.menuItem[data-danger='true'] {
+.menuItem:disabled {
+  color: var(--cyber-text-muted);
+  cursor: default;
+}
+
+.menuText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-inline-size: 0;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.menuReason {
+  font-size: 11px;
+  color: var(--cyber-text-muted);
+}
+
+.menuSeparator {
+  flex: 0 0 auto;
+  border-block-start: 1px solid var(--line-1);
+  margin: 3px 6px;
+}
+
+.menuSubmenuTrigger {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.menuSubmenuArrow {
+  flex: 0 0 auto;
+  color: var(--cyber-text-muted);
+}
+
+.menuCheckSpace {
+  inline-size: 12px;
+  block-size: 12px;
+}
+
+.menuItem[data-danger='true']:not(:disabled) {
   color: var(--status-error);
 }
 
@@ -260,7 +311,7 @@
   color: var(--cyber-text-muted);
 }
 
-.menuItem[data-danger='true'] .menuIcon {
+.menuItem[data-danger='true']:not(:disabled) .menuIcon {
   color: var(--status-error);
 }
 

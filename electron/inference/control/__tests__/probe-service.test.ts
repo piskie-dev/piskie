@@ -425,9 +425,11 @@ describe('InferenceProbeService', () => {
     expect(receipts).toEqual([expect.objectContaining({
       success: false,
       error: expect.objectContaining({
-        source: 'local',
-        stage: 'collect',
+        source: 'provider',
+        stage: 'result',
+        attempt: 1,
         localCode: 'AI_RESULT_EMPTY',
+        upstream: expect.objectContaining({ stopReason: 'other' }),
       }),
     })]);
   });

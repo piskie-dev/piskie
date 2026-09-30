@@ -26,7 +26,7 @@ beforeAll(() => {
   dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
   Object.assign(window, { piskie: { desktop: { files: {
     copyImage: publish, releasePreview,
-    preview: async () => ({ kind: 'image', url, mediaType: 'image/gif', size: 100 }),
+    preview: async () => ({ kind: 'image', revision: 'sample-revision', url, mediaType: 'image/gif', size: 100 }),
   } } } });
 });
 beforeEach(async () => {

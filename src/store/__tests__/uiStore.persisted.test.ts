@@ -77,6 +77,8 @@ describe('uiStore persisted boundary', () => {
       expandedWorkspaceGroups: [''],
       workspaceGroupOrder: ['/sample/alpha', ''],
       pinnedAgentRunIds: ['agent-a'],
+      hiddenWorkspaceGroupKeys: ['/sample/hidden'],
+      workspaceSessionSort: { '/sample/hidden': { mode: 'manual', order: ['agent-a'] } },
       collapsedWorkspaceGroups: [],
       navEdgeDockEnabled: true,
       navPrismEnabled: false,
@@ -94,7 +96,82 @@ describe('uiStore persisted boundary', () => {
       expandedWorkspaceGroups: [''],
       workspaceGroupOrder: ['/sample/alpha', ''],
       pinnedAgentRunIds: ['agent-a'],
+      hiddenWorkspaceGroupKeys: ['/sample/hidden'],
+      workspaceSessionSort: { '/sample/hidden': { mode: 'manual', order: ['agent-a'] } },
     });
+  });
+
+  it('defaults absent sidebar preferences and reads only valid current sorting fields', () => {
+    expect(readPersistedUIState({ retired: true }, 5)).toEqual({});
+    expect(useUIStore.getState()).toMatchObject({ hiddenWorkspaceGroupKeys: [], workspaceSessionSort: {} });
+    expect(readPersistedUIState({
+      hiddenWorkspaceGroupKeys: ['/sample/hidden', '/sample/hidden'],
+      workspaceSessionSort: {
+        '/sample/hidden': { mode: 'manual', order: ['sample-a', 'sample-b', 'sample-a'], revision: 2, retired: true },
+        '/sample/auto': { mode: 'auto', order: ['obsolete'], revision: 3 },
+        '/sample/legacy': { mode: 'manual', order: ['sample-c'] },
+        '/sample/invalid-revision': { mode: 'auto', order: [], revision: 'later' },
+        '/sample/invalid': { mode: 'manual', order: [42] },
+        '/sample/unknown': { mode: 'future', order: [] },
+      },
+      retired: true,
+    }, 6)).toEqual({
+      hiddenWorkspaceGroupKeys: ['/sample/hidden'],
+      workspaceSessionSort: {
+        '/sample/hidden': { mode: 'manual', order: ['sample-a', 'sample-b'], revision: 2 },
+        '/sample/auto': { mode: 'auto', order: [], revision: 3 },
+        '/sample/legacy': { mode: 'manual', order: ['sample-c'] },
+        '/sample/invalid-revision': { mode: 'auto', order: [] },
+      },
+    });
+  });
+
+  it('projects nested preferences on writes, moves pins to the partition front, and forgets deleted IDs', () => {
+    useUIStore.setState({
+      pinnedAgentRunIds: [], hiddenWorkspaceGroupKeys: [],
+      workspaceSessionSort: { '/sample/project': { mode: 'manual', order: ['sample-a', 'sample-b'] } },
+    });
+    const store = useUIStore.getState();
+    store.hideWorkspaceGroup('/sample/project');
+    store.toggleAgentRunPin('sample-b');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/project']?.order).toEqual(['sample-b', 'sample-a']);
+    const write = selectPersistedUIState({
+      ...useUIStore.getState(),
+      workspaceSessionSort: { '/sample/project': { mode: 'manual', order: ['sample-b', 'sample-a'], revision: 2, retired: true } as never },
+    });
+    expect(write.workspaceSessionSort['/sample/project']).toEqual({ mode: 'manual', order: ['sample-b', 'sample-a'], revision: 2 });
+    store.restoreWorkspaceGroup('/sample/project');
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toEqual([]);
+    expect(useUIStore.getState().workspaceSessionSort['/sample/project']?.order).toEqual(['sample-b', 'sample-a']);
+    store.forgetSessionOrder('sample-b');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/project']?.order).toEqual(['sample-a']);
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual([]);
+    store.setWorkspaceSessionSort('/sample/project', { mode: 'auto', order: ['sample-a'] });
+    expect(useUIStore.getState().workspaceSessionSort['/sample/project']).toEqual({ mode: 'auto', order: [], revision: 1 });
+    useUIStore.setState({ workspaceSessionSort: {} });
+  });
+
+  it('preserves explicit sorting recency through persistence and inventory, pin, deletion and alias changes', () => {
+    const workspace = '/sample/default';
+    useUIStore.setState({ workspaceSessionSort: {}, pinnedAgentRunIds: [] });
+    const store = useUIStore.getState();
+    store.setWorkspaceSessionSort(workspace, { mode: 'manual', order: ['sample-b', 'sample-a', 'sample-deleted'] });
+    store.setWorkspaceSessionSort('', { mode: 'auto', order: [] });
+    const persisted = selectPersistedUIState(useUIStore.getState());
+    useUIStore.setState({ workspaceSessionSort: {} });
+    useUIStore.setState(readPersistedUIState(JSON.parse(JSON.stringify(persisted)), 6));
+    store.reconcileWorkspaceSessionSort(undefined, { [workspace]: ['sample-a', 'sample-b', 'sample-new'] });
+    store.toggleAgentRunPin('sample-b');
+    store.forgetSessionOrder('sample-new');
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({
+      [workspace]: { mode: 'manual', order: ['sample-b', 'sample-a'], revision: 1 },
+      '': { mode: 'auto', order: [], revision: 2 },
+    });
+    store.reconcileWorkspaceSessionSort(workspace, { '': ['sample-a', 'sample-b'] });
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({ '': { mode: 'auto', order: [], revision: 2 } });
+    store.setWorkspaceSessionSort('', { mode: 'manual', order: ['sample-b', 'sample-a'] });
+    expect(useUIStore.getState().workspaceSessionSort['']).toEqual({ mode: 'manual', order: ['sample-b', 'sample-a'], revision: 3 });
+    useUIStore.setState({ workspaceSessionSort: {}, pinnedAgentRunIds: [] });
   });
 
   it('discards old localStorage preferences without writing them to app-settings', async () => {

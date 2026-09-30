@@ -191,6 +191,40 @@
 .groupToggle[draggable='true'] { cursor: grab; }
 .groupToggle[draggable='true']:active { cursor: grabbing; }
 
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 22px;
+  color: var(--cyber-text-muted);
+  opacity: 0;
+  cursor: default;
+}
+.dragHandle[draggable='true'] { cursor: grab; }
+.dragHandle[draggable='true']:active { cursor: grabbing; }
+.groupHead > .dragHandle { margin-inline-start: 2px; }
+.groupHead > .dragHandle + .groupToggle { padding-inline-start: 0; }
+.row > .dragHandle { position: absolute; inset-inline-start: 2px; }
+.groupHead:hover > .dragHandle,
+.row:hover > .dragHandle { opacity: 1; }
+.row[data-dragging='true'] { opacity: 0.45; }
+.contextMenuTarget,
+.row[data-context-menu='true'],
+.groupHead[data-context-menu='true'] { background: var(--surface-2); }
+.row[data-drop-edge]::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  block-size: 2px;
+  background: var(--cyber-primary);
+  pointer-events: none;
+}
+.row[data-drop-edge='before']::after { inset-block-start: 0; }
+.row[data-drop-edge='after']::after { inset-block-end: 0; }
+
 /* 在此工作区新建会话:悬停组头才显形 */
 .groupNew {
   display: inline-flex;
@@ -238,6 +272,7 @@
 /* ── 会话 / 历史行 ── */
 
 .row {
+  position: relative;
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) 6px 30px 20px;
   align-items: center;
@@ -570,6 +605,8 @@
   outline: 1px solid var(--line-3);
   outline-offset: 1px;
 }
+
+.dangerButton { color: var(--status-error); }
 
 .renamePrimary {
   border-color: color-mix(in srgb, var(--cyber-primary) 45%, var(--line-2));

@@ -192,6 +192,7 @@ export function descriptorFor<
             signal: ctx.signal,
             log,
             notifyPageOpen: () => ctx.browser?.notifyPageOpen(),
+            allowedFileRoots: [ctx.workspace.dir, ctx.workspace.tempDir],
           }),
         };
       },

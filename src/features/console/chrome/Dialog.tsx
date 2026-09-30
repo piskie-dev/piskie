@@ -26,6 +26,7 @@ export interface DialogProps {
   readonly children: React.ReactNode;
   readonly className?: string;
   readonly bodyClassName?: string;
+  readonly bodyRef?: React.Ref<HTMLDivElement>;
 }
 
 export const Dialog: React.FC<DialogProps> = ({
@@ -37,6 +38,7 @@ export const Dialog: React.FC<DialogProps> = ({
   children,
   className,
   bodyClassName,
+  bodyRef,
 }) => {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -95,7 +97,7 @@ export const Dialog: React.FC<DialogProps> = ({
             {title}
           </header>
         )}
-        <div className={`${styles.dialogBody} ${bodyClassName ?? ''}`}>{children}</div>
+        <div ref={bodyRef} className={`${styles.dialogBody} ${bodyClassName ?? ''}`}>{children}</div>
       </ShortcutOverlayParentProvider>
     </dialog>
   );

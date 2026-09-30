@@ -1,11 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AI_RETRY_BASE_DELAY_MS } from '../../control/config-schema.js';
 import { emptyInferenceConfig } from '../../control/bootstrap-config.js';
-import { GatewayCallError } from '../../execution/call-error.js';
+import { GatewayCallError, type GatewayErrorSource, type UpstreamErrorDetails } from '../../execution/call-error.js';
 import { canRetryAiAttempt, retryDelayMs } from '../retry-decision.js';
 
+function error(source: GatewayErrorSource, upstream?: Partial<UpstreamErrorDetails>): GatewayCallError {
+  return new GatewayCallError({
+    source,
+    gateway: 'ai',
+    providerId: 'provider',
+    modelId: 'model',
+    driverId: 'test-driver',
+    stage: 'request',
+    attempt: 1,
+    traceId: 'trace-retry',
+    message: 'Sample upstream failure',
+    ...(upstream && { upstream: { message: 'Sample upstream failure', ...upstream } }),
+  });
+}
+
 describe('AI retry policy', () => {
-  it('starts at three seconds, doubles, and retains the thirty-second cap', () => {
+  it('defaults to three total attempts with exponential backoff capped at thirty seconds', () => {
+    expect(emptyInferenceConfig().policies.ai.maxAttempts).toBe(3);
     expect(emptyInferenceConfig().policies.ai.retryBaseDelayMs).toBe(DEFAULT_AI_RETRY_BASE_DELAY_MS);
     expect([
       retryDelayMs(DEFAULT_AI_RETRY_BASE_DELAY_MS, 1),
@@ -16,83 +32,50 @@ describe('AI retry policy', () => {
     ]).toEqual([3_000, 6_000, 12_000, 24_000, 30_000]);
   });
 
-  it('never retries a structured context overflow even with a retryable HTTP status', () => {
-    const error = new GatewayCallError({
-      source: 'provider',
-      gateway: 'ai',
-      providerId: 'provider',
-      modelId: 'model',
-      driverId: 'openai',
-      stage: 'stream',
-      attempt: 1,
-      traceId: 'trace-overflow',
-      message: 'provider-specific text',
-      upstream: {
-        status: 429,
-        code: 'context_length_exceeded',
-        message: 'provider-specific text',
-      },
-    });
-
-    expect(canRetryAiAttempt(error)).toBe(false);
+  it.each([
+    { code: 'sample_unknown_error' },
+    { code: 'sample_unknown_error', status: 400 },
+    { code: 'sample_unknown_error', status: 422 },
+    { code: 'upstream_stream_read_error' },
+    { code: 'stream_read_error' },
+    { code: 'server_is_overloaded' },
+    { status: 408 },
+    { status: 409 },
+    { status: 425 },
+    { status: 429 },
+    { status: 503 },
+    {},
+  ])('retries upstream failures by default: %j', (upstream) => {
+    expect(canRetryAiAttempt(error('provider', upstream))).toBe(true);
   });
 
-  it('retries a structured provider overload without an HTTP status', () => {
-    const error = new GatewayCallError({
-      source: 'provider',
-      gateway: 'ai',
-      providerId: 'provider',
-      modelId: 'model',
-      driverId: 'openai',
-      stage: 'request',
-      attempt: 1,
-      traceId: 'trace-overload',
-      message: 'Our servers are currently overloaded. Please try again later.',
-      upstream: {
-        code: 'server_is_overloaded',
-        type: 'service_unavailable_error',
-        message: 'Our servers are currently overloaded. Please try again later.',
-      },
-    });
-
-    expect(canRetryAiAttempt(error)).toBe(true);
+  it.each([
+    { code: 'context_length_exceeded', status: 429 },
+    { code: 'invalid_api_key' },
+    { type: 'authentication_error' },
+    { type: 'permission_error' },
+    { code: 'permission_denied' },
+    { status: 401, code: 'sample_unknown_error' },
+    { status: 403, code: 'server_is_overloaded' },
+  ])('stops for explicit unrecoverable upstream details: %j', (upstream) => {
+    expect(canRetryAiAttempt(error('provider', upstream))).toBe(false);
   });
 
-  it('retries a structured stream read error without an HTTP status', () => {
-    const error = new GatewayCallError({
-      source: 'provider',
-      gateway: 'ai',
-      providerId: 'provider',
-      modelId: 'model',
-      driverId: 'openai',
-      stage: 'request',
-      attempt: 1,
-      traceId: 'trace-stream-read',
-      message: 'stream_read_error',
-      upstream: {
-        code: 'stream_read_error',
-        type: 'upstream_error',
-        message: 'stream_read_error',
-      },
-    });
-
-    expect(canRetryAiAttempt(error)).toBe(true);
+  it.each(['local', 'cancelled'] as const)('never retries %s failures', (source) => {
+    expect(canRetryAiAttempt(error(source, { status: 503 }))).toBe(false);
   });
 
-  it('does not infer a stream read retry from provider message text', () => {
-    const error = new GatewayCallError({
-      source: 'provider',
-      gateway: 'ai',
-      providerId: 'provider',
-      modelId: 'model',
-      driverId: 'openai',
-      stage: 'request',
-      attempt: 1,
-      traceId: 'trace-stream-read-message',
-      message: 'stream_read_error',
-      upstream: { message: 'stream_read_error' },
-    });
+  it.each(['transport', 'timeout'] as const)('retries %s failures', (source) => {
+    expect(canRetryAiAttempt(error(source))).toBe(true);
+  });
 
-    expect(canRetryAiAttempt(error)).toBe(false);
+  it.each([
+    'invalid_api_key',
+    'authentication_error',
+    'permission_denied',
+    'context_length_exceeded',
+    'stream_read_error',
+  ])('does not classify provider message text: %s', (message) => {
+    expect(canRetryAiAttempt(error('provider', { message }))).toBe(true);
   });
 });

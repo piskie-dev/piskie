@@ -245,12 +245,21 @@ export class ElectronPreloadClient {
           this.settleRequest(frame.id, (pending) => pending.reject(new PiskieFault(frame.fault)));
           return;
         }
+        const active = this.subscriptionsById.get(frame.id);
+        if (active) {
+          this.subscriptionsById.delete(frame.id);
+          active.subscriptionId = undefined;
+          active.disposed = true;
+          this.notifySubscriptionError(active, new PiskieFault(frame.fault));
+          return;
+        }
         const subscription = this.subscriptionsByRequest.get(frame.id);
         if (subscription) {
+          const disposed = subscription.disposed;
           this.subscriptionsByRequest.delete(frame.id);
           subscription.requestId = undefined;
           subscription.disposed = true;
-          this.notifySubscriptionError(subscription, new PiskieFault(frame.fault));
+          if (!disposed) this.notifySubscriptionError(subscription, new PiskieFault(frame.fault));
         }
         return;
       }

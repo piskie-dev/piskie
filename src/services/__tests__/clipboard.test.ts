@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CopyImageRequest } from '@shared/electron-contracts/desktop';
 import { deferred, gifBytes, pngBytes } from '@/features/console/attachments/__tests__/fixtures';
-import { copyImage, copyText } from '../clipboard';
+import { copyFile, copyImage, copyText } from '../clipboard';
 import { acquireFilePreview, clearFilePreviews, releaseFilePreview } from '../file-preview';
 
 const publish = vi.fn<(request: CopyImageRequest) => Promise<void>>();
+const publishFile = vi.fn<(path: string) => Promise<void>>();
 const writeText = vi.fn<(text: string) => Promise<void>>();
 const releasePreview = vi.fn(async () => undefined);
 const previewUrl = 'piskie-attachment://preview/sample-image';
-const preview = vi.fn(async () => ({ kind: 'image' as const, url: previewUrl, mediaType: 'image/gif', size: 12 }));
+const preview = vi.fn(async () => ({ kind: 'image' as const, revision: 'sample-revision', url: previewUrl, mediaType: 'image/gif', size: 12 }));
 const animatedGif = gifBytes(2, 2, [
   { left: 0, top: 0, width: 2, height: 2 },
   { left: 0, top: 0, width: 2, height: 2 },
@@ -21,10 +22,11 @@ const animatedWebp = new Uint8Array(Buffer.from(
 
 beforeEach(() => {
   publish.mockReset().mockResolvedValue(undefined);
+  publishFile.mockReset().mockResolvedValue(undefined);
   writeText.mockReset().mockResolvedValue(undefined);
   releasePreview.mockClear();
   preview.mockClear();
-  vi.stubGlobal('window', { piskie: { desktop: { files: { copyImage: publish, preview, releasePreview } } } });
+  vi.stubGlobal('window', { piskie: { desktop: { files: { copyImage: publish, copyFile: publishFile, preview, releasePreview } } } });
   vi.stubGlobal('navigator', { clipboard: { writeText } });
 });
 
@@ -35,6 +37,22 @@ afterEach(() => {
 });
 
 describe('clipboard service', () => {
+  it('passes a file or folder path unchanged and waits for publication or failure', async () => {
+    const pending = deferred<void>();
+    publishFile.mockReturnValueOnce(pending.promise);
+    const settled = vi.fn();
+    const path = '/sample folder/示例.txt ';
+    const operation = copyFile(path).then(settled);
+    expect(publishFile).toHaveBeenCalledExactlyOnceWith(path);
+    expect(settled).not.toHaveBeenCalled();
+    pending.resolve();
+    await operation;
+    expect(settled).toHaveBeenCalledExactlyOnceWith(undefined);
+    const failure = new Error('Sample file unavailable');
+    publishFile.mockRejectedValueOnce(failure);
+    await expect(copyFile('/sample folder')).rejects.toBe(failure);
+  });
+
   it('preserves source whitespace and waits for the actual text clipboard result', async () => {
     const pending = deferred<void>();
     writeText.mockReturnValueOnce(pending.promise);

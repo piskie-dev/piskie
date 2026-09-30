@@ -231,7 +231,14 @@ describe('gateway collection boundary', () => {
     const usage = service();
     const observer = usage.observe({ model: { providerId: 'p', modelId: 'm' }, messages: [] }, { runId: 'r', traceId: 't', signal: new AbortController().signal }, { ref: { providerId: 'p', modelId: 'm' }, driverId: 'fake', upstreamModel: 'm', catalogId: 'm', configRevision: 1 });
     observer.attemptStarted(now, 1);
-    observer.event({ kind: 'response.completed', runId: 'r', attempt: 1, sequence: 1, emittedAt: now, stopReason: 'end_turn' });
+    observer.event({
+      kind: 'response.completed', runId: 'r', attempt: 1, sequence: 1, emittedAt: now, stopReason: 'end_turn',
+      result: {
+        runId: 'r', model: { providerId: 'p', modelId: 'm' }, configRevision: 1,
+        text: 'Sample answer', reasoning: '', reasoningItems: [], toolCalls: [], usage: {},
+        content: [{ kind: 'text', text: 'Sample answer' }], stopReason: 'end_turn',
+      },
+    });
     await expect(Promise.resolve(observer.close(now))).resolves.toBeUndefined();
     await usage.store.flush();
     expect(usage.store.writeError).toBeDefined();

@@ -412,7 +412,15 @@ export function createElectronPiskieClient(options: {
       files: {
         getPathForFile: (file) => options.getPathForFile(file),
         copyImage: (input) => request(DESKTOP_OPERATIONS.copyImage, input),
+        copyFile: (path) => request(DESKTOP_OPERATIONS.copyFile, path),
         preview: (path) => request(DESKTOP_OPERATIONS.previewFile, path),
+        revision: (path) => request(DESKTOP_OPERATIONS.fileRevision, path),
+        observe: (path, listener, onError) => transport.subscribe<string | null, string | null>(DESKTOP_TOPICS.fileChanges, {
+          payload: { path },
+          onSnapshot: listener,
+          onChange: listener,
+          onError,
+        }),
         releasePreview: (url) => request(DESKTOP_OPERATIONS.releasePreview, url),
         select: (input) => waitForUser(DESKTOP_OPERATIONS.selectFiles, input),
       },

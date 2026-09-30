@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { OBSERVABILITY_TOPICS } from '../../../../shared/electron-contracts/observability.js';
 import { ACCOUNT_OPERATIONS } from '../../../../shared/electron-contracts/account.js';
-import { DESKTOP_OPERATIONS } from '../../../../shared/electron-contracts/desktop.js';
+import { DESKTOP_OPERATIONS, DESKTOP_TOPICS } from '../../../../shared/electron-contracts/desktop.js';
 import { PILOT_OPERATIONS } from '../../../../shared/electron-contracts/pilot.js';
 import { INFERENCE_OPERATIONS } from '../../../../shared/electron-contracts/inference.js';
 import {
@@ -47,6 +47,25 @@ describe('createElectronPiskieClient', () => {
     expect(client.desktop.files.getPathForFile(memoryFile)).toBe('');
     expect(getPathForFile.mock.calls).toEqual([[diskFile], [memoryFile]]);
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('maps metadata requests and delivers file snapshots, changes and errors through transport', async () => {
+    const unsubscribe = vi.fn();
+    const request = vi.fn(async () => 'sample-revision');
+    const subscribe = vi.fn(() => unsubscribe);
+    const client = createElectronPiskieClient({
+      transport: { request, subscribe } as unknown as ElectronPreloadClient,
+      version: 'test', platform: 'linux', getPathForFile: vi.fn(),
+    });
+    const listener = vi.fn();
+    const onError = vi.fn();
+    await expect(client.desktop.files.revision('/sample/file.txt')).resolves.toBe('sample-revision');
+    expect(request).toHaveBeenCalledExactlyOnceWith(DESKTOP_OPERATIONS.fileRevision, ['/sample/file.txt']);
+    const dispose = client.desktop.files.observe('/sample/file.txt', listener, onError);
+    expect(subscribe).toHaveBeenCalledExactlyOnceWith(DESKTOP_TOPICS.fileChanges, {
+      payload: { path: '/sample/file.txt' }, onSnapshot: listener, onChange: listener, onError,
+    });
+    expect(dispose).toBe(unsubscribe);
   });
 
   it('queries effective composer Skills for the requested workspace', async () => {

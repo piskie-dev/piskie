@@ -31,6 +31,13 @@ export type ConsoleSelection =
   | { readonly kind: 'live' | 'history'; readonly agentId: string }
   | { readonly kind: 'empty' };
 
+export interface WorkspaceSessionSort {
+  readonly mode: 'auto' | 'manual';
+  readonly order: readonly string[];
+  /** Latest explicit sorting operation; absent in older persisted preferences. */
+  readonly revision?: number;
+}
+
 interface UIStore {
   // 状态
   theme: Theme;
@@ -50,6 +57,8 @@ interface UIStore {
   workspaceGroupOrder: string[];
   /** 置顶会话的 AgentRun ID；排序仅在各自工作区分组内生效。 */
   pinnedAgentRunIds: string[];
+  hiddenWorkspaceGroupKeys: string[];
+  workspaceSessionSort: Record<string, WorkspaceSessionSort>;
   /** 隐形左坞开关（默认开启；与 navPrismEnabled 至少保留一个）。 */
   navEdgeDockEnabled: boolean;
   /** 自由棱镜开关（默认开启；与 navEdgeDockEnabled 至少保留一个）。 */
@@ -67,6 +76,14 @@ interface UIStore {
   expandWorkspaceGroup: (key: string) => void;
   setWorkspaceGroupOrder: (order: string[]) => void;
   toggleAgentRunPin: (agentId: string) => void;
+  hideWorkspaceGroup: (key: string) => void;
+  restoreWorkspaceGroup: (key: string) => void;
+  setWorkspaceSessionSort: (key: string, preference: Pick<WorkspaceSessionSort, 'mode' | 'order'>) => void;
+  reconcileWorkspaceSessionSort: (
+    defaultWorkspacePath?: string,
+    agentIdsByWorkspace?: Readonly<Record<string, readonly string[]>>,
+  ) => void;
+  forgetSessionOrder: (agentId: string) => void;
   setSettings: (settings: AppSettings) => void;
 
   // Actions - 业务操作
@@ -102,6 +119,8 @@ export const useUIStore = create<UIStore>()(
       expandedWorkspaceGroups: [],
       workspaceGroupOrder: [],
       pinnedAgentRunIds: [],
+      hiddenWorkspaceGroupKeys: [],
+      workspaceSessionSort: {},
       navEdgeDockEnabled: DEFAULT_SETTINGS.navEdgeDockEnabled,
       navPrismEnabled: DEFAULT_SETTINGS.navPrismEnabled,
       navPrismSpot: DEFAULT_SETTINGS.navPrismSpot,
@@ -121,10 +140,58 @@ export const useUIStore = create<UIStore>()(
         set((state) => ({ expandedWorkspaceGroups: [...state.expandedWorkspaceGroups, key] }));
       },
       setWorkspaceGroupOrder: (order) => set({ workspaceGroupOrder: order }),
+      hideWorkspaceGroup: (key) => {
+        if (get().hiddenWorkspaceGroupKeys.includes(key)) return;
+        set((state) => ({ hiddenWorkspaceGroupKeys: [...state.hiddenWorkspaceGroupKeys, key] }));
+      },
+      restoreWorkspaceGroup: (key) => {
+        if (!get().hiddenWorkspaceGroupKeys.includes(key)) return;
+        set((state) => ({ hiddenWorkspaceGroupKeys: state.hiddenWorkspaceGroupKeys.filter((item) => item !== key) }));
+      },
+      setWorkspaceSessionSort: (key, preference) => set((state) => ({
+        workspaceSessionSort: {
+          ...state.workspaceSessionSort,
+          [key]: {
+            mode: preference.mode,
+            order: preference.mode === 'manual' ? [...preference.order] : [],
+            revision: Object.values(state.workspaceSessionSort).reduce(
+              (latest, item) => Math.max(latest, item.revision ?? 0), 0,
+            ) + 1,
+          },
+        },
+      })),
+      reconcileWorkspaceSessionSort: (defaultWorkspacePath, agentIdsByWorkspace) => {
+        const saved = get().workspaceSessionSort;
+        let next = normalizeWorkspaceSessionSort(saved, defaultWorkspacePath);
+        if (agentIdsByWorkspace) {
+          const existing = new Set(Object.values(agentIdsByWorkspace).flat());
+          for (const [key, preference] of Object.entries(next)) {
+            if (preference.mode !== 'manual') continue;
+            const known = new Set(preference.order);
+            const added = agentIdsByWorkspace[key]?.filter((id) => !known.has(id)) ?? [];
+            const order = [...added, ...preference.order.filter((id) => existing.has(id))];
+            if (order.length !== preference.order.length || order.some((id, index) => id !== preference.order[index])) {
+              next = { ...next, [key]: { ...preference, order } };
+            }
+          }
+        }
+        if (next !== saved) set({ workspaceSessionSort: next });
+      },
       toggleAgentRunPin: (agentId) => set((state) => ({
         pinnedAgentRunIds: state.pinnedAgentRunIds.includes(agentId)
           ? state.pinnedAgentRunIds.filter((item) => item !== agentId)
           : [...state.pinnedAgentRunIds, agentId],
+        workspaceSessionSort: Object.fromEntries(Object.entries(state.workspaceSessionSort).map(([key, preference]) => [
+          key, preference.mode === 'manual' && preference.order.includes(agentId)
+            ? { ...preference, order: [agentId, ...preference.order.filter((id) => id !== agentId)] }
+            : preference,
+        ])),
+      })),
+      forgetSessionOrder: (agentId) => set((state) => ({
+        pinnedAgentRunIds: state.pinnedAgentRunIds.filter((id) => id !== agentId),
+        workspaceSessionSort: Object.fromEntries(Object.entries(state.workspaceSessionSort).map(([key, preference]) => [
+          key, { ...preference, order: preference.order.filter((id) => id !== agentId) },
+        ])),
       })),
       setBackgroundMaskOpacity: (opacity) => set({ backgroundMaskOpacity: opacity }),
       setBackgroundIsLight: (isLight) => set({ backgroundIsLight: isLight }),
@@ -174,21 +241,35 @@ export const useUIStore = create<UIStore>()(
     }),
     {
       name: UI_STORAGE_NAME,
-      version: 5,
+      version: 6,
       /**
-       * v5 增加工作区内会话置顶偏好。v4 工作区默认收起，退役 collapsedWorkspaceGroups；旧数据不能推断哪些组
+       * v6 增加侧栏隐藏和工作区会话排序偏好。v5 增加工作区内会话置顶偏好。v4 工作区默认收起，退役 collapsedWorkspaceGroups；旧数据不能推断哪些组
        * 曾被手动展开，因此按新的默认值初始化。读取只投影当前字段。
        * 导航与背景偏好由 app-settings 持久化，localStorage 中的旧值直接忽略。
        */
       migrate: (persisted, version) => readPersistedUIState(persisted, version) as never,
       merge: (persisted, current) => ({
         ...current,
-        ...readPersistedUIState(persisted, 5),
+        ...readPersistedUIState(persisted, 6),
       }),
       partialize: selectPersistedUIState,
     }
   )
 );
+
+/** Merge the resolved default-path alias using the latest explicit sorting choice. */
+export function normalizeWorkspaceSessionSort(
+  preferences: Record<string, WorkspaceSessionSort>,
+  defaultWorkspacePath?: string,
+): Record<string, WorkspaceSessionSort> {
+  if (!defaultWorkspacePath || !preferences[defaultWorkspacePath]) return preferences;
+  const { [defaultWorkspacePath]: alias, ...rest } = preferences;
+  const current = rest[''];
+  return {
+    ...rest,
+    '': !current || (alias!.revision ?? 0) > (current.revision ?? 0) ? alias! : current,
+  };
+}
 
 export type PersistedUIState = Pick<
   UIStore,
@@ -198,6 +279,8 @@ export type PersistedUIState = Pick<
   | 'expandedWorkspaceGroups'
   | 'workspaceGroupOrder'
   | 'pinnedAgentRunIds'
+  | 'hiddenWorkspaceGroupKeys'
+  | 'workspaceSessionSort'
 >;
 
 export function selectPersistedUIState(state: PersistedUIState): PersistedUIState {
@@ -208,6 +291,14 @@ export function selectPersistedUIState(state: PersistedUIState): PersistedUIStat
     expandedWorkspaceGroups: state.expandedWorkspaceGroups,
     workspaceGroupOrder: state.workspaceGroupOrder,
     pinnedAgentRunIds: state.pinnedAgentRunIds,
+    hiddenWorkspaceGroupKeys: state.hiddenWorkspaceGroupKeys,
+    workspaceSessionSort: Object.fromEntries(Object.entries(state.workspaceSessionSort).map(([key, preference]) => [
+      key, {
+        mode: preference.mode,
+        order: preference.mode === 'manual' ? [...preference.order] : [],
+        ...(preference.revision === undefined ? {} : { revision: preference.revision }),
+      },
+    ])),
   };
 }
 
@@ -228,7 +319,7 @@ export function readPersistedUIState(value: unknown, version: number): Partial<P
   } else if (version < 1) {
     next.consoleMode = 'thread';
   }
-  for (const key of ['expandedWorkspaceGroups', 'workspaceGroupOrder'] as const) {
+  for (const key of ['expandedWorkspaceGroups', 'workspaceGroupOrder', 'hiddenWorkspaceGroupKeys'] as const) {
     const keys = state[key];
     if (Array.isArray(keys) && keys.every((item) => typeof item === 'string')) {
       next[key] = [...new Set(keys)];
@@ -240,6 +331,18 @@ export function readPersistedUIState(value: unknown, version: number): Partial<P
     next.pinnedAgentRunIds = [...new Set(pinnedAgentRunIds)];
   }
 
+  if (state.workspaceSessionSort && typeof state.workspaceSessionSort === 'object' && !Array.isArray(state.workspaceSessionSort)) {
+    next.workspaceSessionSort = Object.fromEntries(Object.entries(state.workspaceSessionSort).flatMap<[string, WorkspaceSessionSort]>(([key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+      const preference = value as Record<string, unknown>;
+      const revision = typeof preference.revision === 'number' && Number.isSafeInteger(preference.revision)
+        && preference.revision >= 0 ? { revision: preference.revision } : {};
+      if (preference.mode === 'auto') return [[key, { mode: 'auto', order: [], ...revision }]];
+      if (preference.mode !== 'manual' || !Array.isArray(preference.order)
+        || !preference.order.every((id) => typeof id === 'string')) return [];
+      return [[key, { mode: 'manual', order: [...new Set(preference.order)], ...revision }]];
+    }));
+  }
   return next;
 }
 

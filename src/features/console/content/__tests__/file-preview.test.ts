@@ -7,7 +7,7 @@ describe('ordinary preview leases', () => {
     const releasePreview = vi.fn().mockResolvedValue(undefined);
     const url = 'piskie-attachment://preview/example';
     vi.stubGlobal('window', { piskie: { desktop: { files: {
-      preview: vi.fn().mockResolvedValue({ kind: 'image', url, mediaType: 'image/png', size: 20 }), releasePreview,
+      preview: vi.fn().mockResolvedValue({ kind: 'image', revision: 'sample-revision', url, mediaType: 'image/png', size: 20 }), releasePreview,
     } } } });
     await acquireFilePreview('/workspace/example.png');
     const close = retainFilePreviews([url, url]);

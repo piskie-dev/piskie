@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AttachmentFile, AttachmentImage } from '../../attachments';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
+import { AttachmentFileTarget } from '../../attachments/AttachmentFileTarget';
 import type { PresentationText } from '../../../../i18n/presentationText';
 import styles from './gates.module.css';
 
@@ -197,12 +198,12 @@ export const GateAttachments = memo<GateAttachmentsProps>(
           </span>
         ))}
         {files.map((file) => (
-          <span key={file.id} className={styles.chip} title={file.path}>
+          <AttachmentFileTarget key={file.id} file={file} as="span" className={styles.chip}>
             <span className={styles.chipName}>{file.name}</span>
             <button type="button" className={styles.chipRemove} onClick={() => onRemove(file.id)}>
               <X size={9} />
             </button>
-          </span>
+          </AttachmentFileTarget>
         ))}
       </div>
     );

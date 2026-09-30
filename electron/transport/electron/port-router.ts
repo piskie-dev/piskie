@@ -45,6 +45,7 @@ export class PortRouter {
     topicId: string,
     payload: unknown,
     emit: (change: unknown) => void,
+    onError?: (error: unknown) => void,
   ): Promise<TopicOpenResult> {
     if (this.runtime.phase() !== 'ready') {
       throw new PublicOperationError('not-ready', 'Backend is not accepting subscriptions');
@@ -52,7 +53,7 @@ export class PortRouter {
     const topic = this.catalog.topics.get(topicId);
     if (!topic) throw new PublicOperationError('unsupported', `Unknown topic: ${topicId}`);
     const input = decode(topic, payload);
-    return topic.open(context, input, emit);
+    return topic.open(context, input, emit, onError);
   }
 }
 

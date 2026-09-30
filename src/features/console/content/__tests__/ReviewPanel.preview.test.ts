@@ -1,9 +1,11 @@
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
-import { act, createElement } from 'react';
+import { act, cloneElement, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deferred } from '../../attachments/__tests__/fixtures';
+
+vi.mock('../../chrome/Tooltip', () => ({ Tooltip: ({ children, title }: { children: ReactElement; title: string }) => cloneElement(children, { title } as object) }));
 
 let dom: JSDOM;
 let container: HTMLDivElement;
@@ -13,7 +15,7 @@ const nodeRequire = createRequire(import.meta.url);
 const previousCssLoader = nodeRequire.extensions['.css'];
 
 beforeAll(async () => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://piskie.test' });
+  dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://renderer.example.test' });
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);
@@ -53,6 +55,30 @@ function displayedSourceLines(): string[] {
 }
 
 describe('ReviewPanel path preview', () => {
+  it.each(['preview', 'read'] as const)('groups the %s badge immediately after the ellipsizable filename before the fixed actions', async (kind) => {
+    const path = '/workspace/generic.md';
+    const descriptor = { kind: 'text', revision: 'generic-revision', content: '# Generic document', truncated: false, size: 18 } as const;
+    await act(async () => root.render(createElement(ReviewPanel, {
+      change: null,
+      read: kind === 'read' ? { kind: 'read', path, content: descriptor.content, startLine: 1 } : null,
+      preview: kind === 'preview' ? { path, descriptor } : null,
+      onOpenPath: noop, onRevealPath: noop,
+    })));
+    const title = container.querySelector('[class*="headerTitle"]')!;
+    const badge = container.querySelector('[class*="headerHint"]')!;
+    const identity = container.querySelector('[class*="headerIdentity"]')!;
+    const actions = container.querySelector('[class*="headerActions"]')!;
+    expect(title.textContent).toBe('generic.md');
+    expect(title.getAttribute('title')).toBe(path);
+    expect(badge.textContent).toBe(kind === 'preview' ? '预览' : '读取');
+    expect(title.nextElementSibling).toBe(badge);
+    expect(identity.children).toHaveLength(2);
+    expect(title.parentElement).toBe(identity);
+    expect(identity.nextElementSibling).toBe(actions);
+    expect([...actions.querySelectorAll('button')].slice(-2).map((button) => button.getAttribute('aria-label')))
+      .toEqual(['复制内容', '在文件夹中显示']);
+  });
+
   it('shows text copy failure only after the clipboard rejects, then permits retry', async () => {
     const pending = deferred<void>();
     const copy = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined);
@@ -83,6 +109,7 @@ describe('ReviewPanel path preview', () => {
           path: '/workspace/ROADMAP.md',
           descriptor: {
             kind: 'text',
+            revision: 'sample-revision',
             content: '# Roadmap\n\nShip **preview**.',
             truncated: false,
             size: 28,
@@ -187,6 +214,7 @@ describe('ReviewPanel path preview', () => {
           path: '/workspace/app.ts',
           descriptor: {
             kind: 'text',
+            revision: 'sample-revision',
             content: 'const first = 1;\nconst second = 2;',
             truncated: true,
             size: 500 * 1024,
@@ -210,7 +238,7 @@ describe('ReviewPanel path preview', () => {
       await act(async () => root.render(createElement(ReviewPanel, {
         change: null,
         read: null,
-        preview: { path, descriptor: { kind: 'directory' } },
+        preview: { path, descriptor: { kind: 'directory', revision: 'sample-revision' } },
         onOpenPath: open,
         onRevealPath: reveal,
       })));
@@ -238,8 +266,8 @@ describe('ReviewPanel path preview', () => {
   );
 
   it.each([
-    { kind: 'file', mediaType: 'application/pdf', size: 2048 },
-    { kind: 'file', size: 2048 },
+    { kind: 'file', revision: 'sample-revision', mediaType: 'application/pdf', size: 2048 },
+    { kind: 'file', revision: 'sample-revision', size: 2048 },
   ] as const)('shows unsupported local files as an actionable file card: $mediaType', async (descriptor) => {
     const open = vi.fn();
     const reveal = vi.fn();

@@ -7,6 +7,7 @@ import {
   type AttachmentPreviewOpener, type ThumbnailResult,
 } from '../data/composer-drafts';
 import type { AttachmentImage } from './model';
+import { useAttachmentMenu } from './attachmentMenu';
 import styles from './attachmentThumbnail.module.css';
 
 export function AttachmentError({ error }: { readonly error?: PresentationText }) {
@@ -33,8 +34,12 @@ export function AttachmentThumbnail({ image, alt, className, onPreview }: {
   const label = errorText ?? t(image.status === 'capturing'
     ? 'sessionWorkbenchUi.attachmentFailure.preparing' : 'sessionWorkbenchUi.composer.imageAttachment');
   const open = image.status === 'ready' && onPreview ? () => openAttachmentImage(image, onPreview) : undefined;
+  const context = useAttachmentMenu(image.status === 'ready'
+    ? { kind: 'image', source: { kind: 'blob', blob: image.blob, name: image.name }, preview: open }
+    : null);
   return (
-    <span className={styles.item}>
+    <span className={styles.item} onContextMenu={context.onContextMenu}>
+      {context.menu}
       {thumbnail?.kind === 'ready' && image.status === 'ready' ? (
         <img src={thumbnail.url} alt={image.name || alt} title={image.name || alt} className={className} onClick={open} />
       ) : (

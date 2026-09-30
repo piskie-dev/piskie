@@ -5,8 +5,9 @@ import {
 } from '../execution/call-error.js';
 import type { AttemptContext, RunContext } from '../execution/contracts.js';
 import type { AiExecutionPolicy, CompiledTarget } from '../execution/runtime-snapshot.js';
-import type { AiAttemptEvent, AiEvent, AiRequest } from './contracts.js';
+import type { AiEvent, AiRequest } from './contracts.js';
 import { canRetryAiAttempt, retryDelayMs } from './retry-decision.js';
+import { AiAttemptResultAccumulator } from './result-reducer.js';
 import { initialAiRunState, reduceAiRun } from './run-state.js';
 
 export interface AiRunDependencies {
@@ -86,6 +87,11 @@ export async function* executeAiRun(input: ExecuteAiRunInput): AsyncIterable<AiE
     };
 
     try {
+      attemptController.signal.throwIfAborted();
+      if (deadlineReached(input.context.deadlineAt, dependencies.now())) {
+        throw timeoutError(input, attempt, 'absolute_deadline');
+      }
+      const result = new AiAttemptResultAccumulator();
       const iterator = runner.openAttempt(request, attemptContext)[Symbol.asyncIterator]();
 
       try {
@@ -100,6 +106,7 @@ export async function* executeAiRun(input: ExecuteAiRunInput): AsyncIterable<AiE
             () => timeoutError(input, attempt, 'absolute_deadline'),
           );
 
+          attemptController.signal.throwIfAborted();
           if (next.done) {
             throw localCallError({
               gateway: 'ai',
@@ -113,10 +120,24 @@ export async function* executeAiRun(input: ExecuteAiRunInput): AsyncIterable<AiE
             });
           }
 
-          state = reduceAiRun(state, { kind: 'attempt.event', event: next.value });
-          yield toPublicEvent(next.value, base(attempt));
+          const event = next.value;
+          if (event.kind === 'response.completed') {
+            const completedResult = result.complete(event.stopReason, {
+              runId: input.context.runId,
+              model: input.target.ref,
+              configRevision: input.target.configRevision,
+              driverId: input.target.driverId,
+              attempt,
+              traceId: input.context.traceId,
+            });
+            state = reduceAiRun(state, { kind: 'attempt.event', event });
+            yield { ...base(attempt), ...event, result: completedResult };
+            return;
+          }
 
-          if (next.value.kind === 'response.completed') return;
+          result.add(event);
+          state = reduceAiRun(state, { kind: 'attempt.event', event });
+          yield { ...base(attempt), ...event };
         }
       } catch (cause) {
         attemptController.abort(cause);
@@ -175,13 +196,6 @@ function applyGenerationDefaults(
       ...request.generation,
     },
   };
-}
-
-function toPublicEvent(
-  event: AiAttemptEvent,
-  base: Pick<AiEvent, 'runId' | 'sequence' | 'attempt' | 'emittedAt'>,
-): AiEvent {
-  return { ...base, ...event } as AiEvent;
 }
 
 function normalizeAttemptError(cause: unknown, input: ExecuteAiRunInput, attempt: number): GatewayCallError {

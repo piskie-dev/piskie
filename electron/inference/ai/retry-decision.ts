@@ -1,24 +1,25 @@
 import type { GatewayCallError } from '../execution/call-error.js';
 
-type ProviderCodeRetryDecision = 'retry' | 'do_not_retry';
-
-const PROVIDER_CODE_RETRY_DECISIONS: ReadonlyMap<string, ProviderCodeRetryDecision> = new Map([
-  ['context_length_exceeded', 'do_not_retry'],
-  ['server_is_overloaded', 'retry'],
-  ['stream_read_error', 'retry'],
+const AUTHORIZATION_ERROR_CODES: ReadonlySet<string> = new Set([
+  'invalid_api_key',
+  'authentication_error',
+  'permission_error',
+  'permission_denied',
 ]);
-const RETRYABLE_PROVIDER_STATUSES: ReadonlySet<number> = new Set([408, 409, 425, 429]);
+const NON_RETRYABLE_PROVIDER_STATUSES: ReadonlySet<number> = new Set([401, 403]);
 
 export function canRetryAiAttempt(error: GatewayCallError): boolean {
-  if (error.source === 'transport' || error.source === 'timeout') return true;
-  if (error.source !== 'provider') return false;
+  if (error.source === 'local' || error.source === 'cancelled') return false;
 
-  const code = error.upstream?.code;
-  const codeDecision = code ? PROVIDER_CODE_RETRY_DECISIONS.get(code) : undefined;
-  if (codeDecision !== undefined) return codeDecision === 'retry';
+  const upstream = error.upstream;
+  if (upstream) {
+    if (upstream.status !== undefined && NON_RETRYABLE_PROVIDER_STATUSES.has(upstream.status)) return false;
+    if (upstream.code === 'context_length_exceeded') return false;
+    if (upstream.code && AUTHORIZATION_ERROR_CODES.has(upstream.code)) return false;
+    if (upstream.type && AUTHORIZATION_ERROR_CODES.has(upstream.type)) return false;
+  }
 
-  const status = error.upstream?.status;
-  return status !== undefined && (RETRYABLE_PROVIDER_STATUSES.has(status) || status >= 500);
+  return true;
 }
 
 export function retryDelayMs(baseDelayMs: number, failedAttempt: number): number {

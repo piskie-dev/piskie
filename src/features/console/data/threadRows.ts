@@ -8,6 +8,7 @@
 import { hasUnreadMessages, type AgentRunMessageState } from '@shared/agent-run-messages';
 import type { AgentRunAttention } from '@/domains/agent-runs/agent-run-attention';
 import { phaseOrder, type HistoryRow, type SessionRow } from './sessionRow';
+import type { WorkspaceSessionSort } from '../../../store/uiStore';
 
 export interface ThreadRow {
   /** 稳定 key：`agent:<agentId>` */
@@ -109,7 +110,15 @@ export function buildThreadRows(input: {
  * 这里不再走 `sortSessionRows`——它只认 `SessionRow` 且不处理 live/history 混排，
  * 但 phase 权重仍取自 `phaseOrder` 同一张表。
  */
-export function sortThreadRows(rows: readonly ThreadRow[]): ThreadRow[] {
+export function sortThreadRows(rows: readonly ThreadRow[], preference?: WorkspaceSessionSort): ThreadRow[] {
+  if (preference?.mode === 'manual') {
+    const positions = new Map(preference.order.map((id, index) => [id, index]));
+    // Newly observed sessions lead their partition; persisting the complete projection freezes their position.
+    return [...rows].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (positions.get(a.agentId) ?? -1) - (positions.get(b.agentId) ?? -1);
+    });
+  }
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (!!a.live !== !!b.live) return a.live ? -1 : 1;
@@ -121,4 +130,17 @@ export function sortThreadRows(rows: readonly ThreadRow[]): ThreadRow[] {
 
     return timeOf(b.lastActiveAt) - timeOf(a.lastActiveAt);
   });
+}
+
+/** The input is the complete displayed workspace, never the search/preview subset. */
+export function moveThreadRow(
+  rows: readonly ThreadRow[], source: string, target: string, edge: 'before' | 'after',
+): readonly string[] | null {
+  const from = rows.find((row) => row.agentId === source);
+  const to = rows.find((row) => row.agentId === target);
+  if (!from || !to || from === to || from.pinned !== to.pinned) return null;
+  const order = rows.map((row) => row.agentId);
+  const next = order.filter((id) => id !== source);
+  next.splice(next.indexOf(target) + (edge === 'after' ? 1 : 0), 0, source);
+  return next.every((id, index) => id === order[index]) ? null : next;
 }

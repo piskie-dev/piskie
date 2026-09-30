@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GatewayCallError } from '../../execution/call-error.js';
 import type { CompiledTarget } from '../../execution/runtime-snapshot.js';
 import type { AiAttemptEvent, AiEvent, AiRequest } from '../contracts.js';
@@ -260,6 +260,7 @@ describe('executeAiRun cancellation ownership', () => {
           message: 'temporary connection loss',
         });
       }
+      yield { kind: 'text.delta', text: 'answer' };
       yield { kind: 'response.completed', stopReason: 'end_turn' };
     });
 
@@ -279,6 +280,7 @@ describe('executeAiRun cancellation ownership', () => {
       'response.started',
       event.kind,
       'response.retrying',
+      'text.delta',
       'response.completed',
     ]);
     expect(events.at(-1)).toMatchObject({ kind: 'response.completed', attempt: 2 });
@@ -350,6 +352,7 @@ describe('executeAiRun provider retry policy', () => {
           },
         });
       }
+      yield { kind: 'text.delta', text: 'answer' };
       yield { kind: 'response.completed', stopReason: 'end_turn' };
     });
 
@@ -369,6 +372,7 @@ describe('executeAiRun provider retry policy', () => {
     expect(events.map((event) => event.kind)).toEqual([
       'response.started',
       'response.retrying',
+      'text.delta',
       'response.completed',
     ]);
     expect(events[1]).toMatchObject({
@@ -380,11 +384,204 @@ describe('executeAiRun provider retry policy', () => {
   });
 });
 
+describe('executeAiRun bounded upstream retries', () => {
+  it.each([
+    { code: 'upstream_stream_read_error' },
+    { code: 'sample_unknown_error' },
+    { code: 'sample_unknown_error', status: 400 },
+  ])('retries %j and preserves structured diagnostics', async (upstream) => {
+    let attempts = 0;
+    const error = new GatewayCallError({
+      source: 'provider', gateway: 'ai', ...request.model,
+      driverId: 'controlled-driver', stage: 'request', attempt: 1, traceId: 'trace-retry',
+      message: 'Sample upstream interruption',
+      upstream: { ...upstream, message: 'Sample upstream interruption', requestId: 'sample-request', body: { error: upstream } },
+    });
+    const selected = target(async function* (): AsyncIterable<AiAttemptEvent> {
+      attempts++;
+      if (attempts === 1) throw error;
+      yield { kind: 'text.delta', text: 'answer' };
+      yield { kind: 'response.completed', stopReason: 'end_turn' };
+    });
+    const sleep = vi.fn(async (_delayMs: number, _signal: AbortSignal) => undefined);
+    const events = await collect(executeAiRun({
+      request, target: selected, policy: { ...policy, maxAttempts: 3, retryBaseDelayMs: 3_000 },
+      context: { runId: 'run-retry', traceId: 'trace-retry', signal: new AbortController().signal },
+      dependencies: { sleep },
+    }));
+    expect(attempts).toBe(2);
+    expect(sleep).toHaveBeenCalledWith(3_000, expect.any(AbortSignal));
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.retrying', 'text.delta', 'response.completed']);
+    expect(events[1]).toMatchObject({ error });
+    expect(events.at(-1)).toMatchObject({ attempt: 2, result: { text: 'answer' } });
+  });
+
+  it('exhausts the same budget for repeated statusless stream interruptions', async () => {
+    const attempts: number[] = [];
+    const selected = target((_request, context): never => {
+      attempts.push(context.attempt);
+      throw new GatewayCallError({
+        source: 'provider', gateway: 'ai', ...request.model,
+        driverId: 'controlled-driver', stage: 'request', attempt: context.attempt, traceId: context.traceId,
+        message: 'Sample upstream interruption',
+        upstream: { code: 'upstream_stream_read_error', message: 'Sample upstream interruption' },
+      });
+    });
+    const sleep = vi.fn(async (_delayMs: number, _signal: AbortSignal) => undefined);
+    const events = await collect(executeAiRun({
+      request, target: selected, policy: { ...policy, maxAttempts: 3, retryBaseDelayMs: 3_000 },
+      context: { runId: 'run-exhausted', traceId: 'trace-exhausted', signal: new AbortController().signal },
+      dependencies: { sleep },
+    }));
+    expect(attempts).toEqual([1, 2, 3]);
+    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([3_000, 6_000]);
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.retrying', 'response.retrying', 'response.failed']);
+    expect(events.at(-1)).toMatchObject({ attempt: 3, error: { attempt: 3, upstream: { code: 'upstream_stream_read_error' } } });
+  });
+
+  it.each([
+    { status: 401 },
+    { status: 403 },
+    { type: 'authentication_error' },
+    { type: 'permission_error' },
+    { code: 'context_length_exceeded', status: 429 },
+  ])('stops after one attempt for %j', async (upstream) => {
+    const openAttempt = vi.fn((): never => {
+      throw new GatewayCallError({
+        source: 'provider', gateway: 'ai', ...request.model,
+        driverId: 'controlled-driver', stage: 'request', attempt: 1, traceId: 'trace-stop',
+        message: 'Sample failure', upstream: { message: 'Sample failure', ...upstream },
+      });
+    });
+    const events = await collect(executeAiRun({
+      request, target: target(openAttempt), policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-stop', traceId: 'trace-stop', signal: new AbortController().signal },
+    }));
+    expect(openAttempt).toHaveBeenCalledOnce();
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.failed']);
+  });
+
+  it('stops for an unwrapped local programming error', async () => {
+    const openAttempt = vi.fn((): never => { throw new TypeError('Sample local defect'); });
+    const events = await collect(executeAiRun({
+      request, target: target(openAttempt), policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-local', traceId: 'trace-local', signal: new AbortController().signal },
+    }));
+    expect(openAttempt).toHaveBeenCalledOnce();
+    expect(events.at(-1)).toMatchObject({ kind: 'response.failed', error: { source: 'local', localCode: 'UNWRAPPED_DRIVER_ERROR' } });
+  });
+
+  it('cancels during backoff without opening another request', async () => {
+    const controller = new AbortController();
+    const openAttempt = vi.fn(async function* (): AsyncIterable<AiAttemptEvent> {
+      yield { kind: 'response.completed', stopReason: 'other' };
+    });
+    const iterator = executeAiRun({
+      request, target: target(openAttempt), policy: { ...policy, maxAttempts: 3, retryBaseDelayMs: 60_000 },
+      context: { runId: 'run-cancel-backoff', traceId: 'trace-cancel-backoff', signal: controller.signal },
+    })[Symbol.asyncIterator]();
+    expect((await iterator.next()).value.kind).toBe('response.started');
+    expect((await iterator.next()).value.kind).toBe('response.retrying');
+    const waiting = iterator.next();
+    controller.abort('Sample cancellation');
+    expect((await waiting).value).toMatchObject({ kind: 'response.cancelled', reason: 'Sample cancellation' });
+    expect((await iterator.next()).done).toBe(true);
+    expect(openAttempt).toHaveBeenCalledOnce();
+  });
+
+  it('does not open another request when the deadline expires in backoff', async () => {
+    let now = 0;
+    const openAttempt = vi.fn(async function* (): AsyncIterable<AiAttemptEvent> {
+      yield { kind: 'response.completed', stopReason: 'other' };
+    });
+    const events = await collect(executeAiRun({
+      request, target: target(openAttempt), policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-deadline', traceId: 'trace-deadline', signal: new AbortController().signal, deadlineAt: 10 },
+      dependencies: { now: () => now, sleep: async () => { now = 10; } },
+    }));
+    expect(openAttempt).toHaveBeenCalledOnce();
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.retrying', 'response.failed']);
+    expect(events.at(-1)).toMatchObject({ error: { source: 'timeout', stage: 'absolute_deadline' } });
+  });
+});
+
+describe('executeAiRun empty results', () => {
+  it('validates before publishing success and clears usage from the empty attempt', async () => {
+    const selected = target(async function* (_request, context): AsyncIterable<AiAttemptEvent> {
+      if (context.attempt === 1) {
+        yield { kind: 'text.delta', text: '' };
+        yield { kind: 'reasoning.delta', text: '' };
+        yield { kind: 'reasoning.signature', signature: 'sample-signature' };
+        yield { kind: 'usage.updated', usage: { totalInputTokens: 50, totalOutputTokens: 0 } };
+      } else {
+        yield { kind: 'text.delta', text: 'answer' };
+      }
+      yield { kind: 'response.completed', stopReason: 'end_turn' };
+    });
+    const events = await collect(executeAiRun({
+      request, target: selected, policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-empty', traceId: 'trace-empty', signal: new AbortController().signal },
+      dependencies: { sleep: async () => undefined },
+    }));
+    expect(events.filter((event) => event.kind === 'response.completed')).toEqual([
+      expect.objectContaining({ attempt: 2, result: expect.objectContaining({ text: 'answer', usage: {} }) }),
+    ]);
+    expect(events.find((event) => event.kind === 'response.retrying')).toMatchObject({
+      error: { source: 'provider', stage: 'result', localCode: 'AI_RESULT_EMPTY', attempt: 1, upstream: { stopReason: 'end_turn' } },
+    });
+    const completed = events.at(-1);
+    if (completed?.kind !== 'response.completed') throw new Error('Missing completion');
+    expect(completed.result.reasoningSignature).toBeUndefined();
+  });
+
+  it.each(['end_turn', 'other', 'content_filter', 'max_tokens'] as const)('fails after three empty attempts and preserves %s', async (stopReason) => {
+    const openAttempt = vi.fn(async function* (): AsyncIterable<AiAttemptEvent> {
+      yield { kind: 'response.completed', stopReason };
+    });
+    const events = await collect(executeAiRun({
+      request, target: target(openAttempt), policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-empty', traceId: 'trace-empty', signal: new AbortController().signal },
+      dependencies: { sleep: async () => undefined },
+    }));
+    expect(openAttempt).toHaveBeenCalledTimes(3);
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.retrying', 'response.retrying', 'response.failed']);
+    const failed = events.at(-1);
+    if (failed?.kind !== 'response.failed') throw new Error('Missing failure');
+    expect(failed.error.toJSON()).toMatchObject({
+      source: 'provider', stage: 'result', localCode: 'AI_RESULT_EMPTY', attempt: 3,
+      driverId: 'controlled-driver', traceId: 'trace-empty', upstream: { stopReason },
+    });
+    expect(failed.error.message).toBe('AI returned empty response (no text, reasoning, or tool calls)');
+  });
+
+  it('does not reuse partial content to validate a subsequent empty attempt', async () => {
+    const selected = target(async function* (_request, context): AsyncIterable<AiAttemptEvent> {
+      if (context.attempt === 1) {
+        yield { kind: 'text.delta', text: 'partial' };
+        throw new GatewayCallError({
+          source: 'transport', gateway: 'ai', ...request.model,
+          driverId: 'controlled-driver', stage: 'stream', attempt: 1, traceId: context.traceId,
+          message: 'Sample interruption',
+        });
+      }
+      yield { kind: 'response.completed', stopReason: 'other' };
+    });
+    const events = await collect(executeAiRun({
+      request, target: selected, policy: { ...policy, maxAttempts: 3 },
+      context: { runId: 'run-mixed', traceId: 'trace-mixed', signal: new AbortController().signal },
+      dependencies: { sleep: async () => undefined },
+    }));
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'text.delta', 'response.retrying', 'response.retrying', 'response.failed']);
+    expect(events.at(-1)).toMatchObject({ attempt: 3, error: { attempt: 3, localCode: 'AI_RESULT_EMPTY' } });
+  });
+});
+
 describe('executeAiRun compiled model defaults', () => {
   it('adds the catalog output limit without replacing explicit generation fields', async () => {
     let received: AiRequest | undefined;
     const selected = target(async function* (attemptRequest): AsyncIterable<AiAttemptEvent> {
       received = attemptRequest;
+      yield { kind: 'text.delta', text: 'answer' };
       yield { kind: 'response.completed', stopReason: 'end_turn' };
     }, 64_000);
     const configuredRequest: AiRequest = {

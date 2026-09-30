@@ -15,8 +15,11 @@
 import { memo, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronRight,
+  GripVertical,
   FolderOpen,
   History,
   Pause,
@@ -31,6 +34,7 @@ import {
 import { useUIStore } from '../../../store/uiStore';
 
 import { MenuButton, type MenuItemDescriptor } from '../chrome/MenuButton';
+import { useContextMenu } from '../chrome/useContextMenu';
 import { OrbIndicator } from './OrbIndicator';
 import { MessageTime } from './MessageTime';
 import { Tooltip } from '../chrome/Tooltip';
@@ -60,12 +64,17 @@ const HISTORY_MENU_ICON = {
   delete: <Trash2 size={12} />,
 } as const;
 
-export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead' | 'pin' | 'unpin';
+export type ThreadMenuKey = SessionMenuKey | 'open' | 'delete' | 'markRead' | 'pin' | 'unpin' | 'moveUp' | 'moveDown';
+export type WorkspaceMenuKey = 'newSession' | 'openFolder' | 'copyPath' | 'sessionSort' | 'auto' | 'manual' | 'moveUp' | 'moveDown' | 'removeFromSidebar';
 
 export interface WorkspaceTreeProps {
   readonly groups: readonly WorkspaceGroup[];
   readonly searching?: boolean;
   readonly onMoveGroup?: (source: string, target: string, edge: WorkspaceDropEdge) => void;
+  readonly onMoveThread?: (groupKey: string, source: string, target: string, edge: WorkspaceDropEdge) => void;
+  readonly sortingDisabledReason?: string;
+  readonly groupMenuItems?: (group: WorkspaceGroup) => readonly MenuItemDescriptor<WorkspaceMenuKey>[];
+  readonly onGroupMenuAction?: (key: WorkspaceMenuKey, group: WorkspaceGroup) => void;
   readonly selectedAgentId?: string | null;
   readonly onSelect: (row: ThreadRow) => void;
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
@@ -80,7 +89,18 @@ const Row = memo<{
   readonly onSelect: (row: ThreadRow) => void;
   readonly menuSourceOf: (agentId: string) => SessionMenuSource;
   readonly onMenuAction: (key: ThreadMenuKey, row: ThreadRow) => void;
-}>(({ row, selected, onSelect, menuSourceOf, onMenuAction }) => {
+  readonly manual: boolean;
+  readonly canMoveUp: boolean;
+  readonly canMoveDown: boolean;
+  readonly sortingDisabledReason?: string;
+  readonly dragging: boolean;
+  readonly dropEdge?: WorkspaceDropEdge;
+  readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
+  readonly onDragOver: (event: DragEvent<HTMLElement>) => void;
+  readonly onDrop: (event: DragEvent<HTMLElement>) => void;
+  readonly onDragEnd: () => void;
+}>(({ row, selected, onSelect, menuSourceOf, onMenuAction, manual, canMoveUp, canMoveDown,
+  sortingDisabledReason, dragging, dropEdge, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const reveal = useUIStore((store) => {
@@ -98,7 +118,7 @@ const Row = memo<{
   const pinKey = row.pinned ? 'unpin' : 'pin';
   const pinLabel = t(`sessionWorkbenchUi.sessionMenu.${pinKey}`);
 
-  const items: MenuItemDescriptor[] = [{
+  let items: MenuItemDescriptor<ThreadMenuKey>[] = [{
     key: pinKey,
     label: pinLabel,
     icon: row.pinned ? <PinOff size={12} /> : <Pin size={12} />,
@@ -116,12 +136,41 @@ const Row = memo<{
       })))];
 
   if (unread) items.push({ key: 'markRead', label: t('sessionWorkbenchUi.sessionMenu.markRead'), icon: <Check size={12} /> });
+  if (manual) {
+    items.push(...(['moveUp', 'moveDown'] as const).map((key) => {
+      const allowed = key === 'moveUp' ? canMoveUp : canMoveDown;
+      return {
+        key, label: t(`contextMenu.sidebar.${key}`),
+        icon: key === 'moveUp' ? <ArrowUp size={12} /> : <ArrowDown size={12} />,
+        disabled: !!sortingDisabledReason || !allowed,
+        disabledReason: sortingDisabledReason ?? (!allowed ? t(`contextMenu.sidebar.${key === 'moveUp' ? 'atStart' : 'atEnd'}`) : undefined),
+      };
+    }));
+  }
+  const menuOrder: ThreadMenuKey[] = ['pin', 'unpin', 'rename', 'markRead', 'workspace', 'open', 'trace', 'moveUp', 'moveDown', 'pause', 'stop', 'delete'];
+  items.sort((a, b) => menuOrder.indexOf(a.key) - menuOrder.indexOf(b.key));
+  items = items.map((item, index) => ({
+    ...item,
+    label: item.key === 'delete' || item.key === 'stop'
+      ? t(`contextMenu.sidebar.${item.key === 'delete' ? 'deleteSession' : 'stopSession'}`)
+      : item.key === 'rename' ? `${item.label}…` : item.label,
+    separatorBefore: index > 0 && (['workspace', 'open', 'moveUp', 'pause', 'delete'].includes(item.key)
+      || (item.key === 'stop' && items[index - 1]?.key !== 'pause')),
+  }));
+  const selectMenu = (key: ThreadMenuKey) => onMenuAction(key, row);
+  const contextMenu = useContextMenu({ items, onSelect: selectMenu, ariaLabel: t('contextMenu.sidebar.sessionMenuLabel') });
 
   return (
     <div
       ref={ref}
       className={styles.row}
       data-agent-id={row.agentId}
+      data-dragging={dragging || undefined}
+      data-drop-edge={dropEdge}
+      data-context-menu={contextMenu.menu ? 'true' : undefined}
+      onContextMenu={contextMenu.onContextMenu}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       aria-label={[
         row.label,
         row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : '',
@@ -143,6 +192,20 @@ const Row = memo<{
       }}
       title={row.label}
     >
+      <span
+        className={styles.dragHandle}
+        draggable={!!onDragStart}
+        onDragStart={(event) => {
+          event.stopPropagation();
+          contextMenu.close();
+          if (ref.current) event.dataTransfer.setDragImage?.(ref.current, 16, 14);
+          onDragStart?.(event);
+        }}
+        onDragEnd={onDragEnd}
+        onClick={(event) => event.stopPropagation()}
+        title={sortingDisabledReason ?? t('contextMenu.sidebar.dragSession')}
+        aria-label={t('contextMenu.sidebar.dragSession')}
+      ><GripVertical size={11} /></span>
       <span
         className={styles.activitySlot}
         title={[activity, row.pinned ? t('sessionWorkbenchUi.sidebar.pinned') : ''].filter(Boolean).join(' · ')}
@@ -175,12 +238,13 @@ const Row = memo<{
       <span className={styles.rowMenu}>
         <MenuButton
           items={items}
-          onSelect={(key) => onMenuAction(key as ThreadMenuKey, row)}
+          onSelect={selectMenu}
           ariaLabel={live
             ? t('sessionWorkbenchUi.sidebar.taskActions')
             : t('sessionWorkbenchUi.sidebar.historyActions')}
         />
       </span>
+      {contextMenu.menu}
     </div>
   );
 });
@@ -201,11 +265,21 @@ interface GroupProps extends Omit<WorkspaceTreeProps, 'groups' | 'onMoveGroup'> 
 const GROUP_PREVIEW_LIMIT = 5;
 
 const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf, onMenuAction,
-  onNewSessionIn, searching, dropEdge, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) => {
+  onNewSessionIn, searching, dropEdge, dragging, onDragStart, onDragOver, onDrop, onDragEnd,
+  onMoveThread, sortingDisabledReason, groupMenuItems, onGroupMenuAction }) => {
   const { t } = useTranslation();
   const expandedGroups = useUIStore((store) => store.expandedWorkspaceGroups);
   const toggleWorkspaceGroup = useUIStore((store) => store.toggleWorkspaceGroup);
   const open = searching || expandedGroups.includes(group.key);
+  const manual = useUIStore((store) => store.workspaceSessionSort[group.key]?.mode === 'manual');
+  const contextMenu = useContextMenu({
+    items: groupMenuItems?.(group) ?? [],
+    onSelect: (key) => onGroupMenuAction?.(key, group),
+    ariaLabel: t('contextMenu.sidebar.workspaceMenuLabel'),
+  });
+  const [source, setSource] = useState<ThreadRow | null>(null);
+  const [rowDrop, setRowDrop] = useState<{ id: string; edge: WorkspaceDropEdge } | null>(null);
+  const clearRowDrag = () => { setSource(null); setRowDrop(null); };
 
   const [showAll, setShowAll] = useState(false);
   let unpinnedSeen = 0;
@@ -216,6 +290,7 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
   });
   const hiddenCount = group.rows.length - previewRows.length;
   const visibleRows = showAll || searching ? group.rows : previewRows;
+  const positions = new Map(group.rows.map((row, index) => [row.agentId, index]));
 
   return (
     <section
@@ -225,8 +300,19 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
       data-dragging={dragging || undefined}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRowDrop(null);
+      }}
     >
-      <div className={styles.groupHead}>
+      <div className={styles.groupHead} onContextMenu={contextMenu.onContextMenu} data-context-menu={contextMenu.menu ? 'true' : undefined}>
+        <span
+          className={styles.dragHandle}
+          draggable={!!onDragStart}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          title={sortingDisabledReason ?? t('contextMenu.sidebar.dragWorkspace')}
+          aria-label={t('contextMenu.sidebar.dragWorkspace')}
+        ><GripVertical size={11} /></span>
         <button
           type="button"
           className={styles.groupToggle}
@@ -261,6 +347,7 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
           </Tooltip>
         )}
       </div>
+      {contextMenu.menu}
 
       {open &&
         visibleRows.map((row) => (
@@ -271,6 +358,33 @@ const Group = memo<GroupProps>(({ group, selectedAgentId, onSelect, menuSourceOf
             onSelect={onSelect}
             menuSourceOf={menuSourceOf}
             onMenuAction={onMenuAction}
+            manual={manual}
+            canMoveUp={group.rows[positions.get(row.agentId)! - 1]?.pinned === row.pinned}
+            canMoveDown={group.rows[positions.get(row.agentId)! + 1]?.pinned === row.pinned}
+            sortingDisabledReason={sortingDisabledReason}
+            dragging={source?.agentId === row.agentId}
+            dropEdge={rowDrop?.id === row.agentId ? rowDrop.edge : undefined}
+            onDragStart={onMoveThread ? (event) => {
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', row.agentId);
+              setSource(row);
+            } : undefined}
+            onDragOver={(event) => {
+              if (!source || !onMoveThread) return;
+              event.stopPropagation();
+              if (source.agentId === row.agentId || source.pinned !== row.pinned) { setRowDrop(null); return; }
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setRowDrop({ id: row.agentId, edge: dragEdge(event) });
+            }}
+            onDrop={(event) => {
+              if (!source || !onMoveThread) return;
+              event.stopPropagation();
+              event.preventDefault();
+              onMoveThread(group.key, source.agentId, row.agentId, dragEdge(event));
+              clearRowDrag();
+            }}
+            onDragEnd={clearRowDrag}
           />
         ))}
 
@@ -292,16 +406,19 @@ export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, onMoveGroup, ..
   const [source, setSource] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ key: string; edge: WorkspaceDropEdge } | null>(null);
   const clearDrag = () => { setSource(null); setDrop(null); };
-  const dropEdge = (event: DragEvent<HTMLElement>): WorkspaceDropEdge => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-  };
+
   if (groups.length === 0) {
     return <div className={styles.empty}>{t(rest.searching ? 'sessionWorkbenchUi.sidebar.noMatches' : 'sessionWorkbenchUi.sidebar.empty')}</div>;
   }
 
   return (
-    <div onDragLeave={(event) => {
+    <div onDragOverCapture={(event) => {
+      const scroll = event.currentTarget.closest<HTMLElement>('[data-workspace-scroll]');
+      if (!scroll) return;
+      const rect = scroll.getBoundingClientRect();
+      if (event.clientY < rect.top + 32) scroll.scrollTop -= 16;
+      else if (event.clientY > rect.bottom - 32) scroll.scrollTop += 16;
+    }} onDragLeave={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(null);
     }}>
       {groups.map((group) => (
@@ -314,6 +431,8 @@ export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, onMoveGroup, ..
           onDragStart={onMoveGroup ? (event) => {
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', group.key);
+            const head = event.currentTarget.closest('section')?.querySelector<HTMLElement>(`.${styles.groupHead}`);
+            if (head) event.dataTransfer.setDragImage?.(head, 16, 12);
             setSource(group.key);
           } : undefined}
           onDragOver={(event) => {
@@ -321,12 +440,12 @@ export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, onMoveGroup, ..
             if (source === group.key) { setDrop(null); return; }
             event.preventDefault();
             event.dataTransfer.dropEffect = 'move';
-            setDrop({ key: group.key, edge: dropEdge(event) });
+            setDrop({ key: group.key, edge: dragEdge(event) });
           }}
           onDrop={(event) => {
             if (!onMoveGroup || source === null) return;
             event.preventDefault();
-            onMoveGroup(source, group.key, dropEdge(event));
+            onMoveGroup(source, group.key, dragEdge(event));
             clearDrag();
           }}
           onDragEnd={clearDrag}
@@ -337,3 +456,8 @@ export const WorkspaceTree = memo<WorkspaceTreeProps>(({ groups, onMoveGroup, ..
 });
 
 WorkspaceTree.displayName = 'WorkspaceTree';
+
+function dragEdge(event: DragEvent<HTMLElement>): WorkspaceDropEdge {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+}

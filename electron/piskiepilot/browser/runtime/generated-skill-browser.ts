@@ -3,6 +3,8 @@ import {
   type ConnectedBrowserSession,
 } from '../core/browser/browser-manager.js';
 import { BrowserOperations } from '../core/browser/browser-operations.js';
+import { uploadFileThroughElement } from '../core/session/browser-automation-session.js';
+import { validatePathWithinRoots } from '../core/session/file-roots.js';
 import { parseKeyCombination, typeKeyboardText } from '../core/session/keyboard.js';
 
 type BrowserSession = ConnectedBrowserSession['automation'];
@@ -114,6 +116,12 @@ export interface GeneratedSkillPage {
     value: string,
     options?: BrowserActionOptions
   ): Promise<BrowserPageObservation>;
+  /** Upload a file inside the workspace or temporary directory via a file input or chooser trigger. */
+  uploadFile(
+    locator: BrowserSkillLocator | readonly BrowserSkillLocator[],
+    filePath: string,
+    options?: BrowserActionOptions
+  ): Promise<BrowserPageObservation>;
   /** Select one option value on the first matching native select element. */
   select(
     locator: BrowserSkillLocator | readonly BrowserSkillLocator[],
@@ -154,6 +162,7 @@ export interface GeneratedSkillBrowserBinding {
   signal: AbortSignal;
   log(message: string, data?: unknown): void;
   notifyPageOpen(): void;
+  allowedFileRoots: readonly string[];
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -258,6 +267,7 @@ export function createGeneratedBrowserSkillRuntime(
     doubleClick: facade.doubleClick.bind(facade),
     hover: facade.hover.bind(facade),
     fill: facade.fill.bind(facade),
+    uploadFile: facade.uploadFile.bind(facade),
     select: facade.select.bind(facade),
     typeText: facade.typeText.bind(facade),
     press: facade.press.bind(facade),
@@ -368,6 +378,25 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
         await context.waitForAction(() =>
           element.asLocator().setTimeout(timeout(options.timeoutMs)).fill(value)
         );
+        return observe(context.getSelectedPage());
+      }
+    );
+  }
+
+  async uploadFile(
+    locator: BrowserSkillLocator | readonly BrowserSkillLocator[],
+    filePath: string,
+    options: BrowserActionOptions = {}
+  ): Promise<BrowserPageObservation> {
+    this.#assertActive();
+    await validatePathWithinRoots(filePath, this.#binding.allowedFileRoots);
+    return this.#withElement(
+      locator,
+      options.timeoutMs,
+      { requirement: 'attached', sideEffect: true },
+      async (page, element, context) => {
+        context.throwIfDialogOpen();
+        await uploadFileThroughElement(page, element, filePath, timeout(options.timeoutMs));
         return observe(context.getSelectedPage());
       }
     );

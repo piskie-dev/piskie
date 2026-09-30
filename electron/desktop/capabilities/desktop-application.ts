@@ -20,9 +20,11 @@ import type { ThemeService } from '../../services/theme.service.js';
 import type { pathsService } from '../../services/paths.service.js';
 import { PublicOperationError } from '../../capabilities/public-errors.js';
 import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
-import { copyImageFile } from './image-file-clipboard.js';
+import { copyImageContents } from './image-file-clipboard.js';
+import { publishFileReference } from './file-clipboard.js';
 import { expandHomePath } from '../../utils/expand-home-path.js';
 import { createWorkspaceBranch, readWorkspaceInfo, switchWorkspaceBranch } from './workspace.js';
+import { FilePreviewWatcher, readFileRevision, resolvePreviewPath } from './file-preview-watcher.js';
 
 const ATTACHMENT_IMAGE_MIME: Readonly<Record<string, string>> = Object.freeze({
   '.png': 'image/png',
@@ -63,6 +65,8 @@ const MAX_CLIPBOARD_ATTACHMENTS = 32;
 const MAX_CLIPBOARD_FORMAT_BYTES = 256 * 1024;
 
 export class DesktopApplication {
+  private readonly fileWatcher = new FilePreviewWatcher();
+
   constructor(private readonly dependencies: {
     name: string;
     version: string;
@@ -218,29 +222,49 @@ export class DesktopApplication {
       if (!sourcePath) throw new PublicOperationError('not-found', 'The image preview is no longer available');
       request = { kind: 'path', path: sourcePath };
     }
-    await copyImageFile(request, async (target) => {
+    await copyImageContents(request, async (target) => {
       const file = await resolvePreviewPath(target);
       signal?.throwIfAborted();
       if (file.kind !== 'file') throw new PublicOperationError('invalid-input', 'An image file is required');
       if (file.size > MAX_IMAGE_BYTES) throw new PublicOperationError('invalid-input', 'The image exceeds the 32 MiB copy limit');
-      return { path: file.path, bytes: await readFilePrefix(file.path, MAX_IMAGE_BYTES + 1, signal) };
+      return readFilePrefix(file.path, MAX_IMAGE_BYTES + 1, signal);
     }, signal);
+  }
+
+  async copyFile(targetPath: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    const file = await resolvePreviewPath(targetPath);
+    await publishFileReference(file.path, signal);
   }
 
   releasePreview(windowId: number, url: string): void {
     this.dependencies.presentation.releaseFilePreview(windowId, url);
   }
 
+  fileRevision(targetPath: string, signal?: AbortSignal): Promise<string | null> {
+    return readFileRevision(targetPath, signal);
+  }
+
+  observeFile(
+    targetPath: string,
+    listener: (revision: string | null) => void,
+    signal?: AbortSignal,
+    onError?: (error: unknown) => void,
+  ): Promise<{ snapshot: string | null; dispose: () => void }> {
+    return this.fileWatcher.observe(targetPath, listener, signal, onError);
+  }
+
   async previewFile(windowId: number, targetPath: string, signal?: AbortSignal): Promise<FilePreviewDescriptor> {
     signal?.throwIfAborted();
     const file = await resolvePreviewPath(targetPath);
     signal?.throwIfAborted();
-    if (file.kind === 'directory') return { kind: 'directory' };
+    if (file.kind === 'directory') return { kind: 'directory', revision: file.revision };
     const extension = path.extname(file.path).toLowerCase();
     const imageMediaType = FILE_PREVIEW_IMAGE_MIME[extension];
     if (imageMediaType) {
       return {
         kind: 'image',
+        revision: file.revision,
         url: this.dependencies.presentation.createFilePreviewUrl(
           windowId,
           file.path,
@@ -252,17 +276,18 @@ export class DesktopApplication {
     }
 
     const binaryMediaType = BINARY_MIME[extension];
-    if (binaryMediaType) return { kind: 'file', mediaType: binaryMediaType, size: file.size };
+    if (binaryMediaType) return { kind: 'file', mediaType: binaryMediaType, size: file.size, revision: file.revision };
 
-    const buffer = await readFilePrefix(file.path, MAX_TEXT_PREVIEW_BYTES + 1);
+    const buffer = await readFilePrefix(file.path, MAX_TEXT_PREVIEW_BYTES + 1, signal);
     signal?.throwIfAborted();
     if (looksBinaryBuffer(buffer.subarray(0, BINARY_SAMPLE_BYTES))) {
-      return { kind: 'file', size: file.size };
+      return { kind: 'file', size: file.size, revision: file.revision };
     }
 
     const truncated = file.size > MAX_TEXT_PREVIEW_BYTES || buffer.length > MAX_TEXT_PREVIEW_BYTES;
     return {
       kind: 'text',
+      revision: file.revision,
       content: decodePreviewText(buffer.subarray(0, MAX_TEXT_PREVIEW_BYTES)),
       truncated,
       size: file.size,
@@ -365,27 +390,6 @@ function decodePreviewText(buffer: Buffer): string {
   return new TextDecoder('utf-8').decode(buffer);
 }
 
-async function resolvePreviewPath(targetPath: string): Promise<
-  | { kind: 'file'; path: string; size: number }
-  | { kind: 'directory'; path: string }
-> {
-  const expandedPath = expandHomePath(targetPath);
-  if (!path.isAbsolute(expandedPath)) {
-    throw new PublicOperationError('invalid-input', 'An absolute path is required');
-  }
-  let resolved: string;
-  let stats: fs.Stats;
-  try {
-    resolved = await fs.promises.realpath(expandedPath);
-    stats = await fs.promises.stat(resolved);
-  } catch {
-    throw new PublicOperationError('not-found', 'The requested path does not exist');
-  }
-  if (stats.isFile()) return { kind: 'file', path: resolved, size: stats.size };
-  if (stats.isDirectory()) return { kind: 'directory', path: resolved };
-  throw new PublicOperationError('invalid-input', 'A regular file or directory is required');
-}
-
 async function resolveAttachmentPath(targetPath: string): Promise<{ path: string; size: number; isDirectory: boolean }> {
   if (!path.isAbsolute(targetPath)) {
     throw new PublicOperationError('invalid-input', 'An absolute path is required');
@@ -409,7 +413,7 @@ async function resolveAttachmentPath(targetPath: string): Promise<{ path: string
 function readClipboardPathCandidates(): string[] {
   const candidates = new Set<string>();
   const addPath = (candidate: string): void => {
-    const clean = candidate.replaceAll('\0', '').trim();
+    const clean = candidate.replaceAll('\0', '');
     if (path.isAbsolute(clean)) candidates.add(clean);
   };
   const parse = (raw: string): void => {
@@ -441,6 +445,8 @@ function readClipboardPathCandidates(): string[] {
         const raw = buffer.toString(encoding);
         if (format === 'NSFilenamesPboardType') {
           for (const match of raw.matchAll(/<string>([\s\S]*?)<\/string>/g)) addPath(decodeXml(match[1] ?? ''));
+        } else if (format === 'FileNameW') {
+          addPath(raw);
         } else {
           parse(raw);
         }

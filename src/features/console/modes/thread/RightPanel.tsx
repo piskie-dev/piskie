@@ -24,7 +24,7 @@ import type { WorkerVM } from '../../data/vm';
 import type { EmbeddedBrowserState } from '../../../../../shared/types/embedded-browser';
 import type { AgentTarget } from '../../../../../shared/types/agent-control';
 import { BrowserPanel } from './BrowserPanel';
-import type { FileReviewTarget } from '../../content/fileReviewTarget';
+import type { FileReviewTarget, UpdateFileReviewTarget } from '../../content/fileReviewTarget';
 import { resolveSelectedPanel, type PanelKey } from './panels';
 import { ReviewSlot } from '../../content/ReviewSlot';
 import { RightPanelSlot } from './RightPanelSlot';
@@ -67,6 +67,7 @@ export interface RightPanelProps {
   readonly onPick: (panel: PanelKey) => void;
   /** 用户明确打开的文件操作或正文路径；只决定审阅内容，不锁死选中页。 */
   readonly reviewTarget?: FileReviewTarget;
+  readonly onUpdateReviewTarget: UpdateFileReviewTarget;
   readonly onPreviewImage?: ImagePreviewHandler;
   readonly browserState: EmbeddedBrowserState;
   readonly browserTarget: AgentTarget;
@@ -83,6 +84,7 @@ export const RightPanel = memo<RightPanelProps>(
     wanted,
     onPick,
     reviewTarget,
+    onUpdateReviewTarget,
     onPreviewImage,
     browserState,
     browserTarget,
@@ -167,6 +169,7 @@ export const RightPanel = memo<RightPanelProps>(
                 agentId={agentId}
                 workerId={worker?.id}
                 target={reviewTarget}
+                onUpdateTarget={onUpdateReviewTarget}
                 onPreviewImage={onPreviewImage}
               />
             </div>

@@ -35,6 +35,8 @@
   min-block-size: 0;
   block-size: 100%;
   min-inline-size: 0;
+  container-type: inline-size;
+  container-name: file-review;
 }
 
 /* ── 头部：一行总计 ── */
@@ -59,6 +61,14 @@
   color: var(--cyber-text);
 }
 
+.headerIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
 /* 头部动作簇(复制 / 在文件夹中显示):贴右缘的静默图标钮,hover 亮起 */
 .headerActions {
   display: inline-flex;
@@ -74,6 +84,7 @@
   justify-content: center;
   inline-size: 22px;
   block-size: 22px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-badge);
   background: transparent;
@@ -85,6 +96,47 @@
 .headerButton:hover {
   color: var(--cyber-text);
   background: var(--surface-2);
+}
+
+.headerButton:focus-visible {
+  outline: 1px solid var(--cyber-primary);
+  outline-offset: 2px;
+  color: var(--cyber-text);
+}
+
+.headerButton:disabled {
+  cursor: default;
+}
+
+.headerButton[data-state] {
+  position: relative;
+}
+
+.headerButton[data-state='changed'] {
+  color: var(--status-waiting);
+}
+
+.headerButton[data-state='success'] {
+  color: var(--status-running);
+}
+
+.headerButton[data-state='error'] {
+  color: var(--status-error);
+}
+
+.refreshMarker {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+  inline-size: 4px;
+  block-size: 4px;
+  border-radius: 50%;
+  background: var(--status-waiting);
+}
+
+.refreshTooltip {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .roundTitle {

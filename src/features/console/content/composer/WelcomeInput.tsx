@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatModelReference, useInferenceStore } from '../../../../store/inferenceStore';
 import { useAttachmentDraft } from '../../attachments';
+import { useUIStore } from '../../../../store/uiStore';
 import { messageText, presentationFromError, type PresentationText } from '../../../../i18n/presentationText';
 import {
   composerDraftKey,
@@ -79,6 +80,7 @@ export const WelcomeInput: React.FC<{
           });
           started = outcome.kind === 'started';
           if (outcome.kind === 'started') {
+            if (settings.workspace) useUIStore.getState().restoreWorkspaceGroup(settings.workspace);
             useComposerDraftStore.getState().recordHistory(composerDraftKey(outcome.agentId), snapshot.text);
           }
           return started;

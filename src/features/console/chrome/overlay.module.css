@@ -115,6 +115,13 @@
   }
 }
 
+.pointPopover {
+  position-anchor: none;
+  position-area: none;
+  position-try-fallbacks: none;
+  margin: 0;
+}
+
 .tooltip {
   composes: popover;
   padding: 5px 9px;

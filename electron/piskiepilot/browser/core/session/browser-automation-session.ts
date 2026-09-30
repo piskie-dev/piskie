@@ -210,24 +210,9 @@ export class BrowserAutomationSession {
 
   async uploadFileByUid(uid: string, filePath: string): Promise<void> {
     this.throwIfDialogOpen();
-    const handle = await this.getElementByUid(uid) as ElementHandle<HTMLInputElement>;
+    const handle = await this.getElementByUid(uid);
     try {
-      try {
-        await handle.uploadFile(filePath);
-      } catch {
-        try {
-          const [fileChooser] = await Promise.all([
-            this.getSelectedPage().waitForFileChooser({ timeout: 3_000 }),
-            handle.asLocator().click(),
-          ]);
-          await fileChooser.accept([filePath]);
-        } catch {
-          throw new Error(
-            'Failed to upload file. The element could not accept the file directly, '
-            + 'and clicking it did not trigger a file chooser.',
-          );
-        }
-      }
+      await uploadFileThroughElement(this.getSelectedPage(), handle, filePath);
     } finally {
       void handle.dispose();
     }
@@ -453,6 +438,32 @@ export class BrowserAutomationSession {
 
   #assertActive(): void {
     if (this.#disposed) throw new Error('Browser automation session has been disposed');
+  }
+}
+
+export async function uploadFileThroughElement(
+  page: Page,
+  handle: ElementHandle<Element>,
+  filePath: string,
+  clickTimeoutMs?: number,
+): Promise<void> {
+  try {
+    await (handle as ElementHandle<HTMLInputElement>).uploadFile(filePath);
+  } catch {
+    try {
+      const [fileChooser] = await Promise.all([
+        page.waitForFileChooser({ timeout: 3_000 }),
+        clickTimeoutMs === undefined
+          ? handle.asLocator().click()
+          : handle.asLocator().setTimeout(clickTimeoutMs).click(),
+      ]);
+      await fileChooser.accept([filePath]);
+    } catch {
+      throw new Error(
+        'Failed to upload file. The element could not accept the file directly, '
+        + 'and clicking it did not trigger a file chooser.',
+      );
+    }
   }
 }
 

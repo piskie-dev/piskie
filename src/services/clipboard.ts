@@ -10,7 +10,12 @@ export async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-/** Copies the original file bytes; resolves only after the desktop publishes the file. */
+/** Copies one existing file or folder, preserving its original contents. */
+export async function copyFile(path: string): Promise<void> {
+  await window.piskie.desktop.files.copyFile(path);
+}
+
+/** Copies image pixels; resolves only after the desktop publishes the image. */
 export async function copyImage(source: ImageCopySource): Promise<void> {
   const release = retainFilePreviews(source.kind === 'url' ? [source.url] : []);
   try {

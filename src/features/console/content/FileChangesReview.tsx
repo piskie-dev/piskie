@@ -1,7 +1,8 @@
 import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { FileChangeRound } from '../data/fileChanges';
+import type { FileChangeRound, RoundFileChanges } from '../data/fileChanges';
+import { useReviewMenu } from '../attachments/reviewMenu';
 import { basename } from '../data/review';
 import { useFileChanges } from '../data/useFileChanges';
 import { RecordedFileReview } from './ReviewPanel';
@@ -11,6 +12,28 @@ import sidebarStyles from './threads.module.css';
 const COLLAPSED_FILE_LIMIT = 5;
 
 type Selection = { readonly roundId: string; readonly path: string };
+
+function ChangedFile({ file, selected, onSelect }: {
+  readonly file: RoundFileChanges;
+  readonly selected: boolean;
+  readonly onSelect: () => void;
+}) {
+  const context = useReviewMenu({ path: file.path, viewChanges: onSelect });
+  return <>
+    <button type="button" className={styles.file} title={file.path} aria-pressed={selected}
+      onClick={onSelect} onContextMenu={context.onContextMenu}>
+      <span className={styles.fileLabel}>
+        <span className={styles.fileName}>{basename(file.path)}</span>
+        <span className={styles.filePath}>{file.path}</span>
+      </span>
+      <span className={styles.stat}>
+        <span className={styles.added}>+{file.added}</span>
+        <span className={styles.removed}>-{file.removed}</span>
+      </span>
+    </button>
+    {context.menu}
+  </>;
+}
 
 export const FileChangesReview = memo<{
   readonly agentId: string;
@@ -38,23 +61,12 @@ export const FileChangesReview = memo<{
         {round.title && <span className={styles.roundTitle} title={round.title}>{round.title}</span>}
       </div>
       {files.map((file) => (
-        <button
+        <ChangedFile
           key={file.path}
-          type="button"
-          className={styles.file}
-          title={file.path}
-          aria-pressed={selectedRound?.id === round.id && selectedFile?.path === file.path}
-          onClick={() => setSelection({ roundId: round.id, path: file.path })}
-        >
-          <span className={styles.fileLabel}>
-            <span className={styles.fileName}>{basename(file.path)}</span>
-            <span className={styles.filePath}>{file.path}</span>
-          </span>
-          <span className={styles.stat}>
-            <span className={styles.added}>+{file.added}</span>
-            <span className={styles.removed}>-{file.removed}</span>
-          </span>
-        </button>
+          file={file}
+          selected={selectedRound?.id === round.id && selectedFile?.path === file.path}
+          onSelect={() => setSelection({ roundId: round.id, path: file.path })}
+        />
       ))}
       {hiddenCount > 0 && (
         <button
@@ -101,7 +113,7 @@ export const FileChangesReview = memo<{
             key={JSON.stringify([selectedRound!.id, selectedFile.path])}
             file={selectedFile}
             roundTitle={selectedRound!.title}
-            onRevealPath={(path) => void window.piskie.desktop.system.revealPath(path)}
+            onRevealPath={(path) => window.piskie.desktop.system.revealPath(path)}
           />
         ) : <div className={styles.status}>{t(view.loading ? 'sessionWorkbenchUi.review.loadingChanges' : 'sessionWorkbenchUi.review.noChanges')}</div>}
       </div>

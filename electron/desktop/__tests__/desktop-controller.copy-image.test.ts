@@ -4,10 +4,11 @@ import { MAX_IMAGE_BYTES } from '../../../shared/utils/image-format.js';
 import { createElectronPiskieClient } from '../../transport/electron/piskie-client.js';
 import { createDesktopController } from '../capabilities/desktop-controller.js';
 
-function fixture() {
+function fixture(id: string = DESKTOP_OPERATIONS.copyImage) {
   const copyImage = vi.fn(async () => undefined);
-  const controller = createDesktopController({ copyImage } as never);
-  const operation = controller.operations.find((candidate) => candidate.id === DESKTOP_OPERATIONS.copyImage)!;
+  const copyFile = vi.fn(async () => undefined);
+  const controller = createDesktopController({ copyImage, copyFile } as never);
+  const operation = controller.operations.find((candidate) => candidate.id === id)!;
   const signal = new AbortController().signal;
   const request = vi.fn(async (id: string, args: unknown) => {
     expect(id).toBe(operation.id);
@@ -16,8 +17,27 @@ function fixture() {
   const client = createElectronPiskieClient({
     transport: { request } as never, platform: 'linux', version: 'test', getPathForFile: vi.fn(),
   });
-  return { copyImage, client, operation, signal };
+  return { copyImage, copyFile, client, operation, signal };
 }
+
+describe('desktop file copy contract', () => {
+  it('routes one unchanged file or directory path through the typed client with cancellation', async () => {
+    const { client, copyFile, signal } = fixture(DESKTOP_OPERATIONS.copyFile);
+    const path = '/sample folder/示例 ';
+    await expect(client.desktop.files.copyFile(path)).resolves.toBeUndefined();
+    expect(copyFile).toHaveBeenCalledExactlyOnceWith(path, signal);
+    const failure = new Error('Sample clipboard failure');
+    copyFile.mockRejectedValueOnce(failure);
+    await expect(client.desktop.files.copyFile(path)).rejects.toBe(failure);
+  });
+
+  it.each([[], [''], [42], [{ path: '/sample/file.txt' }], ['/sample/file.txt', '/sample/other.txt']])(
+    'rejects malformed external file copy arguments %j', (...input) => {
+      const { operation } = fixture(DESKTOP_OPERATIONS.copyFile);
+      expect(operation.input.safeParse(input).success).toBe(false);
+    },
+  );
+});
 
 describe('desktop image copy contract', () => {
   it.each<CopyImageRequest>([

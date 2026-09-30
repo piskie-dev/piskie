@@ -14,6 +14,7 @@ vi.mock('../StreamingMarkdown', () => ({ StreamingMarkdown: () => null }));
 
 const preview = vi.fn(async (sourcePath: string) => ({
   kind: 'image' as const,
+  revision: 'sample-revision',
   url: `piskie-attachment://preview/${sourcePath.split('/').at(-1)}`,
   mediaType: 'image/png',
   size: 1,
@@ -80,7 +81,8 @@ describe('ThreadCell canonical image refs', () => {
     await act(async () => chip.click());
     expect(openPath).toHaveBeenCalledExactlyOnceWith(files[0].path);
     container.querySelector('img')!.click();
-    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image.png', expect.any(Array), 0);
+    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/image.png', expect.any(Array), 0,
+      undefined, undefined, ['/workspace/sample/image.png']);
   });
 
   it('renders a sent directory with a folder icon and opens its path', async () => {
@@ -293,6 +295,9 @@ describe('ThreadCell canonical image refs', () => {
         'https://example.test/after.png',
       ],
       1,
+      undefined,
+      undefined,
+      [undefined, '/agent/blobs/context.png', undefined],
     );
   });
 });

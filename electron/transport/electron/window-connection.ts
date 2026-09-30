@@ -262,13 +262,25 @@ export class WindowConnection {
     const subscriptionId = createUuid();
     const queued: unknown[] = [];
     let active: ActiveSubscription | undefined;
+    let failed = false;
+    let failure: unknown;
     const emit = (change: unknown): void => {
-      if (this.closed) return;
+      if (this.closed || failed) return;
       if (!active) {
         queued.push(change);
         return;
       }
-      this.publishChange(subscriptionId, active, change);
+      if (this.subscriptions.has(subscriptionId)) this.publishChange(subscriptionId, active, change);
+    };
+    const onError = (error: unknown): void => {
+      if (this.closed || failed || (active && !this.subscriptions.has(subscriptionId))) return;
+      failed = true;
+      failure = error;
+      queued.length = 0;
+      if (!active) return;
+      this.subscriptions.delete(subscriptionId);
+      this.send({ kind: 'fault', id: subscriptionId, fault: toPublicFault(error) });
+      void Promise.resolve().then(active.dispose).catch(() => undefined);
     };
 
     try {
@@ -277,9 +289,10 @@ export class WindowConnection {
         connectionId: this.id,
         windowId: this.options.windowId,
         signal: this.controller.signal,
-      }, topic, payload, emit);
-      if (this.closed) {
+      }, topic, payload, emit, onError);
+      if (this.closed || failed) {
         await opened.dispose();
+        if (failed) this.send({ kind: 'fault', id, fault: toPublicFault(failure) });
         return;
       }
       active = { dispose: opened.dispose, sequence: 0 };

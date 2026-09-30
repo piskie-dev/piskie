@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { HistoryRow, SessionRow } from '../sessionRow';
-import { buildThreadRows, sortThreadRows } from '../threadRows';
+import { buildThreadRows, moveThreadRow, sortThreadRows } from '../threadRows';
 import { rawText } from '../presentationText';
 
 function session(over: Partial<SessionRow> & { agentId: string }): SessionRow {
@@ -124,6 +124,32 @@ describe('buildThreadRows', () => {
       ['live', true],
       ['past', true],
     ]);
+  });
+});
+
+describe('manual thread order', () => {
+  const rows = () => buildThreadRows({ sessions: [], history: [
+    record({ agentId: 'sample-a', lastActiveAt: '2026-01-01T00:00:00Z' }),
+    record({ agentId: 'sample-b', lastActiveAt: '2026-01-02T00:00:00Z' }),
+    record({ agentId: 'sample-pinned' }),
+  ], pinnedAgentRunIds: ['sample-pinned'] });
+
+  it('keeps manual positions across activity and status changes, with pins before normal rows', () => {
+    const preference = { mode: 'manual' as const, order: ['sample-a', 'sample-b', 'sample-pinned'] };
+    const updated = rows().map((row) => row.agentId === 'sample-b'
+      ? { ...row, lastActiveAt: '2026-09-01T00:00:00Z', live: session({ agentId: row.agentId }) } : row);
+    expect(sortThreadRows(updated, preference).map((row) => row.agentId)).toEqual(['sample-pinned', 'sample-a', 'sample-b']);
+    const added = buildThreadRows({ sessions: [], history: [record({ agentId: 'sample-new' })] });
+    expect(sortThreadRows([...updated, ...added], preference).map((row) => row.agentId))
+      .toEqual(['sample-pinned', 'sample-new', 'sample-a', 'sample-b']);
+  });
+
+  it('commits only effective moves inside a partition of the complete workspace', () => {
+    const ordered = sortThreadRows(rows());
+    expect(moveThreadRow(ordered, 'sample-a', 'sample-b', 'before')).toEqual(['sample-pinned', 'sample-a', 'sample-b']);
+    expect(moveThreadRow(ordered, 'sample-a', 'sample-pinned', 'before')).toBeNull();
+    expect(moveThreadRow(ordered, 'sample-a', 'other-project', 'before')).toBeNull();
+    expect(moveThreadRow(ordered, 'sample-a', 'sample-b', 'after')).toBeNull();
   });
 });
 

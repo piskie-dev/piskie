@@ -119,12 +119,17 @@ export function moveWorkspaceGroup(
   source: string,
   target: string,
   edge: WorkspaceDropEdge,
+  visibleKeys: readonly string[] = order,
 ): readonly string[] {
   // 拖动期间分组可能被删除；默认组的空 key 与其他 key 一样参与移动。
-  if (source === target || !order.includes(source) || !order.includes(target)) return order;
-  const next = order.filter((key) => key !== source);
+  const visible = new Set(visibleKeys);
+  const slots = order.filter((key) => visible.has(key));
+  if (source === target || !slots.includes(source) || !slots.includes(target)) return order;
+  const next = slots.filter((key) => key !== source);
   next.splice(next.indexOf(target) + (edge === 'after' ? 1 : 0), 0, source);
-  return next;
+  if (next.every((key, index) => key === slots[index])) return order;
+  let index = 0;
+  return order.map((key) => visible.has(key) ? next[index++]! : key);
 }
 
 /** 搜索只筛选已排序的分组，不生成另一份顺序。组名命中时展示组内全部行。 */

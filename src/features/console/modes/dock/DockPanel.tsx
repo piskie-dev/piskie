@@ -14,7 +14,7 @@
  * 门与 composer 在本层互斥，指标始终保留；**生图审核与门可并存**，所以它在 body 里贴尾。
  */
 
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -56,7 +56,9 @@ import { ReviewSlot } from '../../content/ReviewSlot';
 import {
   reviewTargetForPath,
   type FileReviewTarget,
+  type UpdateFileReviewTarget,
 } from '../../content/fileReviewTarget';
+import { useReviewRequest } from '../../content/useReviewRequest';
 import threadStyles from '../../content/thread.module.css';
 import reviewStyles from '../../content/FileChangesReview.module.css';
 import type { TranscriptNode, TranscriptAction } from '@/domains/transcript/nodes';
@@ -102,9 +104,11 @@ export const DockPanel = memo<DockPanelProps>(
       : null;
     /** 文件操作或正文路径进入同一个 ReviewSlot；dock 只把宿主换成 Dialog。 */
     const reviewScope = workerId ?? agentId;
+    const { begin: beginReviewRequest, invalidate: invalidateReviewRequest, isCurrentScope } = useReviewRequest(reviewScope);
     const [review, setReview] = useState<{ scope: string; target: FileReviewTarget } | null>(null);
     const reviewTarget = review?.scope === reviewScope ? review.target : undefined;
     const reviewOpen = reviewTarget !== undefined;
+    const reviewBodyRef = useRef<HTMLDivElement>(null);
     const fileChangesOpen = reviewTarget?.kind === 'collection';
     const fileChanges = useFileChanges(reviewScope, !workerId);
 
@@ -164,14 +168,23 @@ export const DockPanel = memo<DockPanelProps>(
     }, [actions, target]);
 
     const openFileChange = useCallback((cellId: string) => {
+      invalidateReviewRequest();
       setReview({ scope: reviewScope, target: { kind: 'cell', cellId } });
-    }, [reviewScope]);
+    }, [invalidateReviewRequest, reviewScope]);
 
     const openLocalFile = useCallback(async (targetPath: string) => {
-      const target_ = await reviewTargetForPath(targetPath, onPreviewImage);
-      if (!target_) return;
+      const isCurrent = beginReviewRequest();
+      const target_ = await reviewTargetForPath(targetPath, onPreviewImage, isCurrent);
+      if (!target_ || !isCurrent()) return;
       setReview({ scope: reviewScope, target: target_ });
-    }, [onPreviewImage, reviewScope]);
+    }, [beginReviewRequest, onPreviewImage, reviewScope]);
+
+    const updateReviewTarget = useCallback<UpdateFileReviewTarget>((expected, next) => {
+      setReview((current) => {
+        if (!isCurrentScope() || current?.scope !== reviewScope || current.target.kind !== 'path' || current.target !== expected || current.target.path !== expected.path) return current;
+        return next ? { scope: reviewScope, target: next } : null;
+      });
+    }, [isCurrentScope, reviewScope]);
 
     /** 审批门的「查看详情」：callId 即 cell id，送审阅面板看单次改动 */
     const viewDiff = useCallback(() => {
@@ -204,11 +217,13 @@ export const DockPanel = memo<DockPanelProps>(
     });
 
     const closeReview = useCallback(() => {
+      invalidateReviewRequest();
       setReview(null);
-    }, []);
+    }, [invalidateReviewRequest]);
     const toggleFileChanges = useCallback(() => {
+      invalidateReviewRequest();
       setReview(fileChangesOpen ? null : { scope: reviewScope, target: { kind: 'collection' } });
-    }, [fileChangesOpen, reviewScope]);
+    }, [fileChangesOpen, invalidateReviewRequest, reviewScope]);
 
     /**
      * cell 呈现与 thread 同一份 `ThreadCell`：dock 节点内部也是横条阅读流，
@@ -365,14 +380,17 @@ export const DockPanel = memo<DockPanelProps>(
           onClose={closeReview}
           title={t('sessionWorkbenchUi.panels.reviewPanel')}
           width={880}
-          className={fileChangesOpen ? reviewStyles.dialog : undefined}
+          className={reviewStyles.dialog}
           bodyClassName={fileChangesOpen ? reviewStyles.dialogBody : undefined}
+          bodyRef={reviewBodyRef}
         >
           {reviewOpen && (
             <ReviewSlot
               agentId={agentId}
               workerId={workerId}
               target={reviewTarget}
+              scrollContainerRef={reviewBodyRef}
+              onUpdateTarget={updateReviewTarget}
               onPreviewImage={onPreviewImage}
             />
           )}

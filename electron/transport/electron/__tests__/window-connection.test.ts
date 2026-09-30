@@ -170,6 +170,58 @@ describe('WindowConnection', () => {
     });
   });
 
+  it('disposes and reports a topic failure received before opening completes', async () => {
+    const dispose = vi.fn();
+    const { port, connection } = fixture({
+      operations: [], topics: [{
+        id: 'desktop.files.changes', capability: 'desktop', input: z.undefined(),
+        open: (_context, _input, emit, onError) => {
+          emit('sample-token');
+          onError?.(new Error('Sample watch failed'));
+          return { snapshot: 'initial-token', dispose };
+        },
+      }],
+    });
+    port.receive({ kind: 'subscribe', id: 's1', topic: 'desktop.files.changes' });
+    await settle();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(connection.snapshot().subscriptions).toBe(0);
+    expect(port.sent.map(({ message }) => message)).toEqual([
+      expect.objectContaining({ kind: 'welcome' }),
+      expect.objectContaining({ kind: 'fault', id: 's1', fault: expect.objectContaining({ message: 'Sample watch failed' }) }),
+    ]);
+    await connection.close('sample-cleanup');
+  });
+
+  it('reports an active topic fault once, disposes it, and ignores later changes', async () => {
+    const dispose = vi.fn();
+    let fail!: (error: unknown) => void;
+    let emit!: (value: unknown) => void;
+    const { port, connection } = fixture({
+      operations: [], topics: [{
+        id: 'desktop.files.changes', capability: 'desktop', input: z.undefined(),
+        open: (_context, _input, listener, onError) => {
+          emit = listener;
+          fail = onError!;
+          return { snapshot: 'sample-token', dispose };
+        },
+      }],
+    });
+    port.receive({ kind: 'subscribe', id: 's1', topic: 'desktop.files.changes' });
+    await settle();
+    const subscribed = port.sent[1]!.message as { subscriptionId: string };
+    fail(new Error('Sample watcher error'));
+    fail(new Error('Duplicate watcher error'));
+    emit('late-token');
+    await settle();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(connection.snapshot().subscriptions).toBe(0);
+    expect(port.sent).toHaveLength(3);
+    expect(port.sent[2]!.message).toMatchObject({ kind: 'fault', id: subscribed.subscriptionId, fault: { message: 'Sample watcher error' } });
+    await connection.close('sample-cleanup');
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   it('transfers child stream ports and owns their cleanup', async () => {
     const child = { close: vi.fn() };
     const { port, connection } = fixture({
