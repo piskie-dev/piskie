@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CopyActionButton } from '@/components/shared/CopyActionButton';
-import { copyImage } from '@/services/clipboard';
+import { useAttachmentMenu } from '../attachments/attachmentMenu';
 import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import styles from './ImageLightbox.module.css';
 
@@ -19,6 +19,7 @@ interface ImageLightboxProps {
     readonly index: number;
     /** Original filename of the image at the opening index. */
     readonly name?: string;
+    readonly sourcePaths?: readonly (string | undefined)[];
   } | null;
   onClose: () => void;
 }
@@ -29,6 +30,37 @@ function pinDecodedImageSize(event: React.SyntheticEvent<HTMLImageElement>): voi
   // A viewBox-only SVG has no CSS intrinsic size and collapses in a shrink-wrapped dialog.
   image.width = image.naturalWidth;
   image.height = image.naturalHeight;
+}
+
+function PreviewThumbnail({ url, sourcePath, name, index, active, onSelect, buttonRef }: {
+  readonly url: string;
+  readonly sourcePath?: string;
+  readonly name?: string;
+  readonly index: number;
+  readonly active: boolean;
+  readonly onSelect: () => void;
+  readonly buttonRef?: React.Ref<HTMLButtonElement>;
+}) {
+  const { t } = useTranslation();
+  const context = useAttachmentMenu({ kind: 'image',
+    source: sourcePath ? { kind: 'path', path: sourcePath } : { kind: 'url', url, name },
+    preview: onSelect,
+  });
+  return <>
+    <button
+      ref={buttonRef}
+      type="button"
+      className={styles.thumbnail}
+      data-active={active ? 'true' : undefined}
+      onClick={onSelect}
+      onContextMenu={context.onContextMenu}
+      aria-label={t('sessionWorkbenchUi.lightbox.openImage', { index: index + 1 })}
+      aria-current={active ? 'true' : undefined}
+    >
+      <img src={url} alt="" draggable={false} />
+    </button>
+    {context.menu}
+  </>;
 }
 
 const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
@@ -53,6 +85,12 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
   const imageUrl = preview?.urls[activeIndex] ?? null;
   const imageName = activeIndex === preview?.index ? preview.name : undefined;
   const copyKey = useMemo(() => ({ preview, activeIndex }), [preview, activeIndex]);
+  const sourcePath = preview?.sourcePaths?.[activeIndex];
+  const context = useAttachmentMenu(imageUrl ? { kind: 'image',
+    source: sourcePath ? { kind: 'path', path: sourcePath } : { kind: 'url', url: imageUrl, name: imageName },
+  } : null);
+  const { close: closeContextMenu } = context;
+  useEffect(closeContextMenu, [preview, activeIndex, closeContextMenu]);
 
   // 打开/关闭 dialog 与预览请求同步；关闭走原生动画（不立即 remove）
   useEffect(() => {
@@ -124,7 +162,7 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
             label={t('clipboardUi.copyImage')}
             disabled={!imageUrl}
             iconOnly
-            onCopy={() => copyImage({ kind: 'url', url: imageUrl!, name: imageName })}
+            onCopy={() => context.perform('copyImage')}
           />
           <button
             type="button"
@@ -158,8 +196,10 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
                   total: count,
                 })}
                 onLoad={pinDecodedImageSize}
+                onContextMenu={context.onContextMenu}
                 draggable={false}
               />
+              {context.menu}
             </div>
           )}
 
@@ -180,18 +220,16 @@ const ImageLightbox: React.FC<ImageLightboxProps> = ({ preview, onClose }) => {
               </span>
               <div className={styles.rail}>
                 {preview.urls.map((url, index) => (
-                  <button
+                  <PreviewThumbnail
                     key={`${url}:${index}`}
-                    ref={index === activeIndex ? activeThumbRef : undefined}
-                    type="button"
-                    className={styles.thumbnail}
-                    data-active={index === activeIndex ? 'true' : undefined}
-                    onClick={() => select(index)}
-                    aria-label={t('sessionWorkbenchUi.lightbox.openImage', { index: index + 1 })}
-                    aria-current={index === activeIndex ? 'true' : undefined}
-                  >
-                    <img src={url} alt="" draggable={false} />
-                  </button>
+                    buttonRef={index === activeIndex ? activeThumbRef : undefined}
+                    url={url}
+                    sourcePath={preview.sourcePaths?.[index]}
+                    name={index === preview.index ? preview.name : undefined}
+                    index={index}
+                    active={index === activeIndex}
+                    onSelect={() => select(index)}
+                  />
                 ))}
               </div>
             </div>

@@ -47,7 +47,7 @@ beforeEach(() => {
   getPathForFile.mockReset().mockReturnValue('/sample/example.pdf');
   clipboardAttachments.mockReset().mockResolvedValue([{ kind: 'file', name: 'example.pdf', path: '/sample/example.pdf', size: 6 }]);
   preview.mockReset().mockImplementation(async (path: string) => ({
-    kind: 'image', url: `piskie-attachment://preview/${encodeURIComponent(path)}`, mediaType: 'image/png', size: 4,
+    kind: 'image', revision: 'sample-revision', url: `piskie-attachment://preview/${encodeURIComponent(path)}`, mediaType: 'image/png', size: 4,
   }));
   releasePreview.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(dom.window, 'piskie', {
@@ -116,6 +116,7 @@ describe('ImageReview Runtime owner', () => {
     await act(async () => thumbnails[0]!.click());
     expect(onPreviewImage).toHaveBeenCalledExactlyOnceWith(
       'piskie-attachment://preview/%2Fcandidate%2Ffirst.png',
+      undefined, undefined, undefined, undefined, ['/candidate/first.png'],
     );
   });
 

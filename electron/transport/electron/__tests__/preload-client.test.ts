@@ -10,6 +10,7 @@ vi.mock('electron', () => ({
 
 import { ElectronPreloadClient } from '../preload-client.js';
 import { createElectronPiskieClient } from '../piskie-client.js';
+import { DESKTOP_TOPICS } from '../../../../shared/electron-contracts/desktop.js';
 
 const openPorts: MessagePort[] = [];
 
@@ -190,6 +191,70 @@ describe('ElectronPreloadClient', () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('desktop-stop'),
     }));
+  });
+
+  it('delivers file snapshots, deletion changes and active subscription faults to the API observer', async () => {
+    const { client: transport, host, messages } = await connect();
+    const client = createElectronPiskieClient({ transport, getPathForFile: vi.fn(), version: 'test', platform: 'linux' });
+    const listener = vi.fn();
+    const onError = vi.fn();
+    const dispose = client.desktop.files.observe('/sample/file.txt', listener, onError);
+    await vi.waitFor(() => expect(frames(messages, 'subscribe')).toHaveLength(1));
+    const subscribe = frames<{ kind: 'subscribe'; id: string }>(messages, 'subscribe')[0]!;
+    expect(subscribe).toMatchObject({ topic: DESKTOP_TOPICS.fileChanges, payload: { path: '/sample/file.txt' } });
+    host.postMessage({ kind: 'subscribed', id: subscribe.id, subscriptionId: 'sample-subscription', snapshot: 'sample-token', cursor: '0' });
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledExactlyOnceWith('sample-token'));
+    host.postMessage({ kind: 'change', subscriptionId: 'sample-subscription', sequence: 1, value: null, cursor: '1' });
+    await vi.waitFor(() => expect(listener).toHaveBeenLastCalledWith(null));
+    host.postMessage({ kind: 'fault', id: 'sample-subscription', fault: {
+      code: 'unavailable', message: 'Sample watch unavailable', correlationId: 'sample-fault', retryable: false,
+    } });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'unavailable', message: 'Sample watch unavailable' }));
+    host.postMessage({ kind: 'change', subscriptionId: 'sample-subscription', sequence: 2, value: 'late-token', cursor: '2' });
+    dispose();
+    await settle();
+    expect(listener.mock.calls).toEqual([['sample-token'], [null]]);
+    expect(frames(messages, 'unsubscribe')).toHaveLength(0);
+    transport.close();
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it('forwards a file subscription opening fault to onError', async () => {
+    const { client: transport, host, messages } = await connect();
+    const client = createElectronPiskieClient({ transport, getPathForFile: vi.fn(), version: 'test', platform: 'linux' });
+    const listener = vi.fn();
+    const onError = vi.fn();
+    client.desktop.files.observe('/sample/file.txt', listener, onError);
+    await vi.waitFor(() => expect(frames(messages, 'subscribe')).toHaveLength(1));
+    const subscribe = frames<{ kind: 'subscribe'; id: string }>(messages, 'subscribe')[0]!;
+    host.postMessage({ kind: 'fault', id: subscribe.id, fault: {
+      code: 'forbidden', message: 'Sample parent inaccessible', correlationId: 'sample-fault', retryable: false,
+    } });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'forbidden' }));
+    expect(listener).not.toHaveBeenCalled();
+    transport.close();
+  });
+
+  it.each(['fault', 'subscribed'])('suppresses callbacks when a file observer is disposed before %s', async (kind) => {
+    const { client: transport, host, messages } = await connect();
+    const client = createElectronPiskieClient({ transport, getPathForFile: vi.fn(), version: 'test', platform: 'linux' });
+    const listener = vi.fn();
+    const onError = vi.fn();
+    const dispose = client.desktop.files.observe('/sample/file.txt', listener, onError);
+    await vi.waitFor(() => expect(frames(messages, 'subscribe')).toHaveLength(1));
+    const subscribe = frames<{ kind: 'subscribe'; id: string }>(messages, 'subscribe')[0]!;
+    dispose();
+    host.postMessage(kind === 'fault' ? {
+      kind, id: subscribe.id, fault: { code: 'unavailable', message: 'Sample watch unavailable', correlationId: 'sample-fault', retryable: false },
+    } : { kind, id: subscribe.id, subscriptionId: 'sample-subscription', snapshot: 'sample-token', cursor: '0' });
+    if (kind === 'subscribed') {
+      await vi.waitFor(() => expect(frames(messages, 'unsubscribe')).toEqual([{ kind: 'unsubscribe', subscriptionId: 'sample-subscription' }]));
+    } else await settle();
+    expect(listener).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    transport.close();
   });
 
   it('rejects a malformed welcome instead of throwing from the message callback', async () => {

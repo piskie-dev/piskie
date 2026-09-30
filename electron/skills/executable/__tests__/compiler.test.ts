@@ -85,6 +85,24 @@ describe('compileExecutableSkill', () => {
     await expect(access(candidate.modulePath)).resolves.toBeUndefined();
   }, COMPILE_TEST_TIMEOUT_MS);
 
+  it('compiles a Browser Skill that uploads a workspace file through the public page API', async () => {
+    const source = await makeSource('browser-upload', 'browser', [
+      "import { defineSkill, ok, z, type BrowserSkillRuntime } from 'piskiepilot/core-skill'",
+      "type Page = BrowserSkillRuntime['page']",
+      "async function attach(page: Page, filePath: string) { return page.uploadFile({ css: 'input[type=file]' }, filePath) }",
+      "export default defineSkill({ name: 'browser-upload', domain: 'browser', functions: {",
+      "  attach: { description: 'Attach a file', params: z.object({ filePath: z.string() }),",
+      '    async run({ filePath }, ctx) { return ok(JSON.stringify(await attach(ctx.browser.page, filePath))) },',
+      '  },',
+      '} })',
+    ].join('\n'));
+
+    const candidate = await compileExecutableSkill(source, 'browser-upload', { profile: 'browser' });
+
+    expect(candidate.profile).toBe('browser');
+    await expect(access(candidate.modulePath)).resolves.toBeUndefined();
+  }, COMPILE_TEST_TIMEOUT_MS);
+
   it('keeps standard executable Skill helpers, package metadata, and tsconfig semantics', async () => {
     const source = await makeSource('local-demo', 'local', [
       "import { defineSkill, ok, z } from 'piskiepilot/core-skill'",

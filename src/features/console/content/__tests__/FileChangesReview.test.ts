@@ -1,5 +1,5 @@
 import { JSDOM } from 'jsdom';
-import { act, createElement, type ReactNode } from 'react';
+import { act, cloneElement, createElement, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConversationEntry } from '@shared/types';
@@ -9,7 +9,10 @@ import { call, edit, result, samplePath, user, write } from '../../data/__tests_
 import type { FileReviewTarget } from '../fileReviewTarget';
 import { ReviewSlot } from '../ReviewSlot';
 import { FileChangeSummary } from '../FileChangeSummary';
+import { installMenuDom, menuLabels, rightClick, selectMenuItem } from '../../attachments/__tests__/menuTestDom';
+import { useToastStore } from '@/features/toasts';
 
+vi.mock('../../chrome/Tooltip', () => ({ Tooltip: ({ children, title }: { children: ReactElement; title: string }) => cloneElement(children, { title } as object) }));
 vi.mock('@/components/content-links', () => ({ LinkedMarkdown: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../../data/useFileChanges', () => ({
   useFileChanges: () => ({ ...collectFileChanges('main', new Map([['main', projectConversationNodes(entries)]]), false), loading: false, error: null }),
@@ -21,6 +24,10 @@ let container: HTMLDivElement;
 let root: Root;
 let entries: ConversationEntry[];
 const previewFile = vi.fn();
+const revision = vi.fn();
+const copy = vi.fn();
+const openPath = vi.fn();
+const revealPath = vi.fn();
 
 beforeAll(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -28,9 +35,16 @@ beforeAll(() => {
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  Object.assign(dom.window, { piskie: { desktop: { files: { preview: previewFile }, system: { openPath: vi.fn(), revealPath: vi.fn() } } } });
+  Object.assign(dom.window, { piskie: { desktop: { files: { preview: previewFile, revision }, system: { openPath, revealPath } } } });
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
 });
 beforeEach(() => {
+  installMenuDom(dom);
+  revision.mockReset().mockResolvedValue('sample-revision');
+  copy.mockReset().mockResolvedValue(undefined);
+  openPath.mockReset().mockResolvedValue(undefined);
+  revealPath.mockReset().mockResolvedValue(undefined);
+  useToastStore.setState({ toasts: [] });
   entries = [user('first-turn', '<img src=x onerror=alert(1)>'), ...edit('first', 'alpha', 'beta'), ...edit('second', 'beta', 'gamma'),
     user('latest-turn', 'Update the sample.'), ...edit('latest', 'gamma', 'delta'), ...write('other-file', 'other', '/workspace/other.txt')];
   container = document.createElement('div');
@@ -38,7 +52,12 @@ beforeEach(() => {
   root = createRoot(container);
   previewFile.mockClear();
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  document.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
+});
 afterAll(() => { dom.window.close(); vi.unstubAllGlobals(); });
 
 async function render(target: FileReviewTarget = { kind: 'collection' }) {
@@ -57,6 +76,64 @@ async function selectPath(path: string, index = 0) {
 const detail = () => container.querySelector('[class*="detail"]')!;
 
 describe('file change collection review', () => {
+  it('right-clicks a file without selecting it and views only the requested changes', async () => {
+    await render();
+    const path = '/workspace/other.txt';
+    const row = container.querySelector(`nav button[title="${path}"]`)!;
+    await rightClick(row);
+    expect(detail().textContent).toContain('delta');
+    expect(menuLabels(container)).toEqual(['查看变更', '复制路径', '在文件管理器中显示']);
+    expect(previewFile).not.toHaveBeenCalled();
+    expect(copy).not.toHaveBeenCalled();
+    await selectMenuItem(container, '复制路径');
+    expect(copy).toHaveBeenCalledExactlyOnceWith(path);
+    await rightClick(row);
+    await selectMenuItem(container, '查看变更');
+    expect(detail().textContent).toContain('other');
+    expect(detail().textContent).not.toContain('delta');
+    await rightClick(row);
+    await selectMenuItem(container, '在文件管理器中显示');
+    expect(revealPath).toHaveBeenCalledExactlyOnceWith(path);
+  });
+
+  it('uses current metadata for missing files, keeps their paths copyable, and opens their parent', async () => {
+    revision.mockResolvedValue(null);
+    await render();
+    const row = container.querySelector(`nav button[title="${samplePath}"]`)!;
+    await rightClick(row);
+    expect(menuLabels(container)).toEqual(['查看变更', '复制路径', '打开所在文件夹']);
+    await selectMenuItem(container, '复制路径');
+    expect(copy).toHaveBeenCalledExactlyOnceWith(samplePath);
+    await rightClick(row);
+    await selectMenuItem(container, '打开所在文件夹');
+    expect(openPath).toHaveBeenCalledExactlyOnceWith('/workspace');
+    expect(revealPath).not.toHaveBeenCalled();
+    openPath.mockRejectedValueOnce(new Error('Sample parent is unavailable'));
+    await rightClick(row);
+    await selectMenuItem(container, '打开所在文件夹');
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ tone: 'error', title: expect.stringContaining('Sample parent is unavailable') });
+    expect(previewFile).not.toHaveBeenCalled();
+  });
+
+  it.each(['read', 'diff'] as const)('reuses the %s header copy source and leaves selected text to the native menu', async (kind) => {
+    if (kind === 'read') entries.push(call('read-call', 'read', { file_path: samplePath }), result('read-call', '1\tSample source text'));
+    await render({ kind: 'cell', cellId: kind === 'read' ? 'read-call' : 'latest' });
+    const panel = container.firstElementChild!;
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="复制内容"]')!.click());
+    const text = copy.mock.calls[0]![0];
+    await rightClick(panel);
+    await selectMenuItem(container, kind === 'read' ? '复制内容' : '复制差异');
+    expect(copy.mock.calls.map(([value]) => value)).toEqual([text, text]);
+    expect(text).toBe(kind === 'read' ? 'Sample source text' : '-gamma\n+delta');
+    const body = container.querySelector('[class*="lineText"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    document.getSelection()!.addRange(range);
+    const event = await rightClick(body);
+    expect(event.defaultPrevented).toBe(false);
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+  });
+
   it('defaults to one latest-turn file, expands earlier turns, and retains all old calls for the same path', async () => {
     await render();
     expect(detail().textContent).toContain('delta');
@@ -160,7 +237,7 @@ describe('file change collection review', () => {
     entries.push(call('read-call', 'read', { file_path: samplePath }), result('read-call', '1\tRecorded text'));
     await render({ kind: 'cell', cellId: 'read-call' });
     expect(container.textContent).toContain('Recorded text');
-    await render({ kind: 'path', path: '/workspace/preview.txt', preview: { kind: 'text', content: 'Current preview.', truncated: false, size: 16 } });
+    await render({ kind: 'path', path: '/workspace/preview.txt', preview: { kind: 'text', revision: 'sample-revision', content: 'Current preview.', truncated: false, size: 16 } });
     expect(container.textContent).toContain('Current preview.');
     expect(container.querySelector('nav')).toBeNull();
   });

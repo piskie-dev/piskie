@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
-import { act, createElement, useEffect, useRef, useState } from 'react';
+import { act, cloneElement, createElement, useEffect, useRef, useState, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FilePreviewDescriptor } from '@shared/electron-contracts/desktop';
@@ -10,6 +10,8 @@ import { ContentLinkUrlScope } from '@/components/content-links/ContentLinks';
 import { retainFilePreviews } from '@/services/file-preview';
 import { projectConversationNodes } from '@/domains/transcript/project-entry';
 import { deferred } from '../../attachments/__tests__/fixtures';
+
+vi.mock('../../chrome/Tooltip', () => ({ Tooltip: ({ children, title }: { children: ReactElement; title: string }) => cloneElement(children, { title } as object) }));
 
 let LinkedMarkdown: typeof import('@/components/content-links').LinkedMarkdown;
 let ThreadCell: typeof import('../ThreadCell').ThreadCell;
@@ -27,7 +29,7 @@ const onOpenLocalFile = vi.fn();
 const onOpenUrl = vi.fn();
 let token = 0;
 function image(): FilePreviewDescriptor {
-  return { kind: 'image', url: `piskie-attachment://preview/sample-${++token}`, mediaType: 'image/png', size: 4 };
+  return { kind: 'image', revision: 'sample-revision', url: `piskie-attachment://preview/sample-${++token}`, mediaType: 'image/png', size: 4 };
 }
 const markdownImage = (src: string) => `![Sample illustration](<${src.replace(/\\/g, '\\\\')}>)`;
 
@@ -143,7 +145,7 @@ describe('Markdown image sources and failures', () => {
   });
 
   it.each(['file', 'decode'] as const)('removes the image and preserves its description and path on a %s failure', async (failure) => {
-    if (failure === 'file') preview.mockResolvedValueOnce({ kind: 'file', mediaType: 'application/octet-stream', size: 4 });
+    if (failure === 'file') preview.mockResolvedValueOnce({ kind: 'file', revision: 'sample-revision', mediaType: 'application/octet-stream', size: 4 });
     await render(markdownImage('/workspace/sample.png'));
     if (failure === 'decode') {
       await act(async () => container.querySelector('img')!.dispatchEvent(new dom.window.Event('error')));
@@ -207,7 +209,8 @@ describe('conversation and document image preview', () => {
     }
     expect(preview).toHaveBeenCalledExactlyOnceWith('/workspace/session/assets/sample.png');
     await act(async () => container.querySelector('img')!.click());
-    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/sample-1', ['piskie-attachment://preview/sample-1'], 0);
+    expect(onPreviewImage).toHaveBeenCalledWith('piskie-attachment://preview/sample-1', ['piskie-attachment://preview/sample-1'], 0,
+      undefined, undefined, ['/workspace/session/assets/sample.png']);
   });
 
   it.each((['read', 'preview'] as const).flatMap((mode) => [
@@ -222,7 +225,7 @@ describe('conversation and document image preview', () => {
     await act(async () => root.render(createElement(ReviewPanel, {
       change: null,
       read: mode === 'read' ? { kind: 'read', path, content, startLine: 21 } : null,
-      preview: mode === 'preview' ? { path, descriptor: { kind: 'text', content, truncated: false, size: 4 } } : null,
+      preview: mode === 'preview' ? { path, descriptor: { kind: 'text', revision: 'sample-revision', content, truncated: false, size: 4 } } : null,
       onOpenPath: vi.fn(), onRevealPath: vi.fn(), onPreviewImage,
     })));
     expect(preview).toHaveBeenCalledExactlyOnceWith(imagePath);
@@ -232,7 +235,7 @@ describe('conversation and document image preview', () => {
     await act(async () => container.querySelectorAll('img')[1]!.click());
     expect(onPreviewImage).toHaveBeenCalledWith('https://images.example.test/other.png', [
       'piskie-attachment://preview/sample-1', 'https://images.example.test/other.png',
-    ], 1);
+    ], 1, undefined, undefined, [imagePath, undefined]);
   });
 
   it('shares the gallery with attachments and keeps local tokens alive until the lightbox closes', async () => {

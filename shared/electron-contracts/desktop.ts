@@ -8,7 +8,9 @@ export const DESKTOP_OPERATIONS = Object.freeze({
   openAgentRunTrace: 'desktop.system.openAgentRunTrace',
   clipboardAttachments: 'desktop.system.clipboardAttachments',
   copyImage: 'desktop.files.copyImage',
+  copyFile: 'desktop.files.copyFile',
   previewFile: 'desktop.files.preview',
+  fileRevision: 'desktop.files.revision',
   releasePreview: 'desktop.files.releasePreview',
   selectFiles: 'desktop.files.select',
   defaultWorkspacePath: 'desktop.workspace.defaultPath',
@@ -22,7 +24,10 @@ export const DESKTOP_OPERATIONS = Object.freeze({
 
 export type DesktopColorScheme = 'light' | 'dark';
 
-export type FilePreviewDescriptor =
+export type FilePreviewDescriptor = {
+  /** Metadata token captured before reading the preview, not a content hash. */
+  readonly revision: string;
+} & (
   | {
       readonly kind: 'image';
       readonly url: string;
@@ -40,7 +45,8 @@ export type FilePreviewDescriptor =
       readonly mediaType?: string;
       readonly size: number;
     }
-  | { readonly kind: 'directory' };
+  | { readonly kind: 'directory' }
+);
 
 /** Original image sources; bytes cross the preload bridge as an ArrayBuffer. */
 export type CopyImageRequest =
@@ -61,6 +67,7 @@ export type ClipboardAttachmentDescriptor = {
 
 export const DESKTOP_TOPICS = Object.freeze({
   network: 'desktop.system.network',
+  fileChanges: 'desktop.files.changes',
 } as const);
 
 interface DesktopSystemClient {
@@ -79,9 +86,19 @@ interface DesktopSystemClient {
 interface DesktopFilesClient {
   /** Resolves a DOM File in preload; returns an empty string for files without a disk backing. */
   getPathForFile(file: File): string;
-  /** Publishes an original-format image file to the system clipboard. Rejects on failure. */
+  /** Publishes image pixels to the system clipboard; animated sources become a still image. Rejects on failure. */
   copyImage(request: CopyImageRequest): Promise<void>;
+  /** Publishes one existing file or directory as a native file reference. Rejects on failure. */
+  copyFile(path: string): Promise<void>;
   preview(path: string): Promise<FilePreviewDescriptor>;
+  /** Reads metadata only; null means the path is missing. */
+  revision(path: string): Promise<string | null>;
+  /** Delivers the initial revision and later changes without reading file contents. */
+  observe(
+    path: string,
+    listener: (revision: string | null) => void,
+    onError?: (error: unknown) => void,
+  ): () => void;
   releasePreview(url: string): Promise<void>;
   select(input?: { type?: 'file' | 'folder' | 'any' }): Promise<string[]>;
 }

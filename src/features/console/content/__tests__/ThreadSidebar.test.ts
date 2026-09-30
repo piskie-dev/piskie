@@ -6,6 +6,8 @@ import { createJSONStorage } from 'zustand/middleware';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskDefinitionSnapshot } from '../../../../../shared/electron-contracts/task-definitions';
 import { useUIStore } from '../../../../store/uiStore';
+import { useToastStore } from '../../../toasts/toast-store';
+import { composerDraftKey, useComposerDraftStore } from '../../data/composer-drafts';
 import type { PopoverProps } from '../../chrome/Popover';
 import type { ActionResult } from '../../data/actions';
 import type { HistoryRow } from '../../data/sessionRow';
@@ -23,6 +25,9 @@ const attentionState = vi.hoisted(() => ({
 const consoleActions = vi.hoisted(() => ({
   renameAgentRun: vi.fn(async (): Promise<ActionResult> => ({ ok: true })),
   markRead: vi.fn(async (): Promise<ActionResult> => ({ ok: true })),
+  deleteHistory: vi.fn(async (_id: string): Promise<ActionResult> => ({ ok: true })),
+  stop: vi.fn(async (_id: string): Promise<ActionResult> => ({ ok: true })),
+  openWorkspace: vi.fn(async (_path?: string): Promise<ActionResult> => ({ ok: true })),
 }));
 vi.hoisted(() => {
   const values = new Map<string, string>();
@@ -103,12 +108,41 @@ async function drag(source: string, target: string, edge: 'before' | 'after') {
   await act(async () => targetGroup.dispatchEvent(event('drop')));
 }
 
+async function context(target: Element) {
+  await act(async () => target.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 80, clientY: 120 })));
+}
+async function workspaceMenu(name: string) { await context(button(name).parentElement!); }
+function menuItem(label: string): HTMLButtonElement {
+  const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')]
+    .find((node) => node.textContent?.startsWith(label));
+  expect(item, label).toBeDefined();
+  return item!;
+}
+async function choose(label: string) { await act(async () => menuItem(label).click()); }
+async function sessionDrag(source: string, target?: string, edge: 'before' | 'after' = 'before') {
+  const from = container.querySelector<HTMLElement>(`[data-agent-id="${source}"] [draggable]`)!;
+  const transfer = { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: '', dropEffect: '' };
+  const event = (name: string) => {
+    const result = new dom.window.Event(name, { bubbles: true, cancelable: true });
+    Object.defineProperties(result, { dataTransfer: { value: transfer }, clientY: { value: edge === 'before' ? -1 : 1 } });
+    return result;
+  };
+  await act(async () => from.dispatchEvent(event('dragstart')));
+  if (target) {
+    const to = container.querySelector<HTMLElement>(`[data-agent-id="${target}"]`)!;
+    await act(async () => to.dispatchEvent(event('dragover')));
+    await act(async () => to.dispatchEvent(event('drop')));
+  }
+  await act(async () => from.dispatchEvent(event('dragend')));
+}
+
 beforeEach(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);
   vi.stubGlobal('Event', dom.window.Event);
+  vi.stubGlobal('Element', dom.window.Element);
   vi.stubGlobal('localStorage', dom.window.localStorage);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', { value: vi.fn() });
@@ -138,8 +172,14 @@ beforeEach(() => {
     expandedWorkspaceGroups: [],
     workspaceGroupOrder: [],
     pinnedAgentRunIds: [],
+    hiddenWorkspaceGroupKeys: [],
+    workspaceSessionSort: {},
     consoleSelection: null,
   });
+  useToastStore.setState({ toasts: [] });
+  consoleActions.deleteHistory.mockReset().mockResolvedValue({ ok: true });
+  consoleActions.stop.mockReset().mockResolvedValue({ ok: true });
+  consoleActions.openWorkspace.mockReset().mockResolvedValue({ ok: true });
   historyState.ready = true;
   attentionState.attentionByAgentId = {};
   consoleActions.markRead.mockClear();
@@ -159,6 +199,324 @@ afterEach(async () => {
   container.remove();
   dom.window.close();
   vi.unstubAllGlobals();
+});
+
+describe('sidebar context actions and sorting', () => {
+  it('opens workspace actions without expansion or navigation, and exposes only usable default-group actions', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await render();
+    await workspaceMenu('alpha');
+    expect(button('alpha').getAttribute('aria-expanded')).toBe('false');
+    expect(button('alpha').parentElement!.querySelector('button[aria-haspopup="menu"]')).toBeNull();
+    await choose('复制工作空间路径');
+    expect(writeText).toHaveBeenCalledWith('/sample/alpha');
+    expect(useToastStore.getState().toasts.at(-1)?.title).toBe('工作空间路径已复制');
+    await workspaceMenu('alpha');
+    await choose('在文件管理器中打开');
+    expect(consoleActions.openWorkspace).toHaveBeenCalledWith('/sample/alpha');
+    await workspaceMenu('alpha');
+    await choose('在此工作空间新建会话');
+    expect(props.onNewSessionIn).toHaveBeenCalledWith('/sample/alpha');
+    expect(props.onSelectHistory).not.toHaveBeenCalled();
+    await workspaceMenu(defaultLabel);
+    const labels = [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+    expect(labels).not.toContain('从侧栏移除');
+    expect(labels).not.toContain('复制工作空间路径');
+    expect(labels).not.toContain('在文件管理器中打开');
+  });
+
+  it('shares row actions between right click and the existing menu and keeps the clicked target', async () => {
+    await render({ history: [history('sample-a', '/sample/alpha'), history('sample-b', '/sample/alpha')] });
+    await click('alpha');
+    const row = container.querySelector<HTMLElement>('[data-agent-id="sample-b"]')!;
+    await act(async () => row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+    const labels = [...row.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+    await act(async () => row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+    await context(row);
+    expect([...row.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(labels);
+    await choose('置顶');
+    expect(useUIStore.getState().pinnedAgentRunIds).toEqual(['sample-b']);
+    expect(props.onSelectHistory).not.toHaveBeenCalled();
+    expect(useUIStore.getState().consoleSelection).toBeNull();
+  });
+
+  it('hides running workspaces through reload, activity and search while keeping the current view and draft', async () => {
+    const live = projectActiveAgentRun({ agentId: 'sample-live', phase: 'thinking', children: [],
+      runConfig: { name: 'Sample live', workspace: '/sample/alpha' },
+    } as unknown as AgentControlSnapshot, 'Example');
+    const selection = { kind: 'live' as const, agentId: 'sample-live' };
+    useUIStore.setState({ consoleSelection: selection });
+    useComposerDraftStore.getState().setDraft(composerDraftKey('sample-live'), 'Unsent example');
+    await render({ sessions: [live], selectedAgentId: live.agentId });
+    const order = useUIStore.getState().workspaceGroupOrder;
+    await workspaceMenu('alpha');
+    await choose('从侧栏移除');
+    expect(groupNames()).toEqual([defaultLabel, 'beta']);
+    expect(container.querySelector('dialog[open]')).toBeNull();
+    expect(useUIStore.getState().consoleSelection).toEqual(selection);
+    expect(useComposerDraftStore.getState().drafts[composerDraftKey('sample-live')]?.text).toBe('Unsent example');
+    expect(consoleActions.stop).not.toHaveBeenCalled();
+    expect(consoleActions.deleteHistory).not.toHaveBeenCalled();
+    expect(useUIStore.getState().workspaceGroupOrder).toEqual(order);
+    const saved = localStorage.getItem('piskie-ui-storage')!;
+    await act(async () => root.render(null));
+    useUIStore.setState({ hiddenWorkspaceGroupKeys: [] });
+    localStorage.setItem('piskie-ui-storage', saved);
+    await useUIStore.persist.rehydrate();
+    await render({ sessions: [{ ...live, phase: 'waiting' }], history: props.history.map((row) => ({ ...row, lastActiveAt: '2026-09-01T00:00:00Z' })) });
+    await search('alpha');
+    expect(groupNames()).toEqual([]);
+    await search('');
+    await render({ collapsed: true });
+    expect(container.querySelector('[aria-label="Sample live"]')).toBeNull();
+    await render({ collapsed: false });
+    const undo = useToastStore.getState().toasts.find((toast) => toast.id === 'sidebar-hidden:/sample/alpha');
+    expect(undo?.title).toBe('已从侧栏移除');
+    await act(async () => undo!.action!.run());
+    expect(groupNames()).toEqual([defaultLabel, 'alpha', 'beta']);
+  });
+
+  it('keeps hidden workspace slots through drag and menu moves, restoring the saved position on undo', async () => {
+    await render({ history: [history('a', '/sample/alpha', 3), history('b', '/sample/beta', 2), history('c', '/sample/gamma')] });
+    await workspaceMenu('beta');
+    await choose('从侧栏移除');
+    await drag('gamma', 'alpha', 'before');
+    expect(useUIStore.getState().workspaceGroupOrder).toEqual(['/sample/gamma', '/sample/beta', '/sample/alpha']);
+    await workspaceMenu('alpha');
+    await choose('上移');
+    expect(useUIStore.getState().workspaceGroupOrder).toEqual(['/sample/alpha', '/sample/beta', '/sample/gamma']);
+    await drag('gamma', 'alpha', 'before');
+    await act(async () => useToastStore.getState().toasts.find((toast) => toast.id === 'sidebar-hidden:/sample/beta')!.action!.run());
+    expect(groupNames()).toEqual(['gamma', 'beta', 'alpha']);
+  });
+
+  it('enters manual mode only on successful drop using the complete list and blocks restore while searching', async () => {
+    await render({ history: Array.from({ length: 8 }, (_, index) => history(`sample-${index}`, '/sample/alpha', 8 - index)) });
+    await click('alpha');
+    await sessionDrag('sample-4');
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({});
+    await sessionDrag('sample-4', 'sample-0');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']).toEqual({
+      mode: 'manual', order: ['sample-4', 'sample-0', 'sample-1', 'sample-2', 'sample-3', 'sample-5', 'sample-6', 'sample-7'], revision: 1,
+    });
+    expect(props.onSelectHistory).not.toHaveBeenCalled();
+    const restore = useToastStore.getState().toasts.find((toast) => toast.id === 'sidebar-sort:/sample/alpha')!.action!.run;
+    await search('sample');
+    expect(useToastStore.getState().toasts.find((toast) => toast.id === 'sidebar-sort:/sample/alpha')).toMatchObject({ action: undefined, detail: '清除筛选后调整顺序' });
+    await act(async () => restore());
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.mode).toBe('manual');
+    await workspaceMenu('alpha');
+    expect(menuItem('会话排序').disabled).toBe(true);
+    expect(menuItem('上移').disabled).toBe(true);
+    await act(async () => container.querySelector('[data-workspace-scroll]')!.dispatchEvent(new dom.window.Event('scroll')));
+    await context(container.querySelector('[data-agent-id="sample-4"]')!);
+    expect(menuItem('下移').disabled).toBe(true);
+    expect(container.querySelector<HTMLElement>('[data-agent-id="sample-4"] [draggable]')!.draggable).toBe(false);
+    await search('');
+    await act(async () => restore());
+    expect(visibleAgentIds()).toEqual(['sample-0', 'sample-1', 'sample-2', 'sample-3', 'sample-4']);
+    await render({ history: props.history.map((row) => row.agentId === 'sample-7' ? { ...row, lastActiveAt: '2026-09-01T00:00:00Z' } : row) });
+    await workspaceMenu('alpha');
+    await choose('会话排序');
+    await choose('手动排序');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.order[0]).toBe('sample-7');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.order).toHaveLength(8);
+  });
+
+  it('persists manual order, inserts new sessions and pin changes at the partition top, and cleans deleted IDs', async () => {
+    await render({ history: [history('sample-a', '/sample/alpha', 3), history('sample-b', '/sample/alpha', 2), history('sample-c', '/sample/alpha')] });
+    await click('alpha');
+    await sessionDrag('sample-c', 'sample-a');
+    const saved = localStorage.getItem('piskie-ui-storage')!;
+    await act(async () => root.render(null));
+    useUIStore.setState({ workspaceSessionSort: {} });
+    localStorage.setItem('piskie-ui-storage', saved);
+    await useUIStore.persist.rehydrate();
+    await render({ history: props.history.map((row) => row.agentId === 'sample-b' ? { ...row, lastActiveAt: '2026-09-01T00:00:00Z' } : row) });
+    expect(visibleAgentIds()).toEqual(['sample-c', 'sample-a', 'sample-b']);
+    await render({ history: [...props.history, history('sample-new', '/sample/alpha')] });
+    expect(visibleAgentIds()).toEqual(['sample-new', 'sample-c', 'sample-a', 'sample-b']);
+    await context(container.querySelector('[data-agent-id="sample-a"]')!);
+    await choose('置顶');
+    await context(container.querySelector('[data-agent-id="sample-b"]')!);
+    await choose('置顶');
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a', 'sample-new', 'sample-c']);
+    await context(container.querySelector('[data-agent-id="sample-a"]')!);
+    await choose('取消置顶');
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a', 'sample-new', 'sample-c']);
+    await context(container.querySelector('[data-agent-id="sample-c"]')!);
+    await choose('上移');
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a', 'sample-c', 'sample-new']);
+    await render({ history: props.history.filter((row) => row.agentId !== 'sample-c') });
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.order).toEqual(['sample-b', 'sample-a', 'sample-new']);
+  });
+
+  it('restores automatic sorting from a pre-merge toast using the current default workspace key', async () => {
+    const workspace = '/sample/default';
+    await render({ history: [history('sample-a', workspace, 3), history('sample-b', workspace, 2)] });
+    await click('default');
+    await sessionDrag('sample-b', 'sample-a');
+    const restore = useToastStore.getState().toasts.find((toast) => toast.id === `sidebar-sort:${workspace}`)!.action!.run;
+    await render({ defaultWorkspacePath: workspace });
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a']);
+    await act(async () => restore());
+    expect(visibleAgentIds()).toEqual(['sample-a', 'sample-b']);
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({ '': { mode: 'auto', order: [], revision: 2 } });
+    expect(JSON.parse(localStorage.getItem('piskie-ui-storage')!).state.workspaceSessionSort)
+      .toEqual({ '': { mode: 'auto', order: [], revision: 2 } });
+  });
+
+  it('keeps a new default-path drag when an older automatic preference survives navigation', async () => {
+    const workspace = '/sample/default';
+    await render({ defaultWorkspacePath: workspace, history: [history('sample-a', workspace, 3), history('sample-b', workspace, 2)] });
+    await workspaceMenu(defaultLabel);
+    await choose('会话排序');
+    await choose('自动排序');
+    await act(async () => root.render(null));
+    await render({ defaultWorkspacePath: undefined });
+    await click('default');
+    await sessionDrag('sample-b', 'sample-a');
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a']);
+    await render({ defaultWorkspacePath: workspace });
+    expect(visibleAgentIds()).toEqual(['sample-b', 'sample-a']);
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({
+      '': { mode: 'manual', order: ['sample-b', 'sample-a'], revision: 2 },
+    });
+  });
+
+  it.each([
+    { earlier: 'auto', latest: 'manual', latestDefault: false },
+    { earlier: 'manual', latest: 'auto', latestDefault: false },
+    { earlier: 'manual', latest: 'manual', latestDefault: false },
+    { earlier: 'auto', latest: 'manual', latestDefault: true },
+    { earlier: 'manual', latest: 'auto', latestDefault: true },
+    { earlier: 'manual', latest: 'manual', latestDefault: true },
+  ] as const)('preserves the latest $latest choice over $earlier across alias rehydration (default=$latestDefault)', async ({ earlier, latest, latestDefault }) => {
+    const workspace = '/sample/default';
+    useUIStore.setState({ expandedWorkspaceGroups: ['', workspace] });
+    await render({ history: [
+      history('sample-path-a', workspace, 4), history('sample-path-b', workspace, 3),
+      history('sample-legacy-a', undefined, 2), history('sample-legacy-b'),
+    ] });
+    const chooseSort = async (defaultGroup: boolean, mode: 'auto' | 'manual') => {
+      if (mode === 'manual') {
+        const prefix = defaultGroup ? 'sample-legacy' : 'sample-path';
+        await sessionDrag(`${prefix}-b`, `${prefix}-a`);
+      } else {
+        await workspaceMenu(defaultGroup ? defaultLabel : 'default');
+        await choose('会话排序');
+        await choose('自动排序');
+      }
+    };
+    await chooseSort(!latestDefault, earlier);
+    await chooseSort(latestDefault, latest);
+    const saved = localStorage.getItem('piskie-ui-storage')!;
+    await act(async () => root.render(null));
+    useUIStore.setState({ workspaceSessionSort: {} });
+    localStorage.setItem('piskie-ui-storage', saved);
+    await useUIStore.persist.rehydrate();
+    await render({ defaultWorkspacePath: workspace });
+    const expected = latest === 'auto'
+      ? ['sample-path-a', 'sample-path-b', 'sample-legacy-a', 'sample-legacy-b']
+      : latestDefault
+        ? ['sample-path-a', 'sample-path-b', 'sample-legacy-b', 'sample-legacy-a']
+        : ['sample-legacy-a', 'sample-legacy-b', 'sample-path-b', 'sample-path-a'];
+    expect(visibleAgentIds()).toEqual(expected);
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({
+      '': { mode: latest, order: latest === 'manual' ? expected : [], revision: 2 },
+    });
+    if (latest === 'manual') {
+      const toastKey = latestDefault ? '' : workspace;
+      await act(async () => useToastStore.getState().toasts.find((toast) => toast.id === `sidebar-sort:${toastKey}`)!.action!.run());
+      expect(useUIStore.getState().workspaceSessionSort).toEqual({ '': { mode: 'auto', order: [], revision: 3 } });
+    }
+  });
+
+  it('preserves default manual preferences while its path resolves separately from the session inventory', async () => {
+    useUIStore.setState({
+      expandedWorkspaceGroups: ['', '/sample/default'],
+      workspaceSessionSort: { '': { mode: 'manual', order: ['sample-current', 'sample-legacy'] } },
+    });
+    await render({ history: [history('sample-current', '/sample/default'), history('sample-legacy')] });
+    expect(useUIStore.getState().workspaceSessionSort['']?.order).toEqual(['sample-current', 'sample-legacy']);
+    await render({ defaultWorkspacePath: '/sample/default' });
+    expect(visibleAgentIds()).toEqual(['sample-current', 'sample-legacy']);
+  });
+
+  it('keeps a hidden path hidden and carries its sorting preference when it becomes the default group', async () => {
+    useUIStore.setState({
+      workspaceSessionSort: { '/sample/default': { mode: 'manual', order: ['sample-a', 'sample-b'] } },
+    });
+    await render({ history: [history('sample-a', '/sample/default'), history('sample-b', '/sample/default', 2)] });
+    await workspaceMenu('default');
+    await choose('从侧栏移除');
+    await render({ defaultWorkspacePath: '/sample/default' });
+    expect(groupNames()).toEqual([]);
+    expect(useUIStore.getState().workspaceSessionSort['']).toEqual({ mode: 'manual', order: ['sample-a', 'sample-b'] });
+    await act(async () => useToastStore.getState().toasts.find((toast) => toast.id === 'sidebar-hidden:/sample/default')!.action!.run());
+    await click(defaultLabel);
+    expect(visibleAgentIds()).toEqual(['sample-a', 'sample-b']);
+  });
+
+  it('rejects dragging across pinned partitions or projects and disables sorting before history is ready', async () => {
+    useUIStore.setState({ pinnedAgentRunIds: ['sample-pin'] });
+    await render({ history: [history('sample-pin', '/sample/alpha'), history('sample-row', '/sample/alpha'), history('sample-other', '/sample/beta')] });
+    await click('alpha');
+    await click('beta');
+    await sessionDrag('sample-pin');
+    const originalOrder = useUIStore.getState().workspaceGroupOrder;
+    const transfer = { setData: vi.fn(), effectAllowed: '' };
+    const event = new dom.window.Event('dragstart', { bubbles: true });
+    Object.defineProperty(event, 'dataTransfer', { value: transfer });
+    await act(async () => button('alpha').dispatchEvent(event));
+    await act(async () => button('alpha').dispatchEvent(new dom.window.Event('dragend', { bubbles: true })));
+    expect(useUIStore.getState().workspaceGroupOrder).toBe(originalOrder);
+    await sessionDrag('sample-row', 'sample-pin');
+    await sessionDrag('sample-row', 'sample-other');
+    expect(useUIStore.getState().workspaceSessionSort).toEqual({});
+    historyState.ready = false;
+    await render({ history: [...props.history] });
+    await workspaceMenu('alpha');
+    expect(menuItem('会话排序').disabled).toBe(true);
+    expect(menuItem('会话排序').textContent).toContain('历史记录加载后可调整顺序');
+    expect(button('alpha').draggable).toBe(false);
+  });
+
+  it('confirms a single history deletion, preserves failed records, and clears its saved order only after success', async () => {
+    useUIStore.setState({ workspaceSessionSort: { '/sample/alpha': { mode: 'manual', order: ['sample-a', 'sample-b'] } } });
+    await render({ history: [history('sample-a', '/sample/alpha'), history('sample-b', '/sample/alpha')] });
+    await click('alpha');
+    await context(container.querySelector('[data-agent-id="sample-a"]')!);
+    await choose('删除会话…');
+    expect(consoleActions.deleteHistory).not.toHaveBeenCalled();
+    expect(container.querySelector('dialog[open]')!.textContent).toContain('项目文件夹');
+    await click('取消');
+    expect(consoleActions.deleteHistory).not.toHaveBeenCalled();
+    await context(container.querySelector('[data-agent-id="sample-a"]')!);
+    await choose('删除会话…');
+    consoleActions.deleteHistory.mockResolvedValueOnce({ ok: false, error: { kind: 'raw', text: 'Example deletion failure' } });
+    await click('删除');
+    expect(container.querySelector('dialog[open] [role="alert"]')!.textContent).toBe('Example deletion failure');
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.order).toContain('sample-a');
+    await click('删除');
+    expect(consoleActions.deleteHistory).toHaveBeenLastCalledWith('sample-a');
+    await render({ history: props.history.filter((row) => row.agentId !== 'sample-a') });
+    expect(useUIStore.getState().workspaceSessionSort['/sample/alpha']?.order).toEqual(['sample-b']);
+    expect(consoleActions.stop).not.toHaveBeenCalled();
+  });
+
+  it('requires confirmation for stopping a live row while keeping pause independently available', async () => {
+    const live = projectActiveAgentRun({ agentId: 'sample-live', phase: 'thinking', children: [], runConfig: { name: 'Sample live' } } as unknown as AgentControlSnapshot, 'Example');
+    await render({ sessions: [live], history: [], menuSourceOf: () => ({ phase: 'thinking', agentId: 'sample-live' }) });
+    await click(defaultLabel);
+    await context(container.querySelector('[data-agent-id="sample-live"]')!);
+    expect(menuItem('暂停')).toBeDefined();
+    await choose('停止…');
+    expect(consoleActions.stop).not.toHaveBeenCalled();
+    await click('停止');
+    expect(consoleActions.stop).toHaveBeenCalledWith('sample-live');
+  });
 });
 
 describe('workspace navigation', () => {
@@ -393,9 +751,9 @@ describe('workspace navigation', () => {
     expect(rowCount()).toBe(0);
     await click('alpha');
     const written = JSON.parse(localStorage.getItem('piskie-ui-storage')!);
-    expect(written.version).toBe(5);
+    expect(written.version).toBe(6);
     expect(Object.keys(written.state).sort()).toEqual([
-      'consoleMode', 'expandedWorkspaceGroups', 'pinnedAgentRunIds', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder',
+      'consoleMode', 'expandedWorkspaceGroups', 'hiddenWorkspaceGroupKeys', 'pinnedAgentRunIds', 'sidebarCollapsed', 'theme', 'workspaceGroupOrder', 'workspaceSessionSort',
     ]);
   });
 
@@ -439,9 +797,9 @@ describe('workspace navigation', () => {
       return result!;
     };
     await act(async () => rowMenu().click());
-    await click('重命名');
+    await click('重命名…');
 
-    const dialog = container.querySelector('dialog')!;
+    const dialog = container.querySelector<HTMLDialogElement>('dialog[open]')!;
     const input = dialog.querySelector('input')!;
     const form = dialog.querySelector('form')!;
     expect(dialog.open).toBe(true);
@@ -476,7 +834,7 @@ describe('workspace navigation', () => {
     expect(dialog.open).toBe(false);
 
     await act(async () => rowMenu().click());
-    await click('重命名');
+    await click('重命名…');
     expect(dialog.open).toBe(true);
     await act(async () => dialog.close());
     expect(dialog.open).toBe(false);

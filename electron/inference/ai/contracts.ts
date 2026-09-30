@@ -127,7 +127,7 @@ export type AiEvent =
   | (AiEventBase & { kind: 'tool.arguments.delta'; callId: string; delta: string })
   | (AiEventBase & { kind: 'tool.completed'; callId: string })
   | (AiEventBase & { kind: 'usage.updated'; usage: AiUsage })
-  | (AiEventBase & { kind: 'response.completed'; stopReason: AiStopReason })
+  | (AiEventBase & { kind: 'response.completed'; stopReason: AiStopReason; result: AiResult })
   | (AiEventBase & { kind: 'response.failed'; error: GatewayCallError })
   | (AiEventBase & { kind: 'response.cancelled'; reason?: string });
 

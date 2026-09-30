@@ -17,13 +17,16 @@
  * 上下文环固定在会话输入器主动作左侧，点击可查看明细。
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { ImageNodePublicState } from '../../../../../shared/types';
 import { messageText, resolvePresentationText, type PresentationText } from '@/i18n/presentationText';
 import { MenuButton, type MenuItemDescriptor } from '../../chrome/MenuButton';
+import { useContextMenu } from '../../chrome/useContextMenu';
+import { Dialog } from '../../chrome/Dialog';
+import sidebarStyles from '../../content/threads.module.css';
 import { ConversationComposer } from '../../content/composer/ConversationComposer';
 import { PendingEventQueue } from '../../content/composer/PendingEventQueue';
 import { AgentMetricsStrip } from '../../content/AgentMetricsStrip';
@@ -88,6 +91,7 @@ export const ThreadView = memo<ThreadViewProps>(
     deferEscapeFallback,
   }) => {
     const { t } = useTranslation();
+    const [stopTarget, setStopTarget] = useState<{ name: string; run: () => void } | null>(null);
     const active = isActive(fidelity);
     const target = useMemo<ActionTarget>(() => ({ agentId, workerId }), [agentId, workerId]);
     const primaryOwner = useActivePrimaryOwner(target);
@@ -110,6 +114,19 @@ export const ThreadView = memo<ThreadViewProps>(
     const request = resolveConversationTarget(agent, worker, workerId);
     const browserResources = resolveConversationBrowserResources(agent, worker, workerId);
     const subject = worker ? worker.subject : (agent?.title ?? t('sessionWorkbenchUi.shell.unnamedTask'));
+    const titleItems = menuItems?.map((item) => item.key === 'stop'
+      ? { ...item, label: t('contextMenu.sidebar.stopSession') } : item) ?? [];
+    const selectTitleMenu = (key: string) => {
+      if (key === 'stop') setStopTarget({ name: agent?.title ?? subject, run: () => onMenuSelect?.(key) });
+      else onMenuSelect?.(key);
+    };
+    const titleMenu = useContextMenu({
+      items: titleItems,
+      onSelect: selectTitleMenu,
+      ariaLabel: t('contextMenu.sidebar.sessionMenuLabel'),
+    });
+    const closeTitleMenu = titleMenu.close;
+    useEffect(() => closeTitleMenu(), [agentId, workerId, closeTitleMenu]);
     const tasks = useMemo(() => workerId
       ? projectWorkerTasks(agent?.taskBoard, workerId)
       : (agent?.taskBoard?.items ?? []), [agent?.taskBoard, workerId]);
@@ -218,15 +235,15 @@ export const ThreadView = memo<ThreadViewProps>(
     return (
       <div className={styles.thread} {...scope}>
         {/* 头部只有一行（Codex 截图：标题 + ···，无状态徽章无 meta 轨） */}
-        <div className={styles.header}>
+        <div className={`${styles.header} ${titleMenu.menu ? sidebarStyles.contextMenuTarget : ''}`} onContextMenu={titleMenu.onContextMenu}>
           <span className={styles.headerIcon}>
             <MessageSquare size={14} />
           </span>
           <span className={styles.headerTitle}>{subject}</span>
           {menuItems && menuItems.length > 0 && (
             <MenuButton
-              items={menuItems}
-              onSelect={(key) => onMenuSelect?.(key)}
+              items={titleItems}
+              onSelect={selectTitleMenu}
               ariaLabel={t('sessionWorkbenchUi.panels.sessionActions')}
               placement="block-end"
             >
@@ -234,6 +251,19 @@ export const ThreadView = memo<ThreadViewProps>(
             </MenuButton>
           )}
         </div>
+
+        {titleMenu.menu}
+        <Dialog open={stopTarget !== null} onClose={() => setStopTarget(null)} title={t('contextMenu.sidebar.stopTitle')} width={400}>
+          <div className={sidebarStyles.renameForm}>
+            <p>{t('contextMenu.sidebar.stopBody', { name: stopTarget?.name ?? '' })}</p>
+            <div className={sidebarStyles.renameActions}>
+              <button type="button" className={sidebarStyles.renameButton} onClick={() => setStopTarget(null)}>{t('common.cancel')}</button>
+              <button type="button" className={`${sidebarStyles.renameButton} ${sidebarStyles.dangerButton}`} onClick={() => { stopTarget?.run(); setStopTarget(null); }}>
+                {t('sessionWorkbenchUi.sessionMenu.stop')}
+              </button>
+            </div>
+          </div>
+        </Dialog>
 
         <div className={styles.center}>
             {/* 按目标重挂:切主/子 tab 时换全新滚动容器。否则 scrollTop 物理残留

@@ -8,8 +8,9 @@ import { ThreadMode, type ThreadModeProps } from '../ThreadMode';
 import { FileChangeSummary } from '../../../content/FileChangeSummary';
 import { dispatchKeyEvent } from '../../../data/keyboard';
 import type { ThreadViewProps } from '../ThreadView';
-import type { FileReviewTarget } from '../../../content/fileReviewTarget';
 import type { FilePreviewDescriptor } from '@shared/electron-contracts/desktop';
+import type { ReviewSlotProps } from '../../../content/ReviewSlot';
+import { deferred } from '../../../attachments/__tests__/fixtures';
 
 vi.mock('../../../data/vm', () => ({
   useAgentVM: (agentId: string) => ({
@@ -24,11 +25,18 @@ vi.mock('../../../data/vm', () => ({
 vi.mock('../../../data/actions', () => ({ useConsoleActions: () => ({}) }));
 vi.mock('../../../data/useImageNodes', () => ({ useImageNodes: () => [] }));
 vi.mock('../../../content/ThreadSidebar', () => ({ ThreadSidebar: () => null }));
-vi.mock('../../../content/ReviewSlot', () => ({ ReviewSlot: ({ target }: { target?: FileReviewTarget }) => createElement('div', {
-  'data-review-kind': target?.kind,
-  'data-review-path': target?.kind === 'path' ? target.path : undefined,
-  'data-preview-kind': target?.kind === 'path' ? target.preview.kind : undefined,
-}) }));
+vi.mock('../../../content/ReviewSlot', () => ({ ReviewSlot: (props: ReviewSlotProps) => {
+  reviewInstances.push(props);
+  const { target, onUpdateTarget } = props;
+  return createElement('div', {
+    'data-review-kind': target?.kind,
+    'data-review-path': target?.kind === 'path' ? target.path : undefined,
+    'data-preview-kind': target?.kind === 'path' ? target.preview.kind : undefined,
+    'data-preview-revision': target?.kind === 'path' ? target.preview.revision : undefined,
+  }, target?.kind === 'path' && createElement('button', { onClick: () => onUpdateTarget?.(target, {
+    ...target, preview: { ...target.preview, revision: 'revision-two' },
+  }) }, 'Refresh sample snapshot'));
+} }));
 vi.mock('../ThreadView', () => ({ ThreadView: ({ onToggleFileChanges, fileChangesOpen, onOpenFileChange }: ThreadViewProps) => createElement('div', null,
   createElement(FileChangeSummary, { changes: { filesChanged: 1, added: 1, removed: 0 }, expanded: fileChangesOpen, onToggle: onToggleFileChanges }),
   createElement('button', { onClick: () => onOpenFileChange?.('sample-call') }, 'Open sample call'),
@@ -80,6 +88,7 @@ const api = {
 };
 
 const preview = vi.fn<(path: string) => Promise<FilePreviewDescriptor>>();
+const reviewInstances: ReviewSlotProps[] = [];
 let dom: JSDOM;
 let container: HTMLDivElement;
 let root: Root;
@@ -94,7 +103,8 @@ beforeAll(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
-  preview.mockReset().mockResolvedValue({ kind: 'directory' });
+  preview.mockReset().mockResolvedValue({ kind: 'directory', revision: 'revision-one' });
+  reviewInstances.length = 0;
   states.clear();
   subscriptions.clear();
   retiredListeners.length = 0;
@@ -125,6 +135,48 @@ async function click(label: string) { await act(async () => button(label).click(
 const address = () => container.querySelector<HTMLInputElement>('input');
 
 describe('thread preview controls', () => {
+  it('retains refreshed descriptors across panel and conversation switches and rejects callbacks from another scope', async () => {
+    await render();
+    await click('Open sample directory');
+    await click('Refresh sample snapshot');
+    const latest = reviewInstances.at(-1)!;
+    expect(container.querySelector('[data-preview-revision]')?.getAttribute('data-preview-revision')).toBe('revision-two');
+    await click('Open preview link');
+    await click('审阅');
+    expect(container.querySelector('[data-preview-revision]')?.getAttribute('data-preview-revision')).toBe('revision-two');
+    await render('session-beta');
+    await act(async () => latest.onUpdateTarget!(latest.target as Extract<NonNullable<ReviewSlotProps['target']>, { kind: 'path' }>, null));
+    await render();
+    expect(container.querySelector('[data-preview-revision]')?.getAttribute('data-preview-revision')).toBe('revision-two');
+    expect(preview).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an obsolete callback after closing and reopening the same path', async () => {
+    await render();
+    await click('Open sample directory');
+    const previous = reviewInstances.at(-1)!;
+    await click('关闭审阅');
+    await click('Open sample directory');
+    await act(async () => previous.onUpdateTarget!(previous.target as Extract<NonNullable<ReviewSlotProps['target']>, { kind: 'path' }>, null));
+    expect(container.querySelector('[data-preview-revision]')?.getAttribute('data-preview-revision')).toBe('revision-one');
+  });
+
+  it.each(['scope', 'selection', 'close', 'unmount'] as const)('discards an initial preview that finishes after %s changes', async (action) => {
+    await render();
+    await click('Open sample directory');
+    const pending = deferred<FilePreviewDescriptor>();
+    preview.mockReturnValueOnce(pending.promise);
+    await click('Open sample directory');
+    if (action === 'scope') await render('session-beta');
+    else if (action === 'selection') await click('Open sample call');
+    else if (action === 'close') await click('关闭审阅');
+    else await act(async () => root.render(null));
+    await act(async () => pending.resolve({ kind: 'directory', revision: 'revision-two' }));
+    expect(container.querySelector('[data-preview-revision="revision-two"]')).toBeNull();
+    if (action === 'selection') expect(container.querySelector('[data-review-kind]')?.getAttribute('data-review-kind')).toBe('cell');
+  });
+
+
   it('opens the right review panel for a directory through the shared path entry', async () => {
     await render();
     expect(container.querySelector('[data-review-kind]')).toBeNull();

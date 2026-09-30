@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AiAttemptEvent, AiRequest } from '../../../ai/contracts.js';
+import { executeAiRun } from '../../../ai/run-machine.js';
 import type { CatalogSnapshot, ModelDefinition } from '../../../catalog/contracts.js';
 import type { ProviderInstance } from '../../../control/config-schema.js';
 import type { ArtifactReader } from '../../../execution/artifact-port.js';
@@ -374,6 +375,7 @@ describe('Anthropic Messages SDK driver', () => {
       'x-api-key': 'plain-anthropic-key',
       'x-piskie-test': 'present',
     });
+    const responseFormat = request().responseFormat;
     expect(receivedBody).toMatchObject({
       model: 'wire-claude-model',
       max_tokens: 64,
@@ -389,8 +391,8 @@ describe('Anthropic Messages SDK driver', () => {
       thinking: { type: 'adaptive' },
       output_config: {
         effort: 'high',
-        format: { type: 'json_schema', schema: request().responseFormat!.kind === 'json_schema'
-          ? request().responseFormat!.schema
+        format: { type: 'json_schema', schema: responseFormat?.kind === 'json_schema'
+          ? responseFormat.schema
           : {} },
       },
       messages: [
@@ -567,6 +569,30 @@ describe('Anthropic Messages SDK driver', () => {
           request_id: 'request-body-529',
         },
       },
+    });
+  });
+
+  it.each(['authentication_error', 'permission_error'])('stops on a statusless SSE %s and preserves its diagnostics', async (type) => {
+    let requestCount = 0;
+    const body = { type: 'error', error: { type, message: 'Sample authorization failure' } };
+    const baseUrl = await serve((_incoming, response) => {
+      requestCount++;
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.end(`event: error\ndata: ${JSON.stringify(body)}\n\n`);
+    });
+    const events = [];
+    for await (const event of executeAiRun({
+      request: { model: { providerId: 'provider', modelId: 'chat' }, messages: [{ role: 'user', content: [{ kind: 'text', text: 'Sample prompt' }] }] },
+      context: attemptContext(),
+      target: compile(baseUrl),
+      policy: { maxAttempts: 3, connectTimeoutMs: 1_000, streamIdleTimeoutMs: 1_000, retryBaseDelayMs: 1 },
+      dependencies: { sleep: async () => undefined },
+    })) events.push(event);
+
+    expect(requestCount).toBe(1);
+    expect(events.map((event) => event.kind)).toEqual(['response.started', 'response.failed']);
+    expect(events.at(-1)).toMatchObject({
+      error: { source: 'provider', attempt: 1, upstream: { type, message: 'Sample authorization failure', body } },
     });
   });
 

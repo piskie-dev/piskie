@@ -324,6 +324,9 @@ describe('Browser Skill AgentRun-local candidate', () => {
     expect(workflow.page.click).toHaveBeenLastCalledWith({
       css: '[data-selection-key="offer-42"]',
     });
+    expect(workflow.browser.createGeneratedRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedFileRoots: [process.cwd(), tmpdir()] })
+    );
   }, COMPILE_TEST_TIMEOUT_MS);
 
   it('skill_call 业务失败后修改源码、重新 build，并以新教学和新 candidate 调用成功', async () => {

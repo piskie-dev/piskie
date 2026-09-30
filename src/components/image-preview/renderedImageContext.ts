@@ -5,11 +5,14 @@ export type ImagePreviewHandler = (
   /** The preview owner releases the source on close, replacement or unmount. */
   release?: () => void,
   name?: string,
+  /** Known original paths, aligned with contextUrls; URL-only images have no path. */
+  sourcePaths?: readonly (string | undefined)[],
 ) => void;
 
 export function renderedImageContext(anchor: HTMLImageElement): {
   readonly urls: readonly string[];
   readonly index: number;
+  readonly sourcePaths: readonly (string | undefined)[];
 } {
   const scope = anchor.closest('[data-image-preview-scope]');
   const images = scope
@@ -25,5 +28,6 @@ export function renderedImageContext(anchor: HTMLImageElement): {
   return {
     urls: entries.map((entry) => entry.url),
     index: entries.findIndex((entry) => entry.image === anchor),
+    sourcePaths: entries.map((entry) => entry.image.dataset.imageSourcePath),
   };
 }

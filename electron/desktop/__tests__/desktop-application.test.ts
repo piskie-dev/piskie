@@ -12,6 +12,9 @@ const electron = vi.hoisted(() => ({
   showItemInFolder: vi.fn(),
   readBuffer: vi.fn(() => Buffer.alloc(0)),
   writeBuffer: vi.fn(),
+  writeImage: vi.fn(),
+  image: { isEmpty: () => false, getSize: () => ({ width: 2, height: 2 }) },
+  decodeImage: vi.fn(),
   readText: vi.fn(() => ''),
 }));
 
@@ -21,7 +24,10 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }));
 
 vi.mock('electron', () => ({
-  clipboard: { readBuffer: electron.readBuffer, readText: electron.readText, writeBuffer: electron.writeBuffer },
+  clipboard: {
+    readBuffer: electron.readBuffer, readText: electron.readText, writeBuffer: electron.writeBuffer,
+    writeImage: electron.writeImage, readImage: () => electron.image,
+  },
   net: { isOnline: vi.fn(() => true) },
   shell: {
     openExternal: electron.openExternal,
@@ -30,10 +36,15 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('../capabilities/image-clipboard-decoder.js', () => ({
+  decodeClipboardImage: electron.decodeImage.mockImplementation(async () => electron.image),
+}));
+
 import { gifBytes } from '../../../src/features/console/attachments/__tests__/fixtures.js';
 import { DesktopApplication } from '../capabilities/desktop-application.js';
 import { createDesktopController } from '../capabilities/desktop-controller.js';
-import { DESKTOP_OPERATIONS, type WorkspaceInfo } from '../../../shared/electron-contracts/desktop.js';
+import { DESKTOP_OPERATIONS, DESKTOP_TOPICS, type WorkspaceInfo } from '../../../shared/electron-contracts/desktop.js';
+import { createElectronPiskieClient } from '../../transport/electron/piskie-client.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -81,6 +92,109 @@ function fixture() {
   return { application, appearance, presentation, userDataDirectory, paths };
 }
 
+function pathIdentityFixture() {
+  const base = fixture();
+  const file = path.join(base.userDataDirectory, 'sample.txt ');
+  const neighbor = path.join(base.userDataDirectory, 'sample.txt');
+  fs.writeFileSync(file, 'chosen content');
+  fs.writeFileSync(neighbor, 'nearby content');
+  const controller = createDesktopController(base.application);
+  const context = { generation: 'sample-generation', connectionId: 'sample-connection', windowId: 7, signal: new AbortController().signal };
+  const request = async (id: string, input: unknown) => {
+    const operation = controller.operations.find((candidate) => candidate.id === id)!;
+    return operation.execute(context, operation.input.parse(input));
+  };
+  const getPathForFile = vi.fn(() => file);
+  const { desktop } = createElectronPiskieClient({
+    transport: { request } as never, version: 'test', platform: 'linux', getPathForFile,
+  });
+  return { ...base, file, neighbor, controller, context, desktop };
+}
+
+// Win32 filename normalization cannot create these two distinct trailing-space names.
+describe.skipIf(process.platform === 'win32')('desktop filesystem path identity', () => {
+  it('copies and pastes the OS path while a same-sized trimmed neighbor also exists', async () => {
+    const { desktop, file, neighbor } = pathIdentityFixture();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    electron.readBuffer.mockImplementation((format: string) => format === 'text/uri-list'
+      ? electron.writeBuffer.mock.lastCall![1] : Buffer.alloc(0));
+    await expect(desktop.files.copyFile(file)).resolves.toBeUndefined();
+    expect(electron.writeBuffer).toHaveBeenCalledExactlyOnceWith(
+      'text/uri-list', Buffer.from(pathToFileURL(fs.realpathSync.native(file)).href + '\r\n'),
+    );
+    expect(electron.writeBuffer.mock.lastCall![1].toString()).toContain('sample.txt%20\r\n');
+    electron.readBuffer.mockClear();
+    const osPath = desktop.files.getPathForFile(new File(['chosen content'], 'sample.txt '));
+    const pasted = await desktop.system.clipboardAttachments({ kind: 'paths', paths: [osPath, neighbor] });
+    expect(pasted.map((item) => item.path)).toEqual([fs.realpathSync.native(file), fs.realpathSync.native(neighbor)]);
+    expect(pasted.map((item) => fs.readFileSync(item.path, 'utf8'))).toEqual(['chosen content', 'nearby content']);
+    expect(electron.readBuffer).not.toHaveBeenCalled();
+  });
+
+  it('opens, reveals, previews and observes the exact path through controller validation', async () => {
+    const { desktop, file, neighbor, controller, context } = pathIdentityFixture();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const launcher = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    processes.spawn.mockReturnValue(launcher);
+    const opening = desktop.system.openPath(file);
+    expect(processes.spawn).toHaveBeenCalledWith('xdg-open', [fs.realpathSync.native(file)], expect.any(Object));
+    launcher.emit('exit', 0, null);
+    await opening;
+    await desktop.system.revealPath(file);
+    expect(electron.showItemInFolder).toHaveBeenCalledExactlyOnceWith(fs.realpathSync.native(file));
+    const preview = await desktop.files.preview(file);
+    expect(preview).toMatchObject({ kind: 'text', content: 'chosen content' });
+    expect(await desktop.files.revision(file)).toBe(preview.revision);
+    expect(await desktop.files.revision(neighbor)).not.toBe(preview.revision);
+    const topic = controller.topics.find((candidate) => candidate.id === DESKTOP_TOPICS.fileChanges)!;
+    const observation = await topic.open(context, topic.input.parse({ path: file }), vi.fn());
+    try { expect(observation.snapshot).toBe(preview.revision); }
+    finally { observation.dispose(); }
+  });
+
+  it('opens a workspace directory without selecting its trimmed neighbor', async () => {
+    const { desktop, userDataDirectory } = pathIdentityFixture();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const directory = path.join(userDataDirectory, 'sample folder ');
+    fs.mkdirSync(directory);
+    fs.mkdirSync(directory.trimEnd());
+    const launcher = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    processes.spawn.mockReturnValue(launcher);
+    const opening = desktop.system.openWorkspace(directory);
+    expect(processes.spawn).toHaveBeenCalledWith('xdg-open', [fs.realpathSync.native(directory)], expect.any(Object));
+    launcher.emit('exit', 0, null);
+    await opening;
+  });
+
+  it.each(['text/uri-list', 'public.file-url', 'NSFilenamesPboardType', 'FileNameW', 'text/plain'])('preserves native filename whitespace from a %s buffer fixture', async (format) => {
+    const { desktop, file } = pathIdentityFixture();
+    const content = format === 'NSFilenamesPboardType' ? `<array><string>${file}</string></array>`
+      : format === 'FileNameW' ? `${file}\0` : pathToFileURL(file).href + '\r\n';
+    electron.readBuffer.mockImplementation((candidate: string) => candidate === format
+      ? Buffer.from(content, format === 'FileNameW' ? 'utf16le' : 'utf8') : Buffer.alloc(0));
+    const text = format === 'text/plain' ? content : '';
+    electron.readText.mockReturnValue(text);
+    const pasted = await desktop.system.clipboardAttachments({
+      kind: 'native', files: [{ name: 'sample.txt ', size: Buffer.byteLength('chosen content') }], text,
+    });
+    expect(pasted).toEqual([{
+      kind: 'file', name: 'sample.txt ', path: fs.realpathSync.native(file), size: Buffer.byteLength('chosen content'),
+    }]);
+    expect(fs.readFileSync(pasted[0]!.path, 'utf8')).toBe('chosen content');
+  });
+
+  it('keeps surrounding whitespace as delimiters in plain-text path input', async () => {
+    const { desktop, neighbor } = pathIdentityFixture();
+    const text = ` \t${neighbor} \r\n`;
+    electron.readText.mockReturnValue(text);
+    const pasted = await desktop.system.clipboardAttachments({
+      kind: 'native', files: [{ name: 'sample.txt', size: Buffer.byteLength('nearby content') }], text,
+    });
+    expect(pasted[0]!.path).toBe(fs.realpathSync.native(neighbor));
+    expect(fs.readFileSync(pasted[0]!.path, 'utf8')).toBe('nearby content');
+  });
+});
+
 describe('DesktopApplication file and URL handling', () => {
   it('returns the default workspace path without creating the directory', () => {
     const { application, paths } = fixture();
@@ -91,11 +205,10 @@ describe('DesktopApplication file and URL handling', () => {
     expect(fs.existsSync(workspace)).toBe(false);
   });
 
-  it('captures a preview source before release and copies its existing original file', async () => {
+  it('captures a preview source before release and copies its image contents', async () => {
     const { application, presentation, userDataDirectory } = fixture();
     const source = path.join(userDataDirectory, 'sample image.gif');
     fs.writeFileSync(source, gifBytes());
-    electron.readBuffer.mockImplementation(() => electron.writeBuffer.mock.lastCall![1]);
     presentation.resolveFilePreviewPath.mockReturnValue(source);
     const url = 'piskie-attachment://preview/sample-token';
     const copying = application.copyImage(7, { kind: 'preview', url });
@@ -103,16 +216,82 @@ describe('DesktopApplication file and URL handling', () => {
     application.releasePreview(7, url);
     presentation.resolveFilePreviewPath.mockReturnValue(undefined);
     await copying;
-    expect(electron.writeBuffer).toHaveBeenCalledWith('text/uri-list', Buffer.from(pathToFileURL(fs.realpathSync.native(source)).href + '\r\n'));
+    expect(electron.decodeImage).toHaveBeenCalledWith(Buffer.from(gifBytes()), 'image/gif', undefined);
+    expect(electron.writeImage).toHaveBeenCalledExactlyOnceWith(electron.image);
     expect(fs.readFileSync(source)).toEqual(Buffer.from(gifBytes()));
     expect(fs.existsSync(source)).toBe(true);
     await expect(application.copyImage(8, { kind: 'preview', url })).rejects.toThrow('no longer available');
+  });
+
+  it('previews the physical text target when a directory symlink is followed by dotdot', async () => {
+    const { application, userDataDirectory } = fixture();
+    const nested = path.join(userDataDirectory, 'physical', 'nested');
+    fs.mkdirSync(nested, { recursive: true });
+    const physical = path.join(userDataDirectory, 'physical', 'sample.txt');
+    const lexical = path.join(userDataDirectory, 'sample.txt');
+    fs.writeFileSync(physical, 'physical contents');
+    fs.writeFileSync(lexical, 'lexical contents');
+    const link = path.join(userDataDirectory, 'linked-directory');
+    fs.symlinkSync(nested, link, 'junction');
+    const target = `${link}${path.sep}..${path.sep}sample.txt`;
+    const preview = await application.previewFile(7, target);
+    expect(preview).toMatchObject({ kind: 'text', content: 'physical contents' });
+    expect(preview.revision).toBe(await application.fileRevision(physical));
+    expect(preview.revision).not.toBe(await application.fileRevision(lexical));
+  });
+
+  it('copies the physical image target when a directory symlink is followed by dotdot', async () => {
+    const { application, presentation, userDataDirectory } = fixture();
+    const nested = path.join(userDataDirectory, 'physical', 'nested');
+    fs.mkdirSync(nested, { recursive: true });
+    const physical = path.join(userDataDirectory, 'physical', 'sample.gif');
+    const lexical = path.join(userDataDirectory, 'sample.gif');
+    fs.writeFileSync(physical, gifBytes());
+    fs.writeFileSync(lexical, 'unrelated lexical contents');
+    const link = path.join(userDataDirectory, 'linked-directory');
+    fs.symlinkSync(nested, link, 'junction');
+    const target = `${link}${path.sep}..${path.sep}sample.gif`;
+    const preview = await application.previewFile(7, target);
+    expect(preview.kind).toBe('image');
+    expect(presentation.createFilePreviewUrl).toHaveBeenCalledWith(7, fs.realpathSync.native(physical), 'image/gif');
+    await application.copyImage(7, { kind: 'path', path: target });
+    expect(electron.decodeImage).toHaveBeenCalledWith(Buffer.from(gifBytes()), 'image/gif', undefined);
+    expect(electron.writeImage).toHaveBeenCalledExactlyOnceWith(electron.image);
+    expect(fs.readFileSync(physical)).toEqual(Buffer.from(gifBytes()));
+    expect(fs.readFileSync(lexical, 'utf8')).toBe('unrelated lexical contents');
   });
 
   it('rejects a missing or directory copy source before publishing', async () => {
     const { application, userDataDirectory } = fixture();
     await expect(application.copyImage(7, { kind: 'path', path: path.join(userDataDirectory, 'missing.png') })).rejects.toThrow('does not exist');
     await expect(application.copyImage(7, { kind: 'path', path: userDataDirectory })).rejects.toThrow('image file');
+    expect(electron.writeImage).not.toHaveBeenCalled();
+  });
+
+  it.each(['file', 'directory'] as const)('copies a canonical %s reference without reading its contents', async (kind) => {
+    const { application, userDataDirectory } = fixture();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    vi.spyOn(os, 'homedir').mockReturnValue(userDataDirectory);
+    const target = path.join(userDataDirectory, 'sample 资料 #1%');
+    if (kind === 'file') fs.writeFileSync(target, 'Sample contents');
+    else fs.mkdirSync(target);
+    const link = path.join(userDataDirectory, 'sample-link');
+    fs.symlinkSync(target, link, kind === 'directory' ? 'junction' : 'file');
+    const read = vi.spyOn(fs.promises, 'open');
+    electron.readBuffer.mockImplementation(() => electron.writeBuffer.mock.lastCall![1]);
+    await application.copyFile('~/sample-link');
+    expect(electron.writeBuffer).toHaveBeenCalledExactlyOnceWith(
+      'text/uri-list', Buffer.from(pathToFileURL(fs.realpathSync.native(target)).href + '\r\n'),
+    );
+    expect(read).not.toHaveBeenCalled();
+    expect(electron.writeImage).not.toHaveBeenCalled();
+  });
+
+  it('rejects relative, missing and cancelled file copies before publication', async () => {
+    const { application, userDataDirectory } = fixture();
+    await expect(application.copyFile('relative/sample.txt')).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(application.copyFile(path.join(userDataDirectory, 'missing.txt'))).rejects.toMatchObject({ code: 'not-found' });
+    await expect(application.copyFile(userDataDirectory, AbortSignal.abort())).rejects.toMatchObject({ name: 'AbortError' });
     expect(electron.writeBuffer).not.toHaveBeenCalled();
   });
 
@@ -185,6 +364,7 @@ describe('DesktopApplication file and URL handling', () => {
 
     await expect(application.previewFile(7, file)).resolves.toEqual({
       kind: 'image',
+      revision: expect.any(String),
       url: 'piskie-attachment://preview/opaque-token',
       mediaType: 'image/png',
       size: Buffer.byteLength('file contents'),
@@ -205,6 +385,7 @@ describe('DesktopApplication file and URL handling', () => {
 
     await expect(application.previewFile(7, file)).resolves.toEqual({
       kind: 'image',
+      revision: expect.any(String),
       url: 'piskie-attachment://preview/opaque-token',
       mediaType,
       size: Buffer.byteLength('fictional image bytes'),
@@ -338,7 +519,7 @@ describe('DesktopApplication file and URL handling', () => {
       size: 0,
     }]);
     expect(presentation.createFilePreviewUrl).not.toHaveBeenCalled();
-    await expect(application.previewFile(3, directory)).resolves.toEqual({ kind: 'directory' });
+    await expect(application.previewFile(3, directory)).resolves.toEqual({ kind: 'directory', revision: expect.any(String) });
   });
 
   it('keeps preview-only image formats out of model image attachments', async () => {
@@ -445,6 +626,7 @@ describe('DesktopApplication file and URL handling', () => {
 
     await expect(application.previewFile(7, markdown)).resolves.toEqual({
       kind: 'text',
+      revision: expect.any(String),
       content: '# Roadmap\n\n- ship it\n',
       truncated: false,
       size: 21,
@@ -456,10 +638,12 @@ describe('DesktopApplication file and URL handling', () => {
     });
     await expect(application.previewFile(7, binary)).resolves.toEqual({
       kind: 'file',
+      revision: expect.any(String),
       size: 3,
     });
     await expect(application.previewFile(7, pdf)).resolves.toEqual({
       kind: 'file',
+      revision: expect.any(String),
       mediaType: 'application/pdf',
       size: 14,
     });
@@ -475,7 +659,7 @@ describe('DesktopApplication file and URL handling', () => {
       const read = vi.spyOn(fs.promises, 'readFile');
       const list = vi.spyOn(fs.promises, 'readdir');
 
-      await expect(application.previewFile(7, directory)).resolves.toEqual({ kind: 'directory' });
+      await expect(application.previewFile(7, directory)).resolves.toEqual({ kind: 'directory', revision: expect.any(String) });
 
       expect(open).not.toHaveBeenCalled();
       expect(read).not.toHaveBeenCalled();
@@ -494,10 +678,76 @@ describe('DesktopApplication file and URL handling', () => {
 
     await expect(application.previewFile(7, '~/sample folder/示例 notes.md')).resolves.toEqual({
       kind: 'text',
+      revision: expect.any(String),
       content,
       truncated: false,
       size: Buffer.byteLength(content),
     });
+  });
+
+  it.each(['sample.txt', 'sample.png', 'sample.pdf', 'sample.bin', 'sample-directory'])('matches metadata queries to the %s preview revision', async (name) => {
+    const { application, userDataDirectory } = fixture();
+    const target = path.join(userDataDirectory, name);
+    if (name === 'sample-directory') fs.mkdirSync(target);
+    else fs.writeFileSync(target, name.endsWith('.bin') ? Buffer.from([0, 1, 2]) : 'Sample text');
+    const revision = await application.fileRevision(target);
+    const preview = await application.previewFile(7, target);
+    expect(preview.revision).toBe(revision);
+  });
+
+  it('keeps the pre-read revision when a file is replaced between stat and open', async () => {
+    const { application, userDataDirectory } = fixture();
+    const file = path.join(userDataDirectory, 'sample.txt');
+    fs.writeFileSync(file, 'before');
+    const revision = await application.fileRevision(file);
+    const open = fs.promises.open.bind(fs.promises);
+    vi.spyOn(fs.promises, 'open').mockImplementationOnce(async (...args) => {
+      const replacement = path.join(userDataDirectory, 'replacement.txt');
+      fs.writeFileSync(replacement, 'after!');
+      fs.renameSync(replacement, file);
+      return open(...args);
+    });
+    const preview = await application.previewFile(7, file);
+    expect(preview).toMatchObject({ kind: 'text', content: 'after!', revision });
+    expect(preview.revision).not.toBe(await application.fileRevision(file));
+  });
+
+  it('keeps the pre-read revision when an open handle reads the old file after replacement', async () => {
+    const { application, userDataDirectory } = fixture();
+    const file = path.join(userDataDirectory, 'sample.txt');
+    fs.writeFileSync(file, 'before');
+    const revision = await application.fileRevision(file);
+    const open = fs.promises.open.bind(fs.promises);
+    vi.spyOn(fs.promises, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args);
+      const replacement = path.join(userDataDirectory, 'replacement.txt');
+      fs.writeFileSync(replacement, 'after!');
+      fs.renameSync(replacement, file);
+      return handle;
+    });
+    const preview = await application.previewFile(7, file);
+    expect(preview).toMatchObject({ kind: 'text', content: 'before', revision });
+    expect(preview.revision).not.toBe(await application.fileRevision(file));
+  });
+
+  it('limits asynchronous preview reads to 384 KiB plus one byte', async () => {
+    const { application, userDataDirectory } = fixture();
+    const file = path.join(userDataDirectory, 'large.txt');
+    fs.writeFileSync(file, 'x'.repeat(512 * 1024));
+    const open = fs.promises.open.bind(fs.promises);
+    const lengths: number[] = [];
+    vi.spyOn(fs.promises, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args);
+      const read = handle.read.bind(handle);
+      vi.spyOn(handle, 'read').mockImplementation((...readArgs: Parameters<typeof handle.read>) => {
+        lengths.push(readArgs[2] as number);
+        return read(...readArgs);
+      });
+      return handle;
+    });
+    const preview = await application.previewFile(7, file);
+    expect(preview).toMatchObject({ kind: 'text', truncated: true });
+    expect(lengths).toEqual([384 * 1024 + 1]);
   });
 
   it('reveals home-relative files, directories, and the home directory with canonical paths', () => {
@@ -529,7 +779,7 @@ describe('DesktopApplication file and URL handling', () => {
     const read = vi.spyOn(fs.promises, 'readFile');
 
     for (const target of ['~', '~/', '~/sample folder', '~/sample folder/.示例目录.png']) {
-      await expect(application.previewFile(7, target)).resolves.toEqual({ kind: 'directory' });
+      await expect(application.previewFile(7, target)).resolves.toEqual({ kind: 'directory', revision: expect.any(String) });
     }
     expect(open).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();

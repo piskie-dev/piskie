@@ -42,6 +42,7 @@ export interface TopicDefinition<Input = unknown, Snapshot = unknown, Change = u
     context: ControllerContext,
     input: Input,
     emit: (change: Change) => void,
+    onError?: (error: unknown) => void,
   ): Promise<TopicOpenResult<Snapshot>> | TopicOpenResult<Snapshot>;
 }
 

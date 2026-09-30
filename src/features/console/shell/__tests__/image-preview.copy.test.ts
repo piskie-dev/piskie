@@ -92,6 +92,20 @@ async function copyOriginal() {
 }
 
 describe('attachment preview copy integration', () => {
+  it('retains genuine source paths per gallery item and leaves URL-only images without a path', async () => {
+    const urls = ['piskie-attachment://preview/local', 'https://images.example.test/remote.png'];
+    const sourcePaths = ['/workspace/local.png', undefined];
+    await act(async () => shell.setPreviewImage(urls[0]!, urls, 0, undefined, undefined, sourcePaths));
+    expect(shell.previewImage?.sourcePaths).toEqual(sourcePaths);
+    await copyOriginal();
+    expect(publish).toHaveBeenLastCalledWith({ kind: 'path', path: '/workspace/local.png' });
+    await click(galleryButton('sessionWorkbenchUi.lightbox.next'));
+    await copyOriginal();
+    expect(publish).toHaveBeenLastCalledWith({ kind: 'url', url: urls[1], name: undefined });
+    await click(galleryButton('sessionWorkbenchUi.lightbox.close'));
+    expect(shell.previewImage).toBeNull();
+  });
+
   it('keeps original names and GIF bytes through the thumbnail, shell and lightbox while releasing replaced URLs', async () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL');
     const pending = deferred<void>();

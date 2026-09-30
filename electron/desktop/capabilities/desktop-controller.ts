@@ -12,7 +12,8 @@ import type {
 import { args, identifier } from '../../capabilities/validation.js';
 import type { DesktopApplication } from './desktop-application.js';
 
-const pathSchema = z.string().trim().min(1).max(16_384);
+// Whitespace is part of filesystem path identity, including at the end of a filename.
+const pathSchema = z.string().min(1).max(16_384);
 const branchNameSchema = z.string().min(1).max(1_024);
 const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 const branchBaseSchema = z.discriminatedUnion('kind', [
@@ -53,7 +54,7 @@ export function createDesktopController(
       }).strict()).max(32), text: z.string().max(256 * 1024) }).strict(),
     ])]), (context, [request]) => application.clipboardAttachments(context.windowId, request, context.signal)),
     operation(DESKTOP_OPERATIONS.copyImage, args([z.discriminatedUnion('kind', [
-      z.object({ kind: z.literal('path'), path: z.string().min(1).max(16_384) }).strict(),
+      z.object({ kind: z.literal('path'), path: pathSchema }).strict(),
       z.object({ kind: z.literal('preview'), url: z.string().min(1).max(16_384) }).strict(),
       z.object({ kind: z.literal('url'), url: z.string().min(1).max(16_384), name: z.string().max(16_384).optional() }).strict(),
       z.object({
@@ -62,11 +63,17 @@ export function createDesktopController(
         name: z.string().max(16_384).optional(),
       }).strict(),
     ])]), (context, [request]) => application.copyImage(context.windowId, request, context.signal)),
+    operation(DESKTOP_OPERATIONS.copyFile, args([pathSchema]), (context, [targetPath]) => (
+      application.copyFile(targetPath, context.signal)
+    )),
     operation(DESKTOP_OPERATIONS.releasePreview, args([z.string().max(16_384)]), (context, [url]) => (
       application.releasePreview(context.windowId, url)
     )),
     operation(DESKTOP_OPERATIONS.previewFile, args([pathSchema]), (context, [targetPath]) => (
       application.previewFile(context.windowId, targetPath, context.signal)
+    )),
+    operation(DESKTOP_OPERATIONS.fileRevision, args([pathSchema]), (context, [targetPath]) => (
+      application.fileRevision(targetPath, context.signal)
     )),
     operation(
       DESKTOP_OPERATIONS.selectFiles,
@@ -112,6 +119,13 @@ export function createDesktopController(
         snapshot: application.networkStatus(),
         dispose: application.observeNetwork(emit),
       };
+    },
+  }, {
+    id: DESKTOP_TOPICS.fileChanges,
+    capability: 'desktop',
+    input: z.object({ path: pathSchema }).strict(),
+    open(context, input, emit, onError) {
+      return application.observeFile((input as { path: string }).path, emit, context.signal, onError);
     },
   }];
   return Object.freeze({

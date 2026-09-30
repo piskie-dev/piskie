@@ -11,6 +11,7 @@ export interface UpstreamErrorDetails {
   param?: string;
   message: string;
   requestId?: string;
+  stopReason?: string;
   body?: unknown;
 }
 

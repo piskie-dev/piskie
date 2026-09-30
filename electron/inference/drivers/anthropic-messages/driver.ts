@@ -295,7 +295,12 @@ function anthropicCallError(
   const fields = upstreamFields(body);
   const message = fields.message
     ?? (typeof sdk.message === 'string' ? sdk.message : String(cause));
-  const source = observation?.kind === 'transport' || status === undefined ? 'transport' : 'provider';
+  const sdkProviderError = cause instanceof Anthropic.APIError
+    && !(cause instanceof Anthropic.APIConnectionError)
+    && sdk.error !== undefined;
+  const source = observation?.kind === 'transport' || cause instanceof Anthropic.APIConnectionError
+    ? 'transport'
+    : status !== undefined || sdkProviderError ? 'provider' : 'transport';
 
   return new GatewayCallError({
     source,

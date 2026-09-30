@@ -56,6 +56,7 @@ import {
 } from '../../data/composer-drafts';
 import type { ConversationBrowserResources } from '../../data/vm';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
+import { AttachmentFileTarget } from '../../attachments/AttachmentFileTarget';
 import { Popover } from '../../chrome/Popover';
 import { Tooltip } from '../../chrome/Tooltip';
 import type { MessagePayload } from '../../data/actions';
@@ -441,7 +442,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
               </div>
             ))}
             {attachments.files.map((file) => (
-              <div key={file.id} className={styles.fileChip} title={file.path}>
+              <AttachmentFileTarget key={file.id} file={file} className={styles.fileChip}>
                 {file.kind === 'directory' ? <FolderOpen size={12} /> : <FileText size={12} />}
                 <span className={styles.fileName}>{file.name}</span>
                 <button
@@ -452,7 +453,7 @@ export const ConversationComposer = memo<ConversationComposerProps>(
                 >
                   <X size={10} />
                 </button>
-              </div>
+              </AttachmentFileTarget>
             ))}
           </div>
         )}

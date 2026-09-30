@@ -111,7 +111,7 @@ export const ThreadMode = memo<ThreadModeProps>(
       : undefined, [activeWorkerId, selectedAgentId]);
     const browserState = useEmbeddedBrowserState(browserTarget);
     const panelView = useThreadPanels(panelScope);
-    const { open: openPanel, close: closePanelView } = panelView;
+    const { open: openPanel, close: closePanelView, beginReviewRequest } = panelView;
 
     const tabs = useMemo<readonly AgentTabItem[]>(() => {
       if (!agent) return [];
@@ -223,9 +223,10 @@ export const ThreadMode = memo<ThreadModeProps>(
     );
 
     const openLocalFile = useCallback(async (targetPath: string) => {
-      const target = await reviewTargetForPath(targetPath, onPreviewImage);
-      if (target) showReviewTarget(target);
-    }, [onPreviewImage, showReviewTarget]);
+      const isCurrent = beginReviewRequest();
+      const target = await reviewTargetForPath(targetPath, onPreviewImage, isCurrent);
+      if (target && isCurrent()) showReviewTarget(target);
+    }, [beginReviewRequest, onPreviewImage, showReviewTarget]);
 
     const reviewVisible = showPanel && resolveSelectedPanel(panelView.wanted, visiblePanels) === 'review';
     const fileChangesOpen = reviewVisible && panelView.reviewTarget?.kind === 'collection';
@@ -394,6 +395,7 @@ export const ThreadMode = memo<ThreadModeProps>(
               wanted={panelView.wanted}
               onPick={panelView.pick}
               reviewTarget={panelView.reviewTarget}
+              onUpdateReviewTarget={panelView.updateReviewTarget}
               onPreviewImage={onPreviewImage}
               browserState={browserState}
               browserTarget={browserTarget}

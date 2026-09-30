@@ -10,7 +10,7 @@ import { GenerateImageTool } from '../../../tools/image/generate-image.tool.js';
 import { toToolResult, type ToolContext } from '../../../tools/types.js';
 import { mapOpenAiResponsesRequest } from '../../drivers/openai/responses-request-mapper.js';
 import { AIErrorType } from '../../../../shared/constants/index.js';
-import type { AiEvent, AiGateway, AiRequest as DomainAiRequest } from '../../ai/contracts.js';
+import type { AiEvent, AiGateway, AiResult, AiRequest as DomainAiRequest } from '../../ai/contracts.js';
 import { GatewayCallError } from '../../execution/call-error.js';
 import type { InferenceRuntimeSnapshot } from '../../execution/runtime-snapshot.js';
 import { RuntimeSnapshotStore } from '../../execution/runtime-snapshot.js';
@@ -22,6 +22,14 @@ import {
   type AgentInferenceRequest,
   type VisibleDelta,
 } from '../agent-inference-port.js';
+
+function resultFor(model: DomainAiRequest['model'], runId: string, overrides: Partial<AiResult>): AiResult {
+  return {
+    runId, model, configRevision: 5,
+    text: '', reasoning: '', content: [], reasoningItems: [], toolCalls: [], usage: {}, stopReason: 'end_turn',
+    ...overrides,
+  };
+}
 
 let requestSequence = 0;
 function options(overrides: Partial<AgentInferenceOptions> = {}): AgentInferenceOptions {
@@ -156,7 +164,15 @@ describe('DefaultAgentInferencePort', () => {
           yield { ...base, kind: 'usage.updated', sequence: 8, attempt: 1, usage: {
             totalInputTokens: 10, totalOutputTokens: 5, cachedInputTokens: 2, cacheWriteTokens: 1,
           } };
-          yield { ...base, kind: 'response.completed', sequence: 9, attempt: 1, stopReason: 'tool_use' };
+          yield { ...base, kind: 'response.completed', sequence: 9, attempt: 1, stopReason: 'tool_use', result: resultFor(request.model, base.runId, {
+            text: 'answer', reasoning: 'new thought', reasoningSignature: 'new-signature', stopReason: 'tool_use',
+            content: [
+              { kind: 'reasoning', item: { protocol: 'anthropic-thinking', text: 'new thought', signature: 'new-signature' } },
+              { kind: 'text', text: 'answer' },
+              { kind: 'tool_call', callId: 'call-new', name: 'lookup', arguments: '{"id":"7"}' },
+            ],
+            usage: { totalInputTokens: 10, totalOutputTokens: 5, cachedInputTokens: 2, cacheWriteTokens: 1 },
+          }) };
         })();
         return {
           events,
@@ -283,7 +299,7 @@ describe('DefaultAgentInferencePort', () => {
         }
         const output = await tool.execute({ images }, {
           imageOps: imageModule, signal: new AbortController().signal,
-        } as ToolContext);
+        } as unknown as ToolContext);
         expect(output.ok).toBe(status === 'completed');
         expect(output.data).toMatchObject({ status });
         await expect(fs.readFile(images[0].outputPath)).resolves.toEqual(bytes);
@@ -301,7 +317,9 @@ describe('DefaultAgentInferencePort', () => {
               const base = { runId: context.runId, emittedAt: 1, attempt: 1 };
               yield { ...base, kind: 'response.started', sequence: 1, model: request.model, configRevision: 5 };
               yield { ...base, kind: 'text.delta', sequence: 2, text: 'Sample image received.' };
-              yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn' };
+              yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn', result: resultFor(request.model, base.runId, {
+                text: 'Sample image received.', content: [{ kind: 'text', text: 'Sample image received.' }],
+              }) };
             })(),
             statistics: Promise.resolve({}),
           }),
@@ -379,10 +397,21 @@ describe('DefaultAgentInferencePort', () => {
               delta: '{}',
             };
             yield { ...base, kind: 'tool.completed', sequence: 6, callId: 'call_1' };
-            yield { ...base, kind: 'response.completed', sequence: 7, stopReason: 'tool_use' };
+            yield { ...base, kind: 'response.completed', sequence: 7, stopReason: 'tool_use', result: resultFor(request.model, base.runId, {
+              reasoning: 'Inspect first.', stopReason: 'tool_use',
+              content: [
+                { kind: 'reasoning', item: {
+                  protocol: 'openai-responses', id: 'rs_1', summary: [{ type: 'summary_text', text: 'Inspect first.' }],
+                  encryptedContent: 'encrypted-state', status: 'completed',
+                } },
+                { kind: 'tool_call', callId: 'call_1', name: 'inspect', arguments: '{}', providerItemId: 'fc_1', status: 'completed' },
+              ],
+            }) };
           } else {
             yield { ...base, kind: 'text.delta', sequence: 2, text: 'Done.' };
-            yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn' };
+            yield { ...base, kind: 'response.completed', sequence: 3, stopReason: 'end_turn', result: resultFor(request.model, base.runId, {
+              text: 'Done.', content: [{ kind: 'text', text: 'Done.' }],
+            }) };
           }
         })();
         return { events, statistics: Promise.resolve({}) };
@@ -476,7 +505,9 @@ describe('DefaultAgentInferencePort', () => {
           yield { ...base, kind: 'text.delta', sequence: 2, attempt: 1, text: 'partial' };
           yield { ...base, kind: 'response.retrying', sequence: 3, attempt: 1, retryAt: 1234, error: retryError };
           yield { ...base, kind: 'text.delta', sequence: 4, attempt: 2, text: 'ok' };
-          yield { ...base, kind: 'response.completed', sequence: 5, attempt: 2, stopReason: 'end_turn' };
+          yield { ...base, kind: 'response.completed', sequence: 5, attempt: 2, stopReason: 'end_turn', result: resultFor(request.model, base.runId, {
+            text: 'ok', content: [{ kind: 'text', text: 'ok' }],
+          }) };
         })(),
         statistics: Promise.resolve({}),
       }),
@@ -527,7 +558,14 @@ describe('DefaultAgentInferencePort', () => {
           yield { ...base, kind: 'tool.completed', sequence: 6, callId: 'call-1' };
           yield { ...base, kind: 'text.delta', sequence: 7, text: '' };
           yield { ...base, kind: 'text.delta', sequence: 8, text: 'answer' };
-          yield { ...base, kind: 'response.completed', sequence: 9, stopReason: 'tool_use' };
+          yield { ...base, kind: 'response.completed', sequence: 9, stopReason: 'tool_use', result: resultFor(request.model, base.runId, {
+            text: 'answer', reasoning: 'think', stopReason: 'tool_use',
+            content: [
+              { kind: 'reasoning', item: { protocol: 'openai-chat', text: 'think' } },
+              { kind: 'tool_call', callId: 'call-1', name: 'lookup', arguments: '{"id":"1"}' },
+              { kind: 'text', text: 'answer' },
+            ],
+          }) };
         })(),
         statistics: Promise.resolve({
           firstVisibleContentLatencyMs: 10,
@@ -582,7 +620,7 @@ describe('DefaultAgentInferencePort', () => {
     const gateway = { open: vi.fn(), complete: vi.fn() } as unknown as AiGateway;
     const snapshots = new RuntimeSnapshotStore();
     const missingLimit = snapshot();
-    const catalogModel = missingLimit.catalogModels.get('catalog/chat')!;
+    const catalogModel = missingLimit.catalogModels!.get('catalog/chat')!;
     missingLimit.catalogModels = new Map([['catalog/chat', { ...catalogModel, limits: {} }]]);
     snapshots.publish(missingLimit);
     const port = new DefaultAgentInferencePort(gateway, snapshots, new MemoryArtifactStore());
@@ -598,7 +636,9 @@ describe('DefaultAgentInferencePort', () => {
           const base = { runId: context.runId, emittedAt: 1, attempt: 1 };
           yield { ...base, kind: 'response.started', sequence: 1, model: request.model, configRevision: 5 };
           yield { ...base, kind: 'text.delta', sequence: 2, text: 'Partial response.' };
-          yield { ...base, kind: 'response.completed', sequence: 3, stopReason };
+          yield { ...base, kind: 'response.completed', sequence: 3, stopReason, result: resultFor(request.model, base.runId, {
+            text: 'Partial response.', content: [{ kind: 'text', text: 'Partial response.' }], stopReason,
+          }) };
         })(),
         statistics: Promise.resolve({}),
       }),

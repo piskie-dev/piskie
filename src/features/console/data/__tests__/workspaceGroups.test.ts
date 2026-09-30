@@ -182,6 +182,16 @@ describe('workspace order and search', () => {
     expect(orderWorkspaceGroups([...groups(), ...added], next).map((group) => group.key)).toEqual(next);
   });
 
+  it('reorders visible slots while hidden and temporarily missing workspaces keep their positions', () => {
+    const full = ['/sample/alpha', '/sample/hidden', '/sample/gamma', '/sample/missing'];
+    expect(moveWorkspaceGroup(full, '/sample/gamma', '/sample/alpha', 'before', ['/sample/alpha', '/sample/gamma']))
+      .toEqual(['/sample/gamma', '/sample/hidden', '/sample/alpha', '/sample/missing']);
+    expect(moveWorkspaceGroup(full, '/sample/hidden', '/sample/alpha', 'before', ['/sample/alpha', '/sample/gamma']))
+      .toBe(full);
+    expect(moveWorkspaceGroup(full, '/sample/alpha', '/sample/gamma', 'before', ['/sample/alpha', '/sample/gamma']))
+      .toBe(full);
+  });
+
   it('keeps workspaces with identical directory names distinct', () => {
     const sameNames = groupByWorkspace([
       row({ agentId: 'a', workspace: '/sample/one/demo' }),

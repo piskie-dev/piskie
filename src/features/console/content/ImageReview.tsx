@@ -38,6 +38,8 @@ import { GateAttachments } from './gates/parts';
 import type { ActionTarget } from '../data/actions';
 import styles from './ImageReview.module.css';
 import { useImagePreviewUrl } from '@/hooks/useImagePreviewUrl';
+import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
+import { useAttachmentMenu } from '../attachments/attachmentMenu';
 
 type NodeStatus = ImageNodePublicState['status'];
 
@@ -98,16 +100,16 @@ interface TileProps {
   readonly selected: boolean;
   readonly onToggle: () => void;
   readonly onDelete: () => void;
-  readonly onPreview?: (src: string) => void;
+  readonly onPreview?: ImagePreviewHandler;
 }
 
 const Tile = memo<TileProps>(
   ({ image, nodeStatus, selectable, selected, onToggle, onDelete, onPreview }) => {
     const { t } = useTranslation();
-    const { url: dataUrl } = useImagePreviewUrl(
-      previewSourcePath(nodeStatus, image),
-      image.version,
-    );
+    const sourcePath = previewSourcePath(nodeStatus, image);
+    const { url: dataUrl } = useImagePreviewUrl(sourcePath, image.version);
+    const preview = dataUrl && onPreview ? () => onPreview(dataUrl, undefined, undefined, undefined, undefined, [sourcePath]) : undefined;
+    const context = useAttachmentMenu(sourcePath ? { kind: 'image', source: { kind: 'path', path: sourcePath }, preview } : null);
 
     return (
       <div
@@ -116,7 +118,9 @@ const Tile = memo<TileProps>(
         data-selectable={selectable ? 'true' : undefined}
         data-selected={selected ? 'true' : undefined}
         onClick={selectable ? onToggle : undefined}
+        onContextMenu={context.onContextMenu}
       >
+        {context.menu}
         {dataUrl ? (
           <img
             src={dataUrl}
@@ -125,7 +129,7 @@ const Tile = memo<TileProps>(
             data-previewable={!selectable && onPreview ? 'true' : undefined}
             onClick={!selectable && onPreview ? (event) => {
               event.stopPropagation();
-              onPreview(dataUrl);
+              preview?.();
             } : undefined}
           />
         ) : image.status === 'generating' ? (
@@ -165,7 +169,7 @@ const Tile = memo<TileProps>(
             aria-label={t('sessionWorkbenchUi.imageReview.enlarge')}
             onClick={(event) => {
               event.stopPropagation();
-              onPreview?.(dataUrl);
+              preview?.();
             }}
           >
             <ZoomIn size={10} />
@@ -183,7 +187,7 @@ Tile.displayName = 'ImageReviewTile';
 export interface ImageReviewProps {
   readonly target: ActionTarget;
   readonly node: ImageNodePublicState;
-  readonly onPreviewImage?: (src: string) => void;
+  readonly onPreviewImage?: ImagePreviewHandler;
 }
 
 export const ImageReview = memo<ImageReviewProps>(({ target, node, onPreviewImage }) => {

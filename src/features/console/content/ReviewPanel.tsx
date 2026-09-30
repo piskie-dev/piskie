@@ -23,13 +23,14 @@
  * **不知道落在文件第几行**，于是行号槽显示 `·`。宁可空着也不画假行号。
  */
 
-import React, { memo, useMemo } from 'react';
-import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, TriangleAlert, Video } from 'lucide-react';
+import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { Binary, Check, Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, RefreshCw, TriangleAlert, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { LinkedMarkdown, type SourceBlockProps } from '@/components/content-links';
 import { useCopyAction } from '@/hooks/useCopyAction';
-import { copyText } from '@/services/clipboard';
+import { useReviewMenu, type PathAction } from '../attachments/reviewMenu';
+import { useAttachmentMenu } from '../attachments/attachmentMenu';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { localPathDirectory } from '@/utils/localPath';
 import { collapseContext, type DiffLine } from '../data/diffLines';
@@ -37,7 +38,9 @@ import { grammarForPath, tokenize, MAX_HIGHLIGHT_LINES, type Token } from './dif
 import { basename, fileChangeOf, type FileChange, type ReadOp } from '../data/review';
 import type { RoundFileChanges } from '../data/fileChanges';
 import { resolvePresentationText } from '../data/presentationText';
-import type { ReviewableFilePreview } from './fileReviewTarget';
+import { reviewTargetFromPreview, type ReviewableFilePreview } from './fileReviewTarget';
+import { Tooltip } from '../chrome/Tooltip';
+import { useLiveFilePreview } from './useLiveFilePreview';
 import styles from './review.module.css';
 
 /** 二进制文件卡的图标：按扩展名粗分四类，认不出用通用二进制图标 */
@@ -58,8 +61,11 @@ function kindIcon(path: string): React.ReactNode {
 const HeaderActions = memo<{
   readonly copyText: string | null;
   readonly path: string;
-  readonly onRevealPath: (path: string) => void;
-}>(({ copyText: textToCopy, path, onRevealPath }) => {
+  readonly onRevealPath: PathAction;
+  readonly onCopy: () => Promise<void>;
+  readonly revealLabel: string;
+  readonly refreshAction?: React.ReactNode;
+}>(({ copyText: textToCopy, path, onRevealPath, onCopy, revealLabel, refreshAction }) => {
   const { t } = useTranslation();
   const contentKey = useMemo(() => ({ path, textToCopy }), [path, textToCopy]);
   const { busy, status, run } = useCopyAction(contentKey);
@@ -69,11 +75,12 @@ const HeaderActions = memo<{
 
   return (
     <span className={styles.headerActions}>
+      {refreshAction}
       {textToCopy !== null && (
         <button
           type="button"
           className={styles.headerButton}
-          onClick={() => { void run(() => copyText(textToCopy)); }}
+          onClick={() => { void run(onCopy); }}
           disabled={busy}
           aria-busy={busy}
           title={label}
@@ -86,8 +93,8 @@ const HeaderActions = memo<{
         type="button"
         className={styles.headerButton}
         onClick={() => onRevealPath(path)}
-        title={t('sessionWorkbenchUi.review.showInFolder')}
-        aria-label={t('sessionWorkbenchUi.review.showInFolder')}
+        title={revealLabel}
+        aria-label={revealLabel}
       >
         <FolderOpen size={12} />
       </button>
@@ -177,11 +184,15 @@ const FileCard = memo<{
   readonly path: string;
   readonly kind?: 'file' | 'directory';
   readonly reason: string;
-  readonly onOpenPath: (path: string) => void;
-  readonly onRevealPath: (path: string) => void;
+  readonly onOpenPath: PathAction;
+  readonly onRevealPath: PathAction;
 }>(({ path, kind = 'file', reason, onOpenPath, onRevealPath }) => {
   const { t } = useTranslation();
-  return <div className={styles.card}>
+  const context = useAttachmentMenu({ kind: 'file', path, directory: kind === 'directory',
+    open: () => onOpenPath(path), reveal: () => onRevealPath(path),
+  });
+  return <div className={styles.card} onContextMenu={context.onContextMenu}>
+    {context.menu}
     <span className={styles.cardIcon}>{kind === 'directory' ? <FolderOpen size={18} /> : kindIcon(path)}</span>
     <div className={styles.cardMain}>
       <span className={styles.cardName} title={path}>
@@ -189,11 +200,11 @@ const FileCard = memo<{
       </span>
       <span className={styles.cardReason}>{reason}</span>
       <div className={styles.cardActions}>
-        <button type="button" className={styles.cardButton} onClick={() => onOpenPath(path)}>
+        <button type="button" className={styles.cardButton} onClick={() => context.select('open')}>
           <ExternalLink size={11} />
           <span>{t(kind === 'directory' ? 'sessionWorkbenchUi.review.openDirectory' : 'sessionWorkbenchUi.review.openWithSystem')}</span>
         </button>
-        <button type="button" className={styles.cardButton} onClick={() => onRevealPath(path)}>
+        <button type="button" className={styles.cardButton} onClick={() => context.select('revealPath')}>
           <FolderOpen size={11} />
           <span>{t('sessionWorkbenchUi.review.showInFolder')}</span>
         </button>
@@ -274,8 +285,8 @@ TextPreview.displayName = 'TextPreview';
 
 const ReadView = memo<{
   readonly op: ReadOp;
-  readonly onOpenPath: (path: string) => void;
-  readonly onRevealPath: (path: string) => void;
+  readonly onOpenPath: PathAction;
+  readonly onRevealPath: PathAction;
   readonly onPreviewImage?: ImagePreviewHandler;
 }>(({ op, onOpenPath, onRevealPath, onPreviewImage }) => {
   const { t } = useTranslation();
@@ -303,7 +314,7 @@ ReadView.displayName = 'ReadView';
 export const RecordedFileReview = memo<{
   readonly file: RoundFileChanges;
   readonly roundTitle: string;
-  readonly onRevealPath: (path: string) => void;
+  readonly onRevealPath: PathAction;
 }>(({ file, roundTitle, onRevealPath }) => {
   const { t } = useTranslation();
   const changes = useMemo(() => file.records.flatMap((record) => {
@@ -314,16 +325,19 @@ export const RecordedFileReview = memo<{
     t('sessionWorkbenchUi.review.recordedCall', { index: index + 1 }),
     ...change.diff.lines.map((line) => (line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' ') + line.text),
   ].join('\n')).join('\n\n'), [changes, t]);
+  const context = useReviewMenu({ path: file.path, text: copyText, copyKind: 'copyDiff', onRevealPath });
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} onContextMenu={context.onContextMenu}>
+      {context.menu}
       <div className={styles.header}>
         <span className={styles.headerTitle} title={file.path}>
           {roundTitle && <span className={styles.roundTitle}>{roundTitle}</span>}
           {basename(file.path)}
         </span>
         <StatText added={file.added} removed={file.removed} />
-        <HeaderActions copyText={copyText} path={file.path} onRevealPath={onRevealPath} />
+        <HeaderActions copyText={copyText} path={file.path} onCopy={() => context.perform('copyDiff')}
+          onRevealPath={() => context.select('revealPath')} revealLabel={context.revealLabel} />
       </div>
       <div className={styles.scroll}>
         {changes.map(({ id, change }, index) => (
@@ -357,13 +371,116 @@ export interface ReviewPanelProps {
   readonly read: ReadOp | null;
   /** 正文里的本地路径 ⇒ 当前磁盘内容 / 文件卡 */
   readonly preview: PathPreview | null;
+  /** Host scroller when present; otherwise the review content owns scrolling. */
+  readonly scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  readonly onUpdatePreview?: (expected: PathPreview, next: ReviewableFilePreview | null) => void;
   readonly onPreviewImage?: ImagePreviewHandler;
-  readonly onOpenPath: (path: string) => void;
-  readonly onRevealPath: (path: string) => void;
+  readonly onOpenPath: PathAction;
+  readonly onRevealPath: PathAction;
 }
 
+const LivePathReview = memo<Pick<ReviewPanelProps, 'onOpenPath' | 'onRevealPath' | 'onPreviewImage' | 'onUpdatePreview' | 'scrollContainerRef'> & {
+  readonly preview: PathPreview;
+}>(({ preview, onUpdatePreview, onOpenPath, onRevealPath, onPreviewImage, scrollContainerRef }) => {
+  const { t } = useTranslation();
+  const { descriptor, path } = preview;
+  const scroll = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = scrollContainerRef ? scrollContainerRef.current : scroll.current;
+    if (element) element.scrollTop = 0;
+  }, [scrollContainerRef]);
+  const restore = useRef<{ descriptor: ReviewableFilePreview; top: number } | null>(null);
+  const onRefresh = useCallback((expected: ReviewableFilePreview, next: Parameters<typeof reviewTargetFromPreview>[1]) => {
+    const target = reviewTargetFromPreview(path, next, onPreviewImage);
+    const element = scrollContainerRef ? scrollContainerRef.current : scroll.current;
+    if (target) restore.current = { descriptor: target.preview, top: element?.scrollTop ?? 0 };
+    onUpdatePreview?.({ path, descriptor: expected }, target?.preview ?? null);
+  }, [onPreviewImage, onUpdatePreview, path, scrollContainerRef]);
+  const live = useLiveFilePreview(path, descriptor, onRefresh);
+  useLayoutEffect(() => {
+    const pending = restore.current;
+    const element = scrollContainerRef ? scrollContainerRef.current : scroll.current;
+    if (pending?.descriptor === descriptor && element) {
+      element.scrollTop = Math.min(pending.top, Math.max(0, element.scrollHeight - element.clientHeight));
+      restore.current = null;
+    }
+  }, [descriptor, scrollContainerRef]);
+  const failed = live.status === 'error' || live.status === 'missing';
+  const feedback = failed ? t('sessionWorkbenchUi.review.updateFailed')
+    : live.success ? t('sessionWorkbenchUi.review.updateSucceeded') : '';
+  const action = t('sessionWorkbenchUi.review.refresh');
+  const reason = live.status === 'missing' ? t('sessionWorkbenchUi.review.fileMissing') : live.error;
+  const tooltip = [feedback, reason, action].filter(Boolean).join('\n');
+  const buttonState = failed ? 'error' : live.changed ? 'changed' : live.success ? 'success' : 'current';
+  const text = descriptor.kind === 'text' ? descriptor.content : null;
+  const context = useReviewMenu({ path, text, onRevealPath, onOpenPath, missing: live.status === 'missing' });
+
+  return (
+    <div className={styles.panel} onContextMenu={context.onContextMenu}>
+      {context.menu}
+      <div className={styles.header}>
+        <span className={styles.headerIdentity}>
+          <span className={styles.headerTitle} title={path}>{basename(path)}</span>
+          <span className={styles.headerHint}>{t('sessionWorkbenchUi.review.preview')}</span>
+        </span>
+        <HeaderActions copyText={text} path={path} onCopy={() => context.perform('copyContent')}
+          onRevealPath={() => context.select('revealPath')} revealLabel={context.revealLabel} refreshAction={(
+          <Tooltip title={tooltip} className={styles.refreshTooltip}>
+            <button
+              type="button"
+              className={styles.headerButton}
+              data-state={buttonState}
+              data-changed={live.changed ? 'true' : undefined}
+              disabled={live.status === 'refreshing'}
+              aria-busy={live.status === 'refreshing'}
+              aria-label={feedback ? `${feedback}: ${action}` : action}
+              onClick={() => { void live.refresh(); }}
+            >
+              {failed ? <TriangleAlert size={12} /> : live.success ? <Check size={12} /> : <RefreshCw size={12} />}
+              {buttonState === 'changed' && <span className={styles.refreshMarker} aria-hidden />}
+            </button>
+          </Tooltip>
+        )} />
+      </div>
+      <div className={styles.scroll} ref={scroll}>
+        <PathPreviewBody preview={preview} onOpenPath={onOpenPath} onRevealPath={onRevealPath} onPreviewImage={onPreviewImage} />
+      </div>
+    </div>
+  );
+});
+
+LivePathReview.displayName = 'LivePathReview';
+
+const PathPreviewBody = memo<Pick<ReviewPanelProps, 'onOpenPath' | 'onRevealPath' | 'onPreviewImage'> & {
+  readonly preview: PathPreview;
+}>(({ preview: { descriptor, path }, onOpenPath, onRevealPath, onPreviewImage }) => {
+  const { t } = useTranslation();
+  if (descriptor.kind === 'text') return (
+    <>
+      {descriptor.truncated && <div className={styles.notice}>{t('sessionWorkbenchUi.review.truncatedPreview')}</div>}
+      <TextPreview path={path} content={descriptor.content} startLine={1} onPreviewImage={onPreviewImage} />
+    </>
+  );
+  const type = descriptor.kind === 'file' ? (descriptor.mediaType ?? t('sessionWorkbenchUi.review.binaryFile')) : null;
+  const fileSize = descriptor.kind === 'file' ? descriptor.size : null;
+  const size = fileSize === null ? null : fileSize < 1024
+    ? `${fileSize} B`
+    : fileSize < 1024 * 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${(fileSize / 1024 / 1024).toFixed(2)} MB`;
+  return <FileCard
+    path={path}
+    kind={descriptor.kind}
+    reason={descriptor.kind === 'directory'
+      ? t('sessionWorkbenchUi.review.directoryPreviewUnavailable')
+      : t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
+    onOpenPath={onOpenPath}
+    onRevealPath={onRevealPath}
+  />;
+});
+
+PathPreviewBody.displayName = 'PathPreviewBody';
+
 export const ReviewPanel = memo<ReviewPanelProps>(
-  ({ change, read, preview, onOpenPath, onRevealPath, onPreviewImage }) => {
+  ({ change, read, preview, onOpenPath, onRevealPath, onPreviewImage, onUpdatePreview, scrollContainerRef }) => {
     const { t } = useTranslation();
     /** write/edit 的复制源:本次 diff 的文本形态(+/-/空格前缀,不含行号) */
     const diffText = useMemo(() => {
@@ -372,63 +489,35 @@ export const ReviewPanel = memo<ReviewPanelProps>(
         .map((line) => (line.kind === 'add' ? '+' : line.kind === 'remove' ? '-' : ' ') + line.text)
         .join('\n');
     }, [change]);
+    const context = useReviewMenu({ path: read?.path ?? change?.path ?? '', text: read ? read.content : diffText,
+      copyKind: read ? 'copyContent' : 'copyDiff', onRevealPath, onOpenPath,
+    });
 
-    if (preview) {
-      const { descriptor, path } = preview;
-      const text = descriptor.kind === 'text' ? descriptor.content : null;
-      const type = descriptor.kind === 'file'
-        ? (descriptor.mediaType ?? t('sessionWorkbenchUi.review.binaryFile'))
-        : null;
-      const fileSize = descriptor.kind === 'file' ? descriptor.size : null;
-      const size = fileSize === null ? null : fileSize < 1024
-        ? `${fileSize} B`
-        : fileSize < 1024 * 1024
-          ? `${(fileSize / 1024).toFixed(1)} KB`
-          : `${(fileSize / 1024 / 1024).toFixed(2)} MB`;
-
-      return (
-        <div className={styles.panel}>
-          <div className={styles.header}>
-            <span className={styles.headerTitle} title={path}>{basename(path)}</span>
-            <span className={styles.headerHint}>{t('sessionWorkbenchUi.review.preview')}</span>
-            <HeaderActions copyText={text} path={path} onRevealPath={onRevealPath} />
-          </div>
-          <div className={styles.scroll}>
-            {descriptor.kind !== 'text' ? (
-              <FileCard
-                path={path}
-                kind={descriptor.kind}
-                reason={descriptor.kind === 'directory'
-                  ? t('sessionWorkbenchUi.review.directoryPreviewUnavailable')
-                  : t('sessionWorkbenchUi.review.previewUnavailableDetail', { type, size })}
-                onOpenPath={onOpenPath}
-                onRevealPath={onRevealPath}
-              />
-            ) : (
-              <>
-                {descriptor.truncated && (
-                  <div className={styles.notice}>{t('sessionWorkbenchUi.review.truncatedPreview')}</div>
-                )}
-                <TextPreview path={path} content={descriptor.content} startLine={1} onPreviewImage={onPreviewImage} />
-              </>
-            )}
-          </div>
-        </div>
-      );
-    }
+    if (preview) return <LivePathReview
+      key={preview.path}
+      preview={preview}
+      scrollContainerRef={scrollContainerRef}
+      onUpdatePreview={onUpdatePreview}
+      onOpenPath={onOpenPath}
+      onRevealPath={onRevealPath}
+      onPreviewImage={onPreviewImage}
+    />;
 
     if (read) {
       return (
-        <div className={styles.panel}>
+        <div className={styles.panel} onContextMenu={context.onContextMenu}>
+          {context.menu}
           <div className={styles.header}>
-            <span className={styles.headerTitle} title={read.path}>
-              {basename(read.path)}
+            <span className={styles.headerIdentity}>
+              <span className={styles.headerTitle} title={read.path}>{basename(read.path)}</span>
+              <span className={styles.headerHint}>{t('sessionWorkbenchUi.review.read')}</span>
             </span>
-            <span className={styles.headerHint}>{t('sessionWorkbenchUi.review.read')}</span>
             <HeaderActions
               copyText={read.content ?? null}
               path={read.path}
-              onRevealPath={onRevealPath}
+              onCopy={() => context.perform('copyContent')}
+              onRevealPath={() => context.select('revealPath')}
+              revealLabel={context.revealLabel}
             />
           </div>
           <div className={styles.scroll}>
@@ -440,7 +529,8 @@ export const ReviewPanel = memo<ReviewPanelProps>(
 
     if (change) {
       return (
-        <div className={styles.panel}>
+        <div className={styles.panel} onContextMenu={context.onContextMenu}>
+          {context.menu}
           <div className={styles.header}>
             <span className={styles.headerTitle} title={change.path}>
               {change.name}
@@ -449,7 +539,9 @@ export const ReviewPanel = memo<ReviewPanelProps>(
             <HeaderActions
               copyText={diffText}
               path={change.path}
-              onRevealPath={onRevealPath}
+              onCopy={() => context.perform('copyDiff')}
+              onRevealPath={() => context.select('revealPath')}
+              revealLabel={context.revealLabel}
             />
           </div>
           <div className={styles.scroll}>

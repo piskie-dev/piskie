@@ -13,7 +13,7 @@ let dom: JSDOM;
 let root: Root;
 let container: HTMLDivElement;
 const image = (name: string): FilePreviewDescriptor => ({
-  kind: 'image', url: `piskie-attachment://preview/${name}`, mediaType: 'image/png', size: 4,
+  kind: 'image', revision: 'sample-revision', url: `piskie-attachment://preview/${name}`, mediaType: 'image/png', size: 4,
 });
 function Probe({ sourcePath, version = 0 }: { sourcePath?: string; version?: number }) {
   const { url } = useImagePreviewUrl(sourcePath, version);
@@ -90,7 +90,7 @@ describe('disk image preview ownership', () => {
     preview.mockResolvedValueOnce(image('first'));
     await render('/workspace/first.png');
     if (outcome === 'failure') preview.mockRejectedValueOnce(new Error('Example preview failure'));
-    else preview.mockResolvedValueOnce({ kind: 'file', mediaType: 'application/pdf', size: 4 });
+    else preview.mockResolvedValueOnce({ kind: 'file', revision: 'sample-revision', mediaType: 'application/pdf', size: 4 });
     await render('/workspace/second.png');
     expect(committed.every((url) => url === null)).toBe(true);
     expect(container.textContent).toBe('');

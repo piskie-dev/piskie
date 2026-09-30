@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -54,23 +56,29 @@ describe('generated Browser Skill facade', () => {
   const log = vi.fn();
   const notifyPageOpen = vi.fn();
   let controller: AbortController;
+  let allowedFileRoots: string[];
+  let createdRoots: string[];
   let page: ReturnType<typeof makePage>;
   let context: {
     getSelectedPage: ReturnType<typeof vi.fn>;
     listPages: ReturnType<typeof vi.fn>;
     getSelectedPageIndex: ReturnType<typeof vi.fn>;
     selectPageByIndex: ReturnType<typeof vi.fn>;
+    throwIfDialogOpen: ReturnType<typeof vi.fn>;
     waitForAction: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     controller = new AbortController();
+    allowedFileRoots = [];
+    createdRoots = [];
     page = makePage();
     context = {
       getSelectedPage: vi.fn(() => page),
       listPages: vi.fn(async () => [{ pageId: 1, page, navigationSequence: 0 }]),
       getSelectedPageIndex: vi.fn(() => 0),
+      throwIfDialogOpen: vi.fn(),
       selectPageByIndex: vi.fn(async (pageIdx: number) => {
         if (pageIdx !== 0) throw new Error('No page found');
         return page;
@@ -82,9 +90,19 @@ describe('generated Browser Skill facade', () => {
     mocks.getContext.mockReturnValue(context);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
+    await Promise.all(createdRoots.map((root) => rm(root, { recursive: true, force: true })));
   });
+
+  async function uploadFixture(): Promise<string> {
+    const root = await mkdtemp(path.join(tmpdir(), 'sample-browser-upload-'));
+    createdRoots.push(root);
+    allowedFileRoots = [root];
+    const filePath = path.join(root, 'sample.txt');
+    await writeFile(filePath, 'sample');
+    return filePath;
+  }
 
   function runtime() {
     return createGeneratedBrowserSkillRuntime({
@@ -92,6 +110,7 @@ describe('generated Browser Skill facade', () => {
       signal: controller.signal,
       log,
       notifyPageOpen,
+      allowedFileRoots,
     });
   }
 
@@ -106,6 +125,7 @@ describe('generated Browser Skill facade', () => {
       'doubleClick',
       'hover',
       'fill',
+      'uploadFile',
       'select',
       'typeText',
       'press',
@@ -228,6 +248,61 @@ describe('generated Browser Skill facade', () => {
     expect(element.locator.fill).toHaveBeenCalledWith('query');
     expect(element.dispose).toHaveBeenCalledOnce();
     expect(mocks.getContext).toHaveBeenCalledWith('browser-bound-by-host');
+  });
+
+  it('uploads to a hidden file input selected by a stable DOM locator', async () => {
+    const filePath = await uploadFixture();
+    const hiddenInput = new FakeElement('input', { type: 'file', id: 'sample-file' }, '', [], {
+      style: { display: 'none' },
+    });
+    installFakeDom([hiddenInput]);
+    const elements = installPageDomEvaluation(page);
+
+    await expect(runtime().page.uploadFile({ css: '#sample-file' }, filePath))
+      .resolves.toEqual({ url: 'https://example.test/current', title: 'Example' });
+
+    expect(elements).toHaveLength(1);
+    expect(elements[0].uploadFile).toHaveBeenCalledWith(filePath);
+    expect(elements[0].locator.click).not.toHaveBeenCalled();
+    expect(page.waitForFileChooser).not.toHaveBeenCalled();
+    expect(elements[0].dispose).toHaveBeenCalledOnce();
+  });
+
+  it('uploads through a file chooser triggered by a visible control', async () => {
+    const filePath = await uploadFixture();
+    const trigger = makeElement();
+    trigger.uploadFile.mockRejectedValueOnce(new Error('not a file input'));
+    page.evaluateHandle.mockResolvedValue(makeHandle(trigger));
+    const chooser = { accept: vi.fn(async () => undefined) };
+    page.waitForFileChooser.mockResolvedValue(chooser);
+
+    await expect(runtime().page.uploadFile({ role: 'button', name: 'Attach' }, filePath, {
+      timeoutMs: 200,
+    })).resolves.toEqual({ url: 'https://example.test/current', title: 'Example' });
+
+    expect(trigger.uploadFile).toHaveBeenCalledWith(filePath);
+    expect(page.waitForFileChooser).toHaveBeenCalledWith({ timeout: 3_000 });
+    expect(trigger.locator.setTimeout).toHaveBeenCalledWith(200);
+    expect(trigger.locator.click).toHaveBeenCalledOnce();
+    expect(chooser.accept).toHaveBeenCalledWith([filePath]);
+    expect(trigger.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an outside file and a symlink escaping the workspace before browser access', async () => {
+    const insideFile = await uploadFixture();
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'sample-browser-outside-'));
+    createdRoots.push(outsideRoot);
+    const outsideFile = path.join(outsideRoot, 'sample.txt');
+    await writeFile(outsideFile, 'sample');
+    const link = path.join(path.dirname(insideFile), 'linked.txt');
+    await symlink(outsideFile, link);
+
+    for (const filePath of [outsideFile, link]) {
+      await expect(runtime().page.uploadFile({ css: 'input[type=file]' }, filePath))
+        .rejects.toThrow('Access denied');
+    }
+    expect(mocks.runExclusive).not.toHaveBeenCalled();
+    expect(page.evaluateHandle).not.toHaveBeenCalled();
   });
 
   it('does not retry a side effect after a locator matched and the action failed', async () => {
@@ -861,6 +936,10 @@ describe('generated Browser Skill facade', () => {
     expect(BROWSER_SKILL_SDK_REFERENCE).toContain(
       'Page indices belong to the latest listing and must not be persisted as business identifiers'
     );
+    expect(BROWSER_SKILL_SDK_REFERENCE).toContain('uploadFile(');
+    expect(BROWSER_SKILL_SDK_REFERENCE).toContain(
+      'Pass an absolute file path and locate either a file input'
+    );
     expect(BROWSER_SKILL_SDK_REFERENCE).toContain(
       'Use `doubleClick` only when the real website control requires a double-click'
     );
@@ -905,6 +984,7 @@ function makePage() {
     },
     evaluateHandle: vi.fn(),
     evaluate: vi.fn(),
+    waitForFileChooser: vi.fn(),
   };
 }
 
@@ -941,6 +1021,7 @@ function makeElement(domElement?: FakeElement) {
     locator,
     asLocator: vi.fn(() => locator),
     select: vi.fn(async (value: string) => [value]),
+    uploadFile: vi.fn(async (_filePath: string) => undefined),
     evaluate: vi.fn(
       async (fn: (element: FakeElement, request?: unknown) => unknown, request?: unknown) => {
         if (domElement) return fn(domElement, request);

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useImagePreviewUrl } from '../../hooks/useImagePreviewUrl';
 import { resolveLocalPath } from '../../utils/localPath';
 import { renderedImageContext } from '../image-preview/renderedImageContext';
+import { useAttachmentMenu } from '@/features/console/attachments/attachmentMenu';
 import { MarkdownImageContext, type MarkdownImageOptions } from './markdownImageContext';
 import { ContentLink } from './ContentLinks';
 import { targetFromHref } from './scanTargets';
@@ -41,11 +42,16 @@ export function MarkdownImage(props: ComponentProps) {
   const preview = () => {
     if (!ready || !imageRef.current) return;
     const context = renderedImageContext(imageRef.current);
-    onPreviewImage?.(url, context.urls, context.index);
+    onPreviewImage?.(url, context.urls, context.index, undefined, undefined, context.sourcePaths);
   };
+  const context = useAttachmentMenu(path || url ? { kind: 'image',
+    source: path ? { kind: 'path', path } : { kind: 'url', url: url! },
+    preview: ready && onPreviewImage ? preview : undefined,
+  } : null);
 
   return (
-    <span className={styles.image}>
+    <span className={styles.image} onContextMenu={context.onContextMenu}>
+      {context.menu}
       {failed ? (
         <span className={styles.placeholder} role="status">
           <span>{t('sharedUi.markdownImage.failed')} · {description}</span>
@@ -80,6 +86,7 @@ export function MarkdownImage(props: ComponentProps) {
                 ref={imageRef}
                 className={styles.picture}
                 src={url}
+                data-image-source-path={path ?? undefined}
                 alt={description}
                 title={title}
                 hidden={!ready}

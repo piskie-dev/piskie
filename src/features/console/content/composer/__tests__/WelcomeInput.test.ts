@@ -146,7 +146,7 @@ beforeEach(async () => {
   clearAllComposerDrafts();
   rows.sessions = [];
   rows.history = [];
-  useUIStore.setState({ consoleSelection: null, expandedWorkspaceGroups: [] });
+  useUIStore.setState({ consoleSelection: null, expandedWorkspaceGroups: [], hiddenWorkspaceGroupKeys: [], workspaceSessionSort: {} });
   useComposerDraftStore.setState({ defaults: DEFAULT_COMPOSER_SETTINGS });
   selectFolder.mockReset().mockResolvedValue(['/tmp/sample-workspace']);
   getPathForFile.mockReset().mockReturnValue('');
@@ -216,6 +216,43 @@ describe('workspace navigation reveal', () => {
     expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/beta']);
     act(() => shellRef.current!.newSession());
     expect(useUIStore.getState().expandedWorkspaceGroups).toEqual(['/sample/beta', '']);
+  });
+});
+
+describe('explicit new-session sidebar restore', () => {
+  it('keeps workspaces hidden for directory selection, old navigation and a failed start; restores only the successful path', async () => {
+    useUIStore.getState().hideWorkspaceGroup('/tmp/sample-workspace');
+    useUIStore.getState().hideWorkspaceGroup('/sample/other');
+    act(() => shellRef.current!.selectSession('sample-existing'));
+    act(() => shellRef.current!.openHistory({
+      agentId: 'sample-history', title: 'Example history', taskDescription: 'Example history',
+      workspace: '/tmp/sample-workspace', agentSpec: 'system-chat', running: false,
+      lastActiveAt: '2026-01-01T00:00:00Z',
+    }));
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toEqual(['/tmp/sample-workspace', '/sample/other']);
+    await act(async () => composer().onSelectWorkspace());
+    act(() => composer().onChange('Example new session'));
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toContain('/tmp/sample-workspace');
+    await act(async () => { await composer().onSubmit(); });
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toContain('/tmp/sample-workspace');
+    onStart.mockResolvedValue({ kind: 'started', agentId: 'sample-new' });
+    await act(async () => { await composer().onSubmit(); });
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toEqual(['/sample/other']);
+  });
+
+  it('restores the submitted workspace after delayed success, preserving a newer draft and its hidden workspace', async () => {
+    let finish!: (outcome: StartOutcome) => void;
+    onStart.mockReturnValueOnce(new Promise<StartOutcome>((resolve) => { finish = resolve; }));
+    useUIStore.getState().hideWorkspaceGroup('/sample/first');
+    useUIStore.getState().hideWorkspaceGroup('/sample/second');
+    act(() => shellRef.current!.newSessionIn('/sample/first'));
+    act(() => composer().onChange('First example'));
+    await act(async () => { composer().onSubmit(); });
+    act(() => shellRef.current!.newSessionIn('/sample/second'));
+    act(() => composer().onChange('Second example'));
+    await act(async () => finish({ kind: 'started', agentId: 'sample-new' }));
+    expect(useUIStore.getState().hiddenWorkspaceGroupKeys).toEqual(['/sample/second']);
+    expect(composer()).toMatchObject({ workspacePath: '/sample/second', value: 'Second example' });
   });
 });
 

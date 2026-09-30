@@ -30,7 +30,10 @@ import {
   resolvePresentationText,
   type PresentationText,
 } from '../../../i18n/presentationText';
-import { useUIStore } from '../../../store/uiStore';
+import { normalizeWorkspaceSessionSort, useUIStore } from '../../../store/uiStore';
+import { copyText } from '../../../services/clipboard';
+import { pushToast, useToastStore } from '../../toasts/toast-store';
+import type { MenuItemDescriptor } from '../chrome/MenuButton';
 import { Dialog } from '../chrome/Dialog';
 import { OrbIndicator } from './OrbIndicator';
 import { useAgentRunList } from '@/renderer-runtime/hooks';
@@ -39,7 +42,7 @@ import { useConsoleActions } from '../data/actions';
 import { useHistoryRowsReady } from '../data/session';
 import type { HistoryRow, SessionRow } from '../data/sessionRow';
 import type { SessionMenuSource } from '../data/sessionMenu';
-import { buildThreadRows, type ThreadRow } from '../data/threadRows';
+import { buildThreadRows, moveThreadRow, sortThreadRows, type ThreadRow } from '../data/threadRows';
 import {
   filterWorkspaceGroups,
   groupByWorkspace,
@@ -47,9 +50,11 @@ import {
   normalizeWorkspaceGroupKeys,
   orderWorkspaceGroups,
   reconcileWorkspaceOrder,
+  workspaceGroupKey,
   type WorkspaceDropEdge,
+  type WorkspaceGroup,
 } from '../data/workspaceGroups';
-import { WorkspaceTree, type ThreadMenuKey } from './WorkspaceTree';
+import { WorkspaceTree, type ThreadMenuKey, type WorkspaceMenuKey } from './WorkspaceTree';
 import styles from './threads.module.css';
 
 export interface ThreadSidebarProps {
@@ -91,6 +96,16 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const [renameValue, setRenameValue] = useState('');
     const [renameError, setRenameError] = useState<PresentationText | null>(null);
     const [renaming, setRenaming] = useState(false);
+    const [confirmation, setConfirmation] = useState<{ kind: 'delete' | 'stop'; row: ThreadRow } | null>(null);
+    const [confirming, setConfirming] = useState(false);
+    const [confirmError, setConfirmError] = useState<PresentationText | null>(null);
+    const confirmationRequest = useRef(0);
+    const closeConfirmation = useCallback(() => {
+      confirmationRequest.current += 1;
+      setConfirmation(null);
+      setConfirming(false);
+      setConfirmError(null);
+    }, []);
     const renameRequest = useRef(0);
     const renameInput = useRef<HTMLInputElement>(null);
     const renameErrorId = useId();
@@ -103,7 +118,18 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
     const expandedGroups = useUIStore((state) => state.expandedWorkspaceGroups);
     const setOrder = useUIStore((state) => state.setWorkspaceGroupOrder);
     const toggleAgentRunPin = useUIStore((state) => state.toggleAgentRunPin);
+    const hiddenKeys = useUIStore((state) => state.hiddenWorkspaceGroupKeys);
+    const savedSessionSort = useUIStore((state) => state.workspaceSessionSort);
+    const setSessionSort = useUIStore((state) => state.setWorkspaceSessionSort);
+    const reconcileSessionSort = useUIStore((state) => state.reconcileWorkspaceSessionSort);
+    const sessionSort = useMemo(() => normalizeWorkspaceSessionSort(savedSessionSort, defaultWorkspacePath), [savedSessionSort, defaultWorkspacePath]);
+    const defaultWorkspacePathRef = useRef(defaultWorkspacePath);
+    defaultWorkspacePathRef.current = defaultWorkspacePath;
     const searching = query.trim().length > 0;
+    const sortingDisabledReason = searching ? t('contextMenu.sidebar.sortingUnavailable')
+      : !historyReady ? t('contextMenu.sidebar.historyLoading') : undefined;
+    const sortingBlocked = useRef(!!sortingDisabledReason);
+    sortingBlocked.current = !!sortingDisabledReason;
 
     const allGroups = useMemo(() => groupByWorkspace(
       buildThreadRows({ sessions, history, attentionByAgentId, pinnedAgentRunIds }),
@@ -123,12 +149,100 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
         useUIStore.setState({ expandedWorkspaceGroups: [...normalized] });
       }
     }, [defaultWorkspacePath, expandedGroups]);
-    const orderedGroups = useMemo(() => orderWorkspaceGroups(allGroups, order), [allGroups, order]);
-    const groups = useMemo(() => filterWorkspaceGroups(orderedGroups, query), [orderedGroups, query]);
+    const orderedGroups = useMemo(() => orderWorkspaceGroups(allGroups, order).map((group) => ({
+      ...group, rows: sortThreadRows(group.rows, sessionSort[group.key]),
+    })), [allGroups, order, sessionSort]);
+    // Merge aliases and freeze/prune against the complete inventory without changing sorting recency.
+    useEffect(() => {
+      reconcileSessionSort(defaultWorkspacePath, historyReady ? Object.fromEntries(
+        allGroups.map((group) => [group.key, group.rows.map((row) => row.agentId)]),
+      ) : undefined);
+    }, [defaultWorkspacePath, historyReady, allGroups, savedSessionSort, reconcileSessionSort]);
+    const visibleGroups = useMemo(() => orderedGroups.filter((group) => !hiddenKeys.includes(group.key)
+      && !(group.key === '' && defaultWorkspacePath && hiddenKeys.includes(defaultWorkspacePath))), [orderedGroups, hiddenKeys, defaultWorkspacePath]);
+    const groups = useMemo(() => filterWorkspaceGroups(visibleGroups, query), [visibleGroups, query]);
     const moveGroup = useCallback((source: string, target: string, edge: WorkspaceDropEdge) => {
-      if (!allGroups.some((group) => group.key === source)) return;
-      setOrder([...moveWorkspaceGroup(order, source, target, edge)]);
-    }, [allGroups, order, setOrder]);
+      if (sortingBlocked.current) return;
+      setOrder([...moveWorkspaceGroup(order, source, target, edge, visibleGroups.map((group) => group.key))]);
+    }, [order, setOrder, visibleGroups]);
+    const restoreAutomatic = useCallback((key: string) => {
+      if (sortingBlocked.current) return;
+      setSessionSort(workspaceGroupKey(key, defaultWorkspacePathRef.current), { mode: 'auto', order: [] });
+    }, [setSessionSort]);
+    const moveThread = useCallback((groupKey: string, source: string, target: string, edge: WorkspaceDropEdge) => {
+      if (sortingBlocked.current) return;
+      const group = orderedGroups.find((candidate) => candidate.key === groupKey);
+      if (!group) return;
+      const next = moveThreadRow(group.rows, source, target, edge);
+      if (!next) return;
+      const wasManual = sessionSort[groupKey]?.mode === 'manual';
+      setSessionSort(groupKey, { mode: 'manual', order: next });
+      if (!wasManual) pushToast({
+        id: `sidebar-sort:${groupKey}`, tone: 'info', title: t('contextMenu.sidebar.manualSortEnabled'),
+        action: { label: t('contextMenu.sidebar.restoreAutomatic'), run: () => restoreAutomatic(groupKey) },
+      });
+    }, [orderedGroups, restoreAutomatic, sessionSort, setSessionSort, t]);
+    useEffect(() => {
+      useToastStore.setState((state) => ({ toasts: state.toasts.map((toast) => {
+        if (!toast.id.startsWith('sidebar-sort:')) return toast;
+        const key = toast.id.slice('sidebar-sort:'.length);
+        return { ...toast, detail: sortingDisabledReason, action: sortingDisabledReason ? undefined : {
+          label: t('contextMenu.sidebar.restoreAutomatic'), run: () => restoreAutomatic(key),
+        } };
+      }) }));
+    }, [restoreAutomatic, sortingDisabledReason, t]);
+    const reportFailure = useCallback((error?: PresentationText) => {
+      pushToast({ id: 'sidebar-action-error', tone: 'error', title: t('contextMenu.sidebar.actionFailed', {
+        message: error ? resolvePresentationText(error, (key, values) => t(key, values ?? {})) : t('sessionWorkbenchUi.action.operationFailed'),
+      }) });
+    }, [t]);
+    const groupMenuItems = useCallback((group: WorkspaceGroup): readonly MenuItemDescriptor<WorkspaceMenuKey>[] => {
+      const index = visibleGroups.findIndex((candidate) => candidate.key === group.key);
+      const mode = sessionSort[group.key]?.mode ?? 'auto';
+      return [
+        ...(onNewSessionIn ? [{ key: 'newSession' as const, label: t('contextMenu.sidebar.newSession') }] : []),
+        ...(group.path ? [
+          { key: 'openFolder' as const, label: t('contextMenu.sidebar.openFolder') },
+          { key: 'copyPath' as const, label: t('contextMenu.sidebar.copyPath') },
+        ] : []),
+        { key: 'sessionSort', label: t('contextMenu.sidebar.sessionSort'), separatorBefore: true,
+          disabled: !!sortingDisabledReason, disabledReason: sortingDisabledReason, children: [
+            { key: 'auto', label: t('contextMenu.sidebar.automaticSort'), checked: mode === 'auto', disabled: !!sortingDisabledReason, disabledReason: sortingDisabledReason },
+            { key: 'manual', label: t('contextMenu.sidebar.manualSort'), checked: mode === 'manual', disabled: !!sortingDisabledReason, disabledReason: sortingDisabledReason },
+          ] },
+        { key: 'moveUp', label: t('contextMenu.sidebar.moveUp'), disabled: !!sortingDisabledReason || index === 0,
+          disabledReason: sortingDisabledReason ?? (index === 0 ? t('contextMenu.sidebar.atStart') : undefined) },
+        { key: 'moveDown', label: t('contextMenu.sidebar.moveDown'), disabled: !!sortingDisabledReason || index === visibleGroups.length - 1,
+          disabledReason: sortingDisabledReason ?? (index === visibleGroups.length - 1 ? t('contextMenu.sidebar.atEnd') : undefined) },
+        ...(group.path ? [{ key: 'removeFromSidebar' as const, label: t('contextMenu.sidebar.removeFromSidebar'), separatorBefore: true }] : []),
+      ];
+    }, [onNewSessionIn, sessionSort, sortingDisabledReason, t, visibleGroups]);
+    const onGroupMenuAction = useCallback(async (key: WorkspaceMenuKey, group: WorkspaceGroup) => {
+      if (key === 'newSession') onNewSessionIn?.(group.path);
+      else if (key === 'openFolder' && group.path) {
+        const result = await actions.openWorkspace(group.path);
+        if (!result.ok) reportFailure(result.error);
+      } else if (key === 'copyPath' && group.path) {
+        try {
+          await copyText(group.path);
+          pushToast({ id: 'sidebar-path-copied', tone: 'info', title: t('contextMenu.sidebar.pathCopied') });
+        } catch (error) { reportFailure({ kind: 'raw', text: String(error) }); }
+      } else if (key === 'removeFromSidebar' && group.path) {
+        useUIStore.getState().hideWorkspaceGroup(group.key);
+        pushToast({ id: `sidebar-hidden:${group.key}`, tone: 'info', title: t('contextMenu.sidebar.removedFromSidebar'),
+          action: { label: t('contextMenu.sidebar.undo'), run: () => useUIStore.getState().restoreWorkspaceGroup(group.key) } });
+      } else if (!sortingBlocked.current) {
+        if (key === 'auto') restoreAutomatic(group.key);
+        else if (key === 'manual' && sessionSort[group.key]?.mode !== 'manual') {
+          const complete = orderedGroups.find((candidate) => candidate.key === group.key);
+          if (complete) setSessionSort(group.key, { mode: 'manual', order: complete.rows.map((row) => row.agentId) });
+        } else if (key === 'moveUp' || key === 'moveDown') {
+          const index = visibleGroups.findIndex((candidate) => candidate.key === group.key);
+          const target = visibleGroups[index + (key === 'moveUp' ? -1 : 1)];
+          if (target) moveGroup(group.key, target.key, key === 'moveUp' ? 'before' : 'after');
+        }
+      }
+    }, [actions, moveGroup, onNewSessionIn, orderedGroups, reportFailure, restoreAutomatic, sessionSort, setSessionSort, t, visibleGroups]);
 
     /**
      * 行点击：在跑的选中会话，历史的恢复记录（后端懒恢复）。
@@ -195,6 +309,22 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
           toggleAgentRunPin(row.agentId);
           return;
         }
+        if (key === 'moveUp' || key === 'moveDown') {
+          const group = orderedGroups.find((candidate) => candidate.rows.some((item) => item.agentId === row.agentId));
+          if (!group || sessionSort[group.key]?.mode !== 'manual') return;
+          const partition = group.rows.filter((item) => item.pinned === row.pinned);
+          const index = partition.findIndex((item) => item.agentId === row.agentId);
+          const target = partition[index + (key === 'moveUp' ? -1 : 1)];
+          if (target) moveThread(group.key, row.agentId, target.agentId, key === 'moveUp' ? 'before' : 'after');
+          return;
+        }
+        if (key === 'stop' || (key === 'delete' && !row.live && row.history)) {
+          confirmationRequest.current += 1;
+          setConfirmation({ kind: key, row });
+          setConfirming(false);
+          setConfirmError(null);
+          return;
+        }
         if (key === 'rename') {
           openRename(row);
           return;
@@ -207,7 +337,6 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
           if (key === 'workspace') void actions.openWorkspace(row.workspace);
           else if (key === 'trace') void actions.openTrace(row.agentId);
           else if (key === 'pause') void actions.pause({ agentId: row.agentId });
-          else if (key === 'stop') void actions.stop(row.agentId);
           return;
         }
 
@@ -215,10 +344,31 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
         if (!record) return;
         if (key === 'open') onSelectHistory(record);
         else if (key === 'trace') void actions.openTrace(record.agentId);
-        else if (key === 'delete') void actions.deleteHistory(record.agentId);
       },
-      [actions, onSelectHistory, openRename, toggleAgentRunPin],
+      [actions, moveThread, onSelectHistory, openRename, orderedGroups, sessionSort, toggleAgentRunPin],
     );
+
+    const submitConfirmation = async () => {
+      if (!confirmation || confirming) return;
+      const { kind, row } = confirmation;
+      if (kind === 'delete' && sessions.some((session) => session.agentId === row.agentId)) {
+        setConfirmation(null);
+        return;
+      }
+      const request = ++confirmationRequest.current;
+      setConfirming(true);
+      try {
+        const result = await (kind === 'delete' ? actions.deleteHistory(row.agentId) : actions.stop(row.agentId));
+        if (result.ok && kind === 'delete') useUIStore.getState().forgetSessionOrder(row.agentId);
+        if (request !== confirmationRequest.current) return;
+        if (!result.ok) { setConfirmError(result.error ?? messageText('sessionWorkbenchUi.action.operationFailed')); return; }
+        closeConfirmation();
+      } catch (error) {
+        if (request === confirmationRequest.current) setConfirmError({ kind: 'raw', text: String(error) });
+      } finally {
+        if (request === confirmationRequest.current) setConfirming(false);
+      }
+    };
 
     const taskTrigger = (
       <button
@@ -265,7 +415,7 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
 
           <div className={styles.collapsedList}>
             {/* 收起态只列在跑的：52px 里放不下历史 */}
-            {orderedGroups.flatMap((group) =>
+            {visibleGroups.flatMap((group) =>
               group.rows
                 .filter((row) => !!row.live)
                 .map((row) => (
@@ -327,11 +477,15 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
             {taskLauncher}
           </div>
 
-          <div className={styles.scroll}>
+          <div className={styles.scroll} data-workspace-scroll>
             <WorkspaceTree
               groups={groups}
               searching={searching}
-              onMoveGroup={historyReady && !searching ? moveGroup : undefined}
+              onMoveGroup={!sortingDisabledReason ? moveGroup : undefined}
+              onMoveThread={!sortingDisabledReason ? moveThread : undefined}
+              sortingDisabledReason={sortingDisabledReason}
+              groupMenuItems={groupMenuItems}
+              onGroupMenuAction={(key, group) => { void onGroupMenuAction(key, group); }}
               selectedAgentId={selectedAgentId}
               onSelect={onSelectRow}
               menuSourceOf={menuSourceOf}
@@ -340,6 +494,23 @@ export const ThreadSidebar = memo<ThreadSidebarProps>(
             />
           </div>
         </div>
+        <Dialog
+          open={confirmation !== null}
+          onClose={closeConfirmation}
+          title={t(`contextMenu.sidebar.${confirmation?.kind === 'stop' ? 'stopTitle' : 'deleteTitle'}`)}
+          width={400}
+        >
+          {confirmation && <div className={styles.renameForm} aria-busy={confirming}>
+            <p>{t(`contextMenu.sidebar.${confirmation.kind === 'delete' ? 'deleteBody' : 'stopBody'}`, { name: confirmation.row.label })}</p>
+            {confirmError && <p className={styles.renameError} role="alert">{resolvePresentationText(confirmError, (key, values) => t(key, values ?? {}))}</p>}
+            <div className={styles.renameActions}>
+              <button type="button" className={styles.renameButton} disabled={confirming} onClick={closeConfirmation}>{t('common.cancel')}</button>
+              <button type="button" className={`${styles.renameButton} ${styles.dangerButton}`} disabled={confirming} onClick={() => void submitConfirmation()}>
+                {t(confirming ? `contextMenu.sidebar.${confirmation.kind === 'delete' ? 'deleting' : 'stopping'}` : `sessionWorkbenchUi.sessionMenu.${confirmation.kind}`)}
+              </button>
+            </div>
+          </div>}
+        </Dialog>
         <Dialog
           open={renameTarget !== null}
           onClose={closeRename}

@@ -27,6 +27,7 @@ import type { PresentationText } from '../../../../i18n/presentationText';
 import { WELCOME_DRAFT_KEY } from '../../data/composer-drafts';
 import { WorkspaceBar } from './WorkspaceBar';
 import { AttachmentThumbnail, AttachmentError } from '../../attachments/AttachmentThumbnail';
+import { AttachmentFileTarget } from '../../attachments/AttachmentFileTarget';
 import { SkillTags } from '../SkillTags';
 import { BrowserEnvironmentTags } from '../BrowserEnvironmentTags';
 import { SessionBrowserControl } from './SessionBrowserControl';
@@ -191,7 +192,7 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                   </div>
                 ))}
                 {files.map((file) => (
-                  <div key={file.id} className={styles.fileChip}>
+                  <AttachmentFileTarget key={file.id} file={file} className={styles.fileChip}>
                     {file.kind === 'directory' ? <FolderOpen size={13} /> : <FileText size={13} />}
                     <span className={styles.fileName}>{file.name}</span>
                     <button
@@ -202,7 +203,7 @@ export const WelcomeComposer = memo<WelcomeComposerProps>(
                     >
                       <X size={9} />
                     </button>
-                  </div>
+                  </AttachmentFileTarget>
                 ))}
               </div>
             )}

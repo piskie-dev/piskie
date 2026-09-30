@@ -9,7 +9,7 @@
  * 而不是声明式 invoker。
  */
 
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef } from 'react';
 
 import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '@/shortcuts';
 import styles from './overlay.module.css';
@@ -27,6 +27,8 @@ export interface PopoverProps {
   /** 承载 anchor-name 的触发器外层样式 */
   readonly triggerClassName?: string;
   readonly className?: string;
+  /** Viewport coordinates for a mouse context menu; use trigger={null}. */
+  readonly anchorPoint?: { readonly x: number; readonly y: number };
 }
 
 const PLACEMENT_AREA: Record<NonNullable<PopoverProps['placement']>, Record<NonNullable<PopoverProps['align']>, string>> = {
@@ -45,6 +47,7 @@ export const Popover: React.FC<PopoverProps> = ({
   align = 'end',
   triggerClassName,
   className,
+  anchorPoint,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
@@ -57,11 +60,11 @@ export const Popover: React.FC<PopoverProps> = ({
     onDismiss: onClose,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     openRef.current = open;
   }, [open]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
 
@@ -71,7 +74,32 @@ export const Popover: React.FC<PopoverProps> = ({
     } else if (!open && isOpen) {
       element.hidePopover();
     }
-  }, [open]);
+  }, [open, anchorPoint]);
+
+  const pointX = anchorPoint?.x;
+  const pointY = anchorPoint?.y;
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!open || !element || pointX === undefined || pointY === undefined) return;
+    const viewport = element.ownerDocument.defaultView!;
+    const position = () => {
+      const gap = 8;
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
+      const left = pointX + width > viewport.innerWidth - gap ? pointX - width : pointX;
+      const top = pointY + height > viewport.innerHeight - gap ? pointY - height : pointY;
+      element.style.left = `${Math.max(gap, Math.min(left, viewport.innerWidth - width - gap))}px`;
+      element.style.top = `${Math.max(gap, Math.min(top, viewport.innerHeight - height - gap))}px`;
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(element);
+    viewport.addEventListener('resize', position);
+    return () => {
+      observer.disconnect();
+      viewport.removeEventListener('resize', position);
+    };
+  }, [open, pointX, pointY]);
 
   // Browser light-dismiss still needs to flow back into the controlled state.
   useEffect(() => {
@@ -80,7 +108,7 @@ export const Popover: React.FC<PopoverProps> = ({
 
     const onToggle = (event: Event): void => {
       const { newState } = event as ToggleEvent;
-      if (newState === 'closed' && openRef.current) onClose();
+      if (newState === 'closed' && openRef.current && !element.matches(':popover-open')) onClose();
     };
 
     element.addEventListener('toggle', onToggle);
@@ -89,12 +117,15 @@ export const Popover: React.FC<PopoverProps> = ({
 
   return (
     <>
-      <span className={triggerClassName} style={{ anchorName }}>{trigger}</span>
+      {!anchorPoint && <span className={triggerClassName} style={{ anchorName }}>{trigger}</span>}
       <div
         ref={ref}
         popover="auto"
-        className={`${styles.popover} ${className ?? ''}`}
-        style={{
+        className={`${styles.popover} ${anchorPoint ? styles.pointPopover : ''} ${className ?? ''}`}
+        style={anchorPoint ? {
+          left: anchorPoint.x,
+          top: anchorPoint.y,
+        } : {
           positionAnchor: anchorName,
           positionArea: PLACEMENT_AREA[placement][align],
         }}
