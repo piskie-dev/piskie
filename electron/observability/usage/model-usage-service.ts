@@ -1,11 +1,12 @@
 import { createUuid } from '@shared/utils/identifiers.js';
 import type { AppSettings } from '../../../shared/types/index.js';
-import type { ModelUsageConfig, UsageCleanupPreview, UsageDimension, UsageFacets, UsageFilter, UsageGroup, UsagePage, UsageRecord, UsageReport, UsageSort } from '../../../shared/types/model-usage.js';
+import type { ModelUsageConfig, ProviderTokenBudgetStatus, UsageCleanupPreview, UsageDimension, UsageFacets, UsageFilter, UsageGroup, UsagePage, UsageRecord, UsageReport, UsageSort } from '../../../shared/types/model-usage.js';
 import { knownTokens, matchesUsage, summarizeUsage, usageModelTarget, usageRequestKey } from '../../../shared/model-usage.js';
+import { providerBudgetPeriod } from '../../../shared/provider-token-budget.js';
 import { configFileWriter } from '../../config/core/atomic-file-writer.js';
 import { defaultModelUsageConfig } from '../../config/domains/model-usage.adapter.js';
 import type { AiUsageObserverFactory } from '../../inference/ai/usage-observer.js';
-import { FileUsageStore } from './file-usage-store.js';
+import { FileUsageStore, usageCutoff } from './file-usage-store.js';
 import { formatUsageCsv } from './usage-csv.js';
 
 const DAY = 86_400_000;
@@ -103,6 +104,32 @@ export class ModelUsageService {
       close: (at) => { finish('interrupted', at); },
     };
   };
+
+  async budget(providerId: string, signal?: AbortSignal): Promise<ProviderTokenBudgetStatus | null> {
+    const budget = this.config.providerBudgets?.[providerId];
+    if (!budget) return null;
+    const now = this.now();
+    const { start, end } = providerBudgetPeriod(budget, now);
+    let used = 0;
+    let unmeasuredCalls = 0;
+    return this.store.read({ from: start, to: Math.min(end, now + 1) }, (records) => {
+      for (const record of records) {
+        if (record.providerId !== providerId || record.startedAt < start || record.startedAt >= end) continue;
+        used += knownTokens(record.usage);
+        if (record.usage.totalInputTokens === undefined || record.usage.totalOutputTokens === undefined) {
+          unmeasuredCalls++;
+        }
+      }
+    }, (storage, corruptLines) => {
+      const cutoff = usageCutoff(this.config.retentionDays, now);
+      const complete = unmeasuredCalls === 0 && corruptLines === 0 && !storage.writeError
+        && (!cutoff || start >= Date.parse(`${cutoff}T00:00:00Z`));
+      return {
+        budget, periodStart: start, periodEnd: end, used, unmeasuredCalls, complete,
+        ...(complete && { remaining: Math.max(0, budget.limit - used) }),
+      };
+    }, signal);
+  }
 
   async query(filter: UsageFilter, signal?: AbortSignal): Promise<UsageReport> {
     const records: UsageRecord[] = [];

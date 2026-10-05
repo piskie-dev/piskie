@@ -35,6 +35,7 @@ import { DeckSelect } from '../bits/DeckSelect';
 import { briefProbeFailure, probeElapsedMs, type ProbeFailureBrief } from '../data/probe-brief';
 import { matchVendor, peekKey, pokeKey, vendorLocaleKey } from '../data/vendor-atlas';
 import { pickWire, readWirePact, stampWire } from '../data/wire-contract';
+import { ProviderTokenBudget } from './ProviderTokenBudget';
 import styles from '../deck.module.css';
 
 const DIRECT_LINE = '__direct__';
@@ -487,6 +488,8 @@ export const ProviderDesk: React.FC<ProviderDeskProps> = ({
             })}
           />
         </div>
+
+        {gateway === 'ai' && <ProviderTokenBudget key={providerId} providerId={providerId} />}
 
         <div className={styles.slab}>
           <div className={styles.slabCap}>

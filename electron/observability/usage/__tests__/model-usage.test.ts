@@ -35,6 +35,42 @@ afterEach(async () => {
 });
 
 describe('model usage facts', () => {
+  it('derives a provider budget from latest attempt facts without affecting other providers', async () => {
+    const resetAt = Date.parse('2026-09-21T00:00:00Z');
+    const usage = service({ ...defaultModelUsageConfig(), providerBudgets: {
+      p: { period: 'weekly', limit: 1_000, resetAt },
+    } });
+    await usage.refreshConfig();
+    usage.store.append(fixture({ usage: { totalInputTokens: 100, totalOutputTokens: 20, cachedInputTokens: 80 } }));
+    usage.store.append(fixture({ usage: { totalInputTokens: 200, totalOutputTokens: 30, cachedInputTokens: 80 } }));
+    usage.store.append(fixture({ id: 'retry:2', runId: 'retry', attempt: 2, status: 'failed',
+      usage: { totalInputTokens: 50, totalOutputTokens: 10 } }));
+    usage.store.append(fixture({ id: 'other:1', runId: 'other', providerId: 'other',
+      usage: { totalInputTokens: 500, totalOutputTokens: 500 } }));
+    expect(await usage.budget('p')).toMatchObject({ used: 290, remaining: 710, complete: true, unmeasuredCalls: 0 });
+    expect(await usage.budget('other')).toBeNull();
+  });
+
+  it('does not present an exact remainder when usage is missing', async () => {
+    const usage = service({ ...defaultModelUsageConfig(), providerBudgets: {
+      p: { period: 'monthly', limit: 1000, resetAt: Date.parse('2026-10-01T00:00:00Z') },
+    } });
+    await usage.refreshConfig();
+    usage.store.append(fixture({ usage: { totalInputTokens: 100 } }));
+    expect(await usage.budget('p')).toMatchObject({ used: 100, complete: false, unmeasuredCalls: 1 });
+    expect((await usage.budget('p'))?.remaining).toBeUndefined();
+  });
+
+  it('does not present an exact remainder when retention can remove part of the period', async () => {
+    const usage = service({ ...defaultModelUsageConfig(), retentionDays: 30, providerBudgets: {
+      p: { period: 'monthly', limit: 1000, resetAt: Date.parse('2026-09-19T00:00:00Z') },
+    } });
+    await usage.refreshConfig();
+    usage.store.append(fixture({ usage: { totalInputTokens: 100, totalOutputTokens: 20 } }));
+    expect(await usage.budget('p')).toMatchObject({ used: 120, complete: false });
+    expect((await usage.budget('p'))?.remaining).toBeUndefined();
+  });
+
   it('updates cached days after append and rebuilds them after file replacement or truncation', async () => {
     const usage = service();
     usage.store.append(fixture({ usage: { totalInputTokens: 10 } }));

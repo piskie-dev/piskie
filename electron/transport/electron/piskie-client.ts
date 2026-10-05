@@ -368,6 +368,7 @@ export function createElectronPiskieClient(options: {
         page: (snapshot, offset, sort, descending) => request(OBSERVABILITY_OPERATIONS.usagePage, snapshot, offset, sort, descending),
         detail: (snapshot, id) => request(OBSERVABILITY_OPERATIONS.usageDetail, snapshot, id),
         status: () => request(OBSERVABILITY_OPERATIONS.usageStatus),
+        budget: (providerId) => request(OBSERVABILITY_OPERATIONS.usageBudget, providerId),
         export: (snapshot, language) => waitForUser(OBSERVABILITY_OPERATIONS.usageExport, snapshot, language),
         previewCleanup: (days, all) => request(OBSERVABILITY_OPERATIONS.usagePreview, days, all),
         cleanup: (all, confirmed) => request(OBSERVABILITY_OPERATIONS.usageCleanup, all, confirmed),
