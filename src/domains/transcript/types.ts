@@ -5,6 +5,7 @@ export type { TranscriptNode };
 
 /** Complete assistant messages, including calls whose visible nodes are suppressed. */
 export interface TranscriptResponse {
+  readonly sourceIndex: number;
   readonly afterUserId?: string;
   readonly ts: number;
   readonly hasToolUse: boolean;

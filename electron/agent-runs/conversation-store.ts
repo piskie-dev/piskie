@@ -885,6 +885,7 @@ const advancedSettingsSchema = z.object({
 });
 
 const runConfigSchema = z.object({
+  model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).optional(),
   name: z.string(),
   description: z.string(),
   category: z.string().optional(),

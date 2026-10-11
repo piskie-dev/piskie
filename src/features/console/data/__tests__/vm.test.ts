@@ -169,6 +169,37 @@ describe('reasoning snapshots', () => {
   });
 });
 
+describe('activity output projection', () => {
+  it('keeps Main and Worker counters independent as their activities finish', () => {
+    const child = {
+      id: 'sample-worker', phase: 'thinking', currentModel: 'sample::model',
+      activeStartedAt: 200, activeOutputTokens: { count: 7, estimated: false },
+    };
+    const main = {
+      agentId: 'sample-main', phase: 'thinking', currentModel: 'sample::model',
+      runConfig: { name: 'Sample activity' }, children: [child],
+      activeStartedAt: 100, activeOutputTokens: { count: 3, estimated: true },
+    };
+    harness.controlStates = { 'sample-main': main };
+    let projected: Array<AgentVM | WorkerVM | null> = [];
+    function Probe() {
+      projected = [useAgentVM('sample-main'), useWorkerVM('sample-main', 'sample-worker')];
+      return null;
+    }
+    renderToStaticMarkup(createElement(Probe));
+    expect(projected.map((target) => target?.activeOutputTokens)).toEqual([
+      { count: 3, estimated: true }, { count: 7, estimated: false },
+    ]);
+    harness.controlStates['sample-main'] = {
+      ...main, children: [{ ...child, activeStartedAt: undefined, activeOutputTokens: undefined }],
+    };
+    renderToStaticMarkup(createElement(Probe));
+    expect(projected.map((target) => target?.activeOutputTokens)).toEqual([
+      { count: 3, estimated: true }, undefined,
+    ]);
+  });
+});
+
 describe('Worker task projection', () => {
   it('shows Main’s latest owner matches, including completed and newly recorded work', () => {
     const make = (id: string, owner: string | null, status: 'pending' | 'completed' = 'pending') => ({

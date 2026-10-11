@@ -19,7 +19,7 @@ import {
 } from '../layout';
 
 function worker(over: Partial<CanvasWorkerInput> & { id: string }): CanvasWorkerInput {
-  return { browserId: 'b1', ...over };
+  return { browserId: 'b1', browserReady: true, ...over };
 }
 
 function base(over: Partial<Parameters<typeof buildCanvasLayout>[0]> = {}) {
@@ -40,9 +40,26 @@ const LANE_WIDTH =
 const COLUMN_STRIDE = LANE_WIDTH + CANVAS_LAYOUT.subColumnGap; // 990+140 = 1130
 
 describe('能力判据', () => {
-  it('有 browserId 才有屏幕', () => {
+  it('有 browserId 且浏览器页面就绪才有屏幕', () => {
     expect(workerHasScreen(worker({ id: 'w' }))).toBe(true);
-    expect(workerHasScreen(worker({ id: 'w', browserId: undefined }))).toBe(false);
+    expect(workerHasScreen(worker({ id: 'w', browserReady: false }))).toBe(false);
+    expect(workerHasScreen(worker({ id: 'w', browserId: undefined, browserReady: false }))).toBe(false);
+  });
+
+  it('就绪时添加屏幕及连接线，并保持 worker 布局', () => {
+    const pending = buildCanvasLayout(base({ workers: [worker({ id: 'sample', browserReady: false })] }));
+    expect(pending.nodes).toHaveLength(1);
+    expect(pending.nodes[0]).toMatchObject({ id: 'worker-sample', kind: 'worker' });
+    expect(pending.edges).toEqual([]);
+
+    const ready = buildCanvasLayout(base({ workers: [worker({ id: 'sample', browserReady: true })] }));
+    expect(ready.nodes.filter((node) => node.kind === 'worker')).toEqual(pending.nodes);
+    expect(ready.nodes.find((node) => node.kind === 'screen')).toMatchObject({
+      ownerId: 'sample', x: WORKER_START_X + 600 + 110, y: 100,
+    });
+    expect(ready.edges).toEqual([{
+      id: 'worker-sample->screen-sample', source: 'worker-sample', target: 'screen-sample',
+    }]);
   });
 });
 

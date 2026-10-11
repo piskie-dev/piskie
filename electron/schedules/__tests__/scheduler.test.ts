@@ -134,6 +134,18 @@ const historyOf = (h: Harness, scheduleId?: string) => h.history.query({
 });
 
 describe('Scheduler', () => {
+  it('copies the current template model for each scheduled run without changing prior snapshots', async () => {
+    const template = { ...TEMPLATE, model: { providerId: 'sample-provider', modelId: 'first-model' } };
+    const h = await createHarness([cronSchedule()], { templates: [template] });
+    await h.tick();
+    const first = h.agents.startRun.mock.calls[0]![0];
+    expect(first.model).toEqual(template.model);
+    template.model.modelId = 'next-model';
+    await h.tick('2026-09-19T01:00:05.000Z');
+    expect(h.agents.startRun.mock.calls[1]![0].model.modelId).toBe('next-model');
+    expect(first.model.modelId).toBe('first-model');
+  });
+
   it('fires a due cron schedule once with the template snapshot and trigger line', async () => {
     const h = await createHarness([cronSchedule()]);
     await h.tick();

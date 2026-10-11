@@ -18,6 +18,7 @@ import { useCaptureSize } from './screen/useCaptureSize';
 import { useRemoteInput } from './screen/useRemoteInput';
 import { showBrowserWindow } from './screen/showBrowserWindow';
 import { useScreenViewport } from './screen/useScreenViewport';
+import { ScreenPointerOverlay } from './screen/ScreenPointerOverlay';
 import styles from './screen/screen.module.css';
 
 // ==================== 浏览器流 ====================
@@ -40,6 +41,12 @@ export interface BrowserScreenViewProps {
    * 宽高比,所以它就是被控浏览器视口的真实比例——画布节点用它定默认尺寸。
    */
   readonly onFrameRatio?: (ratio: number) => void;
+  readonly fit?: 'fill' | 'full' | 'detail';
+  readonly fps?: number;
+  readonly controls?: boolean;
+  readonly resourceClosed?: boolean;
+  readonly retainLastFrame?: boolean;
+  readonly onFrameChange?: (available: boolean) => void;
 }
 
 export const BrowserScreenView = memo<BrowserScreenViewProps>(
@@ -52,6 +59,12 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
     onFullscreen,
     interactive = false,
     onFrameRatio,
+    fit = 'fill',
+    fps = 30,
+    controls = true,
+    resourceClosed = false,
+    retainLastFrame = false,
+    onFrameChange,
   }) => {
     const { t } = useTranslation();
     // 头部标题是字面量，`title` 只用于无障碍名（全屏弹窗另有自己的标题）
@@ -61,9 +74,11 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
     const stream = useScreenViewport({
       browserId,
       agentId: subagentId,
-      enabled: browserReady,
+      enabled: browserReady && !resourceClosed,
+      interactive,
+      retainLastFrame,
       // 30 而非 24：everyNthFrame 是整数分频，24 会取整成 N=3（实际 20fps），30 正好 N=2
-      fps: 30,
+      fps,
       paused: fidelity === 'hidden',
       capture,
     });
@@ -73,7 +88,7 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
     }, [browserId]);
 
     const input = useRemoteInput({
-      enabled: interactive && stream.ready,
+      enabled: interactive && stream.ready && !resourceClosed && browserReady,
       frameSize: stream.frameSize,
       send: stream.sendInput,
     });
@@ -86,15 +101,16 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
     useEffect(() => {
       if (frameRatio) onFrameRatio?.(frameRatio);
     }, [frameRatio, onFrameRatio]);
+    useEffect(() => {
+      onFrameChange?.(stream.ready);
+    }, [onFrameChange, stream.ready]);
 
     return (
-      <div className={styles.view}>
-        {/* 画面**填满**面板：面板是竖的、画面近方形，等比装进去必然留边。
-            改为 cover 语义——铺满两个方向，溢出的那一维由本容器滚动够到。
-            帧尺寸未知（首帧未到）时不启用，避免初始尺寸塌成 0 */}
+      <div className={styles.view} data-screen-state={resourceClosed ? 'closed' : browserReady ? 'ready' : 'waiting'}>
+        {/* Display fitting changes the stage and capture demand; the source viewport stays stable. */}
         <div
           className={styles.viewport}
-          data-fit={frameRatio ? 'fill' : undefined}
+          data-fit={frameRatio ? fit : undefined}
           style={frameRatio ? ({ ['--frame-ratio' as string]: `${frameRatio}` }) : undefined}
         >
           {/* 舞台=画面的真实显示矩形（可大于视口）。canvas 与输入宿主都铺满它，
@@ -108,8 +124,11 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
               data-visible={stream.ready ? 'true' : 'false'}
             />
 
+            <ScreenPointerOverlay pointer={stream.ready ? stream.pointer : null} frame={stream.renderedFrame}
+              onPresented={stream.onPointerPresented} />
+
             {/* 输入宿主：盖住画面接管指针/键盘 */}
-            {interactive && (
+            {interactive && !resourceClosed && browserReady && (
               <div
                 ref={input.ref}
                 className={styles.inputHost}
@@ -132,20 +151,28 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
         </div>
 
         {/* 覆盖层与滚动视口并列，固定在面板可见区域。 */}
-        {!browserReady && (
+        {!browserReady && !resourceClosed && (
           <div className={styles.overlay}>
             <Loader2 size={22} className="animate-spin" />
             <span>{t('sessionWorkbenchUi.screen.waitingBrowser')}</span>
           </div>
         )}
 
-        {browserReady && !stream.ready && !stream.error && (
+        {resourceClosed && !stream.ready && (
+          <div className={styles.overlay}>
+            <Unplug size={22} />
+            <span>{t('sessionWorkbenchUi.monitor.closedNoFrame')}</span>
+          </div>
+        )}
+        {resourceClosed && stream.ready && <span className={styles.frozenLabel}>{t('sessionWorkbenchUi.monitor.frozen')}</span>}
+
+        {browserReady && !resourceClosed && !stream.ready && !stream.error && (
           <div className={styles.overlay} data-tone="loading">
             <Loader2 size={22} className="animate-spin" />
           </div>
         )}
 
-        {browserReady && stream.error && !stream.ready && (
+        {browserReady && !resourceClosed && stream.error && !stream.ready && (
           <div className={styles.overlay} data-tone="error">
             <Unplug size={22} />
             <span>{stream.error}</span>
@@ -153,8 +180,8 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
         )}
 
         {/* 画面内悬浮控件：常态可发现，指针移入时增强 */}
-        <div className={styles.floatBar}>
-          {browserReady && (
+        {controls && <div className={styles.floatBar}>
+          {browserReady && !resourceClosed && (
             <span className={styles.floatChip}>
               <span
                 className={styles.statusDot}
@@ -177,12 +204,12 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
             </Tooltip>
           ) : (
             <Tooltip title={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
-              <button type="button" className={styles.floatButton} onClick={onShowWindow} aria-label={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
+              <button type="button" className={styles.floatButton} onClick={onShowWindow} disabled={resourceClosed || !browserReady} aria-label={t('sessionWorkbenchUi.screen.showBrowserWindow')}>
                 <Eye size={14} />
               </button>
             </Tooltip>
           )}
-        </div>
+        </div>}
       </div>
     );
   },

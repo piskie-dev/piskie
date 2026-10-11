@@ -46,16 +46,18 @@ export interface AgentRunMetrics {
   steps: number;
   llmDurationMs: number;
   toolDurationMs: number;
-  firstVisibleContentLatencyTotalMs: number;
-  firstVisibleContentSamples: number;
-  generationDurationMs: number;
-  generationOutputTokens: number;
+  firstTokenLatencyTotalMs: number;
+  firstTokenSamples: number;
+  /** 与已知 outputTokens 配对的最终成功 attempt 完整耗时之和。 */
+  throughputDurationMs: number;
+  /** 与已知 attemptDurationMs 配对的 Provider outputTokens 之和。 */
+  throughputOutputTokens: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   coverage: {
     toolTiming: MetricCoverage;
-    firstVisibleContent: MetricCoverage;
+    firstToken: MetricCoverage;
     throughput: MetricCoverage;
     inputTokens: MetricCoverage;
     outputTokens: MetricCoverage;
@@ -63,8 +65,16 @@ export interface AgentRunMetrics {
   };
 }
 
+export interface AgentOutputTokens {
+  /** Output across the current activity's AI requests, including reasoning and tool arguments. */
+  count: number;
+  /** True while any contribution is estimated from streamed content rather than provider usage. */
+  estimated: boolean;
+}
+
 export interface AgentActivityState {
   activeStartedAt?: number;
+  activeOutputTokens?: AgentOutputTokens;
   activeLlmStartedAt?: number;
   activeToolPhaseStartedAt?: number;
   runMetrics: AgentRunMetrics;
@@ -173,6 +183,15 @@ export interface AgentControlState extends AgentActivityState {
   browserEnvironmentIds?: string[];
 }
 
+/** Current assignment facts for Console display; never part of model/tool inputs. */
+export interface ChildTaskState {
+  readonly inputAt: number;
+  readonly notification?: {
+    readonly type: import('../subagent-events.js').SubagentEventType;
+    readonly at: number;
+  };
+}
+
 /**
  * 子 Agent 控制状态。
  * 存在于 children 数组中 = 在跑。
@@ -186,6 +205,8 @@ export interface ChildControlState extends AgentActivityState {
   workspace?: string;
   /** Parent UI 使用的 Assignment 简短标题 */
   subject: string;
+  taskState?: ChildTaskState;
+  pendingQuestion?: AIQuestion;
   browserReady: boolean;
   currentModel: string;
   approvalMode: ApprovalMode;

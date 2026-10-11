@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConfigPatchOperation,
   ConfigPlan,
@@ -40,6 +40,7 @@ const DEFINITION_B_ID = 'td-BBBBBB';
 const GENERAL_DEFINITION_ID = 'td-GENERAL';
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(temporaryDirectories.splice(0).map((directory) =>
     fs.rm(directory, { recursive: true, force: true })));
 });
@@ -190,6 +191,92 @@ async function applyPlan(
 }
 
 describe('all managed Config Domains', () => {
+  it('validates models on new IM bindings and rebindings while preserving legacy reads, unrelated updates and unbinding', async () => {
+    const { host } = await fixture();
+    const model = { providerId: 'primary', modelId: 'chat' };
+    await applyPlan(host, 'task-definitions', [{ op: 'add', path: '/definitions/follow', value: {
+      name: 'Follow template', description: '', purpose: 'messaging', promptTemplate: '',
+    } }, { op: 'add', path: '/definitions/fixed', value: {
+      name: 'Fixed template', description: '', purpose: 'messaging', promptTemplate: '', model,
+    } }], 0);
+    const addBot: ConfigPatchOperation = { op: 'add', path: '/bots/sample', value: {
+      name: 'Sample Bot', channelType: 'openclaw-weixin', definitionId: 'follow',
+    } };
+    const missingDefault = await host.createPatchPlan<ConfigPlan>('im-bots', [addBot]);
+    expect(missingDefault.validation.issues).toContainEqual(expect.objectContaining({ code: 'IM_BOT_MODEL_REQUIRED' }));
+    await expect(host.apply(missingDefault.id, 0)).rejects.toMatchObject({ code: 'CONFIG_VALIDATION_FAILED' });
+    await applyPlan(host, 'inference-selections', [{ op: 'add', path: '/ai', value: model }], 0);
+    await applyPlan(host, 'im-bots', [addBot], 0);
+    const rename = await validPlan(host, 'im-bots', [{ op: 'replace', path: '/bots/sample/name', value: 'Renamed Bot' }]);
+    await applyPlan(host, 'inference-selections', [{ op: 'remove', path: '/ai' }], 1);
+    await expect(host.show('im-bots')).resolves.toMatchObject({ bots: { sample: { definitionId: 'follow' } } });
+    await expect(host.apply(rename.id, 1)).resolves.toMatchObject({ revision: 2 });
+    await applyPlan(host, 'im-bots', [{ op: 'replace', path: '/bots/sample/definitionId', value: 'fixed' }], 2);
+    await applyPlan(host, 'inference', [{ op: 'replace', path: '/providers/primary/enabled', value: false }], 0);
+    await applyPlan(host, 'im-bots', [{ op: 'replace', path: '/bots/sample/autoStart', value: true }], 3);
+    await applyPlan(host, 'im-bots', [{ op: 'remove', path: '/bots/sample/definitionId' }], 4);
+    const unavailable = await host.createPatchPlan<ConfigPlan>('im-bots', [{ op: 'add', path: '/bots/sample/definitionId', value: 'fixed' }]);
+    expect(unavailable.validation.issues).toContainEqual(expect.objectContaining({ code: 'IM_BOT_MODEL_UNAVAILABLE', message: expect.stringContaining('primary/chat') }));
+    await expect(host.apply(unavailable.id, 5)).rejects.toMatchObject({ code: 'CONFIG_VALIDATION_FAILED' });
+  }, CROSS_DOMAIN_TEST_TIMEOUT_MS);
+
+  it('rejects a binding plan when its model dependencies change before apply', async () => {
+    const { host } = await fixture();
+    await applyPlan(host, 'task-definitions', [{ op: 'add', path: '/definitions/sample', value: {
+      name: 'Sample template', description: '', purpose: 'messaging', promptTemplate: '',
+    } }], 0);
+    await applyPlan(host, 'inference-selections', [{ op: 'add', path: '/ai', value: { providerId: 'primary', modelId: 'chat' } }], 0);
+    const plan = await validPlan(host, 'im-bots', [{ op: 'add', path: '/bots/sample', value: {
+      name: 'Sample Bot', channelType: 'openclaw-weixin', definitionId: 'sample',
+    } }]);
+    await applyPlan(host, 'inference-selections', [{ op: 'remove', path: '/ai' }], 1);
+    const validated = await host.validate<ConfigPlan>(plan.id);
+    expect(validated.validation.valid).toBe(false);
+    expect(validated.validation.issues).toContainEqual(expect.objectContaining({ code: 'CONFIG_DEPENDENCY_REVISION_CHANGED' }));
+    await expect(host.apply(plan.id, 0)).rejects.toMatchObject({ code: 'CONFIG_VALIDATION_FAILED' });
+  });
+
+  it.each(['apply', 'rollback'] as const)('rejects an IM binding %s when its model changes after availability validation', async (operation) => {
+    const { host, control } = await fixture();
+    await applyPlan(host, 'task-definitions', [{ op: 'add', path: '/definitions/sample', value: {
+      name: 'Sample template', description: '', purpose: 'messaging', promptTemplate: '',
+      model: { providerId: 'primary', modelId: 'chat' },
+    } }], 0);
+    const binding = await validPlan(host, 'im-bots', [{ op: 'add', path: '/bots/sample', value: {
+      name: 'Sample Bot', channelType: 'openclaw-weixin', definitionId: 'sample',
+    } }]);
+    if (operation === 'rollback') {
+      await host.apply(binding.id, 0);
+      await applyPlan(host, 'im-bots', [{ op: 'remove', path: '/bots/sample/definitionId' }], 1);
+    }
+    const before = await host.show('im-bots');
+    let modelChecked!: () => void;
+    let finishValidation!: () => void;
+    const checked = new Promise<void>((resolve) => { modelChecked = resolve; });
+    const finish = new Promise<void>((resolve) => { finishValidation = resolve; });
+    const assertSelectableTarget = control.assertSelectableTarget.bind(control);
+    vi.spyOn(control, 'assertSelectableTarget').mockImplementationOnce(async (target, gateway) => {
+      await assertSelectableTarget(target, gateway);
+      modelChecked();
+      await finish;
+    });
+    const pending = operation === 'apply' ? host.apply(binding.id, 0) : host.rollback('im-bots', 1);
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: 'CONFIG_VALIDATION_FAILED',
+      details: { validation: { issues: expect.arrayContaining([
+        expect.objectContaining({ code: 'CONFIG_DEPENDENCY_REVISION_CHANGED' }),
+      ]) } },
+    });
+    await checked;
+    try {
+      await applyPlan(host, 'inference', [{ op: 'replace', path: '/providers/primary/enabled', value: false }], 0);
+    } finally {
+      finishValidation();
+    }
+    await rejected;
+    await expect(host.show('im-bots')).resolves.toEqual(before);
+  }, CROSS_DOMAIN_TEST_TIMEOUT_MS);
+
   it('uses the system-derived language only when creating app settings', async () => {
     const fresh = await fixture(undefined, 'zh-CN');
     await expect(fresh.host.show('app-settings')).resolves.toMatchObject({
@@ -726,6 +813,7 @@ describe('all managed Config Domains', () => {
         name: 'Task A',
         description: 'Test Task Definition',
         purpose: 'messaging',
+        model: { providerId: 'primary', modelId: 'chat' },
         promptTemplate: 'Run the task.',
       },
     }], 0);
@@ -933,6 +1021,7 @@ describe('all managed Config Domains', () => {
           name: 'Task A',
           description: 'Uses environment',
           purpose: 'messaging',
+          model: { providerId: 'primary', modelId: 'chat' },
           promptTemplate: 'Run A.',
         },
       },
@@ -943,6 +1032,7 @@ describe('all managed Config Domains', () => {
           name: 'Task B',
           description: 'Second task',
           purpose: 'messaging',
+          model: { providerId: 'primary', modelId: 'chat' },
           promptTemplate: 'Run B.',
         },
       },
@@ -1150,6 +1240,7 @@ describe('all managed Config Domains', () => {
           name: 'Task A',
           description: 'First messaging task',
           purpose: 'messaging',
+          model: { providerId: 'primary', modelId: 'chat' },
           promptTemplate: 'Run A.',
         },
       },
@@ -1160,6 +1251,7 @@ describe('all managed Config Domains', () => {
           name: 'Task B',
           description: 'Second messaging task',
           purpose: 'messaging',
+          model: { providerId: 'primary', modelId: 'chat' },
           promptTemplate: 'Run B.',
         },
       },

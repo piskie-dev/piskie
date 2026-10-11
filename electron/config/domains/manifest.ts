@@ -81,6 +81,7 @@ export const CONFIG_DOMAIN_MANIFEST = {
     context.rootDirectory,
     context.integrations.imBots,
     context.readDomain,
+    context.inference,
   )),
   inference: (context) => createInferenceDomain(
     context.inference,

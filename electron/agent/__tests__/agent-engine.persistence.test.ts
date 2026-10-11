@@ -109,8 +109,8 @@ class PersistenceEngine extends AgentEngine {
             model: 'provider::model',
             stopReason: 'end_turn',
             latencyMs: 80,
-            firstVisibleContentLatencyMs: 20,
-            generationDurationMs: 60,
+            firstTokenLatencyMs: 20,
+            attemptDurationMs: 80,
             usage: { inputTokens: 10, outputTokens: 4 },
           },
         };

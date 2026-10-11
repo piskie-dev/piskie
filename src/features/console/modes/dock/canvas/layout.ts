@@ -55,6 +55,7 @@ export const CANVAS_LAYOUT = {
 export interface CanvasWorkerInput {
   readonly id: string;
   readonly browserId?: string;
+  readonly browserReady: boolean;
 }
 
 export interface CanvasLayoutInput {
@@ -92,9 +93,9 @@ export interface CanvasLayout {
 
 // ==================== 判据 ====================
 
-/** 按实际浏览器资源决定是否显示屏幕 */
+/** 浏览器页面已就绪时才显示屏幕 */
 export function workerHasScreen(worker: CanvasWorkerInput): boolean {
-  return !!worker.browserId;
+  return !!worker.browserId && worker.browserReady;
 }
 
 /** lane 主体高度：worker 节点与附属（屏幕）取较高者 */

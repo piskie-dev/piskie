@@ -20,6 +20,7 @@ import {
   DefaultAgentInferencePort,
   type AgentInferenceOptions,
   type AgentInferenceRequest,
+  type AgentOutputProgress,
   type VisibleDelta,
 } from '../agent-inference-port.js';
 
@@ -177,8 +178,8 @@ describe('DefaultAgentInferencePort', () => {
         return {
           events,
           statistics: Promise.resolve({
-            firstVisibleContentLatencyMs: 12,
-            generationDurationMs: 34,
+            firstTokenLatencyMs: 12,
+            attemptDurationMs: 46,
           }),
         };
       },
@@ -242,8 +243,8 @@ describe('DefaultAgentInferencePort', () => {
         model: 'provider::model/one',
         stopReason: 'tool_use',
         latencyMs: expect.any(Number),
-        firstVisibleContentLatencyMs: 12,
-        generationDurationMs: 34,
+        firstTokenLatencyMs: 12,
+        attemptDurationMs: 46,
         usage: {
           inputTokens: 10,
           outputTokens: 5,
@@ -519,6 +520,7 @@ describe('DefaultAgentInferencePort', () => {
     const onAttemptStart = vi.fn();
     const onBackoff = vi.fn();
     const visible: VisibleDelta[] = [];
+    const output: AgentOutputProgress[] = [];
 
     const response = await port.invoke(
       { ...agentRequest(), messages: [] },
@@ -526,6 +528,7 @@ describe('DefaultAgentInferencePort', () => {
         onAttemptStart,
         onBackoff,
         onVisibleDelta: (delta) => visible.push(delta),
+        onOutputProgress: (progress) => output.push(progress),
       }),
     );
 
@@ -542,24 +545,34 @@ describe('DefaultAgentInferencePort', () => {
       { runId: response.requestInfo.runId, attempt: 1, sequence: 1, kind: 'text', delta: 'partial' },
       { runId: response.requestInfo.runId, attempt: 2, sequence: 2, kind: 'text', delta: 'ok' },
     ]);
+    expect(output).toEqual([
+      { runId: response.requestInfo.runId, attempt: 1, kind: 'attempt-started' },
+      { runId: response.requestInfo.runId, attempt: 1, kind: 'delta', sequence: 2, delta: 'partial' },
+      { runId: response.requestInfo.runId, attempt: 2, kind: 'attempt-started' },
+      { runId: response.requestInfo.runId, attempt: 2, kind: 'delta', sequence: 4, delta: 'ok' },
+    ]);
     expect(response.content).toEqual([{ type: 'text', text: 'ok' }]);
   });
 
-  it('emits only non-empty visible deltas with an independent sequence', async () => {
+  it('emits visible text independently from output progress for text, reasoning, arguments and usage', async () => {
     const gateway: AiGateway = {
       open: (request) => ({
         events: (async function* (): AsyncIterable<AiEvent> {
           const base = { runId: 'stable-run', emittedAt: 100, attempt: 1 };
           yield { ...base, kind: 'response.started', sequence: 1, model: request.model, configRevision: 5 };
           yield { ...base, kind: 'reasoning.delta', sequence: 2, text: '' };
-          yield { ...base, kind: 'reasoning.delta', sequence: 3, text: 'think' };
-          yield { ...base, kind: 'tool.started', sequence: 4, callId: 'call-1', name: 'lookup' };
-          yield { ...base, kind: 'tool.arguments.delta', sequence: 5, callId: 'call-1', delta: '{"id":"1"}' };
-          yield { ...base, kind: 'tool.completed', sequence: 6, callId: 'call-1' };
-          yield { ...base, kind: 'text.delta', sequence: 7, text: '' };
-          yield { ...base, kind: 'text.delta', sequence: 8, text: 'answer' };
-          yield { ...base, kind: 'response.completed', sequence: 9, stopReason: 'tool_use', result: resultFor(request.model, base.runId, {
+          yield { ...base, kind: 'response.first_token', sequence: 3 };
+          yield { ...base, kind: 'reasoning.delta', sequence: 4, text: 'think' };
+          yield { ...base, kind: 'tool.started', sequence: 5, callId: 'call-1', name: 'lookup' };
+          yield { ...base, kind: 'tool.arguments.delta', sequence: 6, callId: 'call-1', delta: '{"id":"1"}' };
+          yield { ...base, kind: 'tool.completed', sequence: 7, callId: 'call-1' };
+          yield { ...base, kind: 'text.delta', sequence: 8, text: '' };
+          yield { ...base, kind: 'text.delta', sequence: 9, text: 'answer' };
+          yield { ...base, kind: 'usage.updated', sequence: 10, usage: { totalOutputTokens: 9, reasoningTokens: 3 } };
+          yield { ...base, kind: 'usage.updated', sequence: 11, usage: { totalInputTokens: 10 } };
+          yield { ...base, kind: 'response.completed', sequence: 12, stopReason: 'tool_use', result: resultFor(request.model, base.runId, {
             text: 'answer', reasoning: 'think', stopReason: 'tool_use',
+            usage: { totalInputTokens: 10, totalOutputTokens: 9, reasoningTokens: 3 },
             content: [
               { kind: 'reasoning', item: { protocol: 'openai-chat', text: 'think' } },
               { kind: 'tool_call', callId: 'call-1', name: 'lookup', arguments: '{"id":"1"}' },
@@ -568,8 +581,8 @@ describe('DefaultAgentInferencePort', () => {
           }) };
         })(),
         statistics: Promise.resolve({
-          firstVisibleContentLatencyMs: 10,
-          generationDurationMs: 20,
+          firstTokenLatencyMs: 10,
+          attemptDurationMs: 30,
         }),
       }),
       complete: vi.fn(),
@@ -580,6 +593,7 @@ describe('DefaultAgentInferencePort', () => {
     const request = { ...agentRequest(), messages: [] };
     const baseOptions = { requestId: 'stable-request', logicalStartedAt: 50 };
     const visible: unknown[] = [];
+    const output: AgentOutputProgress[] = [];
 
     vi.useFakeTimers();
     vi.setSystemTime(100);
@@ -588,11 +602,13 @@ describe('DefaultAgentInferencePort', () => {
       const withObserver = await port.invoke(request, {
         ...baseOptions,
         onVisibleDelta: (delta) => visible.push(delta),
+        onOutputProgress: (progress) => output.push(progress),
       });
       const withThrowingObservers = await port.invoke(request, {
         ...baseOptions,
         onAttemptStart: () => { throw new Error('attempt observer failed'); },
         onVisibleDelta: () => { throw new Error('visible observer failed'); },
+        onOutputProgress: () => { throw new Error('output observer failed'); },
       });
 
       expect(withObserver).toEqual(withoutObserver);
@@ -600,6 +616,13 @@ describe('DefaultAgentInferencePort', () => {
       expect(visible).toEqual([
         { runId: 'stable-run', attempt: 1, sequence: 1, kind: 'think', delta: 'think' },
         { runId: 'stable-run', attempt: 1, sequence: 2, kind: 'text', delta: 'answer' },
+      ]);
+      expect(output).toEqual([
+        { runId: 'stable-run', attempt: 1, kind: 'attempt-started' },
+        { runId: 'stable-run', attempt: 1, kind: 'delta', sequence: 4, delta: 'think' },
+        { runId: 'stable-run', attempt: 1, kind: 'delta', sequence: 6, delta: '{"id":"1"}' },
+        { runId: 'stable-run', attempt: 1, kind: 'delta', sequence: 9, delta: 'answer' },
+        { runId: 'stable-run', attempt: 1, kind: 'usage', sequence: 10, outputTokens: 9 },
       ]);
     } finally {
       vi.useRealTimers();

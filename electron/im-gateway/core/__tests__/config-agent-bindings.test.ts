@@ -90,7 +90,9 @@ async function fixture(): Promise<{ host: ConfigHost; root: string }> {
       observe: (configs) => configs.map((config) => ({ config, status: 'stopped' })),
     },
     async (domain) => {
-      if (domain !== 'task-definitions') throw new Error(`Unexpected dependency: ${domain}`);
+      if (domain === 'im-bots') return registry.get(domain).show!();
+      if (domain === 'inference-selections') return { revision: 0, ai: { providerId: 'sample', modelId: 'chat' } };
+      if (domain !== 'task-definitions') return { revision: 0 };
       return {
         revision: 0,
         definitions: {
@@ -99,6 +101,7 @@ async function fixture(): Promise<{ host: ConfigHost; root: string }> {
         },
       };
     },
+    { assertSelectableTarget: async () => undefined },
   ));
   const host = new ConfigHost(registry);
   await host.initialize();

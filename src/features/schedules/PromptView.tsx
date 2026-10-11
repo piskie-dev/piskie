@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Bot, ExternalLink, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { TaskDefinitionSnapshot } from '@shared/electron-contracts/task-definitions';
@@ -13,7 +13,7 @@ export interface PromptViewProps {
   readonly live: LiveStates;
   readonly now: Date;
   readonly locale: string;
-  readonly onOpenTemplates: () => void;
+  readonly onEditTemplate: (definitionId: string) => void;
   readonly onOpenRun: (agentId: string) => void;
 }
 
@@ -80,8 +80,8 @@ export function PromptView(props: PromptViewProps) {
             <strong>{t('schedulesUi.target.template', { name: template.name })}</strong>
             <small>{describeTemplate(template, t)}</small>
           </div>
-          <button type="button" className={`${styles.button} ${styles.ghost}`} onClick={props.onOpenTemplates}>
-            <ExternalLink size={14} />
+          <button type="button" className={`${styles.button} ${styles.ghost}`} onClick={() => props.onEditTemplate(template.definitionId)}>
+            <Pencil size={14} />
             {t('schedulesUi.form.manageTemplates')}
           </button>
         </div>

@@ -213,7 +213,10 @@ describe('BrowserManager stop cancellation', () => {
 });
 
 describe('BrowserManager managed-kernel launch', () => {
-  it('uses fingerprint-chromium for a bound profile and preserves launch settings', async () => {
+  it.each([
+    [{ width: 1024, height: 900 }, '--window-position=0,0'],
+    [{ width: 1280, height: 800, x: -1440, y: 140 }, '--window-position=-1440,140'],
+  ])('uses fingerprint-chromium for a bound profile and preserves launch settings %j', async (windowSize, positionArg) => {
     const browser = fakeBrowser();
     let running = false;
     const launch = vi
@@ -240,7 +243,7 @@ describe('BrowserManager managed-kernel launch', () => {
       BrowserManager.getOrCreate('browser-a', {
         launchSpec: {
           ...launchSpec('browser-a', 'profile-a'),
-          windowSize: { width: 1024, height: 900 },
+          windowSize,
         },
         callerWindow: { windowId: '0x123' },
       })
@@ -259,8 +262,8 @@ describe('BrowserManager managed-kernel launch', () => {
     });
     expect(fpConfig.extraArgs).toEqual(
       expect.arrayContaining([
-        '--window-size=1024,900',
-        '--window-position=0,0',
+        `--window-size=${windowSize.width},${windowSize.height}`,
+        positionArg,
         '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
         '--proxy-bypass-list=localhost',
       ])

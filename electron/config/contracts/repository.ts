@@ -3,9 +3,16 @@ export interface VersionedConfigDocument {
 }
 
 export interface VersionedConfigRepositoryPaths {
+  rootDirectory: string;
   configFile: string;
   historyDirectory: string;
   lockFile: string;
+}
+
+export interface ConfigCommitGuard {
+  dependencyDomains: readonly string[];
+  /** Runs with the destination and dependency files locked until commit completes. */
+  validate(): Promise<void>;
 }
 
 export interface VersionedConfigRepository<T extends VersionedConfigDocument> {
@@ -15,7 +22,7 @@ export interface VersionedConfigRepository<T extends VersionedConfigDocument> {
   readRevision(revision: number): Promise<T>;
   history(): Promise<readonly number[]>;
   pruneHistory(): Promise<readonly number[]>;
-  commit(candidate: T, expectedRevision: number): Promise<T>;
+  commit(candidate: T, expectedRevision: number, guard?: ConfigCommitGuard): Promise<T>;
 }
 
 export type ConfigRepositoryErrorCode =

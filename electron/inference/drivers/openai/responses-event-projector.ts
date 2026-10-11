@@ -36,8 +36,13 @@ export async function* projectOpenAiResponsesStream(
 ): AsyncIterable<AiAttemptEvent> {
   const tools = new Map<string, ToolAccumulator>();
   let sawRefusal = false;
+  let firstTokenEmitted = false;
 
   for await (const event of stream) {
+    if (!firstTokenEmitted && hasGeneratedContent(event)) {
+      firstTokenEmitted = true;
+      yield { kind: 'response.first_token' };
+    }
     switch (event.type) {
       case 'response.reasoning_summary_text.delta':
       case 'response.reasoning_text.delta':
@@ -131,6 +136,53 @@ export async function* projectOpenAiResponsesStream(
   }
 
   throw new Error('OpenAI Responses stream ended without a terminal event');
+}
+
+function hasGeneratedContent(event: OpenAI.Responses.ResponseStreamEvent): boolean {
+  switch (event.type) {
+    case 'response.output_text.delta':
+    case 'response.reasoning_summary_text.delta':
+    case 'response.reasoning_text.delta':
+    case 'response.refusal.delta':
+    case 'response.function_call_arguments.delta':
+      return event.delta.length > 0;
+    case 'response.output_text.done':
+    case 'response.reasoning_summary_text.done':
+    case 'response.reasoning_text.done':
+      return event.text.length > 0;
+    case 'response.refusal.done':
+      return event.refusal.length > 0;
+    case 'response.function_call_arguments.done':
+      return event.arguments.length > 0;
+    case 'response.content_part.added':
+    case 'response.content_part.done':
+      return event.part.type === 'refusal' ? event.part.refusal.length > 0 : event.part.text.length > 0;
+    case 'response.reasoning_summary_part.added':
+    case 'response.reasoning_summary_part.done':
+      return event.part.text.length > 0;
+    case 'response.output_item.added':
+    case 'response.output_item.done':
+      return itemHasGeneratedContent(event.item);
+    case 'response.completed':
+    case 'response.incomplete':
+      return event.response.output.some(itemHasGeneratedContent);
+    default:
+      return false;
+  }
+}
+
+function itemHasGeneratedContent(item: OpenAI.Responses.ResponseOutputItem): boolean {
+  switch (item.type) {
+    case 'function_call':
+      return item.arguments.length > 0;
+    case 'reasoning':
+      return item.summary.some((part) => part.text.length > 0)
+        || Boolean(item.content?.some((part) => part.text.length > 0));
+    case 'message':
+      return item.content.some((part) => part.type === 'refusal' ? part.refusal.length > 0 : part.text.length > 0);
+    default:
+      return false;
+  }
 }
 
 function mapReasoningItem(

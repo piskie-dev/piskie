@@ -1,4 +1,6 @@
 import type { ConfigHost } from '../../config/host/config-host.js';
+import type { ConfigPatchOperation, ConfigValidationReport } from '../../../shared/types/config.js';
+import { ConfigKernelError } from '../../config/core/managed-config-domain.js';
 import {
   applyConfigPatch,
   escapeConfigPointer,
@@ -41,7 +43,7 @@ export class MessagingApplication {
       const value: Record<string, unknown> = { ...config, appSecret };
       delete value.id;
       delete value.pluginAccountId;
-      await applyConfigPatch(this.dependencies.config, 'im-bots', [{
+      await this.saveBotPatch([{
         op: 'add',
         path: `/bots/${escapeConfigPointer(id)}`,
         value,
@@ -79,7 +81,21 @@ export class MessagingApplication {
         path: `/agentBindings/${escapeConfigPointer(config.id)}`,
       });
     }
-    await applyConfigPatch(this.dependencies.config, 'im-bots', patch, current.revision);
+    await this.saveBotPatch(patch, current.revision);
+  }
+
+  private async saveBotPatch(patch: ConfigPatchOperation[], revision: number): Promise<void> {
+    try {
+      await applyConfigPatch(this.dependencies.config, 'im-bots', patch, revision);
+    } catch (error) {
+      if (error instanceof ConfigKernelError && error.code === 'CONFIG_VALIDATION_FAILED') {
+        const validation = error.details.validation as ConfigValidationReport;
+        throw new PublicOperationError('invalid-input', validation.issues
+          .filter((issue) => issue.severity !== 'warning')
+          .map((issue) => issue.message).join('\n'));
+      }
+      throw error;
+    }
   }
 
   async deleteBot(botId: string): Promise<void> {

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Browser, Dialog, Page } from 'puppeteer-core';
+import type { Browser, Dialog, Frame, Page } from 'puppeteer-core';
 import { ActionWaiter } from '../action-waiter.js';
 import { BrowserAutomationSession, BrowserDialogOpenError } from '../browser-automation-session.js';
 import { PageRegistry } from '../page-registry.js';
@@ -10,7 +10,7 @@ function fakePage(url: string) {
   const events = new EventEmitter();
   const client = new EventEmitter();
   let currentUrl = url;
-  const frame = {};
+  const frame = {} as Frame;
   const locator = {
     click: vi.fn(async () => undefined),
     fill: vi.fn(async () => undefined),
@@ -28,7 +28,7 @@ function fakePage(url: string) {
     role: 'button',
     name: 'Continue',
     value: 'ready',
-    children: [],
+    children: [] as Array<{ children: unknown[] }>,
     elementHandle: vi.fn(async () => handle),
   };
   const target = {};
@@ -55,6 +55,7 @@ function fakePage(url: string) {
     waitForFileChooser: vi.fn(async () => fileChooser),
     evaluate: vi.fn(async () => true),
     evaluateHandle: vi.fn(async () => stableDomHandle),
+    mouse: { move: vi.fn(async () => {}), down: vi.fn(async () => {}), up: vi.fn(async () => {}) },
     keyboard: {
       down: vi.fn(async () => undefined),
       press: vi.fn(async () => undefined),
@@ -99,6 +100,121 @@ describe('BrowserAutomationSession', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('binds real mouse observations to the registry navigation at call time and restores every page on disposal', async () => {
+    const first = fakePage('https://example.test/sample');
+    const second = fakePage('https://example.test/next');
+    const originalMove = first.page.mouse.move;
+    const session = await BrowserAutomationSession.create(fakeBrowser([first.page, second.page]));
+    const events: import('../browser-automation-session.js').BrowserScreenEvent[] = [];
+    session.subscribeScreen((event) => events.push(event));
+    const firstTarget = session.getScreenTarget();
+    const pending = first.page.mouse.move(70, 90);
+    first.page.emit('framenavigated', first.frame);
+    await pending;
+    expect(events[0]).toMatchObject({ type: 'target', target: { identity: { navigationSequence: 1 } } });
+    expect(events[1]).toMatchObject({ type: 'pointer', pointer: { page: firstTarget.identity, x: 70, y: 90 } });
+    expect(session.getCurrentScreenPointer()).toMatchObject({ page: firstTarget.identity, x: 70, y: 90 });
+    await session.selectPageByIndex(1);
+    expect(session.getScreenTarget().identity.pageId).not.toBe(firstTarget.identity.pageId);
+    await second.page.mouse.move(30, 40);
+    expect(events.at(-1)).toMatchObject({ type: 'pointer', pointer: { page: session.getScreenTarget().identity } });
+    session.dispose();
+    expect(events.at(-1)).toEqual({ type: 'target', target: null });
+    expect(first.page.mouse.move).toBe(originalMove);
+    expect(first.page.listenerCount('framenavigated')).toBe(0);
+  });
+
+  it('replays a recent successful short click to the first screen subscriber', async () => {
+    const current = fakePage('https://example.test/sample');
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+    await current.page.mouse.move(80, 120);
+    await current.page.mouse.down();
+    await current.page.mouse.up();
+    const events: import('../browser-automation-session.js').BrowserScreenEvent[] = [];
+    session.subscribeScreen((event) => events.push(event));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'pointer', pointer: { buttons: 0, press: { x: 80, y: 120 } } });
+    session.dispose();
+  });
+
+  it('keeps a valid idle position through same-Page navigation, expires press replay and clears on selection, return and disposal', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const first = fakePage('https://example.test/sample');
+    const second = fakePage('https://example.test/next');
+    const session = await BrowserAutomationSession.create(fakeBrowser([first.page, second.page]));
+    await first.page.mouse.move(80, 120);
+    await first.page.mouse.down();
+    await first.page.mouse.up();
+    const source = session.getCurrentScreenPointer()!;
+    vi.setSystemTime(source.timestamp + 1500);
+    expect(session.getCurrentScreenPointer()).toMatchObject({ timestamp: source.timestamp, press: { seq: 2 } });
+    vi.setSystemTime(source.timestamp + 5001);
+    const stale = vi.fn();
+    session.subscribeScreen(stale)();
+    expect(stale).toHaveBeenCalledOnce();
+    expect(stale.mock.calls[0]![0]).toMatchObject({ type: 'pointer', pointer: { x: 80, y: 120, timestamp: source.timestamp, press: undefined } });
+    await first.page.mouse.move(90, 130);
+    const beforeNavigation = session.getCurrentScreenPointer();
+    first.page.emit('framenavigated', first.frame);
+    expect(session.getCurrentScreenPointer()).toBe(beforeNavigation);
+    expect(session.getCurrentScreenPointer()!.page.navigationSequence).toBe(0);
+    expect(session.getScreenTarget().identity.navigationSequence).toBe(1);
+    await first.page.mouse.move(100, 140);
+    await session.selectPageByIndex(1);
+    expect(session.getCurrentScreenPointer()).toBeNull();
+    await session.selectPageByIndex(0);
+    expect(session.getCurrentScreenPointer()).toBeNull();
+    await first.page.mouse.move(110, 150);
+    session.dispose();
+    expect(session.getCurrentScreenPointer()).toBeNull();
+  });
+
+  it('keeps one real Mouse position across navigation without forging an observation and preserves the original press frame', async () => {
+    const current = fakePage('https://example.test/sample');
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+    const mouse = current.page.mouse;
+    const listener = vi.fn();
+    session.subscribeScreen(listener);
+    await mouse.move(80, 120);
+    await mouse.down();
+    const down = session.getCurrentScreenPointer()!;
+    current.page.emit('framenavigated', current.frame);
+    expect(current.page.mouse).toBe(mouse);
+    expect(session.getCurrentScreenPointer()).toBe(down);
+    expect(listener.mock.calls.filter(([event]) => event.type === 'pointer')).toHaveLength(2);
+    expect(listener.mock.calls.at(-1)![0].type).toBe('target');
+    await mouse.up();
+    const up = session.getCurrentScreenPointer()!;
+    expect(up).toMatchObject({ page: session.getScreenTarget().identity, seq: 3, x: 80, y: 120,
+      buttons: 0, press: { page: down.page, seq: 2 } });
+    current.page.emit('framenavigated', current.frame);
+    expect(session.getCurrentScreenPointer()).toBe(up);
+    expect(up.page.navigationSequence).toBe(1);
+    expect(up.press!.page.navigationSequence).toBe(0);
+    const replay = vi.fn();
+    session.subscribeScreen(replay)();
+    expect(replay.mock.calls[0]![0].pointer).toBe(up);
+    session.dispose();
+  });
+
+  it('aggregates concurrent successful click acknowledgements at the session observation owner', async () => {
+    const current = fakePage('https://example.test/sample');
+    let finishDown!: () => void;
+    vi.mocked(current.page.mouse.down).mockImplementation(() => new Promise<void>((yes) => { finishDown = yes; }));
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+    await current.page.mouse.move(80, 120);
+    const down = current.page.mouse.down();
+    await current.page.mouse.up();
+    finishDown();
+    await down;
+    expect(session.getCurrentScreenPointer()).toMatchObject({ seq: 3, action: 'up', buttons: 0, press: { seq: 2 } });
+    const listener = vi.fn();
+    session.subscribeScreen(listener)();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]![0].pointer).toBe(session.getCurrentScreenPointer());
+    session.dispose();
+  });
 
   it('keeps one active snapshot and invalidates UIDs on replacement, selection, and navigation', async () => {
     const first = fakePage('https://example.test/first');
@@ -397,7 +513,7 @@ describe('ActionWaiter', () => {
   it('uses the upstream start probe and still waits when navigation finishes after 100ms', async () => {
     const current = fakePage('https://example.test/before');
     let finishNavigation!: () => void;
-    const waitForNavigation = vi.fn(() => new Promise<null>((resolve) => {
+    const waitForNavigation = vi.fn((_options?: Parameters<Page['waitForNavigation']>[0]) => new Promise<null>((resolve) => {
       finishNavigation = () => resolve(null);
     }));
     current.page.waitForNavigation = waitForNavigation;

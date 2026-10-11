@@ -681,27 +681,28 @@ describe('workspace navigation', () => {
     expect(visibleAgentIds()).toEqual(['row-0', 'row-1', 'row-2', 'row-3', 'row-4']);
   });
 
-  it('keeps five pinned rows visible alongside a new live session and five recent slots', async () => {
+  it('keeps pins visible while previewing live and historical rows by last activity', async () => {
     const pinned = Array.from({ length: 5 }, (_, index) => history(`pinned-${index}`, undefined, 12 - index));
     const recent = Array.from({ length: 6 }, (_, index) => history(`recent-${index}`, undefined, 6 - index));
     useUIStore.setState({ pinnedAgentRunIds: pinned.map((row) => row.agentId) });
     const live = projectActiveAgentRun({
       agentId: 'sample-live', phase: 'thinking', children: [], runConfig: { name: 'Sample session' },
+      createdAt: '2025-12-31T00:00:00Z',
     } as unknown as AgentControlSnapshot, 'Example');
     await render({ sessions: [live], history: [...pinned, ...recent] });
     await click(defaultLabel);
 
     const pinnedIds = pinned.map((row) => row.agentId);
-    const recentPreview = ['recent-0', 'recent-1', 'recent-2', 'recent-3'];
-    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview]);
+    const recentPreview = ['recent-0', 'recent-1', 'recent-2', 'recent-3', 'recent-4'];
+    expect(visibleAgentIds()).toEqual([...pinnedIds, ...recentPreview]);
     expect(button('查看更多（还有 2 条）')).toBeDefined();
 
     await render({ selectedAgentId: 'recent-5' });
-    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview, 'recent-5']);
+    expect(visibleAgentIds()).toEqual([...pinnedIds, ...recentPreview, 'recent-5']);
     await click('查看更多（还有 1 条）');
-    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recent.map((row) => row.agentId)]);
+    expect(visibleAgentIds()).toEqual([...pinnedIds, ...recent.map((row) => row.agentId), 'sample-live']);
     await click('收起列表');
-    expect(visibleAgentIds()).toEqual([...pinnedIds, 'sample-live', ...recentPreview, 'recent-5']);
+    expect(visibleAgentIds()).toEqual([...pinnedIds, ...recentPreview, 'recent-5']);
   });
 
   it('offers a quick pin action on live and history rows without selecting them', async () => {

@@ -137,6 +137,8 @@ export interface ModelBoundarySnapshot {
 
 type ActiveModelContext = Omit<ContextSnapshot, 'usage'>;
 
+const OUTPUT_PROGRESS_REFRESH_MS = 100;
+
 /** 冲程 turn 配置（role.configureLoop 产物；动态执行模式在每个工具批次前求值） */
 export interface TurnConfig {
   executeMode?: 'parallel' | 'sequential' | (() => 'parallel' | 'sequential');
@@ -216,6 +218,8 @@ export abstract class AgentEngine {
   protected stateChangeCallback?: (state: AgentControlState) => void;
   /** AI 请求瞬时状态（权威真相源）：只服务 UI/诊断，不参与控制流 */
   protected aiRequestState?: AIRequestState;
+  private outputProgressTimer?: ReturnType<typeof setTimeout>;
+  private lastOutputProgressEmissionAt?: number;
   /** 压缩结束后恢复进入压缩前的请求态；主动压缩通常恢复为静默态。 */
   private requestStateBeforeCompaction?: AIRequestState;
   private publishingCompactionActivity = false;
@@ -311,6 +315,7 @@ export abstract class AgentEngine {
   protected publishInert(): void {
     // 'stopping' 仅是中断进行中的瞬态，不能滞留——否则中断完成的会话在 UI 上永远显示"停止中"
     this.phase = 'waiting';
+    this.cancelOutputProgressRefresh();
     this.activityTracker.activityStopped();
     this.emitContentEvent({ type: 'turn_end' });
     this.context.flush();
@@ -538,6 +543,42 @@ export abstract class AgentEngine {
     this.stateChangeCallback?.(this.getControlState());
   }
 
+  /** Coalesce only output notifications; every delta is already accumulated by the tracker. */
+  private scheduleOutputProgressRefresh(requestId: string, signal?: AbortSignal): void {
+    if (this.outputProgressTimer !== undefined) return;
+    const now = performance.now();
+    const delay = this.lastOutputProgressEmissionAt === undefined
+      ? 0
+      : OUTPUT_PROGRESS_REFRESH_MS - (now - this.lastOutputProgressEmissionAt);
+    if (delay <= 0) {
+      this.lastOutputProgressEmissionAt = now;
+      this.emitStateChange();
+      return;
+    }
+    this.outputProgressTimer = setTimeout(() => {
+      this.outputProgressTimer = undefined;
+      if (this.destroyPromise || signal?.aborted || this.aiRequestState?.requestId !== requestId
+        || this.aiRequestState.phase === 'finished') return;
+      this.lastOutputProgressEmissionAt = performance.now();
+      try {
+        this.emitStateChange();
+      } catch (error) {
+        appLog.warn({
+          event: 'agent.state.publish.failed',
+          message: 'Agent output progress publication failed',
+          context: { scope: 'agent.state', agentId: this.id },
+          error,
+        });
+      }
+    }, delay);
+  }
+
+  private cancelOutputProgressRefresh(): void {
+    if (this.outputProgressTimer !== undefined) clearTimeout(this.outputProgressTimer);
+    this.outputProgressTimer = undefined;
+    this.lastOutputProgressEmissionAt = undefined;
+  }
+
   /** 所有压缩入口共用同一套 UI 活动态，避免调用方各自补状态。 */
   private setCompactionActivity(active: boolean): void {
     if (active) {
@@ -609,6 +650,7 @@ export abstract class AgentEngine {
     const activePump = this.pumpPromise;
     this._interrupted = true;
     this.cancelPlanAutoApproval();
+    this.cancelOutputProgressRefresh();
 
     // stopping 只用于在途冲程；纯 waiting 会话没有 finally 可以将其拨回 waiting。
     if (activePump) {
@@ -800,6 +842,7 @@ export abstract class AgentEngine {
 
     const deferred = createDeferred<void>();
     this.destroyPromise = deferred.promise;
+    this.cancelOutputProgressRefresh();
 
     // ② 门闩即关门事实：post/ensurePump/emitStateChange 从此拒收留痕
     const activePump = this.pumpPromise;
@@ -1182,17 +1225,33 @@ export abstract class AgentEngine {
 
     // 逻辑请求开始；attempt 时间戳由 onAttemptStart 刷新
     const startTime = Date.now();
-    this.activityTracker.aiStarted(startTime);
+    this.cancelOutputProgressRefresh();
+    this.activityTracker.aiStarted(startTime, requestId);
     const retryCallbackOptions: AgentInferenceOptions = {
       ...this.buildRetryCallbackOptions(signal),
       requestId,
       logicalStartedAt: startTime,
-      onVisibleDelta: (delta: VisibleDelta) =>
+      onVisibleDelta: (delta: VisibleDelta) => {
+        if (signal?.aborted || this.aiRequestState?.requestId !== requestId
+          || this.aiRequestState.phase === 'finished') return;
         this.emitLiveContent({
           agentId: this.id,
           requestId,
           ...delta,
-        }),
+        });
+      },
+      onOutputProgress: (progress) => {
+        if (this.destroyPromise || signal?.aborted || this.aiRequestState?.requestId !== requestId
+          || this.aiRequestState.phase === 'finished') return;
+        const changed = this.activityTracker.aiProgress(requestId, progress);
+        if (progress.kind === 'delta') {
+          if (changed) this.scheduleOutputProgressRefresh(requestId, signal);
+        } else if (changed || this.outputProgressTimer !== undefined) {
+          // Usage and attempt boundaries publish the latest accumulated value immediately.
+          this.cancelOutputProgressRefresh();
+          this.emitStateChange();
+        }
+      },
     };
     this.aiRequestState = {
       requestId,
@@ -1205,8 +1264,10 @@ export abstract class AgentEngine {
     this.phase = 'thinking';
     this.emitStateChange();
 
+    const cancelOutputProgress = () => this.cancelOutputProgressRefresh();
     let response: AIResponse;
     try {
+      signal?.addEventListener('abort', cancelOutputProgress, { once: true });
       response = await this.requestWithOverflowRecovery(
         systemPrompt,
         tools,
@@ -1215,7 +1276,7 @@ export abstract class AgentEngine {
         signal
       );
       this.context.commitSuccessfulRequest(requestBoundary, response.requestInfo);
-      this.activityTracker.aiCompleted(response.requestInfo, response.content);
+      this.activityTracker.aiCompleted(response.requestInfo);
       const usage = response.requestInfo.usage;
       const cacheReadTokens = usage.cacheReadTokens ?? 0;
       const cacheHitPercent =
@@ -1284,6 +1345,8 @@ export abstract class AgentEngine {
       // 消费方（handlePumpFailure）只认类型，不再依赖"同一实例"跨组件契约
       throw new RecordedAIRequestError(failure, error);
     } finally {
+      signal?.removeEventListener('abort', cancelOutputProgress);
+      this.cancelOutputProgressRefresh();
       this.emitStateChange();
     }
 
@@ -1793,6 +1856,7 @@ export abstract class AgentEngine {
     return {
       onAttemptStart: (info: { attempt: number; maxAttempts: number }) => {
         if (signal?.aborted || !this.aiRequestState) return;
+        this.cancelOutputProgressRefresh();
         this.aiRequestState = {
           ...this.aiRequestState,
           phase: this.aiRequestState.phase === 'resending' ? 'resending' : 'requesting',
@@ -1806,6 +1870,7 @@ export abstract class AgentEngine {
 
       onBackoff: (info: AgentInferenceBackoff) => {
         if (signal?.aborted || !this.aiRequestState) return;
+        this.cancelOutputProgressRefresh();
 
         this.aiRequestState = {
           ...this.aiRequestState,

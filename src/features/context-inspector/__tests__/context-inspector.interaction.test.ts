@@ -12,12 +12,15 @@ const dom = await vi.hoisted(async () => {
 });
 
 import i18n from 'i18next';
-import { act, createElement } from 'react';
+import { act, createElement, Fragment, useState, type RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentClient } from '@shared/electron-contracts/agents';
 import type { CompactionHistoryView } from '@shared/types/context';
 import type { ContextSnapshot } from '@shared/types/token';
+import { EMPTY_EMBEDDED_BROWSER_STATE } from '@shared/types/embedded-browser';
+import { Dialog, type DialogProps } from '@/features/console/chrome/Dialog';
+import { BrowserPanel } from '@/features/console/modes/thread/BrowserPanel';
 import { RendererRuntimeContext } from '@/renderer-runtime/renderer-runtime-context';
 import type { RendererRuntime } from '@/renderer-runtime/renderer-runtime';
 import {
@@ -42,6 +45,13 @@ let runtime: RendererRuntime;
 let sourceVersion: number;
 const context = vi.fn<AgentClient['context']>();
 const listCompactions = vi.fn<(agentId: string) => Promise<CompactionHistoryView>>();
+const embeddedBrowser = {
+  setBounds: vi.fn(async () => undefined),
+  setVisible: vi.fn(async () => undefined),
+};
+const browserTarget = { agentId: 'agent-a' };
+const browserState = { ...EMPTY_EMBEDDED_BROWSER_STATE, open: true, url: 'about:blank' };
+const layoutAnchors: readonly RefObject<HTMLElement | null>[] = [];
 const scrollTo = vi.fn(function (this: HTMLElement, options: ScrollToOptions) {
   this.scrollTop = options.top ?? 0;
   this.dispatchEvent(new Event('scroll'));
@@ -62,7 +72,9 @@ beforeAll(() => {
   });
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
-  Object.defineProperty(window, 'piskie', { value: { agentRuns: { listCompactions } } });
+  Object.defineProperty(window, 'piskie', {
+    value: { agentRuns: { listCompactions }, pilot: { embeddedBrowser } },
+  });
 });
 
 beforeEach(async () => {
@@ -70,6 +82,8 @@ beforeEach(async () => {
   context.mockReset().mockResolvedValue(snapshot());
   listCompactions.mockReset();
   scrollTo.mockClear();
+  embeddedBrowser.setBounds.mockClear();
+  embeddedBrowser.setVisible.mockClear();
   resource = createContextInspectorResource({ context } as unknown as AgentClient);
   runtime = { contextInspector: resource } as RendererRuntime;
   sourceVersion = 1;
@@ -89,6 +103,97 @@ afterAll(() => {
   dom.window.close();
   vi.unstubAllGlobals();
 });
+
+describe('ContextInspector above the embedded browser', () => {
+  it.each(['close button', 'backdrop', 'native dismissal'] as const)(
+    'hides the browser while open and restores it after %s, including reopening',
+    async (dismissal) => {
+      const onClose = vi.fn();
+      await renderBrowserOverlay({ onClose });
+      expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, true);
+
+      for (let cycle = 0; cycle < 2; cycle += 1) {
+        await click(buttonWithText('Open context'));
+        const dialog = element<HTMLDialogElement>('dialog');
+        expect(dialog.open).toBe(true);
+        expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, false);
+        onClose.mockClear();
+
+        if (dismissal === 'close button') {
+          await click(element(`[aria-label="${i18n.t('contextUi.close')}"]`));
+        } else if (dismissal === 'backdrop') {
+          await click(dialog);
+        } else {
+          // JSDOM has no native Escape default action; deliver the browser's close event.
+          await act(async () => {
+            dialog.close();
+            dialog.dispatchEvent(new Event('close'));
+          });
+          expect(onClose).toHaveBeenCalledOnce();
+        }
+
+        expect(dialog.open).toBe(false);
+        expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, true);
+      }
+    },
+  );
+
+  it('restores the browser when the open inspector is unmounted', async () => {
+    await renderBrowserOverlay();
+    await click(buttonWithText('Open context'));
+    expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, false);
+
+    await renderBrowserOverlay({ inspectorMounted: false });
+    expect(container.querySelector(`.${styles.drawer}`)).toBeNull();
+    expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, true);
+  });
+
+  it('keeps the browser hidden after closing the inspector while another dialog remains open', async () => {
+    await renderBrowserOverlay();
+    await click(buttonWithText('Open context'));
+    await renderBrowserOverlay({ otherDialogOpen: true });
+    expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, false);
+
+    await click(element(`[aria-label="${i18n.t('contextUi.close')}"]`));
+    expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, false);
+
+    await renderBrowserOverlay({ otherDialogOpen: false });
+    expect(embeddedBrowser.setVisible).toHaveBeenLastCalledWith(browserTarget, true);
+  });
+});
+
+function BrowserOverlayHarness({
+  inspectorMounted = true,
+  otherDialogOpen = false,
+  onClose,
+}: {
+  readonly inspectorMounted?: boolean;
+  readonly otherDialogOpen?: boolean;
+  readonly onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return createElement(Fragment, null,
+    createElement('button', { onClick: () => setOpen(true) }, 'Open context'),
+    createElement(BrowserPanel, { target: browserTarget, state: browserState, layoutAnchors }),
+    inspectorMounted && createElement(ContextInspector, {
+      open,
+      onClose: () => { onClose?.(); setOpen(false); },
+      agentId: browserTarget.agentId,
+      sourceVersion,
+    }),
+    createElement(Dialog, {
+      open: otherDialogOpen,
+      onClose: () => undefined,
+      ariaLabel: 'Example overlay',
+    } as DialogProps, 'Example overlay content'));
+}
+
+async function renderBrowserOverlay(props: Parameters<typeof BrowserOverlayHarness>[0] = {}): Promise<void> {
+  await act(async () => {
+    root.render(createElement(RendererRuntimeContext.Provider, { value: runtime },
+      createElement(BrowserOverlayHarness, props)));
+  });
+}
 
 describe('ContextInspector reading during refresh', () => {
   it('blocks a custom Agent interrupt shortcut while its modal is open', async () => {

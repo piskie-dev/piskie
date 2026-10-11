@@ -49,11 +49,14 @@ interface PageRecord {
   readonly onClose: () => void;
   readonly consoleCollector: ConsoleCollector;
   readonly networkCollector: NetworkCollector;
+  releaseMouse?: () => void;
 }
 
 export interface PageRegistryEvents {
   selectedPageChanged(previousPageId: number | undefined, pageId: number | undefined): void;
   mainFrameNavigated(pageId: number): void;
+  screenChanged?(page: RegisteredPage | undefined): void;
+  observeMouse?(page: Page, current: () => RegisteredPage): () => void;
 }
 
 export class PageRegistry {
@@ -212,6 +215,7 @@ export class PageRegistry {
     this.#opened.clear();
     this.#closed.clear();
     this.#selectedPageId = undefined;
+    this.#events.screenChanged?.(undefined);
   }
 
   async #initialize(): Promise<void> {
@@ -264,12 +268,14 @@ export class PageRegistry {
         if (frame !== page.mainFrame()) return;
         record.navigationSequence += 1;
         this.#events.mainFrameNavigated(record.pageId);
+        if (record.pageId === this.#selectedPageId) this.#events.screenChanged?.(toRegisteredPage(record));
       },
       onClose: () => this.#remove(record),
       consoleCollector: new ConsoleCollector(page),
       networkCollector: new NetworkCollector(page),
     } satisfies PageRecord);
 
+    record.releaseMouse = this.#events.observeMouse?.(page, () => toRegisteredPage(record));
     this.#records.set(page, record);
     page.on('dialog', record.onDialog);
     page.on('framenavigated', record.onFrameNavigated);
@@ -303,6 +309,7 @@ export class PageRegistry {
     record.consoleCollector.dispose();
     record.networkCollector.dispose();
     record.dialog = undefined;
+    record.releaseMouse?.();
   }
 
   #selectFallback(previousPageId?: number): void {
@@ -312,8 +319,10 @@ export class PageRegistry {
       this.#selectedPageId = first.pageId;
       updateTimeouts(first.page);
       this.#events.selectedPageChanged(previousPageId, first.pageId);
+      this.#events.screenChanged?.(toRegisteredPage(first));
     } else if (previousPageId !== undefined) {
       this.#events.selectedPageChanged(previousPageId, undefined);
+      this.#events.screenChanged?.(undefined);
     }
   }
 
@@ -325,6 +334,7 @@ export class PageRegistry {
     this.#selectedPageId = pageId;
     updateTimeouts(record.page);
     this.#events.selectedPageChanged(previousPageId, pageId);
+    this.#events.screenChanged?.(toRegisteredPage(record));
   }
 
   #recordById(pageId: number | undefined): PageRecord | undefined {

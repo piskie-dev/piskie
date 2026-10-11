@@ -3,6 +3,7 @@
  * 替代 AgentPlugin，通过 AgentHost 类型安全交互（不再 as any）。
  */
 
+import type { ChildTaskState } from '../../../shared/types/agent-control.js';
 import type { AgentHost } from '../agent-host.js';
 import type { ToolContextBuilder } from '../tool-context.js';
 import type { AgentInputEvent } from '../../../shared/types/index.js';
@@ -44,6 +45,9 @@ export interface AgentModule {
 
   /** 子 Agent 列表（级联中断用） */
   listChildAgents?(): AgentEngine[];
+
+  /** Read-only current assignment facts, projected only into renderer control state. */
+  getChildTaskState?(id: string): ChildTaskState | undefined;
 }
 
 // AgentEngine 前向声明（避免循环依赖）

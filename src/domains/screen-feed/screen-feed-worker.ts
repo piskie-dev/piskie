@@ -1,19 +1,30 @@
 /// <reference lib="webworker" />
 
-import type { StreamControlMessage, StreamServerMessage } from '@shared/types/stream';
+import { sameScreenPage, type StreamControlMessage, type StreamServerMessage } from '@shared/types/stream';
 import type {
   AggregateScreenDemand,
   ScreenFeedFailure,
   ScreenFeedStats,
   ScreenWorkerIncomingMessage,
   ScreenWorkerOutgoingMessage,
+  ScreenViewportFrame,
 } from './worker-protocol';
 
+import { ScreenPointerPresentation } from './screen-pointer-presentation';
+
 const MAX_CONSECUTIVE_DECODE_FAILURES = 5;
+
+interface DecodedFrame {
+  readonly bitmap: ImageBitmap;
+  readonly frame: ScreenViewportFrame;
+  readonly remaining: Set<string>;
+}
 
 export interface ScreenFeedWorkerEnvironment {
   readonly decode: (data: Uint8Array) => Promise<ImageBitmap>;
   readonly now: () => number;
+  readonly unixNow?: () => number;
+  readonly scheduleDelay?: (callback: () => void, delayMs: number) => () => void;
   readonly post: (message: ScreenWorkerOutgoingMessage) => void;
   readonly startInterval: (callback: () => void, delayMs: number) => number;
   readonly stopInterval: (id: number) => void;
@@ -26,10 +37,15 @@ interface Viewport {
   visible: boolean;
   ready: boolean;
   drawnFrames: number;
+  frame: ScreenViewportFrame | null;
+  readonly presentation: ScreenPointerPresentation;
 }
 
 export class ScreenFeedWorker {
   private epoch = 0;
+  private pendingFrame: DecodedFrame | null = null;
+  /** Real painted pixels survive lease replacement only for this feed's existing lifetime. */
+  private lastPicture: { canvas: OffscreenCanvas; frame: ScreenViewportFrame } | null = null;
   private port: MessagePort | null = null;
   private demand: AggregateScreenDemand = { fps: 4 };
   private readonly viewports = new Map<string, Viewport>();
@@ -43,6 +59,7 @@ export class ScreenFeedWorker {
   private lastSequence: number | null = null;
   private consecutiveDecodeFailures = 0;
   private lastFrameSize: { width: number; height: number } | null = null;
+  private screenState: Extract<StreamServerMessage, { type: 'screen-state' }> | null = null;
 
   constructor(private readonly environment: ScreenFeedWorkerEnvironment) {}
 
@@ -57,7 +74,7 @@ export class ScreenFeedWorker {
       case 'detach-viewport':
         if (message.epoch < this.epoch) return;
         if (message.epoch > this.epoch && this.port === null) this.epoch = message.epoch;
-        if (message.epoch === this.epoch) this.viewports.delete(message.leaseId);
+        if (message.epoch === this.epoch) this.detach(message.leaseId);
         break;
       case 'disconnect-feed':
         this.disconnect(message.epoch);
@@ -67,21 +84,36 @@ export class ScreenFeedWorker {
         this.demand = message.demand;
         const activeLeaseIds = new Set(message.viewports.map((item) => item.leaseId));
         for (const leaseId of this.viewports.keys()) {
-          if (!activeLeaseIds.has(leaseId)) this.viewports.delete(leaseId);
+          if (!activeLeaseIds.has(leaseId)) this.detach(leaseId);
         }
         for (const item of message.viewports) {
           const viewport = this.viewports.get(item.leaseId);
-          if (viewport) viewport.visible = item.visible;
+          if (viewport) {
+            const becomingVisible = !viewport.visible && item.visible;
+            viewport.visible = item.visible;
+            viewport.presentation.setVisible(item.visible);
+            if (becomingVisible) this.restoreViewport(viewport);
+            if (!item.visible) this.pendingFrame?.remaining.delete(item.leaseId);
+          }
         }
-        this.sendDemand();
-        break;
+        this.flushPendingFrame();
+        this.sendDemand();        break;
       }
       case 'input': {
         if (message.epoch !== this.epoch) return;
         const viewport = this.viewports.get(message.leaseId);
-        if (viewport?.visible) this.postControl({ type: 'input', event: message.event });
+        if (viewport?.visible && !viewport.presentation.blocked
+          && (!this.screenState || sameScreenPage(viewport.frame?.page, this.screenState.page))) {
+          this.postControl({ type: 'input', event: message.event });
+        }
         break;
       }
+      case 'pointer-presented':
+        if (message.epoch === this.epoch) this.viewports.get(message.leaseId)?.presentation.presented(message.page, message.seq, message.pressSeq, message.at);
+        break;
+      case 'pointer-cleared':
+        if (message.epoch === this.epoch) this.viewports.get(message.leaseId)?.presentation.cleared(message.clearId);
+        break;
       case 'close':
         this.shutdown(message.epoch);
         break;
@@ -103,13 +135,20 @@ export class ScreenFeedWorker {
       return;
     }
     this.closePort();
+    this.clearPendingFrame();
     this.epoch = epoch;
     this.port = port;
     this.demand = demand;
     this.lastSequence = null;
     this.lastFrameSize = null;
+    this.screenState = null;
+    this.lastPicture = null;
     this.consecutiveDecodeFailures = 0;
-    for (const viewport of this.viewports.values()) viewport.ready = false;
+    for (const viewport of this.viewports.values()) {
+      viewport.ready = false;
+      viewport.frame = null;
+      viewport.presentation.reset();
+    }
 
     port.onmessage = (event: MessageEvent<StreamServerMessage>) => {
       this.handleServerMessage(epoch, event.data);
@@ -146,6 +185,18 @@ export class ScreenFeedWorker {
       });
       return;
     }
+    this.detach(leaseId);
+    const presentation = new ScreenPointerPresentation(visible, {
+      now: this.environment.now,
+      unixNow: this.environment.unixNow ?? Date.now,
+      scheduleDelay: this.environment.scheduleDelay ?? ((callback, delayMs) => {
+        const id = setTimeout(callback, delayMs);
+        return () => clearTimeout(id);
+      }),
+      publish: () => this.post({ type: 'viewport-pointer', epoch: this.epoch, leaseId,
+        pointer: presentation.pointer, clearId: presentation.clearId }),
+      resume: () => this.flushPendingFrame(),
+    });
     this.viewports.set(leaseId, {
       id: leaseId,
       canvas,
@@ -153,13 +204,24 @@ export class ScreenFeedWorker {
       visible,
       ready: false,
       drawnFrames: 0,
+      frame: null,
+      presentation,
     });
+    if (this.screenState) presentation.accept(this.screenState.page, this.screenState.pointer);
+    this.restoreViewport(this.viewports.get(leaseId)!);
   }
 
   private disconnect(epoch: number): void {
     if (epoch !== this.epoch) return;
     this.closePort();
-    for (const viewport of this.viewports.values()) viewport.ready = false;
+    this.clearPendingFrame();
+    this.screenState = null;
+    this.lastPicture = null;
+    for (const viewport of this.viewports.values()) {
+      viewport.ready = false;
+      viewport.frame = null;
+      viewport.presentation.reset();
+    }
   }
 
   private handleServerMessage(epoch: number, message: StreamServerMessage): void {
@@ -167,6 +229,12 @@ export class ScreenFeedWorker {
     switch (message.type) {
       case 'started':
         this.post({ type: 'feed-ready', epoch });
+        break;
+      case 'screen-state':
+        this.screenState = message;
+        this.post({ type: 'screen-state', epoch, page: message.page, pointer: message.pointer });
+        for (const viewport of this.viewports.values()) viewport.presentation.accept(message.page, message.pointer);
+        if (this.pendingFrame && !sameScreenPage(this.pendingFrame.frame.page, message.page)) this.clearPendingFrame();
         break;
       case 'error':
         this.postError(epoch, message.failure);
@@ -192,46 +260,104 @@ export class ScreenFeedWorker {
     try {
       bitmap = await this.environment.decode(message.data);
       if (epoch !== this.epoch || this.port === null) return;
+      // A page reset can overtake an in-flight JPEG decode or queued port frame.
+      if (this.screenState && !sameScreenPage(message.meta.page, this.screenState.page)) return;
       const width = message.meta.width ?? bitmap.width;
       const height = message.meta.height ?? bitmap.height;
       this.postFrameSize(width, height);
 
-      for (const viewport of this.viewports.values()) {
-        if (!viewport.visible) continue;
-        if (viewport.canvas.width !== bitmap.width || viewport.canvas.height !== bitmap.height) {
-          viewport.canvas.width = bitmap.width;
-          viewport.canvas.height = bitmap.height;
-        }
-        viewport.context.drawImage(bitmap, 0, 0);
-        viewport.drawnFrames += 1;
-        if (!viewport.ready) {
-          viewport.ready = true;
-          this.post({ type: 'viewport-ready', epoch, leaseId: viewport.id });
-        }
-      }
+      this.clearPendingFrame();
+      this.pendingFrame = { bitmap,
+        frame: { page: message.meta.page ?? null, width, height, mapping: message.meta.mapping },
+        remaining: new Set([...this.viewports.values()].filter((viewport) => viewport.visible).map((viewport) => viewport.id)) };
+      bitmap = null; // The one latest decoded frame owns this bitmap until drawn or replaced.
+      if (!this.flushPendingFrame()) return;
       const decodeMs = this.environment.now() - startedAt;
       this.decodedFrames += 1;
       this.intervalDecoded += 1;
       this.intervalDecodeMs += decodeMs;
       this.consecutiveDecodeFailures = 0;
     } catch (error) {
-      this.decodeFailures += 1;
-      this.consecutiveDecodeFailures += 1;
-      const stalled = this.consecutiveDecodeFailures >= MAX_CONSECUTIVE_DECODE_FAILURES;
-      this.post({
-        type: 'error',
-        epoch,
-        fatal: false,
-        failure: {
-          code: stalled ? 'decode-stalled' : 'decode-failed',
-          retryable: stalled,
-          detail: error instanceof Error ? error.message : String(error),
-        },
-      });
+      this.reportDecodeFailure(epoch, error);
     } finally {
       bitmap?.close();
       if (epoch === this.epoch && this.port !== null) this.postControl({ type: 'ack' });
     }
+  }
+
+  private reportDecodeFailure(epoch: number, error: unknown): void {
+    this.decodeFailures += 1;
+    this.consecutiveDecodeFailures += 1;
+    const stalled = this.consecutiveDecodeFailures >= MAX_CONSECUTIVE_DECODE_FAILURES;
+    this.post({ type: 'error', epoch, fatal: false,
+      failure: { code: stalled ? 'decode-stalled' : 'decode-failed', retryable: stalled,
+        detail: error instanceof Error ? error.message : String(error) } });
+  }
+
+  private flushPendingFrame(): boolean {
+    const pending = this.pendingFrame;
+    if (!pending) return true;
+    let drawn = true;
+    for (const leaseId of pending.remaining) {
+      const viewport = this.viewports.get(leaseId);
+      if (!viewport || !viewport.visible) { pending.remaining.delete(leaseId); continue; }
+      if (!viewport.presentation.canDraw(pending.frame.page)) continue;
+      if (!this.drawViewport(viewport, pending.bitmap, pending.frame)) drawn = false;
+      pending.remaining.delete(leaseId);
+    }
+    if (pending.remaining.size === 0) this.clearPendingFrame();
+    return drawn;
+  }
+
+  private restoreViewport(viewport: Viewport): void {
+    if (!viewport.visible || viewport.presentation.blocked || !this.screenState?.page) return;
+    // Reuse a real current canvas when a static page has no new screencast frame.
+    const source = [...this.viewports.values()].find((other) => other !== viewport && other.visible && other.ready
+      && sameScreenPage(other.frame?.page, this.screenState?.page));
+    const picture = source?.frame ? { canvas: source.canvas, frame: source.frame } : this.lastPicture;
+    if (picture && sameScreenPage(picture.frame.page, this.screenState.page)
+      && viewport.presentation.canDraw(picture.frame.page)) {
+      this.drawViewport(viewport, picture.canvas, picture.frame);
+    }
+  }
+
+  private drawViewport(viewport: Viewport, image: ImageBitmap | OffscreenCanvas, frame: ScreenViewportFrame): boolean {
+    if (viewport.canvas.width !== image.width || viewport.canvas.height !== image.height) {
+      viewport.canvas.width = image.width;
+      viewport.canvas.height = image.height;
+    }
+    try {
+      viewport.context.drawImage(image, 0, 0);
+    } catch (error) {
+      this.reportDecodeFailure(this.epoch, error);
+      return false;
+    }
+    this.lastPicture = { canvas: viewport.canvas, frame };
+    viewport.drawnFrames += 1;
+    const frameChanged = !sameViewportFrame(viewport.frame, frame);
+    const previousPointer = viewport.presentation.pointer;
+    viewport.frame = frame;
+    const pointer = viewport.presentation.drawn(frame.page);
+    if (frameChanged || pointer !== previousPointer) {
+      this.post({ type: 'viewport-frame', epoch: this.epoch, leaseId: viewport.id, frame, pointer });
+    }
+    if (!viewport.ready) {
+      viewport.ready = true;
+      this.post({ type: 'viewport-ready', epoch: this.epoch, leaseId: viewport.id });
+    }
+    return true;
+  }
+
+  private clearPendingFrame(): void {
+    this.pendingFrame?.bitmap.close();
+    this.pendingFrame = null;
+  }
+
+  private detach(leaseId: string): void {
+    this.viewports.get(leaseId)?.presentation.dispose();
+    this.viewports.delete(leaseId);
+    this.pendingFrame?.remaining.delete(leaseId);
+    if (this.pendingFrame?.remaining.size === 0) this.clearPendingFrame();
   }
 
   private postFrameSize(width: number, height: number): void {
@@ -313,13 +439,24 @@ export class ScreenFeedWorker {
       this.environment.stopInterval(this.statsTimer);
       this.statsTimer = null;
     }
+    this.clearPendingFrame();
+    for (const viewport of this.viewports.values()) viewport.presentation.dispose();
     this.viewports.clear();
+    this.lastPicture = null;
     this.post({ type: 'closed', epoch });
   }
 
   private post(message: ScreenWorkerOutgoingMessage): void {
     this.environment.post(message);
   }
+}
+
+function sameViewportFrame(left: ScreenViewportFrame | null, right: ScreenViewportFrame): boolean {
+  return !!left && (left.page === right.page || sameScreenPage(left.page, right.page))
+    && left.width === right.width && left.height === right.height
+    && left.mapping?.scale === right.mapping?.scale
+    && left.mapping?.offsetX === right.mapping?.offsetX
+    && left.mapping?.offsetY === right.mapping?.offsetY;
 }
 
 export function createBrowserScreenFeedWorker(scope: DedicatedWorkerGlobalScope): ScreenFeedWorker {

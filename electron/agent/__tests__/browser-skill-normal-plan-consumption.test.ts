@@ -139,7 +139,7 @@ describe('已安装 Browser Skill 的 normal/plan 通用消费链', () => {
         id: `${mode}-browser-worker`,
         mainAgentId: `${mode}-director`,
         getSkillCatalog: () => skills,
-        getBrowserControl: () => ({ hasBrowser: () => true }),
+        getBrowserControl: () => ({ deferLaunch: () => () => undefined }),
         spec: browserWorkerSpec,
         getSkillDocs: () => docs,
         setSkillDocs: (value: string) => {

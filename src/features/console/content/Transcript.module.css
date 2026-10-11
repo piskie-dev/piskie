@@ -145,11 +145,10 @@
   font-size: 13px;
 }
 
-/* 连续活动状态是内容行，不是消息。它只在工作中存在（内容一到即消失），
-   Atom 呼吸 + 标签流光，与 Think 思考中态使用同一套动态语言。 */
+/* 连续活动状态只在工作中存在；呼吸与标签流光沿用 Think 的动态样式。 */
 .activityRow {
-  display: grid;
-  grid-template-columns: 14px max-content max-content max-content;
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
   column-gap: 7px;
   flex: none;
@@ -171,8 +170,15 @@
   color: color-mix(in srgb, var(--cyber-text-muted) 70%, transparent);
 }
 
-.activityElapsed {
+.activityElapsed,
+.activityTokens {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activityTokens {
+  display: inline-flex;
+  gap: 7px;
 }
 
 .group,

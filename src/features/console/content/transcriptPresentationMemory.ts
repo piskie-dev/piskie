@@ -37,6 +37,8 @@ function mergeBoundary(
   if (sameBoundary(current, candidate)) return current;
   if (current === null) return candidate;
   if (candidate === null) return current;
+  if (current.finalTextNodeId !== undefined && (current.endNodeId !== candidate.endNodeId
+    || current.finalTextNodeId !== candidate.finalTextNodeId)) return current;
 
   const currentPosition = boundaryPosition(current, nodePositions);
   const candidatePosition = boundaryPosition(candidate, nodePositions);
@@ -55,8 +57,8 @@ function mergeBoundary(
 
 /**
  * Merge a committed render into the target's renderer-lifetime presentation state.
- * Groups are never removed by an older owner, and a boundary only moves forward in
- * the node order visible to the committing render.
+ * Groups survive older snapshots. Once a normal final reply is confirmed, its fold
+ * position and reply identity remain fixed; later work belongs to another group.
  */
 export function mergeTranscriptProcessBoundaries(
   key: string,

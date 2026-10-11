@@ -17,6 +17,7 @@ import { formatFps } from './screen/formatFps';
 import { showBrowserWindow } from './screen/showBrowserWindow';
 import { useCaptureSize } from './screen/useCaptureSize';
 import { useScreenViewport } from './screen/useScreenViewport';
+import { ScreenPointerOverlay } from './screen/ScreenPointerOverlay';
 import styles from './screen/screen.module.css';
 
 export interface ScreenFullscreenProps {
@@ -25,6 +26,8 @@ export interface ScreenFullscreenProps {
   readonly subagentId: string;
   readonly browserId: string;
   readonly title?: string;
+  readonly browserReady?: boolean;
+  readonly resourceClosed?: boolean;
 }
 
 export type ScreenFullscreenTarget = Pick<
@@ -33,7 +36,7 @@ export type ScreenFullscreenTarget = Pick<
 >;
 
 export const ScreenFullscreen = memo<ScreenFullscreenProps>(
-  ({ open, onClose, subagentId, browserId, title }) => {
+  ({ open, onClose, subagentId, browserId, title, browserReady = true, resourceClosed = false }) => {
     const { t } = useTranslation();
     const resolvedTitle = title ?? t('sessionWorkbenchUi.screen.liveView');
     const [viewportRef, capture] = useCaptureSize();
@@ -41,7 +44,8 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
     const stream = useScreenViewport({
       browserId,
       agentId: subagentId,
-      enabled: open,
+      enabled: open && browserReady && !resourceClosed,
+      retainLastFrame: true,
       // browser 侧 30 而非 24：everyNthFrame 整数分频，24 实际只有 20fps
       fps: 30,
       capture,
@@ -71,7 +75,7 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
             <div className={styles.fullscreenIdentity}>
               <span className={styles.fullscreenKicker} data-ready={stream.ready ? 'true' : undefined}>
                 <span className={styles.fullscreenSignalDot} aria-hidden="true" />
-                {stream.ready
+                {resourceClosed ? t('sessionWorkbenchUi.monitor.closed') : stream.ready
                   ? t('sessionWorkbenchUi.screen.monitoring')
                   : t('sessionWorkbenchUi.screen.connecting')}
               </span>
@@ -92,6 +96,7 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
                 type="button"
                 className={styles.fullscreenWindowButton}
                 onClick={focusBrowserWindow}
+                disabled={resourceClosed || !browserReady}
                 aria-label={t('sessionWorkbenchUi.screen.showBrowserWindow')}
               >
                 <Eye size={13} />
@@ -120,7 +125,13 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
                 data-visible={stream.ready ? 'true' : 'false'}
               />
 
-              {!stream.ready && !stream.error && (
+              <ScreenPointerOverlay pointer={stream.ready ? stream.pointer : null} frame={stream.renderedFrame}
+                onPresented={stream.onPointerPresented} />
+
+              {resourceClosed && <div className={stream.ready ? styles.frozenLabel : styles.overlay}>
+                {t(stream.ready ? 'sessionWorkbenchUi.monitor.frozen' : 'sessionWorkbenchUi.monitor.closedNoFrame')}
+              </div>}
+              {!resourceClosed && !stream.ready && !stream.error && (
                 <div className={`${styles.overlay} ${styles.fullscreenOverlay}`}>
                   <Loader2 size={24} className="animate-spin" />
                   <span className={styles.overlayTitle}>{t('sessionWorkbenchUi.screen.connectingLiveView')}</span>
@@ -128,7 +139,7 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
                 </div>
               )}
 
-              {stream.error && (
+              {!resourceClosed && stream.error && (
                 <div className={`${styles.overlay} ${styles.fullscreenOverlay}`} data-tone="error">
                   <Unplug size={22} />
                   <span className={styles.overlayTitle}>{stream.error}</span>
@@ -138,7 +149,7 @@ export const ScreenFullscreen = memo<ScreenFullscreenProps>(
             </div>
 
             <div className={styles.fullscreenStageMeta} aria-hidden="true">
-              <span>{stream.ready
+              <span>{resourceClosed ? t('sessionWorkbenchUi.monitor.closed') : stream.ready
                 ? t('sessionWorkbenchUi.screen.liveStatus')
                 : t('sessionWorkbenchUi.screen.standbyStatus')}</span>
               <span>{t('sessionWorkbenchUi.screen.escapeHint')}</span>

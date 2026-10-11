@@ -88,6 +88,7 @@ export class TranscriptProjector {
       const entry = this.entries.get(index)!;
       if (entry.t === 'msg' && entry.role === 'assistant') {
         responses.push({
+          sourceIndex: index,
           afterUserId,
           ts: entry.ts,
           hasToolUse: Array.isArray(entry.content)

@@ -2,19 +2,20 @@
  * 系统托盘 / macOS 菜单栏图标，用于窗口关闭后继续在后台运行。
  *
  * 关闭窗口后应用退到这里:单击直接呼起主窗口;macOS 图标旁显示活遥测
- * (token/s 速率 + 总消耗,Clash 式双行),Windows/Linux 同信息进 tooltip。
+ * (输出平均吞吐),Windows/Linux 同信息与总消耗进 tooltip。
  * 「退出」只在托盘菜单与 Cmd+Q:仍走 DesktopRuntime 的事务停机,不抄近路。
  *
- * 两个遥测两种口径(2026-08-24 裁决):
- * - 速率 = 各在跑会话(含子代理)**纯输出生成吞吐**之和(输出 token ÷ 生成时长,
- *   与控制台底栏的 tok/s 同一算法),空闲归零;
+ * 两个遥测两种口径:
+ * - 输出平均吞吐 = 在忙会话(含子代理)配对总输出 token ÷ 最终成功 attempt 总耗时,
+ *   包含首 token 等待,与控制台底栏共用派生函数;无样本或不完整覆盖时未知;
  * - 总消耗(tooltip)= 输入+输出全量,与天际栏同源的纯加法账本:差量吸收
  *   runMetrics、单调不减、离场不回落、恢复重计不重复;主进程内存态,不持久化。
  */
 
 import { execFileSync } from 'node:child_process';
 import { Menu, Tray, nativeImage, nativeTheme } from 'electron';
-import { canPause, type AgentControlState } from '../../shared/types/agent-control.js';
+import { averageOutputThroughput } from '../../shared/agent-output-throughput.js';
+import { canPause, type AgentControlState, type AgentRunMetrics } from '../../shared/types/agent-control.js';
 import type { AgentObservationSource } from '../agent/observations.js';
 
 export interface DesktopTrayOptions {
@@ -83,23 +84,13 @@ class TokenPulse {
   }
 }
 
-/** 单个目标的生成吞吐(token/s):与控制台底栏同一算法 */
-function throughputOf(metrics: {
-  generationOutputTokens: number;
-  generationDurationMs: number;
-}): number {
-  return metrics.generationDurationMs > 0
-    ? metrics.generationOutputTokens / (metrics.generationDurationMs / 1000)
-    : 0;
-}
-
 export class DesktopTray {
   private tray?: Tray;
   private timer?: ReturnType<typeof setInterval>;
   private windowsThemeRefreshTimer?: ReturnType<typeof setTimeout>;
   private readonly releaseObservations: (() => void)[] = [];
   private readonly pulse = new TokenPulse();
-  /** 各在跑会话的最新控制状态(速率求和用);runtime 释放即移除 */
+  /** 各在跑会话的最新控制状态;runtime 释放即移除 */
   private readonly liveStates = new Map<string, AgentControlState>();
 
   constructor(private readonly options: DesktopTrayOptions) {}
@@ -161,23 +152,23 @@ export class DesktopTray {
     }, WINDOWS_THEME_REFRESH_DELAY_MS);
   };
 
-  /** 在忙会话(含子代理)的生成吞吐求和;没有在忙的即 0 */
-  private currentOutputRate(): number {
-    let rate = 0;
+  /** 汇总在忙会话的主/子代理原始配对总量,派生一个输出平均吞吐。 */
+  private currentOutputRate(): number | undefined {
+    const metrics: AgentRunMetrics[] = [];
     for (const state of this.liveStates.values()) {
       if (!canPause(state)) continue;
-      rate += throughputOf(state.runMetrics);
-      for (const child of state.children) rate += throughputOf(child.runMetrics);
+      metrics.push(state.runMetrics, ...state.children.map((child) => child.runMetrics));
     }
-    return rate;
+    return averageOutputThroughput(metrics);
   }
 
   private refreshTelemetry(): void {
     const tray = this.tray;
     if (!tray) return;
-    const rateText = `${formatTokens(this.currentOutputRate())}/s`;
+    const rate = this.currentOutputRate();
+    const rateText = `${rate === undefined ? '—' : formatTokens(rate)}/s`;
     const totalText = formatTokens(this.pulse.total);
-    tray.setToolTip(`Piskie · ${rateText} · 总消耗 ${totalText}`);
+    tray.setToolTip(`Piskie · 输出平均吞吐 ${rateText} · 总消耗 ${totalText}`);
     if (this.options.platform === 'darwin') {
       // setTitle 无字号控制,双行(\n)会按全尺寸字体溢出菜单栏——单行只放速率,总量进 tooltip
       tray.setTitle(rateText, { fontType: 'monospacedDigit' });

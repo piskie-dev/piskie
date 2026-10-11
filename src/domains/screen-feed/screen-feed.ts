@@ -1,4 +1,5 @@
-import type { RemoteInputEvent } from '@shared/types/stream';
+import { sameScreenPage, type RemoteInputEvent, type ScreenPageIdentity } from '@shared/types/stream';
+import type { PresentedScreenPointer } from '@shared/screen-pointer';
 import {
   ScreenStreamPortError,
   type BrowserStreamOptions,
@@ -10,6 +11,7 @@ import type {
   ScreenWorkerIncomingMessage,
   ScreenWorkerOutgoingMessage,
   ViewportDemand,
+  ScreenViewportFrame,
 } from './worker-protocol';
 
 const BACKGROUND_FPS = 4;
@@ -33,12 +35,16 @@ export interface ScreenFeedSnapshot {
   readonly frameSize: { readonly width: number; readonly height: number } | null;
   readonly stats: ScreenFeedStats;
   readonly demand: AggregateScreenDemand;
+  readonly page: ScreenPageIdentity | null;
 }
 
 export interface ViewportSnapshot extends ScreenFeedSnapshot {
+  readonly pointer: PresentedScreenPointer | null;
+  readonly pointerClearId: number;
   readonly ready: boolean;
   readonly viewportFailure: ScreenFeedFailure | null;
   readonly drawnFrames: number;
+  readonly renderedFrame: ScreenViewportFrame | null;
 }
 
 export type ViewportAttachResult = 'attached' | 'same' | 'replace-canvas' | 'fatal';
@@ -48,6 +54,8 @@ export interface ViewportLease {
   attach(canvas: HTMLCanvasElement): ViewportAttachResult;
   update(demand: ViewportDemand): void;
   sendInput(event: RemoteInputEvent): void;
+  pointerPresented(pointer: PresentedScreenPointer, at: number): void;
+  pointerCleared(clearId: number): void;
   subscribe(listener: () => void): () => void;
   snapshot(): ViewportSnapshot;
   release(): void;
@@ -87,6 +95,9 @@ interface LeaseRecord {
   ready: boolean;
   viewportFailure: ScreenFeedFailure | null;
   drawnFrames: number;
+  renderedFrame: ScreenViewportFrame | null;
+  pointer: PresentedScreenPointer | null;
+  pointerClearId: number;
   snapshot: ViewportSnapshot;
   readonly listeners: Set<() => void>;
   readonly onRelease: () => void;
@@ -102,6 +113,7 @@ export class ScreenFeed {
   private failure: ScreenFeedFailure | null = null;
   private frameSize: ScreenFeedSnapshot['frameSize'] = null;
   private stats: ScreenFeedStats = EMPTY_STATS;
+  private page: ScreenPageIdentity | null = null;
   private demand: AggregateScreenDemand = { fps: BACKGROUND_FPS };
   private cancelDemandFrame: (() => void) | null = null;
   private cancelRetry: (() => void) | null = null;
@@ -150,6 +162,9 @@ export class ScreenFeed {
       ready: false,
       viewportFailure: null,
       drawnFrames: 0,
+      renderedFrame: null,
+      pointer: null,
+      pointerClearId: 0,
       snapshot: undefined as unknown as ViewportSnapshot,
       listeners: new Set(),
       onRelease,
@@ -179,6 +194,15 @@ export class ScreenFeed {
           || this.phase !== 'streaming'
         ) return;
         this.post({ type: 'input', epoch: this.epoch, leaseId: record.id, event });
+      },
+      pointerPresented: (pointer, at) => {
+        if (record.released || this.phase !== 'streaming') return;
+        this.post({ type: 'pointer-presented', epoch: this.epoch, leaseId: record.id,
+          page: pointer.framePage, seq: pointer.seq, pressSeq: pointer.press?.seq, at });
+      },
+      pointerCleared: (clearId) => {
+        if (record.released || this.phase !== 'streaming') return;
+        this.post({ type: 'pointer-cleared', epoch: this.epoch, leaseId: record.id, clearId });
       },
       subscribe: (listener) => {
         record.listeners.add(listener);
@@ -285,7 +309,12 @@ export class ScreenFeed {
     const epoch = this.epoch;
     this.phase = 'requesting-port';
     this.failure = null;
-    for (const lease of this.leases.values()) lease.ready = false;
+    for (const lease of this.leases.values()) {
+      lease.ready = false;
+      lease.pointer = null;
+      lease.renderedFrame = null;
+      lease.pointerClearId = 0;
+    }
     this.refreshAll();
     const demand = this.aggregateDemand();
     this.demand = demand;
@@ -396,6 +425,26 @@ export class ScreenFeed {
         this.failure = null;
         this.refreshAll();
         break;
+      case 'screen-state':
+        this.page = message.page;
+        this.refreshAll();
+        break;
+      case 'viewport-pointer': {
+        const lease = this.leases.get(message.leaseId);
+        if (!lease) return;
+        lease.pointer = message.pointer;
+        lease.pointerClearId = message.clearId;
+        this.refreshLease(lease);
+        break;
+      }
+      case 'viewport-frame': {
+        const lease = this.leases.get(message.leaseId);
+        if (!lease) return;
+        lease.renderedFrame = message.frame;
+        lease.pointer = message.pointer;
+        this.refreshLease(lease);
+        break;
+      }
       case 'viewport-ready': {
         const lease = this.leases.get(message.leaseId);
         if (!lease) return;
@@ -439,6 +488,11 @@ export class ScreenFeed {
       ready: record.ready && this.phase === 'streaming',
       viewportFailure: record.viewportFailure,
       drawnFrames: record.drawnFrames,
+      renderedFrame: record.renderedFrame,
+      page: this.page,
+      pointerClearId: record.pointerClearId,
+      pointer: this.phase === 'streaming' && record.ready && record.demand.visible
+        && sameScreenPage(record.renderedFrame?.page, record.pointer?.framePage) ? record.pointer : null,
     };
   }
 
@@ -518,5 +572,9 @@ function sameViewportSnapshot(left: ViewportSnapshot, right: ViewportSnapshot): 
     && left.demand === right.demand
     && left.ready === right.ready
     && left.viewportFailure === right.viewportFailure
-    && left.drawnFrames === right.drawnFrames;
+    && left.drawnFrames === right.drawnFrames
+    && left.page === right.page
+    && left.pointer === right.pointer
+    && left.pointerClearId === right.pointerClearId
+    && left.renderedFrame === right.renderedFrame;
 }

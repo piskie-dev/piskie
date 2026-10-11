@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { TaskDefinitionSnapshot } from '@shared/electron-contracts/task-definitions';
@@ -40,7 +40,7 @@ export interface ScheduleFormDialogProps {
   readonly onClose: () => void;
   readonly onCreate: (input: ScheduleCreateInput) => Promise<void>;
   readonly onUpdate: (scheduleId: string, updates: ScheduleUpdateInput) => Promise<void>;
-  readonly onOpenTemplates: () => void;
+  readonly onEditTemplate: (definitionId: string) => void;
 }
 
 const NAME_MAX = 40;
@@ -285,7 +285,7 @@ export function ScheduleFormDialog(props: ScheduleFormDialogProps) {
                     <strong>{template.name}</strong>
                     <small>{describeTemplate(template, t)}</small>
                   </div>
-                  <button type="button" className={`${styles.button} ${styles.ghost}`} onClick={props.onOpenTemplates}>
+                  <button type="button" className={`${styles.button} ${styles.ghost}`} onClick={() => props.onEditTemplate(template.definitionId)}>
                     {t('schedulesUi.form.manageTemplates')}
                   </button>
                 </div>
@@ -449,10 +449,16 @@ export function ScheduleFormDialog(props: ScheduleFormDialogProps) {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.fieldLabel} htmlFor="schedule-form-prompt">
-              {t('schedulesUi.form.prompt')}
+            <div className={styles.fieldLabel}>
+              <label htmlFor="schedule-form-prompt">{t('schedulesUi.form.prompt')}</label>
               <em className={styles.muted}>{t(agentOwned ? 'schedulesUi.form.promptFromAgent' : 'schedulesUi.form.promptReadonly')}</em>
-            </label>
+              {!agentOwned && template && (
+                <button type="button" className={styles.link} onClick={() => props.onEditTemplate(template.definitionId)}>
+                  <Pencil size={14} />
+                  {t('schedulesUi.form.editTemplatePrompt')}
+                </button>
+              )}
+            </div>
             <textarea id="schedule-form-prompt" className={styles.textarea} readOnly value={prompt ?? ''} />
           </div>
 

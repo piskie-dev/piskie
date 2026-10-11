@@ -2,11 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   ConfigRepositoryError,
+  type ConfigCommitGuard,
   type VersionedConfigDocument,
   type VersionedConfigRepositoryPaths,
 } from '../contracts/repository.js';
 import { FileConfigHistoryStore } from './file-history-store.js';
 import { parsePersistedConfig } from './persisted-config-parser.js';
+import { configDomainStoragePaths } from './storage-layout.js';
 import {
   configFileWriter,
   type AtomicFileWriter,
@@ -62,7 +64,7 @@ export class VersionedFileConfigRepository<T extends VersionedConfigDocument> {
   async initialize(document: T): Promise<void> {
     this.assertRevision(document);
     await fs.mkdir(path.dirname(this.options.paths.configFile), { recursive: true, mode: 0o700 });
-    await this.withLock(async () => {
+    await this.withLocks([this.options.domain], async () => {
       if (await this.exists()) {
         throw new ConfigRepositoryError(
           'CONFIG_REVISION_CONFLICT',
@@ -93,8 +95,8 @@ export class VersionedFileConfigRepository<T extends VersionedConfigDocument> {
     return this.historyStore.prune();
   }
 
-  async commit(candidate: T, expectedRevision: number): Promise<T> {
-    return this.withLock(async () => {
+  async commit(candidate: T, expectedRevision: number, guard?: ConfigCommitGuard): Promise<T> {
+    return this.withLocks([this.options.domain, ...(guard?.dependencyDomains ?? [])], async () => {
       const current = await this.read();
       if (current.revision !== expectedRevision) {
         throw new ConfigRepositoryError(
@@ -108,6 +110,7 @@ export class VersionedFileConfigRepository<T extends VersionedConfigDocument> {
         );
       }
 
+      await guard?.validate();
       const next = { ...candidate, revision: current.revision + 1 } as T;
       await this.historyStore.write(current);
       const nextHistoryCreated = await this.historyStore.write(next);
@@ -206,25 +209,38 @@ export class VersionedFileConfigRepository<T extends VersionedConfigDocument> {
     }
   }
 
-  private async withLock<R>(operation: () => Promise<R>): Promise<R> {
-    await fs.mkdir(path.dirname(this.options.paths.lockFile), { recursive: true, mode: 0o700 });
+  private withLocks<R>(domains: readonly string[], operation: () => Promise<R>): Promise<R> {
+    const ordered = [...new Set(domains)].sort();
+    const acquire = (index: number): Promise<R> => {
+      const domain = ordered[index];
+      if (domain === undefined) return operation();
+      const lockFile = domain === this.options.domain
+        ? this.options.paths.lockFile
+        : configDomainStoragePaths(this.options.paths.rootDirectory, domain).lockFile;
+      return this.withLock(domain, lockFile, () => acquire(index + 1));
+    };
+    return acquire(0);
+  }
+
+  private async withLock<R>(domain: string, lockFile: string, operation: () => Promise<R>): Promise<R> {
+    await fs.mkdir(path.dirname(lockFile), { recursive: true, mode: 0o700 });
     let handle: fs.FileHandle;
     try {
-      handle = await fs.open(this.options.paths.lockFile, 'wx', 0o600);
+      handle = await fs.open(lockFile, 'wx', 0o600);
       await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
       await handle.sync();
     } catch (cause) {
       if (isNodeError(cause, 'EEXIST')) {
         throw new ConfigRepositoryError(
           'CONFIG_LOCKED',
-          `${this.options.domain} config is locked by another writer`,
-          { domain: this.options.domain },
+          `${domain} config is locked by another writer`,
+          { domain },
         );
       }
       throw new ConfigRepositoryError(
         'CONFIG_WRITE_FAILED',
-        `Unable to acquire ${this.options.domain} config lock`,
-        { domain: this.options.domain },
+        `Unable to acquire ${domain} config lock`,
+        { domain },
         { cause },
       );
     }
@@ -233,7 +249,7 @@ export class VersionedFileConfigRepository<T extends VersionedConfigDocument> {
       return await operation();
     } finally {
       await handle.close().catch(() => undefined);
-      await fs.unlink(this.options.paths.lockFile).catch(() => undefined);
+      await fs.unlink(lockFile).catch(() => undefined);
     }
   }
 }

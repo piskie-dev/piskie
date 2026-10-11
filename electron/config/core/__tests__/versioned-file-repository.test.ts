@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ConfigRepositoryError } from '../../contracts/repository.js';
 import { configDomainStoragePaths } from '../storage-layout.js';
+import { configFileWriter } from '../atomic-file-writer.js';
 import { VersionedFileConfigRepository } from '../versioned-file-repository.js';
 
 interface ExampleConfig {
@@ -53,6 +54,81 @@ describe('VersionedFileConfigRepository', () => {
     await expect(repository.read()).rejects.toMatchObject<ConfigRepositoryError>({
       code: 'CONFIG_INVALID',
     });
+  });
+
+  it('holds dependency locks through replacement across repository instances and releases them after commit', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-config-dependencies-'));
+    temporaryDirectories.push(root);
+    const paths = configDomainStoragePaths(root, 'binding');
+    const codec = { parse: (raw: unknown) => z.object({ revision: z.number(), enabled: z.boolean() }).parse(raw) };
+    const dependencyOptions = { domain: 'model', paths: configDomainStoragePaths(root, 'model'), codec };
+    const model = new VersionedFileConfigRepository(dependencyOptions);
+    const otherWriter = new VersionedFileConfigRepository(dependencyOptions);
+    let replacing!: () => void;
+    let finishReplace!: () => void;
+    const atReplace = new Promise<void>((resolve) => { replacing = resolve; });
+    const finish = new Promise<void>((resolve) => { finishReplace = resolve; });
+    let pause = false;
+    const binding = new VersionedFileConfigRepository({
+      domain: 'binding', paths, codec,
+      writer: {
+        create: (filePath, source) => configFileWriter.create(filePath, source),
+        replace: async (filePath, source) => {
+          if (pause && filePath === paths.configFile) {
+            replacing();
+            await finish;
+          }
+          await configFileWriter.replace(filePath, source);
+        },
+      },
+    });
+    await model.initialize({ revision: 0, enabled: true });
+    await binding.initialize({ revision: 0, enabled: false });
+    pause = true;
+    const pending = binding.commit({ revision: 0, enabled: true }, 0, {
+      dependencyDomains: ['model'],
+      validate: async () => { expect(await model.read()).toEqual({ revision: 0, enabled: true }); },
+    });
+    await atReplace;
+    try {
+      await expect(otherWriter.commit({ revision: 0, enabled: false }, 0)).rejects.toMatchObject({
+        code: 'CONFIG_LOCKED', details: { domain: 'model' },
+      });
+      await expect(binding.read()).resolves.toEqual({ revision: 0, enabled: false });
+    } finally {
+      finishReplace();
+      await pending;
+    }
+    await expect(otherWriter.commit({ revision: 0, enabled: false }, 0)).resolves.toEqual({ revision: 1, enabled: false });
+    await expect(binding.read()).resolves.toEqual({ revision: 1, enabled: true });
+  });
+
+  it('releases acquired locks after dependency contention and failed validation', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-config-contention-'));
+    temporaryDirectories.push(root);
+    const codec = { parse: (raw: unknown) => z.object({ revision: z.number(), enabled: z.boolean() }).parse(raw) };
+    const paths = configDomainStoragePaths(root, 'binding');
+    const modelPaths = configDomainStoragePaths(root, 'model');
+    const binding = new VersionedFileConfigRepository({ domain: 'binding', paths, codec });
+    const model = new VersionedFileConfigRepository({ domain: 'model', paths: modelPaths, codec });
+    await binding.initialize({ revision: 0, enabled: false });
+    await model.initialize({ revision: 0, enabled: true });
+    const held = await fs.open(modelPaths.lockFile, 'wx');
+    try {
+      await expect(binding.commit({ revision: 0, enabled: true }, 0, {
+        dependencyDomains: ['model'], validate: async () => undefined,
+      })).rejects.toMatchObject({ code: 'CONFIG_LOCKED', details: { domain: 'model' } });
+      await expect(fs.access(paths.lockFile)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await held.close();
+      await fs.unlink(modelPaths.lockFile);
+    }
+    await expect(binding.commit({ revision: 0, enabled: true }, 0, {
+      dependencyDomains: ['model'], validate: async () => { throw new Error('Sample dependency changed'); },
+    })).rejects.toThrow('Sample dependency changed');
+    await expect(binding.read()).resolves.toEqual({ revision: 0, enabled: false });
+    await expect(fs.readdir(path.dirname(paths.configFile))).resolves.toEqual(['binding.json', 'model.json']);
+    await expect(binding.commit({ revision: 0, enabled: true }, 0)).resolves.toEqual({ revision: 1, enabled: true });
   });
 
   it('provides shared CAS, atomic persistence and bounded history to any Domain', async () => {

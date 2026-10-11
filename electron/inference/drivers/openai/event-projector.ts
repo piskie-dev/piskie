@@ -21,8 +21,13 @@ export async function* projectOpenAiChatStream(
   let stopReason: AiStopReason = 'other';
   let reasoningText = '';
   let reasoningItemEmitted = false;
+  let firstTokenEmitted = false;
 
   for await (const chunk of stream) {
+    if (!firstTokenEmitted && hasGeneratedContent(chunk)) {
+      firstTokenEmitted = true;
+      yield { kind: 'response.first_token' };
+    }
     const usage = mapUsage(chunk.usage);
     if (usage) yield { kind: 'usage.updated', usage };
 
@@ -83,6 +88,15 @@ export async function* projectOpenAiChatStream(
     yield { kind: 'tool.completed', callId: tool.id };
   }
   yield { kind: 'response.completed', stopReason };
+}
+
+function hasGeneratedContent(chunk: OpenAI.Chat.Completions.ChatCompletionChunk): boolean {
+  return chunk.choices.some((choice) => {
+    const delta = choice.delta as typeof choice.delta & ExtendedDelta;
+    return [delta.content, delta.refusal, delta.reasoning_content, delta.reasoning]
+      .some((text) => typeof text === 'string' && text.length > 0)
+      || Boolean(delta.tool_calls?.some((tool) => tool.function?.arguments));
+  });
 }
 
 /**

@@ -7,7 +7,7 @@
  * 协议要点:
  * - frame_meta + binary 合并为单条 { type:'frame', ... } 消息(原子,无乱序)
  * - 无端口级重连:renderer reload = 端口 close + 重新 request(主进程按 close 摘除 viewer)
- * - 背压:JPEG 流按 sink "最多 1 帧在途 + latest-wins",Worker 每绘制一帧回 ack
+ * - 背压:JPEG 流按 sink "最多 1 帧在途 + latest-wins",Worker 每解码处理一帧回 ack
  */
 
 /** Renderer 通过 desktop capability 协商浏览器流的 child MessagePort。 */
@@ -24,6 +24,58 @@ export interface BrowserStreamRequest {
 
 export type ScreenStreamRequest = BrowserStreamRequest;
 
+/** Identity owned by the automation connection and its page registry. */
+export interface ScreenPageIdentity {
+  readonly connectionId: string;
+  readonly pageId: number;
+  readonly navigationSequence: number;
+}
+
+/** Registry page IDs identify one live Page/Mouse object within an automation connection. */
+export function sameScreenPageInstance(
+  left: ScreenPageIdentity | null | undefined,
+  right: ScreenPageIdentity | null | undefined,
+): boolean {
+  return !!left && !!right && left.connectionId === right.connectionId && left.pageId === right.pageId;
+}
+
+export function sameScreenPage(
+  left: ScreenPageIdentity | null | undefined,
+  right: ScreenPageIdentity | null | undefined,
+): boolean {
+  return sameScreenPageInstance(left, right) && left!.navigationSequence === right!.navigationSequence;
+}
+
+/** Latest successful public mouse observation; its position lives with the Page/Mouse instance. */
+export interface ScreenPointer {
+  /** Call-time frame identity of this observation, preserved across later navigation. */
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly x: number;
+  readonly y: number;
+  readonly buttons: number;
+  readonly action: 'move' | 'down' | 'up';
+  readonly clickCount: number;
+  /** Unix milliseconds, shared with frame timestamps. */
+  readonly timestamp: number;
+  readonly press?: {
+    /** The actual down observation's frame; feedback belongs only to this image. */
+    readonly page: ScreenPageIdentity;
+    readonly seq: number;
+    readonly x: number;
+    readonly y: number;
+    readonly timestamp: number;
+    readonly clickCount: number;
+  };
+}
+
+/** Maps viewport CSS coordinates to the captured image's coordinate plane. */
+export interface ScreenFrameMapping {
+  readonly scale: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
 /** 帧元数据(语义同旧 WS frame_meta) */
 export interface StreamFrameMeta {
   seq: number;
@@ -33,6 +85,8 @@ export interface StreamFrameMeta {
   scrollX?: number;
   scrollY?: number;
   timestamp: number;
+  page?: ScreenPageIdentity;
+  mapping?: ScreenFrameMapping;
 }
 
 export interface ScreenStreamFailure {
@@ -44,6 +98,12 @@ export interface ScreenStreamFailure {
 /** 主进程 → Worker(经 MessagePort) */
 export type StreamServerMessage =
   | { type: 'started'; browserId: string }
+  | {
+      type: 'screen-state';
+      browserId: string;
+      page: ScreenPageIdentity | null;
+      pointer: ScreenPointer | null;
+    }
   | { type: 'frame'; meta: StreamFrameMeta; data: Uint8Array }
   | { type: 'error'; failure: ScreenStreamFailure };
 
@@ -96,6 +156,6 @@ export type StreamControlMessage =
    * 生效方式同 set-fps(hub 取所有 viewer 的最大值后重启 screencast)。
    */
   | { type: 'set-quality'; quality?: number; maxWidth?: number; maxHeight?: number }
-  /** 每绘制完一帧回执一次,驱动 1-in-flight 背压 */
+  /** 每解码处理一帧回执一次,驱动 1-in-flight 背压；视口可短暂保留已绘制帧。 */
   | { type: 'ack' }
   | { type: 'stop' };

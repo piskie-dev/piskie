@@ -18,6 +18,15 @@ const definition = {
 };
 
 describe('Task Definition public schema', () => {
+  it('accepts exact model references and an explicit update clear, but rejects unknown fields', () => {
+    const update = createTaskDefinitionController({} as never).find(({ id }) => id === TASK_DEFINITION_OPERATIONS.update)!;
+    const model = { providerId: 'sample-provider', modelId: 'sample-model' };
+    expect(createOperation.input.safeParse([{ ...definition, model }]).success).toBe(true);
+    expect(createOperation.input.safeParse([{ ...definition, model: null }]).success).toBe(false);
+    expect(update.input.parse(['td-sample', { model: null }])).toEqual(['td-sample', { model: null }]);
+    expect(update.input.safeParse(['td-sample', { model: { ...model, extra: true } }]).success).toBe(false);
+  });
+
   it('accepts only normal/plan definitions without an AgentSpec alias', () => {
     expect(createOperation.input.safeParse([definition]).success).toBe(true);
     expect(createOperation.input.safeParse([{

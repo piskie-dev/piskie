@@ -180,7 +180,7 @@ export const DockMode = memo<DockModeProps>(
     const hasWorkers = (agent?.workers.length ?? 0) > 0;
 
     // 辅助槽目前只有屏幕一种
-    const hasScreen = !!worker?.browserId;
+    const hasScreen = !!worker?.browserId && worker.browserReady;
 
     return (
       <ActivePrimaryOwnerProvider owner={activePrimaryOwner} onActivate={activatePrimaryOwner}>

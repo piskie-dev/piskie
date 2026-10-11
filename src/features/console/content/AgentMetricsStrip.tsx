@@ -32,13 +32,14 @@ export const AgentMetricsStrip = memo<AgentMetricsStripProps>(
       }),
       [activeLlmStartedAt, activeToolPhaseStartedAt, i18n.language, i18n.resolvedLanguage, metrics, now, t],
     );
+    const throughputLabel = `${t('sessionWorkbenchUi.metrics.outputThroughputAverage')} ${labels.throughput}`;
     const detail = [
       labels.rounds,
       labels.steps,
       `LLM ${labels.llm}`,
       `${t('sessionWorkbenchUi.metrics.toolCalls')} ${labels.tools}`,
-      `${t('sessionWorkbenchUi.metrics.firstTokenAverage')} ${labels.firstVisible}`,
-      labels.throughput,
+      `${t('sessionWorkbenchUi.metrics.firstTokenAverage')} ${labels.firstToken}`,
+      throughputLabel,
       `${t('sessionWorkbenchUi.metrics.cacheHit')} ${labels.cache}`,
       `${t('sessionWorkbenchUi.metrics.input')} ${labels.input} tok`,
       `${t('sessionWorkbenchUi.metrics.output')} ${labels.output} tok`,
@@ -53,7 +54,7 @@ export const AgentMetricsStrip = memo<AgentMetricsStripProps>(
           <span>LLM {labels.llm}</span><span aria-hidden>·</span><span>{t('sessionWorkbenchUi.metrics.toolCalls')} {labels.tools}</span>
         </span>
         <span className={styles.group} data-priority="latency">
-          <span>{t('sessionWorkbenchUi.metrics.firstTokenAverage')} {labels.firstVisible}</span><span aria-hidden>·</span><span>{labels.throughput}</span>
+          <span>{t('sessionWorkbenchUi.metrics.firstTokenAverage')} {labels.firstToken}</span><span aria-hidden>·</span><span>{throughputLabel}</span>
         </span>
         <span className={styles.group} data-priority="cache">{t('sessionWorkbenchUi.metrics.cacheHit')} {labels.cache}</span>
         <span className={styles.group} data-priority="tokens">

@@ -14,6 +14,19 @@ const definition = {
 };
 
 describe('Task Definitions Domain schema', () => {
+  it('loads old templates without a model and strips unknown stored model fields while writes stay exact', () => {
+    const model = { providerId: 'sample-provider', modelId: 'sample-model' };
+    const stored = (fields: object) => taskDefinitionsStoredSchema.parse({
+      revision: 1, definitions: { sample: { ...definition, createdAt: '2026-01-01T00:00:00.000Z', ...fields } },
+    }).definitions.sample!;
+    expect(stored({}).model).toBeUndefined();
+    expect(stored({ model: { ...model, unknownField: 'ignored' } }).model).toEqual(model);
+    expect(taskDefinitionsWriteSchema.parse({ definitions: { sample: { ...definition, model } } }).definitions.sample?.model).toEqual(model);
+    for (const invalid of [null, { providerId: '', modelId: 'sample-model' }, { ...model, unknownField: true }]) {
+      expect(taskDefinitionsWriteSchema.safeParse({ definitions: { sample: { ...definition, model: invalid } } }).success).toBe(false);
+    }
+  });
+
   it('accepts non-empty definition IDs and rejects empty keys', () => {
     expect(taskDefinitionsWriteSchema.safeParse({
       definitions: { [definitionId]: definition },

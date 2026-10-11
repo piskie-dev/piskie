@@ -3,6 +3,7 @@ import path from 'node:path';
 export const CONFIG_HISTORY_RETENTION = 5;
 
 export interface ConfigDomainStoragePaths {
+  rootDirectory: string;
   configFile: string;
   historyDirectory: string;
   plansDirectory: string;
@@ -18,6 +19,7 @@ export function configDomainStoragePaths(
   }
   const root = path.resolve(rootDirectory);
   return {
+    rootDirectory: root,
     configFile: path.join(root, 'config', `${domain}.json`),
     historyDirectory: path.join(root, 'config-history', domain),
     plansDirectory: path.join(root, 'config-plans', domain),

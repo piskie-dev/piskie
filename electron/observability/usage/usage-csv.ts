@@ -39,7 +39,7 @@ const columns: readonly Column[] = [
   { label: { 'zh-CN': '缓存读取 Token', 'en-US': 'Cache read tokens' }, value: (r) => r.usage.cachedInputTokens },
   { label: { 'zh-CN': '缓存写入 Token', 'en-US': 'Cache write tokens' }, value: (r) => r.usage.cacheWriteTokens },
   { label: { 'zh-CN': '推理 Token', 'en-US': 'Reasoning tokens' }, value: (r) => r.usage.reasoningTokens },
-  { label: { 'zh-CN': '首响应耗时（毫秒）', 'en-US': 'First response (ms)' }, value: (r) => r.firstResponseMs },
+  { label: { 'zh-CN': '首 token 耗时（毫秒）', 'en-US': 'Time to first token (ms)' }, value: (r) => r.firstTokenLatencyMs },
   { label: { 'zh-CN': '总耗时（毫秒）', 'en-US': 'Total duration (ms)' }, value: (r) => r.endedAt === undefined ? undefined : r.endedAt - r.startedAt },
 ];
 

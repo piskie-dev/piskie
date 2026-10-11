@@ -13,16 +13,16 @@ function metrics(
     steps: 47,
     llmDurationMs: 575_000,
     toolDurationMs: 154_000,
-    firstVisibleContentLatencyTotalMs: 48_000,
-    firstVisibleContentSamples: 4,
-    generationDurationMs: 10_000,
-    generationOutputTokens: 950,
+    firstTokenLatencyTotalMs: 48_000,
+    firstTokenSamples: 4,
+    throughputDurationMs: 58_000,
+    throughputOutputTokens: 950,
     inputTokens: 1_000,
     outputTokens: 950,
     cacheReadTokens: 100,
     coverage: {
       toolTiming: coverage,
-      firstVisibleContent: coverage,
+      firstToken: coverage,
       throughput: coverage,
       inputTokens: coverage,
       outputTokens: coverage,
@@ -45,8 +45,8 @@ describe('agentMetricLabels', () => {
       steps: '47步',
       llm: '9m35s',
       tools: '2m34s',
-      firstVisible: '12s',
-      throughput: '95 tok/s',
+      firstToken: '12s',
+      throughput: '16.4 tok/s',
       cache: '10%',
       input: '1.0k',
       output: '950',
@@ -67,7 +67,7 @@ describe('agentMetricLabels', () => {
       steps: '0步',
       llm: '4s',
       tools: '2s',
-      firstVisible: '—',
+      firstToken: '—',
       throughput: '—',
       cache: '—',
       input: '—',
@@ -75,17 +75,43 @@ describe('agentMetricLabels', () => {
     });
   });
 
+  it('shows zero output throughput when paired duration is positive', () => {
+    const labels = agentMetricLabels(metrics('complete', {
+      firstTokenLatencyTotalMs: 0,
+      throughputDurationMs: 1_000,
+      throughputOutputTokens: 0,
+      outputTokens: 0,
+    }), 1_000, undefined, undefined, labelOptions);
+
+    expect(labels.throughput).toBe('0.0 tok/s');
+  });
+
+  it('shows absent throughput coverage as unknown', () => {
+    const labels = agentMetricLabels(metrics('none', {
+      firstTokenLatencyTotalMs: 0,
+      firstTokenSamples: 0,
+      throughputDurationMs: 0,
+      throughputOutputTokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+    }), 1_000, undefined, undefined, labelOptions);
+
+    expect(labels.throughput).toBe('—');
+  });
+
   it('keeps measured zero distinct from unknown', () => {
     expect(agentMetricLabels(metrics('complete', {
-      firstVisibleContentLatencyTotalMs: 0,
-      firstVisibleContentSamples: 1,
-      generationDurationMs: 0,
-      generationOutputTokens: 0,
+      rounds: 1,
+      firstTokenLatencyTotalMs: 0,
+      firstTokenSamples: 1,
+      throughputDurationMs: 0,
+      throughputOutputTokens: 0,
       inputTokens: 100,
       outputTokens: 0,
       cacheReadTokens: 0,
     }), 1_000, undefined, undefined, labelOptions)).toMatchObject({
-      firstVisible: '0s',
+      firstToken: '0s',
       throughput: '—',
       cache: '0%',
       output: '0',

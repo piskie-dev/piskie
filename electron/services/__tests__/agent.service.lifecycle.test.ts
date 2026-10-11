@@ -455,6 +455,42 @@ describe('AgentService 激活事务', () => {
   });
 });
 
+describe('AgentService new session models', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    { model: undefined, override: undefined, expected: 'provider-1::model-1' },
+    { model: { providerId: 'sample-provider', modelId: 'template-model' }, override: undefined, expected: 'sample-provider::template-model' },
+    { model: { providerId: 'sample-provider', modelId: 'template-model' }, override: 'sample-provider::explicit-model', expected: 'sample-provider::explicit-model' },
+  ])('starts and persists the resolved model $expected', async ({ model, override, expected }) => {
+    const validate = vi.spyOn(h.FakeAgentInference.prototype, 'assertTarget');
+    const state = await agentService.startAgent({ ...launch(), runConfig: { ...runConfig(), model }, launchOptions: { initialModel: override } });
+    expect(state.currentModel).toBe(expected);
+    expect(service.conversationStore.readHeader(state.agentId).currentModel).toBe(expected);
+    expect(validate).toHaveBeenCalledOnce();
+  });
+
+  it('rejects unavailable fixed models without trying the available global default', async () => {
+    const model = { providerId: 'removed-provider', modelId: 'template-model' };
+    const validate = vi.spyOn(h.FakeAgentInference.prototype, 'assertTarget').mockImplementation((target) => {
+      if (target.providerId === model.providerId) throw new Error('Template model unavailable');
+    });
+    await expect(agentService.startAgent({ ...launch(), runConfig: { ...runConfig(), model }, launchOptions: {} }))
+      .rejects.toThrow('Template model unavailable');
+    expect(validate).toHaveBeenCalledExactlyOnceWith(model);
+    expect(h.instances).toHaveLength(0);
+    expect(service.conversationStore.scanHeaders()).toEqual([]);
+  });
+
+  it('requires a default only when neither the template nor the launch specifies a model', async () => {
+    vi.spyOn(h.FakeInferenceRuntimeHost.prototype, 'readEffectiveSelections').mockResolvedValue({ schemaVersion: 1, revision: 2 });
+    await expect(agentService.startAgent({ ...launch(), launchOptions: {} })).rejects.toThrow('未配置 AI 模型');
+    service.createAgentCandidate = () => 'second-run';
+    const state = await agentService.startAgent({ ...launch(), runConfig: { ...runConfig(), model: { providerId: 'sample-provider', modelId: 'template-model' } }, launchOptions: {} });
+    expect(state.currentModel).toBe('sample-provider::template-model');
+  });
+});
+
 describe('AgentService persisted model selection', () => {
   const selectedModel = 'provider-1::chosen-model';
   const event = {
@@ -486,7 +522,8 @@ describe('AgentService persisted model selection', () => {
     ({ ConversationStore: Store } = await vi.importActual<typeof import('../../agent-runs/conversation-store.js')>('../../agent-runs/conversation-store.js'));
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'sample-model-selection-'));
     service.conversationStore = new Store(root);
-    service.conversationStore.writeHeader('disk-run', header('disk-run'));
+    service.conversationStore.writeHeader('disk-run', { ...header('disk-run'),
+      runConfig: { ...runConfig(), model: { providerId: 'sample-provider', modelId: 'template-model' } } });
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -495,6 +532,7 @@ describe('AgentService persisted model selection', () => {
 
   it('saves a cold selection without activation and reopens the persisted model before the first message', async () => {
     const before = service.conversationStore.readHeader('disk-run');
+    expect(before.runConfig.model).toEqual({ providerId: 'sample-provider', modelId: 'template-model' });
     await publicAgents().setModel('disk-run', selectedModel);
 
     expect(h.instances).toHaveLength(0);
@@ -589,7 +627,8 @@ describe('AgentService saved model fallback', () => {
   let diskHeader: ReturnType<typeof header>;
 
   beforeEach(() => {
-    diskHeader = { ...header('disk-run'), currentModel: unavailableModel };
+    diskHeader = { ...header('disk-run'), currentModel: unavailableModel,
+      runConfig: { ...runConfig(), model: { providerId: 'template-provider', modelId: 'template-model' } } };
     service.conversationStore.writeHeader('disk-run', diskHeader);
     service.conversationStore.entries.set('disk-run/disk-run', structuredClone(entries));
     vi.spyOn(h.FakeAgentInference.prototype, 'assertTarget').mockImplementation((target) => {

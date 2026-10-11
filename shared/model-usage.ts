@@ -9,7 +9,7 @@ export function emptyUsageSummary(): UsageSummary {
     inputSamples: 0, outputSamples: 0, cacheReadSamples: 0,
     cacheRead: 0, cacheWrite: 0, reasoning: 0, completeUsage: 0, partialUsage: 0,
     cacheSamples: 0, cacheInput: 0, cacheHit: 0,
-    latencySamples: 0, latencyTotal: 0, firstResponseSamples: 0, firstResponseTotal: 0 };
+    latencySamples: 0, latencyTotal: 0, firstTokenSamples: 0, firstTokenLatencyTotalMs: 0 };
 }
 
 export function summarizeUsage(records: readonly UsageRecord[]): UsageSummary {
@@ -48,9 +48,9 @@ export function addUsageRecord(s: UsageSummary, r: UsageRecord): void {
     s.latencySamples++;
     s.latencyTotal += Math.max(0, r.endedAt - r.startedAt);
   }
-  if (r.firstResponseMs !== undefined) {
-    s.firstResponseSamples++;
-    s.firstResponseTotal += r.firstResponseMs;
+  if (r.firstTokenLatencyMs !== undefined) {
+    s.firstTokenSamples++;
+    s.firstTokenLatencyTotalMs += r.firstTokenLatencyMs;
   }
 }
 

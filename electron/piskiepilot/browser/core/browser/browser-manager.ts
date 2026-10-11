@@ -64,6 +64,11 @@ interface BrowserLaunchOptions extends BrowserConnectionOptions {
   launchSpec: BrowserLaunchSpec;
 }
 
+interface DeferredBrowserLaunch {
+  prepare(signal: AbortSignal): Promise<BrowserLaunchOptions>;
+  onConnected(): void;
+}
+
 export interface ConnectedBrowserSession {
   readonly automation: BrowserAutomationSession;
   readonly browser: Browser;
@@ -123,6 +128,8 @@ function browserAbortReason(signal: AbortSignal): unknown {
 export class BrowserManager {
   /** 生命周期句柄表：条目 = 所有权（含创建中），成品经 getReady() 取 */
   private static instances = new Map<string, BrowserHandle>();
+  private static deferredLaunches = new Map<string, DeferredBrowserLaunch>();
+  private static screenSessionListeners = new Map<string, Set<(session: BrowserAutomationSession) => void>>();
   private static globalMutex = new Mutex(); // 🔒 串行化创建过程（终止路径不拿此锁——边界终止不排队）
   private static get persistDir(): string {
     return getBrowsersDir();
@@ -140,6 +147,21 @@ export class BrowserManager {
     await fs.mkdir(this.persistDir, { recursive: true });
     logger('Browser manager initialized, persist dir: %s', this.persistDir);
     this.initialized = true;
+  }
+
+  /** Register startup inputs without creating a handle or accessing the browser. */
+  static deferLaunch(
+    browserId: string,
+    prepare: DeferredBrowserLaunch['prepare'],
+    onConnected: DeferredBrowserLaunch['onConnected'],
+  ): () => void {
+    const launch = { prepare, onConnected };
+    this.deferredLaunches.set(browserId, launch);
+    return () => {
+      if (this.deferredLaunches.get(browserId) === launch) {
+        this.deferredLaunches.delete(browserId);
+      }
+    };
   }
 
   /**
@@ -182,13 +204,18 @@ export class BrowserManager {
       return browserId;
     }
 
-    // Reserve ownership before filesystem reads so close can reach every startup phase.
+    const deferredLaunch = options ? undefined : this.deferredLaunches.get(browserId);
+    // Reserve ownership before planning or filesystem reads so close reaches every startup phase.
     const handle = this.registerHandle(browserId, async (creationSignal) => {
       if (!this.initialized) await raceAbort(this.initialize(), creationSignal);
       const persisted = await raceAbort(this.readPersistedBrowserConfig(browserId), creationSignal);
       creationSignal.throwIfAborted();
-      const userDataId = options?.launchSpec.userDataId ?? persisted?.userDataId;
-      return this.createInstance(browserId, options, userDataId, userDataId ?? browserId, creationSignal);
+      const launchOptions = options ?? (deferredLaunch
+        ? await raceAbort(deferredLaunch.prepare(creationSignal), creationSignal)
+        : undefined);
+      creationSignal.throwIfAborted();
+      const userDataId = launchOptions?.launchSpec.userDataId ?? persisted?.userDataId;
+      return this.createInstance(browserId, launchOptions, userDataId, userDataId ?? browserId, creationSignal);
     });
     await raceAbort(handle.ready, signal ? AbortSignal.any([signal, handle.signal]) : handle.signal);
     return browserId;
@@ -520,7 +547,7 @@ export class BrowserManager {
         if (launchWindowSize && launchWindowSize.width > 0 && launchWindowSize.height > 0) {
           extraArgs.push(
             `--window-size=${Math.round(launchWindowSize.width)},${Math.round(launchWindowSize.height)}`,
-            '--window-position=0,0'
+            `--window-position=${Math.round(launchWindowSize.x ?? 0)},${Math.round(launchWindowSize.y ?? 0)}`
           );
         } else {
           extraArgs.push('--start-maximized');
@@ -652,6 +679,24 @@ export class BrowserManager {
     return raceAbort(connecting, signal);
   }
 
+  /** Passive subscription; registration never starts or recovers a browser. */
+  static subscribeScreenSession(browserId: string, listener: (session: BrowserAutomationSession) => void): () => void {
+    const listeners = this.screenSessionListeners.get(browserId) ?? new Set<(session: BrowserAutomationSession) => void>();
+    this.screenSessionListeners.set(browserId, listeners);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && this.screenSessionListeners.get(browserId) === listeners) {
+        this.screenSessionListeners.delete(browserId);
+      }
+    };
+  }
+
+  /** Connected screen owner, with the same recovery boundary as selected-page access. */
+  static async getScreenSession(browserId: string): Promise<BrowserAutomationSession> {
+    return (await this.getConnectedInstance(browserId)).automation;
+  }
+
   /** Selected-page accessor for non-exclusive consumers such as screencast polling. */
   static async getSelectedPage(browserId: string): Promise<Page> {
     const instance = await this.getConnectedInstance(browserId);
@@ -728,6 +773,15 @@ export class BrowserManager {
         signal?.throwIfAborted();
         const instance = this.instances.get(browserId)?.getReady();
         if (instance?.browser.connected) {
+          for (const listener of this.screenSessionListeners.get(browserId) ?? []) {
+            try { listener(instance.automation); }
+            catch (error) { logger('Screen session observer failed for %s: %O', browserId, error); }
+          }
+          const deferredLaunch = this.deferredLaunches.get(browserId);
+          if (deferredLaunch) {
+            this.deferredLaunches.delete(browserId);
+            deferredLaunch.onConnected();
+          }
           return instance;
         }
       }
@@ -757,6 +811,7 @@ export class BrowserManager {
    * 边界终止不排队不等 mutex，settle 来自 OS/库级事实。
    */
   static async close(browserId: string): Promise<void> {
+    this.deferredLaunches.delete(browserId);
     const handle = this.instances.get(browserId);
     if (!handle) {
       logger('Browser %s not found, skipping close', browserId);

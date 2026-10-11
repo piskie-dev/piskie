@@ -64,8 +64,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   // ─── 浏览器子流程运行时私有状态 ─────────────────────────
   /** navigateTo 成功后才为 true，防止 ScreenPreview 提前订阅 */
   private browserLaunched = false;
-  /** Whether startup needs to launch a browser or reuse the current instance. */
-  private ownsBrowser = false;
+  private cancelDeferredLaunch?: () => void;
   /** 绑定环境只有成功声明占用后才取得关闭权，避免冲突回滚误关当前占用者。 */
   private environmentOccupancyClaimed = false;
   private instanceOccupancyClaimed = false;
@@ -126,19 +125,19 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
     }
     this.instanceOccupancyClaimed = true;
 
-    // 占用齐全后再做唯一一次 owned/borrowed 判定；失败回滚阶段尚未取得关闭权。
-    this.ownsBrowser = !browser.hasBrowser(this.browserId);
-
-    if (this.ownsBrowser) {
-      const spec = this.config.browserEnvironmentId
-        ? await browserEnvironmentRuntime.planLaunch(
+    const browserId = this.browserId;
+    this.cancelDeferredLaunch = browser.deferLaunch(
+      browserId,
+      (signal) => this.config.browserEnvironmentId
+        ? browserEnvironmentRuntime.planLaunch(
             this.config.browserEnvironmentId,
-            this.browserId,
+            browserId,
             userDataId,
-            true
+            true,
+            signal,
           )
-        : await browserLaunchPlanner.planTask({
-            browserId: this.browserId,
+        : browserLaunchPlanner.planTask({
+            browserId,
             userDataId,
             identity: {
               ...(this.config.advancedSettings?.language
@@ -150,18 +149,17 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
             },
             fingerprint: this.config.advancedSettings?.fingerprint,
             backgroundMode: this.config.advancedSettings?.backgroundMode ?? true,
-          });
-      if (this.stopped) return;
-      await browser.launch(spec);
-      if (this.stopped) return;
-      if (this.config.browserEnvironmentId) {
-        browserEnvironmentRuntime.recordAgentBrowserStarted(
-          this.config.browserEnvironmentId,
-          this.browserId,
-          userDataId
-        );
-      }
-    }
+          }),
+      () => {
+        if (!this.stopped && this.config.browserEnvironmentId) {
+          browserEnvironmentRuntime.recordAgentBrowserStarted(
+            this.config.browserEnvironmentId,
+            browserId,
+            userDataId,
+          );
+        }
+      },
+    );
 
     // 加载浏览器技能文档并追加到核心文档
     await this.loadSkillDocs(skills);
@@ -175,6 +173,8 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
    */
   async onDestroyBegin(): Promise<void> {
     this.stopped = true;
+    this.cancelDeferredLaunch?.();
+    this.cancelDeferredLaunch = undefined;
     const agentId = this.host.id;
     const browser = this.host.getBrowserControl();
     if (!browser) return;
@@ -214,6 +214,8 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
    */
   async onDestroy(): Promise<void> {
     // 清理内部状态
+    this.cancelDeferredLaunch?.();
+    this.cancelDeferredLaunch = undefined;
     this.browserId = undefined;
     this.browserLaunched = false;
     this.environmentOccupancyClaimed = false;

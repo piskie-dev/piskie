@@ -88,7 +88,7 @@ type TestableSubagentModule = {
 
 function createModule() {
   const module = new SubagentModule() as unknown as TestableSubagentModule & SubagentModule;
-  const post = vi.fn(() => true);
+  const post = vi.fn<(event: AgentInputEvent) => boolean>(() => true);
   module.host = {
     id: 'main-1',
     mainAgentId: 'main-1',
@@ -639,6 +639,76 @@ describe('SubagentModule resume boundaries', () => {
     } finally {
       await module.onDestroy();
     }
+  });
+});
+
+describe('SubagentModule renderer task facts', () => {
+  it('publishes an accepted terminal before parent consumption and clears it only after a delivered follow-up', () => {
+    const { module, post } = createModule();
+    const child = createChild();
+    module.subagents.set('sample-child', child);
+    module.subagentMeta.set('sample-child', createMeta({ startedAt: 1000 }));
+    Object.assign(module, { traceRecorder: { recordLifecycle: vi.fn() } });
+    const notify = module.createSubagentNotificationHandler('sample-child');
+    expect(notify({ type: 'completed', message: 'Sample result delivered.' })).toBe(true);
+    expect(module.getChildTaskState('sample-child')).toMatchObject({ inputAt: 1000, notification: { type: 'completed' } });
+    expect(module.host.emitStateChange).toHaveBeenCalled();
+    const terminal = module.getChildTaskState('sample-child');
+    vi.mocked(child.post).mockReturnValueOnce(false);
+    const input: AgentInputEvent = { id: 'sample-input', source: 'parent', timestamp: new Date(), content: 'Inspect the next sample.' };
+    expect(module.injectEventToSubagent('sample-child', input)).toBe(false);
+    expect(module.getChildTaskState('sample-child')).toBe(terminal);
+    expect(module.injectEventToSubagent('sample-child', input)).toBe(true);
+    expect(module.getChildTaskState('sample-child')?.notification).toBeUndefined();
+    post.mockReturnValueOnce(false);
+    expect(notify({ type: 'failed', error: 'Sample unavailable.' })).toBe(false);
+    expect(module.getChildTaskState('sample-child')?.notification).toBeUndefined();
+  });
+
+  it.each(['before', 'after'] as const)('retains a delivered terminal when ordinary notices arrive %s parent consumption', (consumption) => {
+    const { module, post } = createModule();
+    const child = createChild();
+    module.subagents.set('sample-child', child);
+    module.subagentMeta.set('sample-child', createMeta({ startedAt: 1000 }));
+    Object.assign(module, { traceRecorder: { recordLifecycle: vi.fn() } });
+    Object.assign(module.host, { addUserMessage: vi.fn() });
+    const notify = module.createSubagentNotificationHandler('sample-child');
+    expect(notify({ type: 'completed', message: 'Sample result delivered.' })).toBe(true);
+    const terminal = module.getChildTaskState('sample-child');
+    const terminalEvent = post.mock.calls[0][0] as AgentInputEvent;
+    if (consumption === 'after') module.processEvent(terminalEvent);
+    for (const type of ['message', 'need_user_action'] as const) {
+      expect(notify({ type, message: 'Sample coordination notice.' })).toBe(true);
+      expect(module.getChildTaskState('sample-child')).toBe(terminal);
+    }
+    if (consumption === 'before') module.processEvent(terminalEvent);
+    expect(module.getChildTaskState('sample-child')).toBe(terminal);
+    const input: AgentInputEvent = { id: 'sample-followup', source: 'parent', timestamp: new Date(), content: 'Inspect another sample.' };
+    vi.mocked(child.post).mockReturnValueOnce(false);
+    expect(module.injectEventToSubagent('sample-child', input)).toBe(false);
+    expect(module.getChildTaskState('sample-child')).toBe(terminal);
+    post.mockReturnValueOnce(false);
+    expect(notify({ type: 'failed', error: 'Sample replacement was not delivered.' })).toBe(false);
+    expect(module.getChildTaskState('sample-child')).toBe(terminal);
+    expect(notify({ type: 'failed', error: 'Sample replacement was delivered.' })).toBe(true);
+    expect(module.getChildTaskState('sample-child')?.notification?.type).toBe('failed');
+    expect(module.injectEventToSubagent('sample-child', input)).toBe(true);
+    expect(module.getChildTaskState('sample-child')?.notification).toBeUndefined();
+    expect(notify({ type: 'message', message: 'Sample next assignment progress.' })).toBe(true);
+    expect(module.getChildTaskState('sample-child')?.notification?.type).toBe('message');
+  });
+
+  it('retains a terminal delivered during an ordinary notification post', () => {
+    const { module, post } = createModule();
+    module.subagentMeta.set('sample-child', createMeta({ startedAt: 1000 }));
+    Object.assign(module, { traceRecorder: { recordLifecycle: vi.fn() } });
+    const notify = module.createSubagentNotificationHandler('sample-child');
+    post.mockImplementationOnce(() => {
+      expect(notify({ type: 'completed', message: 'Sample result delivered.' })).toBe(true);
+      return true;
+    });
+    expect(notify({ type: 'message', message: 'Sample progress in flight.' })).toBe(true);
+    expect(module.getChildTaskState('sample-child')?.notification?.type).toBe('completed');
   });
 });
 

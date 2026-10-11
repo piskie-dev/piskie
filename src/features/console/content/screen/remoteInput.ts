@@ -14,10 +14,8 @@
 
 import type { RemoteInputEvent } from '../../../../../shared/types/stream';
 
-export interface FrameSize {
-  readonly width: number;
-  readonly height: number;
-}
+import { localToPage, type FrameSize } from './screenGeometry';
+export type { FrameSize } from './screenGeometry';
 
 /** CDP modifiers 位掩码 */
 export function modifiersOf(event: {
@@ -51,19 +49,7 @@ export function toPageCoords(
   frame: FrameSize,
 ): { x: number; y: number } | null {
   const rect = element.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0 || frame.width <= 0 || frame.height <= 0) return null;
-
-  // object-fit: contain —— 等比缩放到"装得下"，短边留黑边
-  const scale = Math.min(rect.width / frame.width, rect.height / frame.height);
-  const shownWidth = frame.width * scale;
-  const shownHeight = frame.height * scale;
-  const offsetX = (rect.width - shownWidth) / 2;
-  const offsetY = (rect.height - shownHeight) / 2;
-
-  const x = (clientX - rect.left - offsetX) / scale;
-  const y = (clientY - rect.top - offsetY) / scale;
-  if (x < 0 || y < 0 || x > frame.width || y > frame.height) return null;
-  return { x, y };
+  return localToPage({ x: clientX - rect.left, y: clientY - rect.top }, rect, frame);
 }
 
 /** 功能键 → Windows 虚拟键码（只列会真正改变页面行为的那些） */

@@ -126,10 +126,10 @@ const electron = vi.hoisted(() => {
     },
     screen: {
       getDisplayMatching: vi.fn(() => ({
-        workAreaSize: { width: 1512, height: 944 },
+        workArea: { x: 0, y: 0, width: 1512, height: 944 },
       })),
       getPrimaryDisplay: vi.fn(() => ({
-        workAreaSize: { width: 1512, height: 944 },
+        workArea: { x: 0, y: 0, width: 1512, height: 944 },
       })),
     },
     shell: { openExternal: vi.fn() },
@@ -354,7 +354,7 @@ describe('WindowRegistry bootstrap authorization', () => {
   it('projects the main window handle through a narrow presentation value', async () => {
     const { registry } = await registryFixture();
     expect(registry.pilotCallerWindow()).toEqual({ windowId: '0x1234' });
-    expect(registry.pilotBrowserWindowSize()).toEqual({ width: 1024, height: 944 });
+    expect(registry.pilotBrowserWindowSize()).toEqual({ width: 756, height: 944, x: 756, y: 0 });
     expect(electron.screen.getDisplayMatching).toHaveBeenCalledWith({
       x: 40,
       y: 20,
@@ -364,6 +364,18 @@ describe('WindowRegistry bootstrap authorization', () => {
     await registry.stop('test');
     expect(registry.pilotCallerWindow()).toEqual({});
     expect(registry.pilotBrowserWindowSize()).toBeUndefined();
+  });
+
+  it.each([
+    [{ x: -1600, y: 40, width: 1600, height: 1000 }, { width: 800, height: 1000, x: -800, y: 40 }],
+    [{ x: 1920, y: -700, width: 960, height: 600 }, { width: 480, height: 600, x: 2400, y: -700 }],
+    [{ x: 20, y: 30, width: 1400, height: 500 }, { width: 700, height: 500, x: 720, y: 30 }],
+    [{ x: 100, y: 20, width: 1001, height: 760 }, { width: 501, height: 760, x: 600, y: 20 }],
+  ])('places the default browser in the right half of the main display work area %j', async (workArea, expected) => {
+    const { registry } = await registryFixture();
+    electron.screen.getDisplayMatching.mockReturnValueOnce({ workArea });
+    expect(registry.pilotBrowserWindowSize()).toEqual(expected);
+    await registry.stop('test');
   });
 
   it('rejects unknown senders, child frames, foreign URLs and wrong builds', async () => {

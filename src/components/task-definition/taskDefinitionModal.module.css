@@ -359,6 +359,11 @@
   white-space: nowrap;
 }
 
+.tile[data-tile='model'] .tileValue {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .tile[data-lit='true'] .tileValue {
   color: color-mix(in srgb, var(--loadout-accent, var(--cyber-primary)) 40%, var(--cyber-text));
 }

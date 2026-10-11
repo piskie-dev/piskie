@@ -67,11 +67,19 @@ export const mcpServersSchema = z.array(
   }
 });
 
+const taskModelFields = {
+  providerId: z.string().trim().min(1).describe('Exact configured inference Provider ID.'),
+  modelId: z.string().trim().min(1).describe('Exact model binding ID within the Provider.'),
+};
+export const taskModelWriteSchema = z.strictObject(taskModelFields);
+const taskModelStoredSchema = z.object(taskModelFields);
+
 const definitionWriteFields = {
   name: z.string().trim().min(1).describe('User-visible Task Definition name.'),
   description: z.string().describe('User-visible explanation of the reusable task.'),
   category: z.string().trim().min(1).describe('Optional Task Definition category.').optional(),
   purpose: taskDefinitionPurposeSchema,
+  model: taskModelWriteSchema.describe('Model for new sessions; omit to follow the global default.').optional(),
   promptTemplate: z.string().describe('Initial task instruction copied into each AgentRun.'),
   systemPrompt: z.string().describe('Optional system instruction copied into each AgentRun.').optional(),
   defaultModeId: z.enum(['normal', 'plan'])
@@ -93,6 +101,7 @@ const definitionReadSchema = z.object({
 const definitionStoredSchema = z.object({
   ...definitionWriteFields,
   purpose: taskDefinitionPurposeSchema.optional(),
+  model: taskModelStoredSchema.optional(),
   metadata: taskBindingsStoredSchema.optional(),
   advancedSettings: taskAdvancedSettingsStoredSchema.optional(),
   createdAt: z.string().datetime(),

@@ -10,6 +10,7 @@ import type { RendererRuntime } from '@/renderer-runtime/renderer-runtime';
 import { mountShortcutListener, resetShortcutRegistry } from '@/shortcuts';
 import type { StatusKey } from '../../data/status';
 import type { ConversationComposerProps } from '../../content/composer/ConversationComposer';
+import { clearTranscriptPresentationMemory } from '../../content/transcriptPresentationMemory';
 import { ThreadMode } from '../thread/ThreadMode';
 import { DockMode } from '../dock/DockMode';
 
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => ({
   workers: [{ id: 'worker-example', subject: 'Inspect the sample', type: 'explore', status: 'thinking' as StatusKey }],
   nodes: [] as TranscriptNode[],
   transcriptEverywhere: false,
+  childNodes: [] as TranscriptNode[],
 }));
 vi.mock('../../data/vm', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../data/vm')>(),
@@ -35,8 +37,8 @@ vi.mock('../../data/vm', async (importOriginal) => ({
 }));
 vi.mock('../../data/useTranscript', () => ({
   useTranscript: (targetId: string) => ({
-    nodes: targetId === 'session-example' || state.transcriptEverywhere ? state.nodes : [],
-    loaded: true,
+    nodes: targetId === 'session-example' || state.transcriptEverywhere ? state.nodes : state.childNodes,
+    responses: [], hasEarlier: false, loadEarlier: () => undefined, loaded: true,
   }),
 }));
 vi.mock('../../data/actions', () => ({ useConsoleActions: () => ({}) }));
@@ -56,11 +58,6 @@ vi.mock('../../content/ReviewSlot', () => ({ ReviewSlot: () => null }));
 vi.mock('../../content/AgentMetricsStrip', () => ({ AgentMetricsStrip: () => null }));
 vi.mock('../../content/AIRequestStatus', () => ({ AIRequestStatus: () => null }));
 vi.mock('../../content/McpRuntimeCard', () => ({ McpRuntimeCard: () => null }));
-vi.mock('../../content/Transcript', () => ({
-  Transcript: ({ nodes, renderNode }: { nodes: TranscriptNode[]; renderNode: (node: TranscriptNode) => ReactNode }) => (
-    createElement('div', null, nodes.map((node) => createElement('div', { key: node.id }, renderNode(node))))
-  ),
-}));
 vi.mock('../../content/composer/ConversationComposer', () => ({
   ConversationComposer: ({ workerId, workspace, reasoningOverride, isShortcutOwner, deferEscapeFallback }: ConversationComposerProps) => createElement('div', {
     'data-composer-target': workerId ?? 'main', 'data-workspace': workspace,
@@ -88,12 +85,15 @@ let runtime: RendererRuntime;
 let disposeListener: () => void;
 const RuntimeProvider = RendererRuntimeProvider as ComponentType<{ readonly runtime: RendererRuntime }>;
 beforeAll(() => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>');
+  dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://example.test' });
   dom.window.Element.prototype.getAnimations = () => [];
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
   vi.stubGlobal('navigator', dom.window.navigator);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1; });
+  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  dom.window.HTMLElement.prototype.scrollIntoView = () => undefined;
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     disconnect() {}
@@ -101,8 +101,10 @@ beforeAll(() => {
 });
 beforeEach(() => {
   resetShortcutRegistry();
+  clearTranscriptPresentationMemory();
   state.workers = [{ id: 'worker-example', subject: 'Inspect the sample', type: 'explore', status: 'thinking' }];
   state.transcriptEverywhere = false;
+  state.childNodes = [];
   state.nodes = projectConversationNodes([{
     t: 'msg', ts: 1, id: 'message-example', role: 'assistant',
     content: [{ type: 'tool_use', id: 'call-example', name: 'subagent', input: {
@@ -153,6 +155,32 @@ async function pressEscape() {
 }
 
 describe.each(['thread', 'dock'] as const)('%s worker navigation', (mode) => {
+  it('shares the child last tool and live content through its actual Transcript and navigation', async () => {
+    state.childNodes = projectConversationNodes([{
+      t: 'msg', ts: 20, id: 'example-child-call', role: 'assistant', content: [{
+        type: 'tool_use', id: 'example-shell', name: 'shell', input: { command: 'sample-command', description: 'Inspect sample records' },
+      }],
+    }, { t: 'tool', ts: 30, toolUseId: 'example-shell', ok: true, result: [{ type: 'text', text: 'Sample result' }] }]);
+    await render(mode);
+    expect(row()?.textContent).toContain('Inspect sample records');
+    await act(async () => row()?.click());
+    const childComposer = container.querySelector<HTMLElement>('[data-composer-target="worker-example"]')!;
+    const childPanel = childComposer.closest(mode === 'thread' ? '[class*="thread"]' : 'section')!;
+    expect(childPanel.textContent).toContain('Inspect sample records');
+    await pressEscape();
+    state.childNodes = [{
+      kind: 'assistant', id: 'live:worker-example:example-request:0', ts: 0, sourceIndex: -1,
+      titleKey: 'transcript.title.assistantResponse', markdown: 'Latest sample content', live: true,
+      tone: 'live', interaction: 'none', defaultExpanded: true, summaryDuplicatesDetail: false,
+    }];
+    await render(mode);
+    expect(row()?.textContent).toContain('Latest sample content');
+    expect(row()?.textContent).not.toContain('Inspect sample records');
+    await act(async () => row()?.click());
+    expect(container.querySelector('[data-composer-target="worker-example"]')).not.toBeNull();
+    expect(container.textContent).toContain('Latest sample content');
+  });
+
   it('updates the row from Worker status and opens the matching tab and conversation', async () => {
     await render(mode);
     expect(row()?.dataset.live).toBe('true');
@@ -175,6 +203,8 @@ describe.each(['thread', 'dock'] as const)('%s worker navigation', (mode) => {
     await render(mode);
     expect(container.querySelector('[data-composer-target="worker-example"]')).toBeNull();
     expect(container.querySelector('[data-composer-target="main"]')).not.toBeNull();
+    expect(row()).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-transcript-group="process"] > button')?.click());
     expect(row()?.dataset.live).toBe('false');
     expect((row() as HTMLButtonElement)?.disabled).toBe(true);
   });
@@ -240,7 +270,7 @@ describe('Thread transient Review', () => {
     state.transcriptEverywhere = true;
     await render('thread');
     await act(async () => row()?.click());
-    const reviewAction = [...container.querySelectorAll<HTMLButtonElement>('[data-clickable="true"]')]
+    const reviewAction = [...container.querySelectorAll<HTMLButtonElement>('[class*="actionLine"][data-clickable="true"]')]
       .find((button) => button.textContent?.includes('/workspace/example.ts'))!;
     await act(async () => reviewAction.click());
     expect(container.querySelector('[data-composer-target="worker-example"]')?.getAttribute('data-defer-escape'))

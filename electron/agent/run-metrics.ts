@@ -1,11 +1,21 @@
-import type { AgentActivityState, AgentRunMetrics, MetricCoverage } from '../../shared/types/agent-control.js';
+import type { AgentActivityState, AgentOutputTokens, AgentRunMetrics, MetricCoverage } from '../../shared/types/agent-control.js';
+import type { AgentOutputProgress } from '../inference/application/agent-inference-port.js';
 import type { AIRequestInfo } from '../../shared/types/context.js';
-import type { ContentBlock } from '../../shared/types/index.js';
 import type { ToolExecutionInterval } from '../tools/pipeline/observe.js';
 
 interface CoverageCounter {
   applicable: number;
   known: number;
+}
+
+interface OutputRequest {
+  requestId: string;
+  runId?: string;
+  attempt: number;
+  lastSequence: number;
+  units: number;
+  reportedTokens?: number;
+  reportedUnits: number;
 }
 
 export function emptyAgentRunMetrics(): AgentRunMetrics {
@@ -15,16 +25,16 @@ export function emptyAgentRunMetrics(): AgentRunMetrics {
     steps: 0,
     llmDurationMs: 0,
     toolDurationMs: 0,
-    firstVisibleContentLatencyTotalMs: 0,
-    firstVisibleContentSamples: 0,
-    generationDurationMs: 0,
-    generationOutputTokens: 0,
+    firstTokenLatencyTotalMs: 0,
+    firstTokenSamples: 0,
+    throughputDurationMs: 0,
+    throughputOutputTokens: 0,
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
     coverage: {
       toolTiming: 'none',
-      firstVisibleContent: 'none',
+      firstToken: 'none',
       throughput: 'none',
       inputTokens: 'none',
       outputTokens: 'none',
@@ -45,7 +55,7 @@ export class AgentActivityTracker {
   private readonly toolIntervals: ToolExecutionInterval[] = [];
   private readonly pendingToolIntervals: ToolExecutionInterval[] = [];
   private readonly coverage = {
-    firstVisibleContent: counter(),
+    firstToken: counter(),
     throughput: counter(),
     inputTokens: counter(),
     outputTokens: counter(),
@@ -55,10 +65,14 @@ export class AgentActivityTracker {
   private activeStartedAt?: number;
   private activeLlmStartedAt?: number;
   private activeToolPhaseStartedAt?: number;
+  private settledOutputTokens?: AgentOutputTokens;
+  private outputRequest?: OutputRequest;
 
   snapshot(): AgentActivityState {
+    const activeOutputTokens = this.getOutputTokens();
     return {
       ...(this.activeStartedAt !== undefined && { activeStartedAt: this.activeStartedAt }),
+      ...(activeOutputTokens && { activeOutputTokens }),
       ...(this.activeLlmStartedAt !== undefined && { activeLlmStartedAt: this.activeLlmStartedAt }),
       ...(this.activeToolPhaseStartedAt !== undefined && {
         activeToolPhaseStartedAt: this.activeToolPhaseStartedAt,
@@ -67,7 +81,7 @@ export class AgentActivityTracker {
         ...this.metrics,
         coverage: {
           toolTiming: this.metrics.steps === 0 ? 'none' : 'complete',
-          firstVisibleContent: coverageOf(this.coverage.firstVisibleContent),
+          firstToken: coverageOf(this.coverage.firstToken),
           throughput: coverageOf(this.coverage.throughput),
           inputTokens: coverageOf(this.coverage.inputTokens),
           outputTokens: coverageOf(this.coverage.outputTokens),
@@ -77,13 +91,49 @@ export class AgentActivityTracker {
     };
   }
 
-  aiStarted(startedAt: number): void {
+  aiStarted(startedAt: number, requestId: string): void {
     this.activeStartedAt ??= startedAt;
     this.activeLlmStartedAt = startedAt;
+    this.outputRequest = { requestId, attempt: 0, lastSequence: 0, units: 0, reportedUnits: 0 };
   }
 
-  aiCompleted(info: AIRequestInfo, content: readonly ContentBlock[]): void {
+  aiProgress(requestId: string, progress: AgentOutputProgress): boolean {
+    const current = this.outputRequest;
+    if (!current || current.requestId !== requestId) return false;
+    const before = this.getOutputTokens();
+    if (progress.kind === 'attempt-started') {
+      if (current.runId === progress.runId && progress.attempt <= current.attempt) return false;
+      // A new gateway run (overflow resend) or attempt replaces this request's contribution.
+      current.runId = progress.runId;
+      current.attempt = progress.attempt;
+      current.lastSequence = 0;
+      current.units = 0;
+      current.reportedTokens = undefined;
+      current.reportedUnits = 0;
+    } else {
+      if (current.runId !== progress.runId || current.attempt !== progress.attempt
+        || progress.sequence <= current.lastSequence) return false;
+      current.lastSequence = progress.sequence;
+      if (progress.kind === 'delta') {
+        current.units += outputTokenUnits(progress.delta);
+      } else {
+        current.reportedTokens = progress.outputTokens;
+        current.reportedUnits = current.units;
+      }
+    }
+    const after = this.getOutputTokens();
+    return before?.count !== after?.count || before?.estimated !== after?.estimated;
+  }
+
+  aiCompleted(info: AIRequestInfo): void {
     this.activeLlmStartedAt = undefined;
+    if (this.outputRequest?.requestId === info.requestId) {
+      if (info.usage.outputTokens !== undefined) {
+        this.outputRequest.reportedTokens = info.usage.outputTokens;
+        this.outputRequest.reportedUnits = this.outputRequest.units;
+      }
+      this.settleOutput();
+    }
     if (this.completedRequestIds.has(info.requestId)) return;
     this.completedRequestIds.add(info.requestId);
 
@@ -99,27 +149,25 @@ export class AgentActivityTracker {
       this.metrics.cacheReadTokens += value;
     });
 
-    if (!hasVisibleContent(content)) return;
     addOptional(
-      this.coverage.firstVisibleContent,
-      info.firstVisibleContentLatencyMs,
+      this.coverage.firstToken,
+      info.firstTokenLatencyMs,
       (value) => {
-        this.metrics.firstVisibleContentLatencyTotalMs += value;
-        this.metrics.firstVisibleContentSamples++;
+        this.metrics.firstTokenLatencyTotalMs += value;
+        this.metrics.firstTokenSamples++;
       },
     );
-    const throughputKnown = info.generationDurationMs !== undefined
-      && info.usage.outputTokens !== undefined;
     this.coverage.throughput.applicable++;
-    if (throughputKnown) {
+    if (info.attemptDurationMs !== undefined && info.usage.outputTokens !== undefined) {
       this.coverage.throughput.known++;
-      this.metrics.generationDurationMs += info.generationDurationMs!;
-      this.metrics.generationOutputTokens += info.usage.outputTokens!;
+      this.metrics.throughputDurationMs += info.attemptDurationMs;
+      this.metrics.throughputOutputTokens += info.usage.outputTokens;
     }
   }
 
   aiStopped(): void {
     this.activeLlmStartedAt = undefined;
+    this.settleOutput();
   }
 
   toolStarted(callId: string, startedAt: number): void {
@@ -143,6 +191,8 @@ export class AgentActivityTracker {
   }
 
   activityStopped(): void {
+    this.settledOutputTokens = undefined;
+    this.outputRequest = undefined;
     this.activeStartedAt = undefined;
     this.activeLlmStartedAt = undefined;
     this.activeToolPhaseStartedAt = undefined;
@@ -150,11 +200,48 @@ export class AgentActivityTracker {
     this.commitToolIntervals();
   }
 
+  private getOutputTokens(): AgentOutputTokens | undefined {
+    const current = this.outputRequest;
+    const pending = current && (current.units > 0 || current.reportedTokens !== undefined)
+      ? {
+          count: (current.reportedTokens ?? 0) + Math.ceil((current.units - current.reportedUnits) / 4),
+          estimated: current.reportedTokens === undefined || current.units !== current.reportedUnits,
+        }
+      : undefined;
+    return addOutputTokens(this.settledOutputTokens, pending);
+  }
+
+  private settleOutput(): void {
+    this.settledOutputTokens = this.getOutputTokens();
+    this.outputRequest = undefined;
+  }
+
   private commitToolIntervals(): void {
     if (this.pendingToolIntervals.length === 0) return;
     this.toolIntervals.push(...this.pendingToolIntervals.splice(0));
     this.metrics.toolDurationMs = mergedDuration(this.toolIntervals);
   }
+}
+
+/** Four ASCII characters or one Unicode code point per estimated token; round after accumulation. */
+function outputTokenUnits(delta: string): number {
+  let units = 0;
+  for (let index = 0; index < delta.length; index++) {
+    const code = delta.charCodeAt(index);
+    // Ignore the low half so a surrogate pair counts once even across stream chunks.
+    if (code >= 0xdc00 && code <= 0xdfff) continue;
+    units += code <= 0x7f ? 1 : 4;
+  }
+  return units;
+}
+
+function addOutputTokens(
+  left: AgentOutputTokens | undefined,
+  right: AgentOutputTokens | undefined,
+): AgentOutputTokens | undefined {
+  if (!left) return right;
+  if (!right) return left;
+  return { count: left.count + right.count, estimated: left.estimated || right.estimated };
 }
 
 function counter(): CoverageCounter {
@@ -189,18 +276,6 @@ function addCacheUsage(
 function coverageOf(value: CoverageCounter): MetricCoverage {
   if (value.applicable === 0 || value.known === 0) return 'none';
   return value.known === value.applicable ? 'complete' : 'partial';
-}
-
-function hasVisibleContent(content: readonly ContentBlock[]): boolean {
-  return content.some((block) => {
-    if (block.type === 'text') return Boolean(block.text);
-    if (block.type === 'thinking') return Boolean(block.thinking);
-    if (block.type !== 'openai_reasoning') return false;
-    return Boolean(
-      block.summary?.some((part) => part.text)
-      || block.reasoning_content?.some((part) => part.text),
-    );
-  });
 }
 
 function mergedDuration(intervals: readonly ToolExecutionInterval[]): number {

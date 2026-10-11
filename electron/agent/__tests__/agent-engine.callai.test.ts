@@ -8,8 +8,10 @@
  * 恢复成功时不得留下 AgentIncident——那条错误已经不存在了。
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { AIErrorType } from '../../../shared/constants/index.js';
 import type { AgentControlState } from '../../../shared/types/agent-control.js';
+import type { AgentLiveContentDelta } from '../../../shared/electron-contracts/agents.js';
 import type { AIResponse, AgentInputEvent, Message, Tool } from '../../../shared/types/index.js';
 
 vi.mock('electron', () => ({
@@ -87,6 +89,12 @@ class CallAITestEngine extends AgentEngine {
     return [] as unknown[];
   });
   readonly requestPhases: string[] = [];
+  readonly liveDeltas: AgentLiveContentDelta[] = [];
+  protected override emitLiveContent(event: AgentLiveContentDelta): void {
+    this.liveDeltas.push(event);
+  }
+
+  get outputTokens() { return this.getActivityState().activeOutputTokens; }
 
   constructor(chatImpl: (req: unknown, opts?: unknown) => Promise<AIResponse>) {
     super();
@@ -100,6 +108,7 @@ class CallAITestEngine extends AgentEngine {
       captureRequestBoundary: vi.fn(() => undefined),
       commitSuccessfulRequest: vi.fn(),
       getContextUsage: vi.fn(() => ({ limit: 200_000 })),
+      getAllMessages: () => [],
       projectRequestTokenCheckpoints: vi.fn(() => []),
       flush: vi.fn(),
       markTurnProcessed: vi.fn(),
@@ -109,7 +118,16 @@ class CallAITestEngine extends AgentEngine {
   }
 
   buildSystemPrompt(): string { return ''; }
-  getControlState(): AgentControlState { return {} as AgentControlState; }
+  getControlState(): AgentControlState {
+    return {
+      phase: this.phase,
+      aiRequestState: this.aiRequestState,
+      ...this.getActivityState(),
+    } as AgentControlState;
+  }
+  setStateProbe(callback: (state: AgentControlState) => void): void {
+    this.stateChangeCallback = callback;
+  }
   protected applyEvents(_events: AgentInputEvent[]): void {}
 
   override emitStateChange(): void {
@@ -347,6 +365,309 @@ describe('callAI 唯一 AgentIncident 写入点', () => {
   });
 });
 
+describe('callAI output activity', () => {
+  it('updates during generation, rejects finished and older request callbacks, and clears between activities', async () => {
+    const calls: AgentInferenceOptions[] = [];
+    let release!: () => void;
+    const engine = new CallAITestEngine(async (_request, rawOptions) => {
+      const options = rawOptions as AgentInferenceOptions;
+      calls.push(options);
+      await new Promise<void>((resolve) => { release = resolve; });
+      return { ...successResponse(), requestInfo: {
+        ...successResponse().requestInfo, requestId: options.requestId, usage: { outputTokens: 4 },
+      } };
+    });
+    const first = engine.runCallAI();
+    const old = calls[0]!;
+    old.onOutputProgress?.({ kind: 'attempt-started', runId: 'run-1', attempt: 1 });
+    old.onOutputProgress?.({ kind: 'delta', runId: 'run-1', attempt: 1, sequence: 2, delta: 'abcd' });
+    expect(engine.outputTokens).toEqual({ count: 1, estimated: true });
+    release();
+    await first;
+    expect(engine.outputTokens).toEqual({ count: 4, estimated: false });
+    old.onOutputProgress?.({ kind: 'usage', runId: 'run-1', attempt: 1, sequence: 3, outputTokens: 999 });
+    expect(engine.outputTokens).toEqual({ count: 4, estimated: false });
+    const second = engine.runCallAI();
+    old.onOutputProgress?.({ kind: 'usage', runId: 'run-1', attempt: 1, sequence: 4, outputTokens: 999 });
+    const fresh = calls[1]!;
+    fresh.onOutputProgress?.({ kind: 'attempt-started', runId: 'run-2', attempt: 1 });
+    fresh.onOutputProgress?.({ kind: 'delta', runId: 'run-2', attempt: 1, sequence: 2, delta: 'abcd' });
+    expect(engine.outputTokens).toEqual({ count: 5, estimated: true });
+    release();
+    await second;
+    expect(engine.outputTokens).toEqual({ count: 8, estimated: false });
+    engine.finishActivity();
+    expect(engine.outputTokens).toBeUndefined();
+    const third = engine.runCallAI();
+    expect(engine.outputTokens).toBeUndefined();
+    fresh.onOutputProgress?.({ kind: 'usage', runId: 'run-2', attempt: 1, sequence: 3, outputTokens: 999 });
+    expect(engine.outputTokens).toBeUndefined();
+    release();
+    await third;
+  });
+
+  it('ignores output and visible content arriving after cancellation', async () => {
+    const controller = new AbortController();
+    let options!: AgentInferenceOptions;
+    let reject!: (error: Error) => void;
+    const engine = new CallAITestEngine(async (_request, rawOptions) => {
+      options = rawOptions as AgentInferenceOptions;
+      return new Promise<AIResponse>((_resolve, rejectRequest) => { reject = rejectRequest; });
+    });
+    const pending = engine.runCallAI(controller.signal);
+    const base = { runId: 'run-1', attempt: 1 };
+    options.onOutputProgress?.({ ...base, kind: 'attempt-started' });
+    options.onOutputProgress?.({ ...base, kind: 'delta', sequence: 2, delta: 'abcd' });
+    options.onVisibleDelta?.({ ...base, kind: 'text', sequence: 1, delta: 'abcd' });
+    controller.abort();
+    options.onOutputProgress?.({ ...base, kind: 'usage', sequence: 3, outputTokens: 999 });
+    options.onVisibleDelta?.({ ...base, kind: 'text', sequence: 2, delta: 'late' });
+    expect(engine.outputTokens).toEqual({ count: 1, estimated: true });
+    expect(engine.liveDeltas.map((delta) => delta.delta)).toEqual(['abcd']);
+    const original = new Error('cancelled request');
+    reject(original);
+    await expect(pending).rejects.toBe(original);
+    engine.finishActivity();
+    expect(engine.outputTokens).toBeUndefined();
+    options.onOutputProgress?.({ ...base, kind: 'delta', sequence: 4, delta: 'late' });
+    expect(engine.outputTokens).toBeUndefined();
+  });
+
+  it('replaces an overflow run within the same request and rejects its late output', async () => {
+    let invocations = 0;
+    const calls: AgentInferenceOptions[] = [];
+    const engine = new CallAITestEngine(async (_request, rawOptions) => {
+      const options = rawOptions as AgentInferenceOptions;
+      calls.push(options);
+      invocations++;
+      if (invocations === 1) {
+        options.onOutputProgress?.({ kind: 'attempt-started', runId: 'overflow-run', attempt: 1 });
+        options.onOutputProgress?.({ kind: 'usage', runId: 'overflow-run', attempt: 1, sequence: 2, outputTokens: 50 });
+        throw overflowError();
+      }
+      options.onOutputProgress?.({ kind: 'attempt-started', runId: 'resend-run', attempt: 1 });
+      expect(engine.outputTokens).toBeUndefined();
+      options.onOutputProgress?.({ kind: 'usage', runId: 'overflow-run', attempt: 1, sequence: 3, outputTokens: 999 });
+      expect(engine.outputTokens).toBeUndefined();
+      options.onOutputProgress?.({ kind: 'delta', runId: 'resend-run', attempt: 1, sequence: 2, delta: 'abcd' });
+      expect(engine.outputTokens).toEqual({ count: 1, estimated: true });
+      return { ...successResponse(), requestInfo: {
+        ...successResponse().requestInfo, requestId: options.requestId, runId: 'resend-run',
+        usage: { outputTokens: 3, reasoningTokens: 2 },
+      } };
+    });
+    await engine.runCallAI();
+    expect(calls[1]).toBe(calls[0]);
+    expect(engine.outputTokens).toEqual({ count: 3, estimated: false });
+    expect(h.raiseIncident).not.toHaveBeenCalled();
+  });
+});
+
+class OutputPumpTestEngine extends CallAITestEngine {
+  protected override async runTurn(signal: AbortSignal) {
+    await this.runCallAI(signal);
+    return {};
+  }
+}
+
+function outputProgressHarness(Engine = CallAITestEngine) {
+  const calls: Array<{
+    options: AgentInferenceOptions;
+    resolve: (response: AIResponse) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  const engine = new Engine((_request, options) => new Promise((resolve, reject) => {
+    calls.push({ options: options as AgentInferenceOptions, resolve, reject });
+  }));
+  const states: AgentControlState[] = [];
+  engine.setStateProbe((state) => states.push(state));
+  const complete = (index: number, outputTokens = 4) => {
+    const call = calls[index]!;
+    call.resolve({
+      ...successResponse(),
+      requestInfo: {
+        ...successResponse().requestInfo,
+        requestId: call.options.requestId,
+        usage: { outputTokens },
+      },
+    });
+  };
+  return { engine, calls, states, complete };
+}
+
+function startOutput(options: AgentInferenceOptions, runId = 'sample-run', attempt = 1) {
+  const base = { runId, attempt };
+  options.onOutputProgress?.({ ...base, kind: 'attempt-started' });
+  return (sequence: number) => options.onOutputProgress?.({
+    ...base, kind: 'delta', sequence, delta: 'abcd',
+  });
+}
+
+describe('callAI output notification coalescing', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('accumulates every dense delta immediately and publishes the latest value at most every 100ms', async () => {
+    const { engine, calls, states, complete } = outputProgressHarness();
+    const project = vi.spyOn(engine, 'getControlState');
+    const pending = engine.runCallAI();
+    const delta = startOutput(calls[0]!.options);
+    delta(2);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 1, estimated: true });
+    expect(vi.getTimerCount()).toBe(0);
+
+    for (let sequence = 3; sequence <= 52; sequence++) delta(sequence);
+    expect(engine.outputTokens).toEqual({ count: 51, estimated: true });
+    expect(states).toHaveLength(2);
+    expect(project).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(99);
+    expect(states).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 51, estimated: true });
+
+    for (let sequence = 53; sequence <= 102; sequence++) delta(sequence);
+    expect(engine.outputTokens).toEqual({ count: 101, estimated: true });
+    expect(states).toHaveLength(3);
+    vi.advanceTimersByTime(100);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 101, estimated: true });
+    expect(project).toHaveBeenCalledTimes(4);
+    expect(vi.getTimerCount()).toBe(0);
+
+    vi.advanceTimersByTime(1_000);
+    expect(states).toHaveLength(4);
+    expect(engine.outputTokens).toEqual({ count: 101, estimated: true });
+    engine.emitStateChange();
+    expect(states).toHaveLength(5);
+    complete(0);
+    await pending;
+  });
+
+  it('publishes provider usage and final response corrections immediately and starts the next activity fresh', async () => {
+    const { engine, calls, states, complete } = outputProgressHarness();
+    const pending = engine.runCallAI();
+    const options = calls[0]!.options;
+    const delta = startOutput(options);
+    delta(2);
+    delta(3);
+    expect(vi.getTimerCount()).toBe(1);
+    options.onOutputProgress?.({
+      kind: 'usage', runId: 'sample-run', attempt: 1, sequence: 4, outputTokens: 7,
+    });
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 7, estimated: false });
+    expect(vi.getTimerCount()).toBe(0);
+    delta(5);
+    delta(6);
+    expect(vi.getTimerCount()).toBe(1);
+    complete(0, 11);
+    await pending;
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 11, estimated: false });
+    expect(states.at(-1)?.aiRequestState?.phase).toBe('finished');
+    expect(vi.getTimerCount()).toBe(0);
+    engine.finishActivity();
+    expect(states.at(-1)?.activeOutputTokens).toBeUndefined();
+    const emitted = states.length;
+    vi.advanceTimersByTime(1_000);
+    expect(states).toHaveLength(emitted);
+
+    const next = engine.runCallAI();
+    startOutput(calls[1]!.options, 'sample-next-run')(2);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 1, estimated: true });
+    expect(vi.getTimerCount()).toBe(0);
+    complete(1);
+    await next;
+  });
+
+  it('flushes pending output at backoff and cancels it when an attempt or overflow run is replaced', async () => {
+    const { engine, calls, states, complete } = outputProgressHarness();
+    const pending = engine.runCallAI();
+    const options = calls[0]!.options;
+    const first = startOutput(options);
+    first(2);
+    first(3);
+    expect(vi.getTimerCount()).toBe(1);
+    options.onBackoff?.({
+      attempt: 1, maxAttempts: 2, errorType: AIErrorType.NETWORK,
+      retryAt: Date.now() + 1_000, errorMessage: 'Sample retry',
+    });
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 2, estimated: true });
+    expect(states.at(-1)?.aiRequestState?.phase).toBe('backoff');
+    expect(vi.getTimerCount()).toBe(0);
+    const retry = startOutput(options, 'sample-run', 2);
+    options.onAttemptStart?.({ attempt: 1, maxAttempts: 2 });
+    expect(states.at(-1)?.activeOutputTokens).toBeUndefined();
+    retry(4);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 1, estimated: true });
+    retry(5);
+    expect(vi.getTimerCount()).toBe(1);
+    const resend = startOutput(options, 'sample-resend-run');
+    expect(states.at(-1)?.activeOutputTokens).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+    resend(2);
+    expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 1, estimated: true });
+    const emitted = states.length;
+    vi.advanceTimersByTime(100);
+    expect(states).toHaveLength(emitted);
+    complete(0);
+    await pending;
+  });
+
+  it('removes a pending refresh on abort before the provider settles', async () => {
+    const { engine, calls, states } = outputProgressHarness();
+    const controller = new AbortController();
+    const pending = engine.runCallAI(controller.signal);
+    const delta = startOutput(calls[0]!.options);
+    delta(2);
+    delta(3);
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort();
+    expect(vi.getTimerCount()).toBe(0);
+    const emitted = states.length;
+    delta(4);
+    vi.advanceTimersByTime(1_000);
+    expect(states).toHaveLength(emitted);
+    expect(engine.outputTokens).toEqual({ count: 2, estimated: true });
+    const error = new Error('Sample cancellation');
+    calls[0]!.reject(error);
+    await expect(pending).rejects.toBe(error);
+    expect(states.at(-1)?.aiRequestState?.outcome).toBe('cancelled');
+    engine.finishActivity();
+    expect(states.at(-1)?.activeOutputTokens).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['interrupt', 'destroy'] as const)('%s cancels a pending refresh synchronously while the pump is settling', async (action) => {
+    const { engine, calls, states, complete } = outputProgressHarness(OutputPumpTestEngine);
+    engine.post({ source: 'user', content: 'Sample request' });
+    await Promise.resolve();
+    const delta = startOutput(calls[0]!.options);
+    delta(2);
+    delta(3);
+    expect(vi.getTimerCount()).toBe(1);
+    const stopping = engine[action]();
+    expect(vi.getTimerCount()).toBe(0);
+    if (action === 'interrupt') {
+      expect(states.at(-1)?.phase).toBe('stopping');
+      expect(states.at(-1)?.activeOutputTokens).toBeUndefined();
+    }
+    const emitted = states.length;
+    delta(4);
+    vi.advanceTimersByTime(1_000);
+    expect(states).toHaveLength(emitted);
+    expect(vi.getTimerCount()).toBe(0);
+    calls[0]!.reject(new Error('Sample cancellation'));
+    await stopping;
+    expect(vi.getTimerCount()).toBe(0);
+    if (action === 'interrupt') {
+      const next = engine.runCallAI();
+      startOutput(calls[1]!.options, 'sample-next-run')(2);
+      expect(states.at(-1)?.activeOutputTokens).toEqual({ count: 1, estimated: true });
+      complete(1);
+      await next;
+    }
+  });
+});
+
 describe('上下文溢出恢复', () => {
   const ok = successResponse();
 
@@ -393,8 +714,8 @@ describe('上下文溢出恢复', () => {
           model: 'test::model',
           stopReason: 'end_turn',
           latencyMs: Date.now() - options.logicalStartedAt,
-          firstVisibleContentLatencyMs: 25,
-          generationDurationMs: 75,
+          firstTokenLatencyMs: 25,
+          attemptDurationMs: 100,
           usage: { inputTokens: 2, outputTokens: 1 },
         },
       };
@@ -417,8 +738,8 @@ describe('上下文溢出恢复', () => {
         requestId: calls[0]!.requestId,
         runId: 'successful-overflow-run',
         latencyMs: 800,
-        firstVisibleContentLatencyMs: 25,
-        generationDurationMs: 75,
+        firstTokenLatencyMs: 25,
+        attemptDurationMs: 100,
       });
     } finally {
       vi.useRealTimers();

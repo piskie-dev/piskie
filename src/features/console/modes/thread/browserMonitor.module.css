@@ -1,0 +1,135 @@
+.collection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  block-size: 100%;
+  min-block-size: 0;
+  padding: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.card {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.identity { display: grid; gap: 4px; margin-block-end: 8px; min-inline-size: 0; }
+.identity strong, .action, .windowHeader strong, .windowAction {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.identity strong { color: var(--cyber-text); font-size: 12px; }
+.action, .resourceState { color: var(--cyber-text-muted); font-size: 11px; }
+.resourceState { display: block; margin-block-start: 6px; }
+.preview { position: relative; inline-size: 100%; min-block-size: 0; }
+.previewButton {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.previewButton span {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  font-size: 11px;
+  opacity: 0;
+}
+.previewButton:hover span, .previewButton:focus-visible span { opacity: 1; }
+.previewButton:focus-visible { outline: 2px solid var(--cyber-primary); outline-offset: 2px; }
+
+/* This isolated layer is confined to the reading area, below native Dialog's top layer. */
+.layer {
+  position: absolute;
+  isolation: isolate;
+  z-index: 5;
+  overflow: clip;
+  pointer-events: none;
+}
+.layer[hidden], .window[hidden], .card[hidden] { display: none; }
+.window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  background: var(--surface-1);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--cyber-bg) 40%, transparent);
+}
+.windowHeader {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 10px 6px;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+  border-block-end: 1px solid var(--line-1);
+  background: var(--surface-2);
+}
+.windowHeader strong { flex: 1; min-inline-size: 0; color: var(--cyber-text); font-size: 12px; }
+.windowHeader button, .windowFooter button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cyber-text-muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.windowHeader button:hover, .windowFooter button:hover { background: var(--surface-3); color: var(--cyber-text); }
+.windowHeader button:focus-visible, .windowFooter button:focus-visible, .parking button:focus-visible {
+  outline: 2px solid var(--cyber-primary);
+  outline-offset: -2px;
+}
+.windowFooter button:disabled { opacity: 0.45; cursor: default; }
+.windowAction { flex: 0 0 24px; padding: 4px 10px; color: var(--cyber-text-muted); font-size: 11px; }
+.windowPicture { flex: 1; min-block-size: 0; min-inline-size: 0; overflow: hidden; }
+.windowFooter { display: flex; flex: 0 0 30px; align-items: center; gap: 5px; padding-inline: 6px; }
+.windowFooter .resize { margin-inline-start: auto; align-self: stretch; cursor: nwse-resize; touch-action: none; }
+.parking {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  display: flex;
+  gap: 6px;
+  block-size: 34px;
+  overflow-x: auto;
+  pointer-events: auto;
+}
+.parking button {
+  flex: 0 0 auto;
+  max-inline-size: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--cyber-text);
+  cursor: pointer;
+  font-size: 12px;
+}

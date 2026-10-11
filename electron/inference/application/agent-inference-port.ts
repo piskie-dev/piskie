@@ -48,7 +48,14 @@ export interface AgentInferenceOptions {
   onAttemptStart?: (info: { attempt: number; maxAttempts: number }) => void;
   onBackoff?: (info: AgentInferenceBackoff) => void;
   onVisibleDelta?: (delta: VisibleDelta) => void;
+  onOutputProgress?: (progress: AgentOutputProgress) => void;
 }
+
+export type AgentOutputProgress = { runId: string; attempt: number } & (
+  | { kind: 'attempt-started' }
+  | { kind: 'delta'; sequence: number; delta: string }
+  | { kind: 'usage'; sequence: number; outputTokens: number }
+);
 
 export interface VisibleDelta {
   runId: string;
@@ -366,7 +373,28 @@ export class DefaultAgentInferencePort implements AgentInferencePort {
     const maxAttempts = Math.max(0, (this.snapshots.capture()?.policies.ai.maxAttempts ?? 1) - 1);
     let startedAttempt = 0;
     let visibleSequence = 0;
+    let outputAttempt = -1;
     for await (const event of events) {
+      if (event.attempt > outputAttempt) {
+        outputAttempt = event.attempt;
+        safelyNotify(options.onOutputProgress, {
+          kind: 'attempt-started', runId: event.runId, attempt: event.attempt,
+        });
+      }
+      const outputDelta = event.kind === 'text.delta' || event.kind === 'reasoning.delta'
+        ? event.text
+        : event.kind === 'tool.arguments.delta' ? event.delta : undefined;
+      if (outputDelta) {
+        safelyNotify(options.onOutputProgress, {
+          kind: 'delta', runId: event.runId, attempt: event.attempt,
+          sequence: event.sequence, delta: outputDelta,
+        });
+      } else if (event.kind === 'usage.updated' && event.usage.totalOutputTokens !== undefined) {
+        safelyNotify(options.onOutputProgress, {
+          kind: 'usage', runId: event.runId, attempt: event.attempt,
+          sequence: event.sequence, outputTokens: event.usage.totalOutputTokens,
+        });
+      }
       const logicalAttempt = Math.max(0, event.attempt - 1);
       if (event.kind === 'response.started') {
         safelyNotify(options.onAttemptStart, { attempt: 0, maxAttempts });

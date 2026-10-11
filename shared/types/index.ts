@@ -8,6 +8,7 @@ import type {
   StandardTaskBindings,
 } from './task-bindings.js';
 import type { AIRequestInfo } from './context.js';
+import type { ModelTarget } from './inference.js';
 import type { UserFileRef } from './user-input.js';
 export type { UserFileRef, UserMessageInput } from './user-input.js';
 import type { AIErrorType } from '../constants/index.js';
@@ -416,6 +417,8 @@ export interface TaskDefinition {
   description: string;
   category?: string;
   purpose: TaskDefinitionPurpose;
+  /** Exact model for new sessions; omitted to follow the global default. */
+  model?: ModelTarget;
   promptTemplate: string;
   systemPrompt?: string;
   defaultModeId: TaskDefinitionModeId;
@@ -428,6 +431,8 @@ export interface TaskDefinition {
 }
 
 export interface AgentRunConfig {
+  /** Template model snapshot, used only when starting a new session. */
+  model?: ModelTarget;
   name: string;
   description: string;
   category?: string;

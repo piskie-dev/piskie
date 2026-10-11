@@ -208,16 +208,25 @@ class PilotRuntimeKernel {
     this.skillDocsCache.clear();
   }
 
-  /**
-   * 完整物化本次启动配置，并在返回前显式拉起 Chromium。
-   *
-   * @param browserId - 浏览器实例 ID（如 'agent1-xiaohongshu'），用于区分不同任务的浏览器
-   * @param userDataId - 用户数据 ID（如 'xiaohongshu'），用于共享登录状态。如果不提供，默认使用 browserId
-   */
+  /** 完整物化本次启动配置，并在返回前显式拉起 Chromium。 */
   async launchBrowser(spec: BrowserLaunchSpec): Promise<void> {
     this.ensureReady();
-    const { browserId } = spec;
-    const windowSize = spec.backgroundMode ? this.getBrowserLaunchWindowSize() : undefined;
+    await BrowserManager.getOrCreate(spec.browserId, this.browserLaunchOptions(spec));
+  }
+
+  deferBrowserLaunch(
+    browserId: string,
+    plan: (signal: AbortSignal) => Promise<BrowserLaunchSpec>,
+    onConnected: () => void,
+  ): () => void {
+    return BrowserManager.deferLaunch(browserId, async (signal) => {
+      this.ensureReady();
+      return this.browserLaunchOptions(await plan(signal));
+    }, onConnected);
+  }
+
+  private browserLaunchOptions(spec: BrowserLaunchSpec) {
+    const windowSize = spec.windowSize ?? this.getBrowserLaunchWindowSize();
     const launchSpec: BrowserLaunchSpec = windowSize
       ? Object.freeze({
           ...spec,
@@ -229,10 +238,10 @@ class PilotRuntimeKernel {
       ? this.getCallerWindowConfig()
       : undefined;
 
-    await BrowserManager.getOrCreate(browserId, {
+    return {
       launchSpec,
       ...(callerWindow && Object.keys(callerWindow).length > 0 ? { callerWindow } : {}),
-    });
+    };
   }
 
   /** BrowserManager 生命周期表的只读 ready 判定，供 owned/borrowed 分派。 */
@@ -475,6 +484,11 @@ export interface BrowserControlPort {
   showWindow(browserId: string): Promise<boolean>;
   getSnapshot(browserId: string, quality?: number): Promise<{ data: string; timestamp: number }>;
   launch(spec: BrowserLaunchSpec): Promise<void>;
+  deferLaunch(
+    browserId: string,
+    plan: (signal: AbortSignal) => Promise<BrowserLaunchSpec>,
+    onConnected: () => void,
+  ): () => void;
   deleteUserDataById(userDataId: string): Promise<number>;
   navigateTo(params: BrowserNavigateRequest): Promise<BrowserNavigationResult>;
   closeBrowser(params: Readonly<{ browserId: string }>): Promise<void>;
@@ -511,6 +525,11 @@ class DefaultBrowserControlPort implements BrowserControlPort {
   getSnapshot = (browserId: string, quality?: number) =>
     this.kernel.getSnapshot(browserId, quality);
   launch = (spec: BrowserLaunchSpec) => this.kernel.launchBrowser(spec);
+  deferLaunch = (
+    browserId: string,
+    plan: (signal: AbortSignal) => Promise<BrowserLaunchSpec>,
+    onConnected: () => void,
+  ) => this.kernel.deferBrowserLaunch(browserId, plan, onConnected);
   deleteUserDataById = (userDataId: string) => this.kernel.deleteUserDataById(userDataId);
   navigateTo = (params: BrowserNavigateRequest) => BrowserOperations.navigate(params);
   closeBrowser = (params: Readonly<{ browserId: string }>) =>

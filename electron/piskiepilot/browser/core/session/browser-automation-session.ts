@@ -29,6 +29,19 @@ import {
   type TextSnapshotResult,
 } from './text-snapshot.js';
 
+import { sameScreenPageInstance, type ScreenPageIdentity, type ScreenPointer } from '@shared/types/stream.js';
+import { isRecentScreenPress, reduceScreenPointer } from '@shared/screen-pointer.js';
+import { MouseObserver } from './mouse-observer.js';
+
+export interface BrowserScreenTarget {
+  readonly page: Page;
+  readonly identity: ScreenPageIdentity;
+}
+
+export type BrowserScreenEvent =
+  | { readonly type: 'target'; readonly target: BrowserScreenTarget | null }
+  | { readonly type: 'pointer'; readonly pointer: ScreenPointer };
+
 let nextSessionGeneration = 1;
 
 interface ActiveSnapshot {
@@ -54,6 +67,8 @@ export class BrowserAutomationSession {
   #registry!: PageRegistry;
   #activeSnapshot: ActiveSnapshot | undefined;
   #disposed = false;
+  #currentPointer: ScreenPointer | null = null;
+  readonly #screenListeners = new Set<(event: BrowserScreenEvent) => void>();
 
   private constructor(browser: Browser) {
     this.browser = browser;
@@ -67,8 +82,57 @@ export class BrowserAutomationSession {
       mainFrameNavigated: (pageId) => {
         if (session.#activeSnapshot?.pageId === pageId) session.#invalidateSnapshot();
       },
+      screenChanged: (registered) => session.#publishScreen({
+        type: 'target', target: registered ? session.#screenTarget(registered) : null,
+      }),
+      observeMouse: (page, current) => {
+        const observer = new MouseObserver(page.mouse, () => session.#screenTarget(current()).identity,
+          (identity, action) => session.#publishScreen({ type: 'pointer', pointer: { ...action, page: identity } }));
+        return () => observer.dispose();
+      },
     });
     return session;
+  }
+
+  getScreenTarget(): BrowserScreenTarget {
+    return this.#screenTarget(this.#registry.selectedPage());
+  }
+
+  subscribeScreen(listener: (event: BrowserScreenEvent) => void): () => void {
+    this.#screenListeners.add(listener);
+    const pointer = this.getCurrentScreenPointer();
+    if (pointer) listener({ type: 'pointer', pointer });
+    return () => this.#screenListeners.delete(listener);
+  }
+
+  getCurrentScreenPointer(): ScreenPointer | null {
+    if (this.#disposed || !this.#currentPointer) return null;
+    const press = this.#currentPointer.press;
+    if (press && !isRecentScreenPress(press.timestamp, Date.now())) {
+      this.#currentPointer = { ...this.#currentPointer, press: undefined };
+    }
+    return this.#currentPointer;
+  }
+
+  #screenTarget(registered: RegisteredPage): BrowserScreenTarget {
+    return {
+      page: registered.page,
+      identity: {
+        connectionId: this.generation,
+        pageId: registered.pageId,
+        navigationSequence: registered.navigationSequence,
+      },
+    };
+  }
+
+  #publishScreen(event: BrowserScreenEvent): void {
+    if (event.type === 'target') {
+      if (!sameScreenPageInstance(this.#currentPointer?.page, event.target?.identity)) this.#currentPointer = null;
+    } else if (sameScreenPageInstance(event.pointer.page, this.getScreenTarget().identity)) {
+      this.#currentPointer = reduceScreenPointer(this.#currentPointer, event.pointer);
+      event = { type: 'pointer', pointer: this.#currentPointer };
+    }
+    for (const listener of this.#screenListeners) listener(event);
   }
 
   getSelectedPage(): Page {
@@ -368,6 +432,7 @@ export class BrowserAutomationSession {
     this.#disposed = true;
     this.#invalidateSnapshot();
     this.#registry.dispose();
+    this.#screenListeners.clear();
   }
 
   async #fillElement(uid: string, value: string): Promise<void> {

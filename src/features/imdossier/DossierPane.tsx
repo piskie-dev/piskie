@@ -18,6 +18,8 @@ import { MessagesSquare, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { createUuid } from '@shared/utils/identifiers.js';
+import type { ModelTarget } from '../../../shared/types/inference';
+import { useTaskModel } from '../../components/task-definition/useTaskModel';
 import type { SetupGuide } from '../../../shared/types/setup-guide';
 import type { MessagingConnectionConfig } from '../../../shared/electron-contracts/messaging';
 import { CHANNEL_SETUP_GUIDES } from '../../../shared/constants/channel-setup-guides';
@@ -87,6 +89,20 @@ function seedForm(persisted: MessagingConnectionConfig | undefined): Omit<Dossie
     forwardToolImages: persisted?.replyForward?.forwardToolImages ?? true,
   };
 }
+
+const TaskModelSummary: React.FC<{ model?: ModelTarget }> = ({ model }) => {
+  const { t } = useTranslation();
+  const { current, source } = useTaskModel(model);
+  return (
+    <div className={styles.fieldStack}>
+      <div className={styles.fieldNote} role="status" title={current.reference}>
+        {t('console.taskModel')} · {source} · {current.summary}
+        {current.unavailable && current.reference && ` (${current.reference})`}
+      </div>
+      <div className={styles.fieldNote}>{t('console.taskModelSessionHint')}</div>
+    </div>
+  );
+};
 
 export const DossierPane: React.FC<DossierPaneProps> = ({
   focus,
@@ -220,6 +236,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
   };
 
   const claims = claimTemplateOptions(taskDefinitions, connections, targetId);
+  const selectedTemplate = taskDefinitions.find((definition) => definition.definitionId === form.definitionId);
   const guide = CHANNEL_SETUP_GUIDES[channelType];
   const credentialLabels = CREDENTIAL_LABELS[channelType] ?? ['App ID', 'App Secret'];
   const botRequests = botId ? requests.filter((request) => request.botId === botId) : [];
@@ -514,6 +531,7 @@ export const DossierPane: React.FC<DossierPaneProps> = ({
             fault={formFault?.field === 'definition'}
             onPick={(definitionId) => patch({ definitionId })}
           />
+          {selectedTemplate && <TaskModelSummary model={selectedTemplate.model} />}
           {formFault?.field === 'definition' && (
             <div className={styles.fieldNote}>
               <span className={styles.faultNote}>{t(formFault.messageKey)}</span>

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { AtomicFileWriter } from '../../config/core/atomic-file-writer.js';
+import type { ConfigCommitGuard } from '../../config/contracts/repository.js';
 import { configDomainStoragePaths } from '../../config/core/storage-layout.js';
 import { VersionedFileConfigRepository } from '../../config/core/versioned-file-repository.js';
 import { inferenceConfigSchema, type InferenceConfig } from './config-schema.js';
@@ -84,8 +85,8 @@ export class InferenceConfigRepository {
     return this.repository.pruneHistory();
   }
 
-  commit(candidate: InferenceConfig, expectedRevision: number): Promise<InferenceConfig> {
-    return this.repository.commit(candidate, expectedRevision);
+  commit(candidate: InferenceConfig, expectedRevision: number, guard?: ConfigCommitGuard): Promise<InferenceConfig> {
+    return this.repository.commit(candidate, expectedRevision, guard);
   }
 }
 

@@ -12,7 +12,16 @@ import { RuntimeSnapshotStore, type CompiledTarget } from '../../../inference/ex
 import { GatewayCallError } from '../../../inference/execution/call-error.js';
 import type { AiAttemptEvent } from '../../../inference/ai/contracts.js';
 import { attributedInferencePort } from '../../../inference/application/attributed-inference-port.js';
-import type { AgentInferencePort } from '../../../inference/application/agent-inference-port.js';
+import { DefaultAgentInferencePort, type AgentInferencePort } from '../../../inference/application/agent-inference-port.js';
+import { MemoryArtifactStore } from '../../../inference/image/artifact-store.js';
+import { AgentActivityTracker } from '../../../agent/run-metrics.js';
+import { averageOutputThroughput } from '../../../../shared/agent-output-throughput.js';
+import type OpenAI from 'openai';
+import type Anthropic from '@anthropic-ai/sdk';
+import { projectOpenAiChatStream } from '../../../inference/drivers/openai/event-projector.js';
+import { projectOpenAiResponsesStream } from '../../../inference/drivers/openai/responses-event-projector.js';
+import { projectAnthropicMessagesStream } from '../../../inference/drivers/anthropic-messages/event-projector.js';
+import { formatUsageCsv } from '../usage-csv.js';
 
 let root: string;
 const now = Date.parse('2026-09-18T12:00:00Z');
@@ -125,12 +134,12 @@ describe('model usage facts', () => {
 
   it.each([
     { language: 'zh-CN', time: '调用时间（UTC）', purpose: '用途', compaction: '上下文压缩', status: '状态', success: '成功',
-      provider: 'Provider 名称', model: '模型名称', output: '输出 Token（含推理）', input: '输入 Token（含缓存）', duration: '总耗时（毫秒）' },
+      provider: 'Provider 名称', model: '模型名称', output: '输出 Token（含推理）', input: '输入 Token（含缓存）', duration: '总耗时（毫秒）', firstToken: '首 token 耗时（毫秒）' },
     { language: 'en-US', time: 'Call time (UTC)', purpose: 'Purpose', compaction: 'Compaction', status: 'Status', success: 'Success',
-      provider: 'Provider name', model: 'Model name', output: 'Output tokens (including reasoning)', input: 'Input tokens (including cache)', duration: 'Total duration (ms)' },
+      provider: 'Provider name', model: 'Model name', output: 'Output tokens (including reasoning)', input: 'Input tokens (including cache)', duration: 'Total duration (ms)', firstToken: 'Time to first token (ms)' },
   ] as const)('exports readable $language labels while preserving numbers and unknown values', async (labels) => {
     const usage = service();
-    usage.store.append(fixture({ purpose: 'compaction', usage: { totalInputTokens: 0 }, endedAt: now + 1250 }));
+    usage.store.append(fixture({ purpose: 'compaction', usage: { totalInputTokens: 0 }, endedAt: now + 1250, firstTokenLatencyMs: 75 }));
     const report = await usage.query({});
     const file = path.join(root, 'localized.csv');
     await usage.export(report.snapshotId, file, labels.language);
@@ -143,7 +152,7 @@ describe('model usage facts', () => {
     const values = Object.fromEntries(header!.map((name, index) => [name, row![index]]));
     expect(values).toMatchObject({
       [labels.time]: '2026-09-18T12:00:00.000Z', [labels.purpose]: labels.compaction, [labels.status]: labels.success,
-      [labels.provider]: 'Provider', [labels.model]: 'Model', [labels.input]: '0', [labels.output]: '', [labels.duration]: '1250',
+      [labels.provider]: 'Provider', [labels.model]: 'Model', [labels.input]: '0', [labels.output]: '', [labels.duration]: '1250', [labels.firstToken]: '75',
     });
   });
 
@@ -199,13 +208,122 @@ describe('retention lifecycle', () => {
   });
 });
 
+type TestProtocol = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
+
+function projectTimedAttempt(protocol: TestProtocol, attempt: number): AsyncIterable<AiAttemptEvent> {
+  const retry = attempt === 1;
+  const chat = (delta: unknown, finishReason: string | null = null) => ({
+    id: 'chat-example', object: 'chat.completion.chunk', created: 1, model: 'example-model',
+    choices: [{ index: 0, delta, finish_reason: finishReason }],
+  });
+  const call = { type: 'function_call', id: 'fc_example', call_id: 'call_example', name: 'lookup', arguments: '', status: 'in_progress' };
+  let frames: Array<[number, unknown]>;
+  switch (protocol) {
+    case 'openai-chat':
+      frames = retry ? [
+        [10, chat({ role: 'assistant', content: '' })],
+        [25, chat({ content: 'draft' })],
+      ] : [
+        [150, chat({ role: 'assistant', content: '' })],
+        [175, chat({ tool_calls: [{ index: 0, function: { arguments: '{"value":' } }] })],
+        [200, chat({ tool_calls: [{ index: 0, id: 'call_example', function: { name: 'lookup', arguments: '1}' } }] })],
+        [225, { ...chat({}, 'tool_calls'), usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 } }],
+      ];
+      break;
+    case 'openai-responses':
+      frames = retry ? [
+        [10, { type: 'response.created', response: { output: [] } }],
+        [25, { type: 'response.output_text.delta', delta: 'draft' }],
+      ] : [
+        [150, { type: 'response.created', response: { output: [] } }],
+        [155, { type: 'response.output_item.added', output_index: 0, item: call }],
+        [175, { type: 'response.function_call_arguments.delta', item_id: call.id, delta: '{"value":1}' }],
+        [215, { type: 'response.output_item.done', output_index: 0, item: { ...call, arguments: '{"value":1}', status: 'completed' } }],
+        [225, { type: 'response.completed', response: { output: [], usage: { input_tokens: 8, output_tokens: 3 } } }],
+      ];
+      break;
+    case 'anthropic-messages':
+      frames = retry ? [
+        [10, { type: 'message_start', message: { content: [], usage: { input_tokens: 8, output_tokens: 0 } } }],
+        [15, { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+        [25, { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'draft' } }],
+      ] : [
+        [150, { type: 'message_start', message: { content: [], usage: { input_tokens: 8, output_tokens: 0 } } }],
+        [155, { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_example', name: 'lookup', input: {} } }],
+        [175, { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"value":1}' } }],
+        [215, { type: 'content_block_stop', index: 0 }],
+        [225, { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 3 } }],
+        [225, { type: 'message_stop' }],
+      ];
+      break;
+  }
+  const source = (async function* () {
+    for (const [offset, event] of frames) {
+      vi.setSystemTime(now + offset);
+      yield event;
+    }
+    if (retry) {
+      vi.setSystemTime(now + 40);
+      throw new GatewayCallError({ source: 'transport', gateway: 'ai', providerId: 'p', modelId: 'm', driverId: 'test',
+        stage: 'stream', attempt, traceId: 'trace-example', message: 'Temporary stream failure' });
+    }
+  })();
+  if (protocol === 'openai-chat') return projectOpenAiChatStream(source as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>);
+  if (protocol === 'openai-responses') return projectOpenAiResponsesStream(source as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>);
+  return projectAnthropicMessagesStream(source as AsyncIterable<Anthropic.RawMessageStreamEvent>);
+}
+
 describe('gateway collection boundary', () => {
+  it.each(['openai-chat', 'openai-responses', 'anthropic-messages'] as const)('shares $0 first token timing and final-attempt throughput across Agent and retry Usage', async (protocol) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const usage = service();
+    const snapshots = new RuntimeSnapshotStore();
+    const target: CompiledTarget = { ref: { providerId: 'p', modelId: 'm' }, driverId: protocol, upstreamModel: 'm', catalogId: 'm', configRevision: 1,
+      ai: { openAttempt: (_request, context) => projectTimedAttempt(protocol, context.attempt) } };
+    snapshots.publish({ configRevision: 1, catalogVersion: 'test', targets: new Map([['p', new Map([['m', target]])]]), createdAt: new Date(now).toISOString(),
+      policies: { ai: { maxAttempts: 2, connectTimeoutMs: 1000, streamIdleTimeoutMs: 1000, retryBaseDelayMs: 100 }, image: { maxSubmitAttempts: 1, submitTimeoutMs: 1000, operationTimeoutMs: 1000, allowResubmitAfterAccepted: false } } });
+    const sleep = vi.fn(async () => { vi.setSystemTime(now + 140); });
+    const gateway = new DefaultAiGateway(snapshots, { sleep }, usage.observe);
+    const port = new DefaultAgentInferencePort(gateway, snapshots, new MemoryArtifactStore());
+    const response = await port.invoke({ model: target.ref, systemPrompt: '', messages: [], promptCacheKey: 'example-cache' },
+      { requestId: 'turn-example', logicalStartedAt: now });
+
+    expect(sleep).toHaveBeenCalledWith(100, expect.any(AbortSignal));
+    expect(response.content).toMatchObject([{ type: 'tool_use', id: 'call_example', name: 'lookup', input: { value: 1 } }]);
+    expect(response.requestInfo).toMatchObject({ firstTokenLatencyMs: 35, attemptDurationMs: 85, latencyMs: 225 });
+    const tracker = new AgentActivityTracker();
+    tracker.aiCompleted(response.requestInfo);
+    expect(tracker.snapshot().runMetrics).toMatchObject({
+      rounds: 1, llmDurationMs: 225, firstTokenLatencyTotalMs: 35, firstTokenSamples: 1,
+      throughputDurationMs: 85, throughputOutputTokens: 3,
+      coverage: { firstToken: 'complete', throughput: 'complete' },
+    });
+    expect(averageOutputThroughput([tracker.snapshot().runMetrics])).toBeCloseTo(3 / 0.085);
+    const report = await usage.query({});
+    const attempts = [...report.records].sort((a, b) => a.attempt - b.attempt);
+    expect(attempts).toMatchObject([
+      { attempt: 1, startedAt: now, endedAt: now + 40, firstTokenLatencyMs: 25, status: 'failed' },
+      { attempt: 2, startedAt: now + 140, endedAt: now + 225, firstTokenLatencyMs: 35, status: 'success' },
+    ]);
+    expect(report.summary).toMatchObject({ calls: 2, requests: 1, firstTokenSamples: 2, firstTokenLatencyTotalMs: 60 });
+    expect(report.groups.modelId[0]?.summary.firstTokenLatencyTotalMs).toBe(60);
+    const [header, ...rows] = formatUsageCsv(attempts, 'en-US').slice(1).trimEnd().split('\r\n').map((line) => line.slice(1, -1).split('","'));
+    const firstTokenColumn = header!.indexOf('Time to first token (ms)');
+    expect(firstTokenColumn).toBeGreaterThanOrEqual(0);
+    expect(rows.map((row) => row[firstTokenColumn])).toEqual(['25', '35']);
+    const durationColumn = header!.indexOf('Total duration (ms)');
+    expect(durationColumn).toBeGreaterThanOrEqual(0);
+    expect(rows.map((row) => row[durationColumn])).toEqual(['40', '85']);
+  });
+
   it('captures every retry and never persists prompt or error body', async () => {
     const usage = service();
     const snapshots = new RuntimeSnapshotStore();
     const target: CompiledTarget = { ref: { providerId: 'p', modelId: 'm' }, driverId: 'fake', upstreamModel: 'm', catalogId: 'm', configRevision: 1,
       ai: { openAttempt: async function* (_request, context): AsyncIterable<AiAttemptEvent> {
         if (context.attempt === 1) throw new GatewayCallError({ source: 'transport', gateway: 'ai', providerId: 'p', modelId: 'm', driverId: 'fake', stage: 'connect', attempt: 1, traceId: 'trace', message: 'SECRET', upstream: { message: 'SECRET', body: 'SECRET' } });
+        yield { kind: 'response.first_token' };
         yield { kind: 'text.delta', text: 'SECRET completion' };
         yield { kind: 'usage.updated', usage: { totalInputTokens: 100 } };
         yield { kind: 'usage.updated', usage: { totalInputTokens: 120, totalOutputTokens: 20 } };

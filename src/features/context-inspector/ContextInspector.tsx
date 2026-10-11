@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import { useRendererRuntime, useContextInspectorResource } from '../../renderer-runtime/hooks';
+import { useNativeDialog } from '../../components/task-definition/useNativeDialog';
 import { Divider } from '../console/chrome/Divider';
 import { ShortcutOverlayParentProvider, useDismissShortcutScope } from '../../shortcuts';
 import { ContextLedger } from './ContextLedger';
@@ -52,8 +53,7 @@ export function ContextInspector({
   const requestedRef = useRef<{ agentId: string; sourceVersion: number } | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
-  /* 原 antd Drawer 改原生 <dialog>(top layer + ::backdrop):开合受控同步 */
-  const drawerRef = useRef<HTMLDialogElement>(null);
+  const drawerRef = useNativeDialog(open, onClose);
   const shortcutScopeId = useDismissShortcutScope({
     scopeIdPrefix: 'context-inspector-dialog',
     active: open,
@@ -61,12 +61,6 @@ export function ContextInspector({
     blocksLowerLayers: 'all',
   });
 
-  useEffect(() => {
-    const dialog = drawerRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
-  }, [open]);
   const [filter, setFilter] = useState<LedgerFilter>('all');
   const [query, setQuery] = useState('');
   const [selectionRequest, setSelectionRequest] = useState(0);
@@ -179,7 +173,6 @@ export function ContextInspector({
     <dialog
       ref={drawerRef}
       className={`${styles.drawerRoot} ${styles.drawer}`}
-      onClose={onClose}
       onClick={(event) => {
         // 点击落在 ::backdrop 时事件目标是 dialog 自身(children 铺满面板)
         if (event.target === event.currentTarget) onClose();

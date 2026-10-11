@@ -58,6 +58,19 @@ describe('availablePanels · worker 能力位', () => {
   });
 });
 
+describe('main browser monitor', () => {
+  it('appears only for a main conversation with browser content', () => {
+    expect(availablePanels(cap({ hasMonitor: true }))).toEqual(['monitor']);
+    expect(availablePanels(cap({ isWorker: true, hasMonitor: true }))).toEqual([]);
+  });
+  it('preserves an available user-selected panel as monitoring arrives', () => {
+    const panels = availablePanels(cap({ hasReviewTarget: true, hasBrowser: true, hasMonitor: true }));
+    expect(resolveSelectedPanel('browser', panels)).toBe('browser');
+    expect(resolveSelectedPanel('review', panels)).toBe('review');
+    expect(resolveSelectedPanel('monitor', panels)).toBe('monitor');
+  });
+});
+
 describe('resolveSelectedPanel', () => {
   it('目标可用就保持同名选择', () => {
     expect(resolveSelectedPanel('screen', ['review', 'screen'])).toBe('screen');

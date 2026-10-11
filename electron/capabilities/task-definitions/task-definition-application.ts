@@ -83,10 +83,13 @@ export class TaskDefinitionApplication {
       throw new PublicOperationError('not-found', 'Task Definition was not found');
     }
 
+    const { model, ...fields } = updates;
     const submitted: WritableTaskDefinition = {
       ...withoutCreatedAt(existing),
-      ...updates,
+      ...fields,
+      ...(model ? { model } : {}),
     };
+    if (model === null) delete submitted.model;
     const value = this.dependencies.config.projectWrite<{
       definitions: Record<string, WritableTaskDefinition>;
     }>('task-definitions', { definitions: { [definitionId]: submitted } }).definitions[

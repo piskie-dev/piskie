@@ -17,6 +17,10 @@ const tool = (id: string, name = 'shell', input = {}): PersistedMessageBlock => 
 const result = (id: string): ToolEntry => ({
   t: 'tool', toolUseId: id, ts: 3000, ok: true, result: [{ type: 'text', text: 'Sample result' }],
 });
+const notification = (id = 'sample-notice', ts = 9000): MsgEntry => ({
+  t: 'msg', role: 'user', id, ts, subtype: 'subagent_notification',
+  content: '<subagent_event id="sample-worker" type="message">Sample worker update.</subagent_event>',
+});
 function project(entries: readonly ConversationEntry[], settled = false) {
   const projector = new TranscriptProjector();
   projector.reset(0, entries);
@@ -96,12 +100,15 @@ describe('user input boundaries', () => {
     transcript.rows(true);
     transcript.append(user('sample-next', 15000));
     const rows = transcript.rows();
-    expect(rows.map((row) => row.id)).toEqual(['sample-user', 'process:sample-user', 'sample-next']);
-    const process = rows[1]!;
+    expect(rows.map((row) => row.id)).toEqual([
+      'sample-user', 'sample-first-final', 'process:after:sample-first-final', 'sample-next',
+    ]);
+    const process = rows[2]!;
     expect(process.kind).toBe('process');
     if (process.kind !== 'process') return;
     expect(process.durationMs).toBeUndefined();
-    expect(process.rows.slice(0, 2).map((row) => row.id)).toEqual(['sample-first-final', 'sample-resumed-work-text']);
+    expect(process.rows[0]?.id).toBe('sample-resumed-work-text');
+    expect(process.rows.some((row) => row.id === 'sample-first-final')).toBe(false);
   });
 
   it('preserves a confirmed final reply when only a notice arrived before the next user input', () => {
@@ -118,7 +125,7 @@ describe('user input boundaries', () => {
     expect(transcript.rows().slice(0, -2)).toEqual(completed);
   });
 
-  it('retains the latest final reply when the resumed work normally completes before the next input', () => {
+  it('retains both final replies when resumed work normally completes before the next input', () => {
     const transcript = observe([user(), assistant('sample-first-final', 'First reply.', 8000)]);
     transcript.rows(true);
     transcript.append(assistant('sample-resumed-work', [tool('sample-resumed-tool')], 10000));
@@ -126,7 +133,9 @@ describe('user input boundaries', () => {
     transcript.rows();
     transcript.append(assistant('sample-latest-final', 'Latest answer.', 12000));
     const completed = transcript.rows(true);
-    expect(completed.map((row) => row.id)).toEqual(['sample-user', 'process:sample-user', 'sample-latest-final']);
+    expect(completed.map((row) => row.id)).toEqual([
+      'sample-user', 'sample-first-final', 'process:after:sample-first-final', 'sample-latest-final',
+    ]);
     transcript.rows();
     transcript.append(user('sample-next', 15000));
     expect(transcript.rows().slice(0, -1)).toEqual(completed);
@@ -149,6 +158,127 @@ describe('user input boundaries', () => {
     const initial = transcript.rows();
     expect(initial.map((row) => row.id)).toEqual(['sample-user', 'sample-tool', 'sample-next']);
     expect(transcript.rows()).toEqual(initial);
+  });
+});
+
+describe('notification continuation history', () => {
+  const entries = (): ConversationEntry[] => [
+    user(), assistant('sample-first-work', [tool('sample-first-tool')]), result('sample-first-tool'),
+    assistant('sample-first-final', [
+      { type: 'thinking', thinking: 'Conclude the first sample.' },
+      text('First reply.'), text('Another paragraph.'),
+      { type: 'thinking', thinking: 'Final context.' },
+    ], 8000),
+    notification(), notification('sample-second-notice', 9500),
+    assistant('sample-resumed-work', [tool('sample-resumed-tool')], 10000),
+    { ...result('sample-resumed-tool'), ts: 11000 },
+    assistant('sample-second-final', 'Second reply.', 12000),
+    notification('sample-third-notice', 13000),
+    assistant('sample-third-final', 'Third reply.', 15000),
+  ];
+
+  it('rebuilds separate completed executions without presentation memory and keeps complete replies outside', () => {
+    const rows = project(entries(), true);
+    expect(rows.map((row) => row.id)).toEqual([
+      'sample-user', 'process:sample-user', 'sample-first-final-text', 'sample-first-final-text-2',
+      'sample-first-final-think-3', 'process:after:sample-first-final-text', 'sample-second-final',
+      'process:after:sample-second-final', 'sample-third-final',
+    ]);
+    const processes = rows.filter((row) => row.kind === 'process');
+    expect(processes.map((row) => row.durationMs)).toEqual([7000, 3000, 2000]);
+    expect(processes[0]?.rows.map((row) => row.id)).toEqual(['sample-first-tool', 'sample-first-final-think-0']);
+    expect(processes[1]?.rows.map((row) => row.id)).toEqual([
+      'sample-notice', 'sample-second-notice', 'sample-resumed-tool',
+    ]);
+    expect(processes[2]?.rows.map((row) => row.id)).toEqual(['sample-third-notice']);
+  });
+
+  it('recovers earlier completions while the last continuation is live and awaiting a decision', () => {
+    const projector = new TranscriptProjector();
+    projector.reset(0, [
+      ...entries(), notification('sample-pending-notice', 16000),
+      assistant('sample-pending-work', [tool('sample-pending-call')], 17000),
+    ]);
+    projector.setPendingCallId('sample-pending-call');
+    const snapshot = projector.snapshot();
+    const live = projectLiveNodes('sample-agent', {
+      phase: 'awaiting-commit', requestId: 'sample-request', runId: 'sample-run', attempt: 1,
+      parts: [{ kind: 'text', markdown: 'A response still awaiting its complete record.' }],
+    });
+    const { rows } = buildTranscriptRows([...snapshot.nodes, ...live], snapshot.responses, false);
+    expect(rows.filter((row) => row.kind === 'process').map((row) => row.id)).toEqual([
+      'process:sample-user', 'process:after:sample-first-final-text', 'process:after:sample-second-final',
+    ]);
+    expect(rows.filter((row) => row.kind === 'node').map((row) => row.id)).toContain('sample-third-final');
+    expect(rows.slice(-3).map((row) => row.id)).toEqual([
+      'sample-pending-notice', 'sample-pending-call', 'live:sample-agent:sample-request:0',
+    ]);
+  });
+
+  it('uses the response immediately before each notification, including invisible tool responses', () => {
+    const rows = project([
+      user(), assistant('sample-preface', 'Inspecting.'),
+      assistant('sample-hidden-work', [tool('sample-hidden-call', 'task')]), result('sample-hidden-call'),
+      notification(), assistant('sample-final', 'Completed answer.', 12000),
+    ], true);
+    expect(rows.map((row) => row.id)).toEqual(['sample-user', 'process:sample-user', 'sample-final']);
+    expect(rows[1]).toMatchObject({ rows: [{ id: 'sample-preface' }, { id: 'sample-notice' }] });
+  });
+
+  it('keeps notification-only activity visible without creating another process', () => {
+    const transcript = observe([
+      user(), assistant('sample-work', [tool('sample-call')]), result('sample-call'),
+      assistant('sample-final', 'Completed answer.', 8000),
+    ]);
+    const completed = transcript.rows(true);
+    transcript.append(notification());
+    transcript.append(notification('sample-second-notice', 10000));
+    expect(transcript.rows(true).slice(0, -2)).toEqual(completed);
+    transcript.append(user('sample-next', 15000));
+    expect(transcript.rows().map((row) => row.id)).toEqual([
+      'sample-user', 'process:sample-user', 'sample-final', 'sample-notice', 'sample-second-notice', 'sample-next',
+    ]);
+  });
+
+  it.each([
+    { content: 'First reply.', finalIds: ['sample-first-final'] },
+    { content: [text('First reply.'), text('Another paragraph.')], finalIds: ['sample-first-final-text', 'sample-first-final-text-1'] },
+  ])('keeps a page beginning with a direct final reply stable over repeated rebuilds ($finalIds)', ({ content, finalIds }) => {
+    const projector = new TranscriptProjector();
+    projector.reset(10, [
+      assistant('sample-first-final', content, 8000), notification(),
+      assistant('sample-resumed-work', [tool('sample-resumed-tool')], 10000),
+      { ...result('sample-resumed-tool'), ts: 11000 },
+      assistant('sample-second-final', 'Second reply.', 12000),
+    ]);
+    const { nodes, responses } = projector.snapshot();
+    let previous: TranscriptProcessBoundaries = new Map();
+    for (const settled of [true, false, true]) {
+      const next = buildTranscriptRows(nodes, responses, settled, previous);
+      expect(next.rows.map((row) => row.id)).toEqual([
+        ...finalIds, `process:after:${finalIds[0]}`, 'sample-second-final',
+      ]);
+      expect(next.boundaries.get(`process:${finalIds[0]}`)).toMatchObject({
+        endNodeId: null, finalTextNodeId: finalIds[0],
+      });
+      previous = next.boundaries;
+    }
+  });
+
+  it('restores the same continuation groups when earlier history is loaded after a partial page', () => {
+    const history = entries();
+    const projector = new TranscriptProjector();
+    projector.reset(3, history.slice(3));
+    const partial = projector.snapshot();
+    const initial = buildTranscriptRows(partial.nodes, partial.responses, true);
+    expect(initial.rows.filter((row) => row.kind === 'process').map((row) => row.id)).toEqual([
+      'process:sample-first-final-think-0', 'process:after:sample-first-final-text', 'process:after:sample-second-final',
+    ]);
+    projector.reset(0, history);
+    const full = projector.snapshot();
+    const restored = buildTranscriptRows(full.nodes, full.responses, true, initial.boundaries);
+    expect(restored.rows.map((row) => row.id)).toEqual(project(history, true).map((row) => row.id));
+    expect(restored.boundaries.get('process:after:sample-first-final-text')).toEqual(initial.boundaries.get('process:after:sample-first-final-text'));
   });
 });
 

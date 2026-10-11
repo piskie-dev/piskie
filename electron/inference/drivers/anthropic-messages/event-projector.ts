@@ -20,8 +20,13 @@ export async function* projectAnthropicMessagesStream(
   const thinking = new Map<number, ThinkingBlock>();
   const redactedThinking = new Map<number, string>();
   let stopReason: AiStopReason = 'other';
+  let firstTokenEmitted = false;
 
   for await (const event of stream) {
+    if (!firstTokenEmitted && hasGeneratedContent(event)) {
+      firstTokenEmitted = true;
+      yield { kind: 'response.first_token' };
+    }
     switch (event.type) {
       case 'message_start': {
         const usage = mapUsage(event.message.usage);
@@ -111,6 +116,24 @@ export async function* projectAnthropicMessagesStream(
   }
 
   throw new Error('Anthropic stream ended without a message_stop event');
+}
+
+function hasGeneratedContent(event: Anthropic.RawMessageStreamEvent): boolean {
+  if (event.type === 'content_block_start') {
+    const block = event.content_block;
+    if (block.type === 'text') return block.text.length > 0;
+    if (block.type === 'thinking') return block.thinking.length > 0;
+    if (block.type === 'tool_use') {
+      return block.input !== null && typeof block.input === 'object' && Object.keys(block.input).length > 0;
+    }
+  }
+  if (event.type === 'content_block_delta') {
+    const delta = event.delta;
+    if (delta.type === 'text_delta') return delta.text.length > 0;
+    if (delta.type === 'thinking_delta') return delta.thinking.length > 0;
+    if (delta.type === 'input_json_delta') return delta.partial_json.length > 0;
+  }
+  return false;
 }
 
 /**

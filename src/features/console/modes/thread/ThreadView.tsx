@@ -17,7 +17,7 @@
  * 上下文环固定在会话输入器主动作左侧，点击可查看明细。
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
 import { MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -73,6 +73,7 @@ export interface ThreadViewProps {
   readonly onToggleFileChanges?: () => void;
   readonly onOpenWorker?: (workerId: string) => void;
   readonly deferEscapeFallback?: boolean;
+  readonly readingAreaRef?: RefObject<HTMLDivElement>;
 }
 
 export const ThreadView = memo<ThreadViewProps>(
@@ -89,6 +90,7 @@ export const ThreadView = memo<ThreadViewProps>(
     onToggleFileChanges,
     onOpenWorker,
     deferEscapeFallback,
+    readingAreaRef,
   }) => {
     const { t } = useTranslation();
     const [stopTarget, setStopTarget] = useState<{ name: string; run: () => void } | null>(null);
@@ -204,6 +206,7 @@ export const ThreadView = memo<ThreadViewProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          mainAgentId={agentId}
           conversationStatus={request?.status}
           workspace={request?.workspace}
           workers={agent?.workers}
@@ -213,7 +216,7 @@ export const ThreadView = memo<ThreadViewProps>(
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, request?.workspace, runCellAction],
+      [agentId, agent?.workers, onOpenFileChange, onOpenWorker, onPreviewImage, request?.status, request?.workspace, runCellAction],
     );
 
 
@@ -265,7 +268,7 @@ export const ThreadView = memo<ThreadViewProps>(
           </div>
         </Dialog>
 
-        <div className={styles.center}>
+        <div ref={readingAreaRef} className={styles.center}>
             {/* 按目标重挂:切主/子 tab 时换全新滚动容器。否则 scrollTop 物理残留
                 (scroll-initial-target 只救未被用户碰过的容器),上一个目标的滚动
                 位置会原样带进下一个目标——用户 2026-08-25 报的"滚动条完全跟随" */}
@@ -284,6 +287,7 @@ export const ThreadView = memo<ThreadViewProps>(
                 ? t('sessionWorkbenchUi.transcript.emptyLoaded')
                 : t('sessionWorkbenchUi.transcript.loading')}
               activeStartedAt={request.activeStartedAt}
+              activeOutputTokens={request.activeOutputTokens}
               scrollAffordance
             />
 

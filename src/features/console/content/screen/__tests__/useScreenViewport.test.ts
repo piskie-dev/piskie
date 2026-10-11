@@ -33,6 +33,10 @@ const SNAPSHOT: ViewportSnapshot = {
   ready: true,
   viewportFailure: null,
   drawnFrames: 1,
+  page: null,
+  pointer: null,
+  pointerClearId: 0,
+  renderedFrame: null,
 };
 
 let dom: JSDOM;
@@ -105,6 +109,8 @@ function screenFeedsWith(snapshot: ViewportSnapshot): ScreenFeedRegistry {
     attach: vi.fn(() => 'attached' as const),
     update: vi.fn(),
     sendInput: vi.fn(),
+    pointerPresented: vi.fn(),
+    pointerCleared: vi.fn(),
     subscribe: () => () => undefined,
     snapshot: () => snapshot,
     release: vi.fn(),
@@ -124,6 +130,52 @@ async function flushAcquire(): Promise<void> {
 }
 
 describe('useScreenViewport', () => {
+  it('retains the drawn canvas after closure while releasing the lease and suppressing live pointer/input', async () => {
+    const screenFeeds = screenFeedsWith(SNAPSHOT);
+    const runtime = { screenFeeds } as unknown as RendererRuntime;
+    function FrozenProbe({ enabled }: { enabled: boolean }) {
+      const viewport = useScreenViewport({ agentId: 'sample-agent', browserId: 'sample-browser', enabled,
+        fps: 4, retainLastFrame: true });
+      return createElement('div', { 'data-ready': String(viewport.ready), 'data-frozen': String(viewport.frozen) },
+        createElement('canvas', { key: viewport.canvasKey, ref: viewport.canvasRef }));
+    }
+    const renderProbe = (enabled: boolean) => act(async () => root.render(createElement(RuntimeProvider, { runtime }, createElement(FrozenProbe, { enabled }))));
+    await renderProbe(true);
+    await flushAcquire();
+    const canvas = container.querySelector('canvas');
+    const lease = vi.mocked(screenFeeds.acquireViewport).mock.results[0]!.value as ViewportLease;
+    await renderProbe(false);
+    expect(lease.release).toHaveBeenCalledOnce();
+    expect(container.querySelector('canvas')).toBe(canvas);
+    expect(container.querySelector('[data-frozen]')?.getAttribute('data-frozen')).toBe('true');
+    expect(container.querySelector('[data-ready]')?.getAttribute('data-ready')).toBe('true');
+    expect(screenFeeds.acquireViewport).toHaveBeenCalledOnce();
+  });
+
+  it('reports no retained picture if the painted canvas was replaced before resource closure', async () => {
+    const screenFeeds = screenFeedsWith(SNAPSHOT);
+    const runtime = { screenFeeds } as unknown as RendererRuntime;
+    function ReplacementProbe({ enabled }: { enabled: boolean }) {
+      const viewport = useScreenViewport({ agentId: 'sample-agent', browserId: 'sample-browser', enabled,
+        fps: 4, retainLastFrame: true });
+      return createElement('div', { 'data-ready': String(viewport.ready), 'data-frozen': String(viewport.frozen) },
+        createElement('canvas', { key: viewport.canvasKey, ref: viewport.canvasRef }));
+    }
+    const renderProbe = (enabled: boolean) => act(async () => root.render(createElement(RuntimeProvider, { runtime }, createElement(ReplacementProbe, { enabled }))));
+    await renderProbe(true);
+    await flushAcquire();
+    const painted = container.querySelector('canvas');
+    const lease = vi.mocked(screenFeeds.acquireViewport).mock.results[0]!.value as ViewportLease;
+    await renderProbe(false);
+    vi.mocked(lease.attach).mockReturnValueOnce('replace-canvas');
+    await renderProbe(true);
+    await flushAcquire();
+    expect(container.querySelector('canvas')).not.toBe(painted);
+    await renderProbe(false);
+    expect(container.querySelector('[data-ready]')?.getAttribute('data-ready')).toBe('false');
+    expect(container.querySelector('[data-frozen]')?.getAttribute('data-frozen')).toBe('false');
+  });
+
   it('defers acquire through the StrictMode probe and transfers the canvas once', async () => {
     const release = vi.fn();
     const attach = vi.fn(() => 'attached' as const);
@@ -132,6 +184,8 @@ describe('useScreenViewport', () => {
       attach,
       update: vi.fn(),
       sendInput: vi.fn(),
+      pointerPresented: vi.fn(),
+      pointerCleared: vi.fn(),
       subscribe: () => () => undefined,
       snapshot: () => SNAPSHOT,
       release,
@@ -165,6 +219,23 @@ describe('useScreenViewport', () => {
     await act(async () => root.unmount());
     expect(release).toHaveBeenCalledOnce();
     root = createRoot(container);
+  });
+
+  it('acknowledges cleared feedback while retaining a same-Page static pointer, without repeating for later observations', async () => {
+    const page = { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 };
+    const pointer = { page, framePage: page, seq: 3, action: 'up' as const, x: 80, y: 120,
+      buttons: 0, clickCount: 1, timestamp: 1000, visibleAt: 1100, pressVisibleAt: null };
+    const snapshot: ViewportSnapshot = { ...SNAPSHOT, page, pointer, pointerClearId: 1,
+      renderedFrame: { page, width: 800, height: 600 } };
+    const screenFeeds = screenFeedsWith(snapshot);
+    const runtime = { screenFeeds } as unknown as RendererRuntime;
+    await act(async () => root.render(createElement(RuntimeProvider, { runtime }, createElement(Probe))));
+    await flushAcquire();
+    const lease = vi.mocked(screenFeeds.acquireViewport).mock.results[0]!.value as ViewportLease;
+    expect(lease.pointerCleared).toHaveBeenCalledExactlyOnceWith(1);
+    vi.spyOn(lease, 'snapshot').mockReturnValue({ ...snapshot, pointer: { ...pointer, seq: 4, x: 120 } });
+    await act(async () => root.render(createElement(RuntimeProvider, { runtime }, createElement(Probe))));
+    expect(lease.pointerCleared).toHaveBeenCalledOnce();
   });
 
   it('reprojects local port failures while preserving external error text', async () => {

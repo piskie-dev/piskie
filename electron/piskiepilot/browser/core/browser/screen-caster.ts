@@ -10,7 +10,7 @@ import { Page, CDPSession } from 'puppeteer-core';
 import { EventEmitter } from 'events';
 import debug from 'debug';
 
-import type { RemoteInputEvent } from '@shared/types/stream.js';
+import { sameScreenPage, type RemoteInputEvent, type ScreenPageIdentity, type ScreenFrameMapping } from '@shared/types/stream.js';
 
 const logger = debug('piskiepilot:screen-caster');
 
@@ -46,6 +46,8 @@ export interface ScreencastFrame {
   scrollOffsetX?: number;
   /** 垂直滚动偏移 */
   scrollOffsetY?: number;
+  page?: ScreenPageIdentity;
+  mapping?: ScreenFrameMapping;
 }
 
 /**
@@ -73,12 +75,18 @@ export class ScreenCaster extends EventEmitter {
   private options: Required<ScreencastOptions>;
   private setFpsTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingOptions: Required<ScreencastOptions> | null = null;
+  private optionsRestartGeneration = 0;
   /** rebind 串行链：连续快速选页时也保证 stop/start 不交叠 */
   private rebindChain: Promise<void> = Promise.resolve();
+  private captureGeneration = 0;
+  private targetGeneration = 0;
+  private startRequested = false;
+  private identity: ScreenPageIdentity | undefined;
 
-  constructor(page: Page, options: ScreencastOptions = {}) {
+  constructor(page: Page, options: ScreencastOptions = {}, identity?: ScreenPageIdentity) {
     super();
     this.page = page;
+    this.identity = identity;
     this.options = {
       format: options.format || 'jpeg',
       quality: options.quality ?? 80,
@@ -92,43 +100,56 @@ export class ScreenCaster extends EventEmitter {
    * 启动 Screencast
    */
   async start(): Promise<void> {
+    this.startRequested = true;
     if (this.isRunning) {
       logger('Screencast already running, skipping start');
       return;
     }
 
+    const generation = ++this.captureGeneration;
     try {
-      // 创建 CDP Session
-      this.cdpSession = await this.page.createCDPSession();
+      const page = this.page;
+      const identity = this.identity;
+      const session = await page.createCDPSession();
+      if (generation !== this.captureGeneration) {
+        await session.detach();
+        return;
+      }
+      this.cdpSession = session;
 
-      // 监听帧事件
-      this.cdpSession.on('Page.screencastFrame', async (frame: any) => {
+      // Each callback retains its capture owner across asynchronous ACKs.
+      session.on('Page.screencastFrame', async (frame) => {
+        const timestamp = Date.now();
+        const current = () => generation === this.captureGeneration && this.cdpSession === session;
         try {
           // 必须确认收到帧，否则会停止发送
-          await this.cdpSession?.send('Page.screencastFrameAck', {
+          await session.send('Page.screencastFrameAck', {
             sessionId: frame.sessionId,
           });
 
+          if (!current()) return;
           // 构造帧数据
           const frameData: ScreencastFrame = {
             data: frame.data,
-            timestamp: Date.now(),
+            timestamp,
             deviceWidth: frame.metadata?.deviceWidth,
             deviceHeight: frame.metadata?.deviceHeight,
             scrollOffsetX: frame.metadata?.scrollOffsetX,
             scrollOffsetY: frame.metadata?.scrollOffsetY,
+            page: identity,
+            mapping: { scale: frame.metadata?.pageScaleFactor ?? 1, offsetX: 0, offsetY: frame.metadata?.offsetTop ?? 0 },
           };
 
           // 发送帧事件
           this.emit('frame', frameData);
         } catch (error) {
           logger('Error processing frame: %O', error);
-          this.emit('error', error as Error);
+          if (current()) this.emit('error', error as Error);
         }
       });
 
       // 启动 Screencast
-      await this.cdpSession.send('Page.startScreencast', {
+      await session.send('Page.startScreencast', {
         format: this.options.format,
         quality: this.options.quality,
         maxWidth: this.options.maxWidth,
@@ -136,6 +157,7 @@ export class ScreenCaster extends EventEmitter {
         everyNthFrame: this.options.everyNthFrame,
       });
 
+      if (generation !== this.captureGeneration) return;
       this.isRunning = true;
       logger(
         'Screencast started: format=%s, quality=%d, size=%dx%d, everyNthFrame=%d, url=%s',
@@ -147,10 +169,11 @@ export class ScreenCaster extends EventEmitter {
         this.page.url()
       );
 
-      this.captureFirstFrame().catch(err => {
+      this.captureFirstFrame(session, page, identity, generation).catch(err => {
         logger('Failed to capture first frame: %O', err);
       });
     } catch (error) {
+      if (generation !== this.captureGeneration) return;
       logger('Failed to start screencast: %O', error);
       await this.cleanup();
       throw error;
@@ -161,11 +184,8 @@ export class ScreenCaster extends EventEmitter {
    * 停止 Screencast
    */
   async stop(): Promise<void> {
-    if (!this.isRunning) {
-      logger('Screencast not running, skipping stop');
-      return;
-    }
-
+    this.startRequested = false;
+    this.targetGeneration += 1;
     await this.cleanup();
     this.emit('stop');
     logger('Screencast stopped');
@@ -176,19 +196,24 @@ export class ScreenCaster extends EventEmitter {
    * 帧/错误监听都在 caster 自身（EventEmitter），跨重挂保留；输入转发随 session 一起切换。
    * 未在运行时只替换目标页，等下次 start 生效。
    */
-  async rebind(page: Page): Promise<void> {
+  async rebind(page: Page, identity?: ScreenPageIdentity): Promise<void> {
+    if (page === this.page && (identity === this.identity || sameScreenPage(identity, this.identity))) return this.rebindChain;
+    if (page.isClosed()) return;
+    // The requested target is authoritative, even while an older stop/start is awaiting CDP.
+    this.page = page;
+    this.identity = identity;
+    const targetGeneration = ++this.targetGeneration;
+    this.captureGeneration += 1;
     this.rebindChain = this.rebindChain.then(async () => {
-      if (page === this.page || page.isClosed()) return;
-      const wasRunning = this.isRunning;
-      this.page = page;
-      if (!wasRunning) return;
+      if (targetGeneration !== this.targetGeneration) return;
       await this.cleanup();
+      if (targetGeneration !== this.targetGeneration || !this.startRequested) return;
       await this.start();
       logger('Screencast rebound to selected page: %s', page.url());
     });
     this.rebindChain = this.rebindChain.catch((error) => {
       logger('Failed to rebind screencast: %O', error);
-      this.emit('error', error as Error);
+      if (targetGeneration === this.targetGeneration) this.emit('error', error as Error);
     });
     return this.rebindChain;
   }
@@ -223,16 +248,25 @@ export class ScreenCaster extends EventEmitter {
       if (!target || this.sameAsCurrent(target)) return;
 
       this.options = target;
-      if (this.isRunning && this.cdpSession) {
+      const session = this.cdpSession;
+      const captureGeneration = this.captureGeneration;
+      const targetGeneration = this.targetGeneration;
+      const optionsRestartGeneration = ++this.optionsRestartGeneration;
+      const current = () => this.isRunning && this.cdpSession === session
+        && this.captureGeneration === captureGeneration && this.targetGeneration === targetGeneration
+        && this.optionsRestartGeneration === optionsRestartGeneration;
+      if (session && current()) {
         try {
-          await this.cdpSession.send('Page.stopScreencast');
-          await this.cdpSession.send('Page.startScreencast', {
+          await session.send('Page.stopScreencast');
+          if (!current()) return;
+          await session.send('Page.startScreencast', {
             format: target.format,
             quality: target.quality,
             maxWidth: target.maxWidth,
             maxHeight: target.maxHeight,
             everyNthFrame: target.everyNthFrame,
           });
+          if (!current()) return;
           logger(
             'Screencast options changed: quality=%d, size=%dx%d, everyNthFrame=%d',
             target.quality,
@@ -242,7 +276,7 @@ export class ScreenCaster extends EventEmitter {
           );
         } catch (error) {
           logger('Failed to change screencast options: %O', error);
-          this.emit('error', error as Error);
+          if (current()) this.emit('error', error as Error);
         }
       }
     }, 200);
@@ -303,39 +337,43 @@ export class ScreenCaster extends EventEmitter {
     await session.send('Input.insertText', { text: event.text });
   }
 
-  private async captureFirstFrame(): Promise<void> {
-    if (!this.cdpSession || !this.isRunning) return;
-
-    const result = await this.cdpSession.send('Page.captureScreenshot', {
-      format: this.options.format,
-      quality: this.options.quality,
-    });
-
-    if (!this.isRunning) return;
-
-    const viewport = this.page.viewport();
+  private async captureFirstFrame(
+    session: CDPSession, page: Page, identity: ScreenPageIdentity | undefined, generation: number,
+  ): Promise<void> {
+    const timestamp = Date.now();
+    const [result, metrics] = await Promise.all([
+      session.send('Page.captureScreenshot', { format: this.options.format, quality: this.options.quality }),
+      session.send('Page.getLayoutMetrics'),
+    ]);
+    if (!this.isRunning || generation !== this.captureGeneration || session !== this.cdpSession || page !== this.page) return;
+    const viewport = metrics.visualViewport;
     this.emit('frame', {
-      data: result.data,
-      timestamp: Date.now(),
-      deviceWidth: viewport?.width,
-      deviceHeight: viewport?.height,
-      scrollOffsetX: 0,
-      scrollOffsetY: 0,
-    } as ScreencastFrame);
+      data: result.data, timestamp, page: identity,
+      deviceWidth: viewport.clientWidth * viewport.scale,
+      deviceHeight: viewport.clientHeight * viewport.scale,
+      scrollOffsetX: metrics.cssVisualViewport.pageX,
+      scrollOffsetY: metrics.cssVisualViewport.pageY,
+      mapping: { scale: viewport.scale, offsetX: 0, offsetY: 0 },
+    } satisfies ScreencastFrame);
   }
 
   private async cleanup(): Promise<void> {
+    this.captureGeneration += 1;
+    const session = this.cdpSession;
+    this.cdpSession = null;
+    const wasRunning = this.isRunning;
+    this.isRunning = false;
     if (this.setFpsTimer) {
       clearTimeout(this.setFpsTimer);
       this.setFpsTimer = null;
       this.pendingOptions = null;
     }
-    if (this.cdpSession) {
+    if (session) {
       try {
-        if (this.isRunning) {
-          await this.cdpSession.send('Page.stopScreencast');
+        if (wasRunning) {
+          await session.send('Page.stopScreencast');
         }
-        await this.cdpSession.detach();
+        await session.detach();
       } catch (error) {
         logger('Error during cleanup: %O', error);
       }

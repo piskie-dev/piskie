@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,8 +11,10 @@ import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import type { RemoteInputEvent } from '@shared/types/stream';
+import type { PresentedScreenPointer } from '@shared/screen-pointer';
 import type {
   ScreenCaptureOptions,
+  ScreenViewportFrame,
   ViewportDemand,
 } from '@/domains/screen-feed/worker-protocol';
 import type {
@@ -37,6 +40,10 @@ const EMPTY_SNAPSHOT: ViewportSnapshot = Object.freeze({
   ready: false,
   viewportFailure: null,
   drawnFrames: 0,
+  page: null,
+  pointer: null,
+  pointerClearId: 0,
+  renderedFrame: null,
 });
 
 interface LeaseSession {
@@ -53,13 +60,18 @@ export interface ScreenViewportOptions {
   readonly interactive?: boolean;
   readonly paused?: boolean;
   readonly capture?: ScreenCaptureOptions;
+  readonly retainLastFrame?: boolean;
 }
 
 export interface ScreenViewportState {
   readonly ready: boolean;
+  readonly frozen: boolean;
   readonly error: string | null;
   readonly frameSize: { readonly width: number; readonly height: number } | null;
   readonly currentFps: number | null;
+  readonly pointer: PresentedScreenPointer | null;
+  readonly onPointerPresented: (pointer: PresentedScreenPointer, at: number) => void;
+  readonly renderedFrame: ScreenViewportFrame | null;
   readonly canvasKey: string;
   readonly canvasRef: (node: HTMLCanvasElement | null) => void;
   readonly sendInput: (event: RemoteInputEvent) => void;
@@ -75,6 +87,7 @@ export function useScreenViewport(options: ScreenViewportOptions): ScreenViewpor
     interactive = false,
     paused = false,
     capture,
+    retainLastFrame = false,
   } = options;
   const { screenFeeds } = useRendererRuntime();
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -104,7 +117,14 @@ export function useScreenViewport(options: ScreenViewportOptions): ScreenViewpor
     () => activeLease?.snapshot() ?? EMPTY_SNAPSHOT,
     [activeLease],
   );
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const liveSnapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const lastFrame = useRef<{ key: string; snapshot: ViewportSnapshot } | null>(null);
+  const frameKey = `${agentId}:${browserId}:${canvasVersion}`;
+  if (enabled && liveSnapshot.ready) lastFrame.current = { key: frameKey, snapshot: liveSnapshot };
+  const retained = !enabled && retainLastFrame && lastFrame.current?.key === frameKey
+    ? lastFrame.current.snapshot : null;
+  const snapshot = retained ?? liveSnapshot;
+  const frozen = retained !== null;
 
   useEffect(() => {
     demandRef.current = demand;
@@ -158,13 +178,24 @@ export function useScreenViewport(options: ScreenViewportOptions): ScreenViewpor
   const sendInput = useCallback((event: RemoteInputEvent) => {
     activeLease?.sendInput(event);
   }, [activeLease]);
+  const onPointerPresented = useCallback((pointer: PresentedScreenPointer, at: number) => {
+    activeLease?.pointerPresented(pointer, at);
+  }, [activeLease]);
+  const feedbackCleared = !snapshot.pointer?.press;
+  useLayoutEffect(() => {
+    if (feedbackCleared && snapshot.pointerClearId > 0) activeLease?.pointerCleared(snapshot.pointerClearId);
+  }, [activeLease, feedbackCleared, snapshot.pointerClearId]);
   const failure = snapshot.viewportFailure ?? snapshot.failure;
 
   return {
     ready: snapshot.ready,
+    frozen,
     error: attachError ?? screenFailureText(failure, t),
     frameSize: snapshot.frameSize,
-    currentFps: snapshot.phase === 'idle' ? null : snapshot.stats.decodedFps,
+    currentFps: frozen || snapshot.phase === 'idle' ? null : snapshot.stats.decodedFps,
+    pointer: paused || frozen ? null : snapshot.pointer,
+    onPointerPresented,
+    renderedFrame: snapshot.renderedFrame,
     canvasKey: `browser-${browserId}-${canvasVersion}`,
     canvasRef,
     sendInput,

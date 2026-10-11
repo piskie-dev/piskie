@@ -37,6 +37,9 @@ import { RightPanel } from './RightPanel';
 import { availablePanels, resolveSelectedPanel, type PanelKey } from './panels';
 import { useEmbeddedBrowserState } from './useEmbeddedBrowserState';
 import { useThreadPanels } from './useThreadPanels';
+import { BrowserMonitorPanel, FloatingBrowserMonitors } from './BrowserMonitor';
+import { useBrowserMonitor } from './useBrowserMonitor';
+import { ScreenFullscreen } from '../../content/ScreenFullscreen';
 import styles from './threadview.module.css';
 
 export interface ThreadModeProps {
@@ -86,6 +89,7 @@ export const ThreadMode = memo<ThreadModeProps>(
     const gridRef = useRef<HTMLDivElement>(null);
     const threadsRef = useRef<HTMLDivElement>(null);
     const centerRef = useRef<HTMLDivElement>(null);
+    const readingAreaRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const browserLayoutAnchors = useMemo(() => [threadsRef, centerRef], []);
     const [tabWorkerId, setTabWorkerId] = useState<string | undefined>(undefined);
@@ -99,6 +103,18 @@ export const ThreadMode = memo<ThreadModeProps>(
     }, [revealWorker]);
     const agent = useAgentVM(selectedAgentId);
     const actions = useConsoleActions();
+    const monitor = useBrowserMonitor(selectedAgentId ?? '', agent?.workers);
+    const [fullscreen, setFullscreen] = useState<{ agentId: string; key: string } | null>(null);
+    useEffect(() => {
+      setFullscreen((current) => current && current.agentId !== selectedAgentId ? null : current);
+    }, [selectedAgentId]);
+    const openMonitorWindow = useCallback((key: string) => {
+      const rect = readingAreaRef.current?.getBoundingClientRect();
+      if (rect) monitor.open(key, { width: rect.width, height: rect.height });
+    }, [monitor.open]);
+    const openMonitorFullscreen = useCallback((key: string) => {
+      if (selectedAgentId) setFullscreen({ agentId: selectedAgentId, key });
+    }, [selectedAgentId]);
 
     // worker 销毁且正被选中 ⇒ 自动回落主会话（纯派生，不用 effect）
     const activeWorkerId = agent?.workers.some((item) => item.id === tabWorkerId) ? tabWorkerId : undefined;
@@ -112,6 +128,10 @@ export const ThreadMode = memo<ThreadModeProps>(
     const browserState = useEmbeddedBrowserState(browserTarget);
     const panelView = useThreadPanels(panelScope);
     const { open: openPanel, close: closePanelView, beginReviewRequest } = panelView;
+    const returnToMonitor = useCallback((key: string) => {
+      monitor.close(key);
+      if (monitor.tasks.some((task) => !task.closed || task.hasFrame)) openPanel('monitor');
+    }, [monitor.close, monitor.tasks, openPanel]);
 
     const tabs = useMemo<readonly AgentTabItem[]>(() => {
       if (!agent) return [];
@@ -187,11 +207,12 @@ export const ThreadMode = memo<ThreadModeProps>(
       () =>
         availablePanels({
           isWorker: !!worker,
-          hasScreen: !!worker?.browserId,
+          hasScreen: !!worker?.browserId && worker.browserReady,
           hasReviewTarget: panelView.reviewTarget !== undefined,
           hasBrowser: browserState.open,
+          hasMonitor: monitor.tasks.some((task) => !task.closed || task.hasFrame),
         }),
-      [panelView.reviewTarget, browserState.open, worker],
+      [panelView.reviewTarget, browserState.open, worker, monitor.tasks],
     );
 
     /** 扣掉用户关掉的；空数组 ⇒ 整栏不出现 */
@@ -362,8 +383,11 @@ export const ThreadMode = memo<ThreadModeProps>(
                 onToggleFileChanges={toggleFileChanges}
                 onOpenWorker={selectTab}
                 deferEscapeFallback={reviewVisible}
+                readingAreaRef={readingAreaRef}
               />
             ) : emptyState}
+            {selectedAgentId && <FloatingBrowserMonitors agentId={selectedAgentId} controller={monitor}
+              readingRef={readingAreaRef} hidden={!!activeWorkerId} onFullscreen={openMonitorFullscreen} onReturnToMonitor={returnToMonitor} />}
           </div>
 
           {showPanel && (
@@ -386,7 +410,7 @@ export const ThreadMode = memo<ThreadModeProps>(
         </div>
 
         <div ref={panelRef} className={styles.panel} data-collapsed={showPanel ? undefined : 'true'}>
-          {showPanel && (
+          {browserTarget && agent && (
             <RightPanel
               agentId={browserTarget.agentId}
               worker={worker}
@@ -401,10 +425,20 @@ export const ThreadMode = memo<ThreadModeProps>(
               browserTarget={browserTarget}
               browserLayoutAnchors={browserLayoutAnchors}
               topRailActions={railActions}
+              hidden={!showPanel}
+              monitorContent={<BrowserMonitorPanel key={selectedAgentId} agentId={browserTarget.agentId}
+                tasks={monitor.tasks} windows={monitor.windows}
+                hidden={!showPanel || resolveSelectedPanel(panelView.wanted, visiblePanels) !== 'monitor'}
+                onOpen={openMonitorWindow} trackFrame={monitor.trackFrame} />}
             />
           )}
         </div>
       </div>
+      {fullscreen?.agentId === selectedAgentId && (() => {
+        const task = monitor.tasks.find((item) => item.key === fullscreen.key);
+        return task && <ScreenFullscreen open onClose={() => setFullscreen(null)} subagentId={task.workerId}
+          browserId={task.browserId} title={task.title} browserReady={task.ready} resourceClosed={task.closed} />;
+      })()}
       </ContentLinkUrlScope>
     );
   },

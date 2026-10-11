@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import type { ScheduleCreateInput, ScheduleUpdateInput } from '@shared/electron-contracts/schedules';
+import type { TaskDefinitionSnapshot } from '@shared/electron-contracts/task-definitions';
 import type { ScheduleFireRecord } from '@shared/types/schedules';
+import { TaskDefinitionModal } from '../../components/task-definition/TaskDefinitionModal';
 import { Dialog } from '../console/chrome/Dialog';
 import { createConsoleHeaderAction } from '../console/shell/headerAction';
 import {
@@ -67,6 +69,7 @@ export function SchedulesPage() {
   const [history, setHistory] = useState<{ key: string; records: readonly ScheduleFireRecord[] }>({ key: '', records: [] });
   const [historyFrom, setHistoryFrom] = useState(() => new Date(Date.now() - HISTORY_WINDOW_MS));
   const [form, setForm] = useState<ScheduleFormMode | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<TaskDefinitionSnapshot | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -144,7 +147,10 @@ export function SchedulesPage() {
       state: { consoleAction: createConsoleHeaderAction({ kind: 'reveal', target: { agentId } }) },
     });
   }, [navigate]);
-  const openTemplates = useCallback(() => navigate('/console'), [navigate]);
+  const editTemplate = useCallback((definitionId: string) => {
+    setEditingTemplate(definitions.find((definition) => definition.definitionId === definitionId) ?? null);
+  }, [definitions]);
+  const closeTemplateEditor = useCallback(() => setEditingTemplate(null), []);
 
   const onCreate = useCallback(async (input: ScheduleCreateInput) => {
     const created = await runtime.schedules.create(input);
@@ -261,7 +267,7 @@ export function SchedulesPage() {
             live={live}
             now={now}
             locale={locale}
-            onOpenTemplates={openTemplates}
+            onEditTemplate={editTemplate}
             onOpenRun={openRun}
           />
         ) : null}
@@ -279,9 +285,17 @@ export function SchedulesPage() {
           onClose={() => setForm(null)}
           onCreate={onCreate}
           onUpdate={onUpdate}
-          onOpenTemplates={openTemplates}
+          onEditTemplate={editTemplate}
         />
       )}
+
+      <TaskDefinitionModal
+        open={editingTemplate !== null}
+        editingDefinition={editingTemplate ?? undefined}
+        onClose={closeTemplateEditor}
+        onCreated={closeTemplateEditor}
+        onUpdated={closeTemplateEditor}
+      />
 
       <Dialog
         open={deleteTarget !== null}
