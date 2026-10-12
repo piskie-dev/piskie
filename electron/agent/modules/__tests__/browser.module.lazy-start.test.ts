@@ -47,7 +47,7 @@ const launchSpec: BrowserLaunchSpec = Object.freeze({
   userDataId: PROFILE_ID,
   generation: 'sample-generation',
   identity: { language: 'en-US', userAgent: 'Sample browser agent' },
-  fingerprint: { platform: 'linux' },
+  fingerprint: { platform: 'linux' as const },
   backgroundMode: true,
 });
 const manager = BrowserManager as unknown as {
@@ -82,6 +82,8 @@ function browserFixture() {
   };
   const automation = {
     dispose: vi.fn(),
+    getScreenTarget: () => ({ page, identity: { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 } }),
+    withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
     getSelectedPage: () => page,
     getSelectedPageIndex: () => 0,
     listPages: vi.fn(async () => [{ pageId: 1, page }]),
@@ -312,15 +314,15 @@ describe('BrowserModule lazy browser access', () => {
   });
 
   it.each(['listPages', 'takeSnapshot', 'listConsoleMessages', 'listNetworkRequests', 'getAllCookies', 'getWindowBounds'])(
-    'starts on the first builtin %s read without marking a page ready',
+    'starts on the first builtin %s read and marks its usable Page ready',
     async (functionName) => {
       const { module, emitStateChange } = await startModule();
       expect(await calls(module).run(functionName)).toMatchObject({ ok: true });
       expect(fingerprintBrowser.launch).toHaveBeenCalledOnce();
       expect(puppeteer.connect).toHaveBeenCalledOnce();
       expect(browserEnvironmentRuntime.recordAgentBrowserStarted).toHaveBeenCalledWith(ENVIRONMENT_ID, BROWSER_ID, PROFILE_ID);
-      expect(module.getBrowserReady()).toBe(false);
-      expect(emitStateChange).not.toHaveBeenCalled();
+      expect(module.getBrowserReady()).toBe(true);
+      expect(emitStateChange).toHaveBeenCalledOnce();
       expect(WindowController.initialize).toHaveBeenCalledWith(BROWSER_ID, {
         startHidden: true, callerWindow: { windowId: '0x00100001' },
       });
@@ -340,7 +342,7 @@ describe('BrowserModule lazy browser access', () => {
       expect(await calls(module).run(functionName, true, { url: 'https://example.test/sample' })).toMatchObject({ ok: true });
       expect(fingerprintBrowser.launch).toHaveBeenCalledOnce();
       expect(browserEnvironmentRuntime.recordAgentBrowserStarted).toHaveBeenCalledOnce();
-      expect(module.getBrowserReady()).toBe(functionName === 'navigate');
+      expect(module.getBrowserReady()).toBe(true);
     },
   );
 
@@ -412,7 +414,7 @@ describe('BrowserModule lazy browser access', () => {
     request.mockResolvedValueOnce({ callId: 'sample-call', decision: 'allow' });
     expect(await tools.run(custom ? 'currentPage' : 'listPages', custom)).toMatchObject({ ok: true });
     expect(fingerprintBrowser.launch).toHaveBeenCalledOnce();
-    expect(fingerprintBrowser.launch.mock.invocationCallOrder[0]).toBeGreaterThan(request.mock.invocationCallOrder[1]);
+    expect(vi.mocked(fingerprintBrowser.launch).mock.invocationCallOrder[0]).toBeGreaterThan(request.mock.invocationCallOrder[1]);
   });
 
   it('preserves SDK validation and already-aborted signal checks before any connection', async () => {

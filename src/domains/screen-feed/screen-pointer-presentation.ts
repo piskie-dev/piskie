@@ -1,5 +1,5 @@
 import { sameScreenPage, sameScreenPageInstance, type ScreenPageIdentity, type ScreenPointer } from '@shared/types/stream';
-import { isRecentScreenPress, SCREEN_POINTER_POLICY, type PresentedScreenPointer } from '@shared/screen-pointer';
+import { isRecentScreenPress, screenPointerRevision, screenPressSequence, SCREEN_POINTER_POLICY, type PresentedScreenPointer } from '@shared/screen-pointer';
 
 interface PresentationEnvironment {
   readonly now: () => number;
@@ -60,13 +60,16 @@ export class ScreenPointerPresentation {
     if (!this.blocked) this.derive();
   }
 
-  presented(page: ScreenPageIdentity, seq: number, pressSeq: number | undefined, at: number): void {
-    if (!this.visible || !this.pointer || !sameScreenPage(this.pointer.framePage, page) || this.pointer.seq !== seq) return;
+  presented(page: ScreenPageIdentity, seq: number, pressSeq: number | undefined, at: number, targetSeq?: number, activitySeq?: number): void {
+    if (!this.visible || !this.pointer || !sameScreenPage(this.pointer.framePage, page) || screenPointerRevision(this.pointer) !== seq) return;
     const pointer = this.pointer;
     const visibleAt = pointer.visibleAt ?? at;
-    const pressVisibleAt = pointer.press && pressSeq === pointer.press.seq ? pointer.pressVisibleAt ?? at : pointer.pressVisibleAt;
-    if (pointer.visibleAt === visibleAt && pointer.pressVisibleAt === pressVisibleAt) return;
-    this.pointer = { ...pointer, visibleAt, pressVisibleAt };
+    const pressVisibleAt = pointer.press && pressSeq === screenPressSequence(pointer.press) ? pointer.pressVisibleAt ?? at : pointer.pressVisibleAt;
+    const targetVisibleAt = pointer.target && targetSeq === pointer.target.seq ? pointer.targetVisibleAt ?? at : pointer.targetVisibleAt;
+    const activityVisibleAt = pointer.activity && activitySeq === pointer.activity.seq ? pointer.activityVisibleAt ?? at : pointer.activityVisibleAt;
+    if (pointer.visibleAt === visibleAt && pointer.pressVisibleAt === pressVisibleAt
+      && pointer.targetVisibleAt === targetVisibleAt && pointer.activityVisibleAt === activityVisibleAt) return;
+    this.pointer = { ...pointer, visibleAt, pressVisibleAt, targetVisibleAt, activityVisibleAt };
     this.environment.publish();
     if (this.holdCap !== null) this.scheduleHold();
   }
@@ -126,13 +129,21 @@ export class ScreenPointerPresentation {
     const previous = sameScreenPageInstance(this.pointer?.page, source.page) ? this.pointer : null;
     const press = source.press && sameScreenPage(source.press.page, this.framePage)
       && isRecentScreenPress(source.press.timestamp, this.environment.unixNow())
-      && !(sameScreenPageInstance(source.page, this.suppressed?.page) && source.press.seq <= (this.suppressed?.press?.seq ?? 0))
+      && !(sameScreenPageInstance(source.page, this.suppressed?.page) && screenPressSequence(source.press) <= (this.suppressed?.press ? screenPressSequence(this.suppressed.press) : 0))
       ? source.press : undefined;
-    if (previous?.seq === source.seq && sameScreenPage(previous.framePage, this.framePage)
-      && previous.press?.seq === press?.seq) return;
-    this.pointer = { ...source, framePage: this.framePage!, press,
-      visibleAt: previous?.seq === source.seq ? previous.visibleAt : null,
-      pressVisibleAt: previous?.press?.seq === press?.seq ? previous?.pressVisibleAt ?? null : null };
+    const target = source.target && sameScreenPage(source.target.page, this.framePage) ? source.target : undefined;
+    const activity = source.activity && sameScreenPage(source.activity.page, this.framePage)
+      && !(sameScreenPageInstance(source.page, this.suppressed?.page) && source.activity.seq <= (this.suppressed?.activity?.seq ?? 0))
+      ? source.activity : undefined;
+    if (previous && screenPointerRevision(previous) === screenPointerRevision(source) && sameScreenPage(previous.framePage, this.framePage)
+      && previous.press === press && previous.target === target && previous.activity === activity) return;
+    this.pointer = { ...source, framePage: this.framePage!, press, target, activity,
+      positionTarget: source.target && !sameScreenPage(source.target.page, this.framePage) ? source.target : source.positionTarget,
+      targetSuppressed: !!target && sameScreenPageInstance(source.page, this.suppressed?.page) && target.seq <= (this.suppressed?.target?.seq ?? 0),
+      visibleAt: previous && screenPointerRevision(previous) === screenPointerRevision(source) ? previous.visibleAt : null,
+      pressVisibleAt: previous?.press && press && screenPressSequence(previous.press) === screenPressSequence(press) ? previous.pressVisibleAt : null,
+      targetVisibleAt: previous?.target?.seq === target?.seq ? previous?.targetVisibleAt ?? null : null,
+      activityVisibleAt: previous?.activity?.seq === activity?.seq ? previous?.activityVisibleAt ?? null : null };
     if (publish) this.environment.publish();
   }
 
@@ -155,7 +166,7 @@ export class ScreenPointerPresentation {
     if (this.clearing || !this.pointer) return;
     this.pointer = sameScreenPageInstance(this.pointer.page, this.page)
       && sameScreenPageInstance(this.source?.page, this.page)
-      ? { ...this.pointer, press: undefined, pressVisibleAt: null } : null;
+      ? { ...this.pointer, press: undefined, target: undefined, activity: undefined, pressVisibleAt: null, targetVisibleAt: null, activityVisibleAt: null } : null;
     this.clearing = true;
     this.clearId += 1;
     // Remove old-frame feedback before switching images; a live Page's arrow remains.

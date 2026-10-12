@@ -564,7 +564,7 @@ export abstract class AgentEngine {
         this.emitStateChange();
       } catch (error) {
         appLog.warn({
-          event: 'agent.state.publish.failed',
+          event: 'agent.output.progress.publish.failed',
           message: 'Agent output progress publication failed',
           context: { scope: 'agent.state', agentId: this.id },
           error,

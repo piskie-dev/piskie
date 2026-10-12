@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   const casters: Array<{
     page: unknown; emit(type: string, value: unknown): boolean;
     start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>;
-    setOptions: ReturnType<typeof vi.fn>; rebind: ReturnType<typeof vi.fn>;
+    setOptions: ReturnType<typeof vi.fn>; rebind: ReturnType<typeof vi.fn>; refreshFrame: ReturnType<typeof vi.fn>;
   }> = [];
   const sessionListeners = new Set<(session: unknown) => void>();
   const subscribeScreenSession = vi.fn((_id: string, listener: (session: unknown) => void) => {
@@ -33,6 +33,7 @@ vi.mock('../core/browser/screen-caster.js', () => ({
     });
     readonly setOptions = vi.fn(async () => undefined);
     readonly rebind = vi.fn(async () => undefined);
+    readonly refreshFrame = vi.fn(async () => undefined);
     constructor(readonly page: unknown) { super(); mocks.casters.push(this); }
   },
 }));
@@ -44,6 +45,7 @@ function sessionFixture(pageId = 1, connectionId = 'sample-connection') {
   const listeners = new Set<(event: BrowserScreenEvent) => void>();
   let recent: ScreenPointer | null = null;
   const session = { getScreenTarget: () => target,
+    refreshTargetForFrame: vi.fn(), observeManualInput: vi.fn(),
     getCurrentScreenPointer: () => recent && recent.press && !isRecentScreenPress(recent.press.timestamp, Date.now())
       ? { ...recent, press: undefined } : recent,
     subscribeScreen: (listener: (event: BrowserScreenEvent) => void) => {
@@ -78,6 +80,27 @@ beforeEach(() => { vi.clearAllMocks(); mocks.casters.length = 0; mocks.sessionLi
 afterEach(() => { hub.close(); vi.useRealTimers(); });
 
 describe('ScreenStreamHub shared screen owner', () => {
+  it('requests actual current pixels for pending local layout or removal and stops requesting once the frame has arrived', async () => {
+    const runtime = sessionFixture();
+    mocks.getScreenSession.mockResolvedValue(runtime.session);
+    const viewer = sinkFixture();
+    await hub.addViewer('sample-browser', viewer.sink);
+    const caster = mocks.casters[0]!;
+    caster.emit('frame', castFrame(runtime.target.identity));
+    const after = Date.now() + 50;
+    const target = { page: runtime.target.identity, seq: 2, timestamp: Date.now(), kind: 'input' as const, actor: 'ai' as const,
+      x: 130, y: 80, rect: { x: 80, y: 60, width: 100, height: 40 }, scrollX: 0, scrollY: 0, frameAfter: after };
+    runtime.emit({ type: 'feedback', pointer: { ...pointer(runtime.target.identity), target } });
+    expect(caster.refreshFrame).toHaveBeenCalledOnce();
+    caster.emit('frame', { ...castFrame(runtime.target.identity), timestamp: after });
+    runtime.emit({ type: 'feedback', pointer: { ...pointer(runtime.target.identity), target } });
+    expect(caster.refreshFrame).toHaveBeenCalledOnce();
+    runtime.emit({ type: 'feedback', pointer: { ...pointer(runtime.target.identity), positionTarget: { ...target, frameAfter: after + 50 } } });
+    expect(caster.refreshFrame).toHaveBeenCalledTimes(2);
+    runtime.emit({ type: 'feedback', pointer: { ...pointer(identity(99)), target: { ...target, page: identity(99) } } });
+    expect(caster.refreshFrame).toHaveBeenCalledTimes(2);
+  });
+
   it('gets the connected owner before the first viewer and shares frame/pointer replay', async () => {
     const runtime = sessionFixture();
     mocks.getScreenSession.mockResolvedValue(runtime.session);

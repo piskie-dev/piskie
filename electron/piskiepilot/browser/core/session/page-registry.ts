@@ -46,6 +46,7 @@ interface PageRecord {
   dialog?: Dialog;
   readonly onDialog: (dialog: Dialog) => void;
   readonly onFrameNavigated: (frame: Frame) => void;
+  readonly onFrameDetached: (frame: Frame) => void;
   readonly onClose: () => void;
   readonly consoleCollector: ConsoleCollector;
   readonly networkCollector: NetworkCollector;
@@ -55,6 +56,7 @@ interface PageRecord {
 export interface PageRegistryEvents {
   selectedPageChanged(previousPageId: number | undefined, pageId: number | undefined): void;
   mainFrameNavigated(pageId: number): void;
+  frameChanged?(page: RegisteredPage, frame: Frame): void;
   screenChanged?(page: RegisteredPage | undefined): void;
   observeMouse?(page: Page, current: () => RegisteredPage): () => void;
 }
@@ -265,11 +267,13 @@ export class PageRegistry {
         record.dialog = dialog;
       },
       onFrameNavigated: (frame: Frame) => {
+        this.#events.frameChanged?.(toRegisteredPage(record), frame);
         if (frame !== page.mainFrame()) return;
         record.navigationSequence += 1;
         this.#events.mainFrameNavigated(record.pageId);
         if (record.pageId === this.#selectedPageId) this.#events.screenChanged?.(toRegisteredPage(record));
       },
+      onFrameDetached: (frame: Frame) => this.#events.frameChanged?.(toRegisteredPage(record), frame),
       onClose: () => this.#remove(record),
       consoleCollector: new ConsoleCollector(page),
       networkCollector: new NetworkCollector(page),
@@ -279,6 +283,7 @@ export class PageRegistry {
     this.#records.set(page, record);
     page.on('dialog', record.onDialog);
     page.on('framenavigated', record.onFrameNavigated);
+    page.on('framedetached', record.onFrameDetached);
     page.on('close', record.onClose);
     void page.emulateFocusedPage(true).catch(() => undefined);
 
@@ -305,6 +310,7 @@ export class PageRegistry {
   #detach(record: PageRecord): void {
     record.page.off('dialog', record.onDialog);
     record.page.off('framenavigated', record.onFrameNavigated);
+    record.page.off('framedetached', record.onFrameDetached);
     record.page.off('close', record.onClose);
     record.consoleCollector.dispose();
     record.networkCollector.dispose();

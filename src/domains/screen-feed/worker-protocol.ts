@@ -6,6 +6,10 @@ export interface ScreenViewportFrame {
   readonly width: number;
   readonly height: number;
   readonly mapping?: ScreenFrameMapping;
+  readonly timestamp?: number;
+  readonly seq?: number;
+  readonly scrollX?: number;
+  readonly scrollY?: number;
 }
 
 export interface ViewportDemand {
@@ -92,14 +96,14 @@ export type ScreenWorkerIncomingMessage =
       readonly leaseId: string;
       readonly event: RemoteInputEvent;
     }
-  | { readonly type: 'pointer-presented'; readonly epoch: number; readonly leaseId: string; readonly page: ScreenPageIdentity; readonly seq: number; readonly pressSeq?: number; readonly at: number }
+  | { readonly type: 'pointer-presented'; readonly epoch: number; readonly leaseId: string; readonly page: ScreenPageIdentity; readonly seq: number; readonly pressSeq?: number; readonly targetSeq?: number; readonly activitySeq?: number; readonly at: number }
   | { readonly type: 'pointer-cleared'; readonly epoch: number; readonly leaseId: string; readonly clearId: number }
   | { readonly type: 'close'; readonly epoch: number };
 
 export type ScreenWorkerOutgoingMessage =
   | { readonly type: 'feed-ready'; readonly epoch: number }
   | { readonly type: 'screen-state'; readonly epoch: number; readonly page: ScreenPageIdentity | null; readonly pointer: ScreenPointer | null }
-  | { readonly type: 'viewport-pointer'; readonly epoch: number; readonly leaseId: string; readonly pointer: PresentedScreenPointer | null; readonly clearId: number }
+  | { readonly type: 'viewport-pointer'; readonly epoch: number; readonly leaseId: string; readonly pointer: PresentedScreenPointer | null; readonly clearId: number; readonly frame?: ScreenViewportFrame }
   | { readonly type: 'viewport-frame'; readonly epoch: number; readonly leaseId: string; readonly frame: ScreenViewportFrame; readonly pointer: PresentedScreenPointer | null }
   | { readonly type: 'viewport-ready'; readonly epoch: number; readonly leaseId: string }
   | {

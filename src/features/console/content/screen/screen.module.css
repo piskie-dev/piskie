@@ -197,6 +197,10 @@
   outline: none;
 }
 
+.inputHost[data-active='true'][data-pointer-visible='true'] {
+  cursor: none;
+}
+
 .inputHost[data-active='true']:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--cyber-primary) 60%, transparent);
   outline-offset: -2px;

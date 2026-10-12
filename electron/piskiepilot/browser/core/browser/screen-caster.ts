@@ -50,6 +50,15 @@ export interface ScreencastFrame {
   mapping?: ScreenFrameMapping;
 }
 
+export interface SuccessfulScreenInput {
+  readonly event: RemoteInputEvent;
+  readonly page: Page;
+  readonly identity: ScreenPageIdentity | undefined;
+  readonly seq: number;
+  readonly timestamp: number;
+  readonly sourceOrder?: number;
+}
+
 /**
  * Screen Caster
  *
@@ -71,6 +80,7 @@ export interface ScreencastFrame {
 export class ScreenCaster extends EventEmitter {
   private cdpSession: CDPSession | null = null;
   private isRunning = false;
+  private runningGeneration = 0;
   private page: Page;
   private options: Required<ScreencastOptions>;
   private setFpsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,8 +92,11 @@ export class ScreenCaster extends EventEmitter {
   private targetGeneration = 0;
   private startRequested = false;
   private identity: ScreenPageIdentity | undefined;
+  private inputSequence = 0;
+  private frameCapture: { session: CDPSession; generation: number; promise: Promise<void> } | null = null;
 
-  constructor(page: Page, options: ScreencastOptions = {}, identity?: ScreenPageIdentity) {
+  constructor(page: Page, options: ScreencastOptions = {}, identity?: ScreenPageIdentity,
+    private readonly reserveInputOrder?: () => number) {
     super();
     this.page = page;
     this.identity = identity;
@@ -159,6 +172,7 @@ export class ScreenCaster extends EventEmitter {
 
       if (generation !== this.captureGeneration) return;
       this.isRunning = true;
+      this.runningGeneration = generation;
       logger(
         'Screencast started: format=%s, quality=%d, size=%dx%d, everyNthFrame=%d, url=%s',
         this.options.format,
@@ -302,6 +316,8 @@ export class ScreenCaster extends EventEmitter {
   async dispatchInput(event: RemoteInputEvent): Promise<void> {
     const session = this.cdpSession;
     if (!session || !this.isRunning) return;
+    const input: SuccessfulScreenInput = { event, page: this.page, identity: this.identity,
+      seq: ++this.inputSequence, timestamp: Date.now(), sourceOrder: this.reserveInputOrder?.() };
 
     if (event.kind === 'mouse') {
       await session.send('Input.dispatchMouseEvent', {
@@ -316,6 +332,7 @@ export class ScreenCaster extends EventEmitter {
           ? { deltaX: event.deltaX ?? 0, deltaY: event.deltaY ?? 0 }
           : {}),
       });
+      this.publishInput(input);
       return;
     }
 
@@ -331,10 +348,28 @@ export class ScreenCaster extends EventEmitter {
         nativeVirtualKeyCode: event.windowsVirtualKeyCode,
         modifiers: event.modifiers ?? 0,
       });
+      this.publishInput(input);
       return;
     }
 
     await session.send('Input.insertText', { text: event.text });
+    this.publishInput(input);
+  }
+
+  private publishInput(input: SuccessfulScreenInput): void {
+    try { this.emit('input', input); }
+    catch (error) { logger('Input feedback observer failed: %O', error); }
+  }
+
+  /** Request real current pixels when a finite layout change was skipped by screencast sampling. */
+  refreshFrame(): Promise<void> {
+    const session = this.cdpSession, generation = this.captureGeneration;
+    if (!session || !this.isRunning || this.runningGeneration !== generation) return Promise.resolve();
+    if (this.frameCapture?.session === session && this.frameCapture.generation === generation) return this.frameCapture.promise;
+    const capture = { session, generation, promise: this.captureFirstFrame(session, this.page, this.identity, generation) };
+    this.frameCapture = capture;
+    void capture.promise.finally(() => { if (this.frameCapture === capture) this.frameCapture = null; }).catch(() => undefined);
+    return capture.promise;
   }
 
   private async captureFirstFrame(
@@ -361,8 +396,10 @@ export class ScreenCaster extends EventEmitter {
     this.captureGeneration += 1;
     const session = this.cdpSession;
     this.cdpSession = null;
+    this.frameCapture = null;
     const wasRunning = this.isRunning;
     this.isRunning = false;
+    this.runningGeneration = 0;
     if (this.setFpsTimer) {
       clearTimeout(this.setFpsTimer);
       this.setFpsTimer = null;

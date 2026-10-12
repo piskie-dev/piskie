@@ -109,7 +109,7 @@ export class ScreenFeedWorker {
         break;
       }
       case 'pointer-presented':
-        if (message.epoch === this.epoch) this.viewports.get(message.leaseId)?.presentation.presented(message.page, message.seq, message.pressSeq, message.at);
+        if (message.epoch === this.epoch) this.viewports.get(message.leaseId)?.presentation.presented(message.page, message.seq, message.pressSeq, message.at, message.targetSeq, message.activitySeq);
         break;
       case 'pointer-cleared':
         if (message.epoch === this.epoch) this.viewports.get(message.leaseId)?.presentation.cleared(message.clearId);
@@ -193,8 +193,12 @@ export class ScreenFeedWorker {
         const id = setTimeout(callback, delayMs);
         return () => clearTimeout(id);
       }),
-      publish: () => this.post({ type: 'viewport-pointer', epoch: this.epoch, leaseId,
-        pointer: presentation.pointer, clearId: presentation.clearId }),
+      publish: () => {
+        const frame = this.viewports.get(leaseId)?.frame;
+        this.post({ type: 'viewport-pointer', epoch: this.epoch, leaseId,
+          pointer: presentation.pointer, clearId: presentation.clearId,
+          ...(frame && (presentation.pointer?.target?.frameAfter !== undefined || presentation.pointer?.target?.frameBefore !== undefined) ? { frame } : {}) });
+      },
       resume: () => this.flushPendingFrame(),
     });
     this.viewports.set(leaseId, {
@@ -268,7 +272,8 @@ export class ScreenFeedWorker {
 
       this.clearPendingFrame();
       this.pendingFrame = { bitmap,
-        frame: { page: message.meta.page ?? null, width, height, mapping: message.meta.mapping },
+        frame: { page: message.meta.page ?? null, width, height, mapping: message.meta.mapping,
+          timestamp: message.meta.timestamp, seq: message.meta.seq, scrollX: message.meta.scrollX, scrollY: message.meta.scrollY },
         remaining: new Set([...this.viewports.values()].filter((viewport) => viewport.visible).map((viewport) => viewport.id)) };
       bitmap = null; // The one latest decoded frame owns this bitmap until drawn or replaced.
       if (!this.flushPendingFrame()) return;
@@ -334,7 +339,11 @@ export class ScreenFeedWorker {
     }
     this.lastPicture = { canvas: viewport.canvas, frame };
     viewport.drawnFrames += 1;
-    const frameChanged = !sameViewportFrame(viewport.frame, frame);
+    const after = viewport.presentation.pointer?.target?.frameAfter;
+    const reachedTargetFrame = after !== undefined && (viewport.frame?.timestamp ?? 0) < after && (frame.timestamp ?? 0) >= after;
+    const refreshingTarget = viewport.presentation.pointer?.target?.frameBefore !== undefined
+      && (viewport.frame?.timestamp !== frame.timestamp || viewport.frame?.seq !== frame.seq);
+    const frameChanged = !sameViewportFrame(viewport.frame, frame) || reachedTargetFrame || refreshingTarget;
     const previousPointer = viewport.presentation.pointer;
     viewport.frame = frame;
     const pointer = viewport.presentation.drawn(frame.page);
@@ -454,6 +463,7 @@ export class ScreenFeedWorker {
 function sameViewportFrame(left: ScreenViewportFrame | null, right: ScreenViewportFrame): boolean {
   return !!left && (left.page === right.page || sameScreenPage(left.page, right.page))
     && left.width === right.width && left.height === right.height
+    && left.scrollX === right.scrollX && left.scrollY === right.scrollY
     && left.mapping?.scale === right.mapping?.scale
     && left.mapping?.offsetX === right.mapping?.offsetX
     && left.mapping?.offsetY === right.mapping?.offsetY;

@@ -11,7 +11,7 @@
  * 背压(1-in-flight + latest-wins)由 sink 适配器实现,hub 对每帧只管调 send。
  */
 
-import { ScreenCaster, type ScreencastFrame } from './core/browser/screen-caster.js';
+import { ScreenCaster, type ScreencastFrame, type SuccessfulScreenInput } from './core/browser/screen-caster.js';
 import { BrowserManager } from './core/browser/browser-manager.js';
 import { sameScreenPage, sameScreenPageInstance, type RemoteInputEvent, type StreamServerMessage } from '@shared/types/stream.js';
 import type { BrowserAutomationSession, BrowserScreenTarget } from './core/session/browser-automation-session.js';
@@ -110,19 +110,19 @@ export class ScreenStreamHub {
         const shared = this.casters.get(browserId);
         if (shared) return this.addViewerToEntry(browserId, shared, sink, info);
         const target = session.getScreenTarget();
-        const caster = new ScreenCaster(target.page, {
+        const caster: ScreenCaster = new ScreenCaster(target.page, {
           quality: info.quality,
           maxWidth: info.maxWidth,
           maxHeight: info.maxHeight,
           everyNthFrame: everyNthFrameOf(info.fps),
-        }, target.identity);
+        }, target.identity, (): number => owner.session.reserveInputOrder());
 
         entry = { caster, viewers: new Map(), seq: 0, lastFrame: null, follow: null,
           target, session, unsubscribe: () => {}, unsubscribeConnection: () => {} };
         this.casters.set(browserId, entry);
 
         this.bindSession(browserId, entry, session);
-        const owner = entry;
+        const owner: CasterEntry = entry;
         entry.unsubscribeConnection = BrowserManager.subscribeScreenSession(browserId, (connected) => {
           if (this.casters.get(browserId) !== owner) return;
           if (connected !== owner.session) this.bindSession(browserId, owner, connected);
@@ -130,6 +130,9 @@ export class ScreenStreamHub {
         });
         caster.on('frame', (frame: ScreencastFrame) => {
           if (this.casters.get(browserId) === owner) this.broadcastFrame(browserId, frame);
+        });
+        caster.on('input', (input: SuccessfulScreenInput) => {
+          if (this.casters.get(browserId) === owner) owner.session.observeManualInput(input);
         });
         caster.on('error', (error: Error) => {
           const e = this.casters.get(browserId);
@@ -276,6 +279,10 @@ export class ScreenStreamHub {
       if (event.type === 'target') this.updateTarget(browserId, entry, event.target);
       else if (sameScreenPageInstance(event.pointer.page, entry.target?.identity)) {
         for (const sink of entry.viewers.keys()) this.sendState(sink, browserId, entry);
+        const geometry = event.pointer.target ?? event.pointer.positionTarget;
+        const after = geometry?.frameAfter;
+        if (after !== undefined && sameScreenPage(geometry?.page, entry.target?.identity)
+          && (entry.lastFrame?.timestamp ?? 0) < after) void entry.caster.refreshFrame().catch(() => undefined);
       }
     });
   }
@@ -307,6 +314,8 @@ export class ScreenStreamHub {
 
     entry.lastFrame = frame;
     entry.seq++;
+    if (frame.page) entry.session.refreshTargetForFrame(frame.page, { width: frame.deviceWidth, height: frame.deviceHeight,
+      scrollX: frame.scrollOffsetX, scrollY: frame.scrollOffsetY, timestamp: frame.timestamp, seq: entry.seq });
 
     for (const sink of entry.viewers.keys()) {
       this.sendFrameToViewer(sink, browserId, entry, frame);

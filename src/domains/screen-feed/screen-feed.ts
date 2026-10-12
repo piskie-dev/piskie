@@ -1,5 +1,5 @@
 import { sameScreenPage, type RemoteInputEvent, type ScreenPageIdentity } from '@shared/types/stream';
-import type { PresentedScreenPointer } from '@shared/screen-pointer';
+import { screenPointerRevision, screenPressSequence, type PresentedScreenPointer } from '@shared/screen-pointer';
 import {
   ScreenStreamPortError,
   type BrowserStreamOptions,
@@ -198,7 +198,9 @@ export class ScreenFeed {
       pointerPresented: (pointer, at) => {
         if (record.released || this.phase !== 'streaming') return;
         this.post({ type: 'pointer-presented', epoch: this.epoch, leaseId: record.id,
-          page: pointer.framePage, seq: pointer.seq, pressSeq: pointer.press?.seq, at });
+          page: pointer.framePage, seq: screenPointerRevision(pointer),
+          pressSeq: pointer.press ? screenPressSequence(pointer.press) : undefined,
+          targetSeq: pointer.target?.seq, activitySeq: pointer.activity?.seq, at });
       },
       pointerCleared: (clearId) => {
         if (record.released || this.phase !== 'streaming') return;
@@ -433,6 +435,7 @@ export class ScreenFeed {
         const lease = this.leases.get(message.leaseId);
         if (!lease) return;
         lease.pointer = message.pointer;
+        if (message.frame) lease.renderedFrame = message.frame;
         lease.pointerClearId = message.clearId;
         this.refreshLease(lease);
         break;

@@ -204,6 +204,29 @@ describe('ScreenPointerPresentation', () => {
       expect(test.controller.canDraw(target)).toBe(true);
     });
 
+  it('presents target/state revisions without rewriting source seq/time and suppresses hidden highlights', () => {
+    const test = harness();
+    const original = { ...test.click(), press: undefined, action: 'move' as const };
+    const target = { page, seq: 10, timestamp: test.now(), kind: 'input' as const, actor: 'ai' as const,
+      x: 500, y: 200, rect: { x: 400, y: 180, width: 200, height: 40 }, scrollX: 0, scrollY: 0 };
+    const source = { ...original, revision: 11, target, activity: { page, seq: 10, timestamp: test.now(), kind: 'input' as const, actor: 'ai' as const, pending: false } };
+    test.controller.accept(page, source);
+    expect(test.controller.pointer).toBeNull();
+    test.controller.drawn(page);
+    test.controller.presented(page, 11, undefined, test.now(), 10, 10);
+    expect(test.controller.pointer).toMatchObject({ seq: original.seq, timestamp: original.timestamp, targetVisibleAt: test.now(), activityVisibleAt: test.now() });
+    test.controller.setVisible(false);
+    test.controller.accept(page, { ...source, revision: 12, target: { ...target, seq: 12 } });
+    test.controller.setVisible(true);
+    expect(test.controller.pointer).toMatchObject({ target: { seq: 12 }, targetSuppressed: true, activity: undefined });
+    const next = { ...page, navigationSequence: 1 };
+    test.controller.accept(next, source);
+    test.controller.drawn(next);
+    expect(test.controller.pointer).toMatchObject({ target: undefined, positionTarget: target, framePage: next, seq: original.seq });
+    test.controller.dispose();
+    expect(test.tasks.filter((task) => task.active)).toHaveLength(0);
+  });
+
   it('fences old presentation by identity and resets clocks, sources and timers at a new feed epoch', () => {
     const test = harness();
     const click = test.click();

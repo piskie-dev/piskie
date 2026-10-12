@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>操作指针效果预览 · D 雾蓝</title>
+<style>
+:root{color-scheme:light;--bg:#edf2f6;--paper:#fff;--surface:#f5f8fc;--ink:#1e2940;--muted:#66738c;--line:#d3dce8;--accent:#34558b;--soft:#e8eff8;--good:#178f5c;--shadow:0 14px 45px #223e6410;--cyber-surface:#f5f8fc;--cyber-border:#d3dce8;--cyber-text:#1e2940}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0a0a0c;--paper:#131317;--surface:#1c1c22;--ink:#ededf2;--muted:#8a8a94;--line:#2b2b32;--accent:#9db9d9;--soft:#24303f;--good:#3ecf8e;--shadow:0 14px 45px #0003;--cyber-surface:#131317;--cyber-border:#2b2b32;--cyber-text:#ededf2}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5}button,input,select,textarea{font:inherit}button,select,input[type="range"]{cursor:pointer}button{color:inherit}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #69a7c3;outline-offset:3px}button{border:0}svg{display:block}button:disabled{cursor:default;opacity:.5}button:hover{filter:brightness(.97)}[hidden]{display:none!important}.app{max-width:1460px;margin:auto;padding:30px 32px 26px}
+.masthead{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:22px}.eyebrow{display:flex;align-items:center;gap:9px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:1.4px}.eyebrow:before{content:"";width:7px;height:7px;border-radius:50%;background:#69a7c3;box-shadow:0 0 0 4px #8fbfd420}h1{font-size:30px;letter-spacing:-1px;line-height:1.25;margin:12px 0 10px;font-weight:720}.intro{margin:0;color:var(--muted);font-size:14px}.page-controls{display:flex;flex-direction:column;align-items:flex-end;gap:14px;padding-top:2px}.theme-switch{display:flex;flex-shrink:0;white-space:nowrap;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}.theme-switch button{padding:6px 13px;border-radius:6px;background:transparent;font-size:12px;color:var(--muted)}.theme-switch button[aria-pressed="true"]{background:var(--soft);color:var(--ink)}.local-label{font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center}.local-label:before{content:"";width:5px;height:5px;background:var(--good);border-radius:50%}
+.quick-facts{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:12px;background:var(--paper);margin-bottom:20px;overflow:hidden}.fact{padding:11px 16px;border-right:1px solid var(--line);display:flex;gap:11px;align-items:center}.fact:last-child{border:0}.fact-icon{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;display:grid;place-items:center;color:#4e96b6;background:var(--surface)}.fact b{font-size:12px;font-weight:650}.fact small{display:block;font-size:11px;color:var(--muted)}.tiny-ring{width:14px;height:14px;border:1.5px solid #4e96b6;border-radius:50%}.tiny-target{width:18px;height:12px;border:1.5px solid #69a7c3;border-radius:3px;background:#8fbfd414}
+.workspace{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px;align-items:start}.catalog,.preview{border:1px solid var(--line);border-radius:14px;background:var(--paper);box-shadow:var(--shadow);overflow:hidden}.catalog-head{padding:16px 16px 12px;border-bottom:1px solid var(--line)}.catalog-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.catalog-title b{font-size:14px}.count{color:var(--muted);font-size:11px}.catalog-head select{width:100%;border:1px solid var(--line);color:var(--ink);background:var(--surface);padding:7px 10px;border-radius:7px;font-size:12px}.scene-list{height:654px;overflow-y:auto;padding:8px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}.group-heading{margin:14px 9px 7px;color:var(--muted);font-size:10px;font-weight:650;letter-spacing:.8px;display:flex;justify-content:space-between}.group-heading:first-child{margin-top:6px}.scene-button{width:100%;display:flex;align-items:center;text-align:left;gap:10px;background:transparent;padding:9px 10px;border-radius:8px;border:1px solid transparent;margin-bottom:3px}.scene-button[aria-pressed="true"]{background:var(--soft);border-color:var(--line)}.scene-button:hover{background:var(--surface)}.scene-button[aria-pressed="true"]:hover{background:var(--soft)}.scene-icon{flex:0 0 24px;color:var(--muted)}.scene-button[aria-pressed="true"] .scene-icon{color:#4e96b6}.scene-text{flex:1;min-width:0}.scene-text b{font-size:12px;font-weight:650;display:block}.scene-text small{font-size:10px;color:var(--muted);display:block;margin-top:1px;line-height:1.4}.scene-play{font-size:12px;color:var(--accent);opacity:0}.scene-button[aria-pressed="true"] .scene-play,.scene-button:hover .scene-play{opacity:1}.catalog-foot{padding:10px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}
+.preview-head{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line)}.preview-kicker{font-size:10px;color:var(--muted);letter-spacing:1px}.preview-head h2{font-size:18px;font-weight:680;line-height:1.3;margin:3px 0 0}.preview-tools{display:flex;align-items:center;gap:8px}.preview-tools select{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font-size:11px;padding:6px 9px;max-width:160px}.badge{border:1px solid var(--line);padding:4px 7px;border-radius:5px;color:var(--muted);font-size:10px;white-space:nowrap}.scene-viewport{position:relative;width:100%;aspect-ratio:900/510;overflow:hidden;background:var(--surface);isolation:isolate}.scene-plane{position:absolute;inset:0;transform:scale(var(--zoom,1));transform-origin:var(--view-x,50%) var(--view-y,50%)}.sample-page{position:absolute;width:900px;height:510px;left:0;top:0;transform:scale(var(--fit,1));transform-origin:top left;padding:23px 28px;background:var(--surface);color:var(--ink)}.sample-top{display:flex;align-items:center;justify-content:space-between;height:44px}.sample-brand{display:flex;align-items:center;gap:11px}.sample-logo{width:34px;height:34px;background:#8fbfd424;border:1px solid #69a7c344;border-radius:10px;display:grid;place-items:center;font-size:18px;color:#4e96b6;font-weight:600}.sample-brand strong{font-size:17px}.sample-brand small{display:block;color:var(--muted);font-size:11px}.sample-address{color:var(--muted);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:5px 10px;background:var(--paper)}.sample-grid{display:grid;grid-template-columns:1fr 324px;gap:24px;margin-top:19px}.sample-form{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:17px 18px}.sample-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}.sample-field{display:block;margin-bottom:12px}.sample-field>span,.sample-section-label{display:block;font-size:10px;color:var(--muted);margin-bottom:5px}.sample-field input:not([type="file"]),.sample-field select,.sample-field textarea,.sample-rich{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:8px 10px;font-size:12px;outline:0;box-shadow:none}.sample-field input:not([type="file"]),.sample-field select{height:35px}.sample-field textarea{resize:none;height:51px;display:block}.sample-rich{height:34px;overflow:hidden;white-space:nowrap;line-height:16px}.sample-file{width:100%;font-size:11px;height:32px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--muted)}.sample-file::file-selector-button{border:0;border-right:1px solid var(--line);background:var(--paper);color:var(--ink);height:30px;padding:0 11px;margin-right:10px;font-size:11px}.sample-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:2px}.sample-action{border:1px solid var(--line);background:var(--soft);padding:8px 18px;border-radius:6px;font-size:11px;color:var(--accent);height:34px}.sample-action.observed-hover{background:#8fbfd433;border-color:#69a7c3}.drag-slot{width:186px;height:34px;border:1px dashed var(--line);border-radius:6px;position:relative}.drag-card{position:absolute;left:5px;top:4px;border:1px solid var(--line);background:var(--surface);border-radius:4px;font-size:10px;padding:2px 8px;height:24px;color:var(--muted);width:90px;white-space:nowrap}.sample-feed{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden}.feed-head{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:1px solid var(--line);font-size:11px}.feed-count{font-size:10px;color:var(--muted)}.scroll-box{height:168px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) var(--surface)}.scroll-content{padding:0 12px;width:520px;min-height:420px}.sample-item{height:48px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;font-size:11px}.item-symbol{width:24px;height:24px;border-radius:7px;background:var(--soft);border:1px solid var(--line);display:grid;place-items:center;font-size:10px;color:var(--muted)}.item-detail{width:224px}.sample-item small{display:block;color:var(--muted);font-size:9px}.item-label{color:var(--muted);margin-left:9px;font-size:10px}.sample-side-note{margin:12px 1px;color:var(--muted);font-size:10px}.clip-surface{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:12px;display:flex;align-items:center;gap:10px;height:78px}.clip-caption{font-size:10px;color:var(--muted);flex:1}.clip-area{width:142px;max-width:142px;overflow:hidden;height:36px;flex:none;border-radius:6px}.clip-input{width:290px!important;height:35px;border:1px solid var(--line);background:var(--surface);border-radius:6px;color:var(--ink);padding:8px 10px;font-size:11px}.sample-footer{display:flex;align-items:center;justify-content:space-between;margin-top:17px;font-size:10px;color:var(--muted)}.sample-result{display:flex;align-items:center;gap:6px;min-width:0}.sample-result:before{content:"";width:4px;height:4px;background:var(--good);border-radius:50%}.viewport-label{position:absolute;bottom:10px;right:12px;border:1px solid var(--line);background:var(--paper);color:var(--muted);font-size:10px;border-radius:5px;padding:3px 7px;z-index:3;pointer-events:none;opacity:.9}.manual-hit{position:absolute;inset:0;z-index:2;cursor:none;touch-action:none;display:none}.scene-viewport[data-manual="true"] .manual-hit{display:block}
+/* D「雾蓝」artwork, feedback and dimensions copied from the current production overlay.
+   Reviewed 2026-10-12: ScreenPointerOverlay.tsx, screenPointer.module.css,
+   screenPointerMotion.ts, shared/screen-pointer.ts, shared/types/stream.ts.
+   The standalone timeline only supplies fictitious observations, pause and slow playback.
+   Target geometry is read from the local sample controls. No product code is imported.
+   Generic script focus has target.kind=focus and activity.kind=operation.
+   handleDialog currently goes through the shared operation boundary: Activity, not a
+   synthetic MessageSquare. The renderer's icon map alone does not establish a producer. */
+.layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}.layer *{pointer-events:none}.arrow{position:absolute;overflow:visible;stroke-linejoin:round;filter:drop-shadow(0 0 1.15px #a6ddf387) drop-shadow(0 .6px .65px #142d3b33);opacity:.95}.arrowEdge{fill:none;stroke:#ffffffed;stroke-width:2.25}.arrowBody{stroke:#3c637a;stroke-width:.8}.arrowFacet{fill:#ffffff73}.arrowFold{fill:none;stroke:#557f9740;stroke-width:.5;stroke-linecap:round}.arrow[data-pressed="true"] .arrowBody{stroke:#30556c}.arrow[data-pressed="true"] .arrowFacet{fill:#e1f8ff73}.ripple{position:absolute;inline-size:10px;block-size:10px;border:1.5px solid #4e96b6;border-radius:50%;transform:translate(-50%,-50%);animation:press-ring 360ms ease-out both;animation-play-state:paused}.target{position:absolute;border:1.5px solid #69a7c3;background:#8fbfd414;border-radius:4px;box-shadow:0 0 0 2px #d6f3ff33}.activity{position:absolute;display:flex;padding:3px;border:1px solid var(--cyber-border);border-radius:5px;color:var(--cyber-text);background:var(--cyber-surface);opacity:.9}
+@keyframes press-ring{from{opacity:.9;transform:translate(-50%,-50%) scale(.65)}to{opacity:0;transform:translate(-50%,-50%) scale(2.6)}}@keyframes press-ring-static{from{opacity:.8}to{opacity:0}}@media(prefers-reduced-motion:reduce){.ripple{animation-name:press-ring-static}}
+.transport{padding:14px 18px;border-top:1px solid var(--line)}.transport-main{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.control{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 11px;font-size:11px;min-height:33px;white-space:nowrap}.control.primary{background:var(--accent);color:var(--paper);border-color:transparent;min-width:83px}:root[data-theme="dark"] .control.primary{color:#131317}.speed-control{margin-left:auto;display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)}.speed-control select{border:1px solid var(--line);color:var(--ink);background:var(--surface);border-radius:6px;padding:5px 7px;font-size:11px}.timeline-row{display:flex;gap:12px;align-items:center;margin-top:12px}.timeline-row input{flex:1;min-width:0;accent-color:#4e96b6;height:4px}.time-readout{font-size:10px;font-variant-numeric:tabular-nums;min-width:79px;color:var(--muted)}.play-state{color:var(--muted);font-size:10px;min-width:45px}.speed-note{font-size:10px;color:var(--muted);margin-top:8px}.observation{border-top:1px solid var(--line);background:var(--surface);padding:13px 18px;display:grid;grid-template-columns:1fr;gap:5px;min-height:86px}.observation-title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:650;color:var(--accent)}.observation-title:before{content:"";width:5px;height:5px;border-radius:50%;background:#69a7c3}.observation p{margin:0;font-size:12px}.live-note{font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}.footer{margin-top:20px;color:var(--muted);font-size:11px;display:flex;justify-content:space-between;gap:24px}.footer p{margin:0}.range-details{margin-top:18px;border-top:1px solid var(--line);padding-top:13px;color:var(--muted);font-size:11px}.range-details summary{cursor:pointer;width:max-content;color:var(--accent)}.coverage{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:15px}.coverage div{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:12px 14px;line-height:1.7}.coverage b{display:block;color:var(--ink);font-size:12px;margin-bottom:4px}.coverage p{margin:0}.reduced-note{display:none}.reduced-note.visible{display:block;color:var(--muted);font-size:10px;margin-top:6px}
+@media(min-width:1450px){.scene-list{height:698px}}@media(max-width:1100px){.app{padding:24px}.workspace{grid-template-columns:232px minmax(0,1fr);gap:14px}.scene-list{height:570px}.preview-head{padding:12px}.preview-tools{gap:5px}.preview-tools .badge{display:none}.preview-head h2{font-size:16px}.control{padding:6px 9px}.transport,.observation{padding:12px}.fact{padding:10px}.fact small{font-size:10px}.footer{font-size:10px}.coverage{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.app{padding:18px 14px}.masthead{gap:10px;margin-bottom:18px}h1{font-size:24px;max-width:240px}.intro{font-size:12px;max-width:360px}.page-controls{gap:9px}.theme-switch button{padding:5px 8px;font-size:10px}.local-label{font-size:9px}.quick-facts{grid-template-columns:1fr 1fr}.fact{padding:9px 10px}.fact:nth-child(2){border-right:0}.fact:nth-child(-n+2){border-bottom:1px solid var(--line)}.fact-icon{width:26px;height:26px}.fact b{font-size:11px}.workspace{grid-template-columns:1fr}.catalog-head{padding:10px 12px;display:flex;align-items:center;gap:14px}.catalog-title{margin:0;flex:1}.catalog-head select{width:160px}.catalog-title b{font-size:12px}.scene-list{height:156px;display:grid;grid-template-columns:1fr 1fr;gap:3px;align-content:start}.group-heading{grid-column:1/-1;margin:7px 9px 2px}.scene-button{margin:0;padding:7px 8px;gap:7px}.scene-text b{font-size:11px}.scene-text small{font-size:9px}.scene-play{display:none}.catalog-foot{padding:6px 12px;font-size:10px}.preview-head h2{font-size:15px}.preview-tools{flex-wrap:wrap;justify-content:flex-end;max-width:180px}.preview-tools select{font-size:10px;max-width:140px;padding:4px}.viewport-label{font-size:8px;padding:2px 5px;bottom:5px;right:5px}.transport{padding:10px}.control{font-size:10px;padding:6px 8px}.control.primary{min-width:65px}.speed-control{font-size:10px}.observation p{font-size:11px}.live-note{font-size:9px}.footer{display:block}.footer p+p{margin-top:5px}.coverage{grid-template-columns:1fr}.range-details{margin-top:13px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="masthead">
+    <div><div class="eyebrow">操作指针 · 现有效果预览</div><h1>除了点击，它还会怎么动？</h1><p class="intro">用同一枚 D「雾蓝」指针，逐项看清当前已有的移动、目标高亮和状态提示。</p></div>
+    <div class="page-controls"><div class="theme-switch" aria-label="背景主题"><button id="light-theme" type="button" aria-pressed="true">浅色</button><button id="dark-theme" type="button" aria-pressed="false">深色</button></div><span class="local-label">单文件 · 离线可打开</span></div>
+  </header>
+  <div class="quick-facts" aria-label="共有视觉效果">
+    <div class="fact"><div class="fact-icon" data-icon="navigation"></div><div><b>常驻 / 平滑移动</b><small>AI 120ms · 手动立即跟随</small></div></div>
+    <div class="fact"><div class="fact-icon"><i class="tiny-ring"></i></div><div><b>真实按下 / 点击环</b><small>按住变色 · 环形提示 360ms</small></div></div>
+    <div class="fact"><div class="fact-icon"><i class="tiny-target"></i></div><div><b>控件目标轻框</b><small>同一种框 · 到达后 700ms</small></div></div>
+    <div class="fact"><div class="fact-icon" data-icon="operation"></div><div><b>指针旁状态图标</b><small>900ms · 操作未结束时保持</small></div></div>
+  </div>
+  <main class="workspace">
+    <aside class="catalog" aria-label="效果选择">
+      <div class="catalog-head"><div class="catalog-title"><b>选择一个场景</b><span class="count" id="scene-count">28 项</span></div><select id="category-filter" aria-label="筛选效果类别"></select></div>
+      <div class="scene-list" id="scene-list"></div>
+      <div class="catalog-foot">点击即播放；所有场景共用右侧一枚指针。</div>
+    </aside>
+    <section class="preview" aria-label="单指针效果演示">
+      <div class="preview-head"><div><div class="preview-kicker" id="scene-category">控件目标</div><h2 id="scene-title">输入 / 连续填表</h2></div><div class="preview-tools"><select id="variant" aria-label="场景变体"></select><select id="zoom" aria-label="观察大小"><option value="1">真实指针大小</option><option value="2">局部放大 2×</option></select><span class="badge">D · 雾蓝</span></div></div>
+      <div class="scene-viewport" id="viewport" data-manual="false">
+        <div class="scene-plane" id="plane">
+          <div class="sample-page" id="sample-page">
+            <div class="sample-top"><div class="sample-brand"><div class="sample-logo">S</div><div><strong id="sample-title">Sample workspace</strong><small>本地虚构页面 · 控件仅用于预览</small></div></div><div class="sample-address" id="sample-address">example.test / sample</div></div>
+            <div class="sample-grid">
+              <div class="sample-form">
+                <div class="sample-row"><label class="sample-field"><span>Sample name</span><input id="sample-name" value="Example" autocomplete="off" tabindex="-1"></label><label class="sample-field"><span>Sample option</span><select id="sample-select" tabindex="-1"><option value="a">Option A</option><option value="b">Option B</option><option value="c">Option C</option></select></label></div>
+                <label class="sample-field"><span>Sample note</span><textarea id="sample-note" tabindex="-1">Sample note</textarea></label>
+                <div class="sample-field"><span>Sample rich text</span><div id="sample-rich" class="sample-rich" contenteditable="true" tabindex="-1" role="textbox" aria-label="Sample rich text">Example text</div></div>
+                <label class="sample-field"><span>Sample file · 可见上传控件</span><input id="sample-file" class="sample-file" type="file" accept=".txt" tabindex="-1"></label>
+                <div class="sample-actions"><button type="button" id="sample-action" class="sample-action" tabindex="-1">Sample action</button><div class="drag-slot"><div class="drag-card" id="drag-card">⋮⋮ Sample card</div></div></div>
+              </div>
+              <div>
+                <section class="sample-feed"><div class="feed-head"><b>Sample items</b><span class="feed-count">08 records</span></div><div class="scroll-box" id="scroll-box"><div class="scroll-content" id="scroll-content"></div></div></section>
+                <div class="sample-side-note">列表可以纵向 / 横向滚动；页面变化与指针提示分别展示。</div>
+                <div class="clip-surface"><div class="clip-caption">部分可见控件<br><span id="clip-caption">箭头仍可停在可见区域</span></div><div class="clip-area" id="clip-area"><input id="clip-input" class="clip-input" value="Sample clipped input" tabindex="-1" aria-label="Sample clipped input"></div></div>
+              </div>
+            </div>
+            <div class="sample-footer"><span class="sample-result" id="sample-result">Sample page ready</span><span id="page-label">Page A · 本地示例</span></div>
+          </div>
+          <div class="layer" id="pointer-layer" aria-hidden="true">
+            <svg id="pointer" class="arrow" data-screen-pointer="true" data-pressed="false" data-actor="ai" data-origin="element" width="20" height="22" viewBox="2.15 1.65 20 22">
+              <defs><linearGradient id="mist-rest" x1="0" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#fff"></stop><stop offset="0.47" stop-color="#d6f3ff"></stop><stop offset="1" stop-color="#8fbfd4"></stop></linearGradient><linearGradient id="mist-press" x1="0" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#e7faff"></stop><stop offset="1" stop-color="#69a7c3"></stop></linearGradient></defs>
+              <path class="arrowEdge" d="M2.15 1.65L4.5 19.1Q4.58 19.62 4.94 19.17L8.85 13.92L16.7 13.5Q17.22 13.47 16.82 13.12Z"></path><path class="arrowBody" id="arrow-body" fill="url(#mist-rest)" d="M2.15 1.65L4.5 19.1Q4.58 19.62 4.94 19.17L8.85 13.92L16.7 13.5Q17.22 13.47 16.82 13.12Z"></path><path class="arrowFacet" d="M3.4 4.1L5.14 16.08L8.05 12.15Z"></path><path class="arrowFold" d="M4 5.15L8.85 13.92"></path>
+            </svg>
+            <span id="press-ripple" class="ripple" data-screen-pointer-ripple="true" hidden></span><span id="target-frame" class="target" hidden></span><span id="activity-badge" class="activity" hidden></span>
+          </div>
+        </div>
+        <div class="manual-hit" id="manual-hit" aria-label="手动指针体验区"></div>
+        <div class="viewport-label" id="viewport-label">本地示例 · 指针 20 × 22</div>
+      </div>
+      <div class="transport">
+        <div class="transport-main"><button class="control primary" type="button" id="play">▶ 播放</button><button class="control" type="button" id="replay">↻ 重播</button><button class="control" type="button" id="freeze">◷ 定格关键帧</button><label class="speed-control">预览速度<select id="speed"><option value="1">1× 正式节奏</option><option value="0.5">0.5× 慢放</option><option value="0.25">0.25× 慢放</option></select></label></div>
+        <div class="timeline-row"><span class="play-state" id="play-state">已定格</span><input id="timeline" type="range" min="0" max="2600" step="1" value="700" aria-label="预览时间轴"><output id="time-readout" class="time-readout">0.70 / 2.60s</output></div>
+        <div class="speed-note" id="speed-note">1× 使用正式效果时长；动作间的短停留仅方便观察。可拖动时间轴逐帧查看。</div><div class="reduced-note" id="reduced-note">已跟随系统“减少动态效果”：位置立即更新，点击环只淡出。</div>
+      </div>
+      <div class="observation"><div class="observation-title" id="effect-family">共用目标框 + 输入图标</div><p id="scene-description">输入框、多行文本和富文本使用同一种目标轻框，输入不会生成点击环。</p><div class="live-note"><span id="live-note">已定格在输入目标出现的时刻。</span><span id="scene-index">08 / 28</span></div></div>
+    </section>
+  </main>
+  <div class="footer"><p>打开后已定格一帧输入高亮。选择左侧场景即可播放，慢放与放大仅用于观察。</p><p>当前正式效果 · 同一枚指针 · 无外部资源</p></div>
+  <details class="range-details"><summary>展开完整效果范围与共用关系</summary><div class="coverage">
+    <div><b>位置与真实鼠标</b><p>初始化常驻、平滑移动、最新目标接续、悬停、拖拽、单击、双击。悬停共用移动；拖拽共用真实按下 / 按住 / 释放。</p></div>
+    <div><b>控件目标</b><p>输入框、多行文本、富文本、连续填表、下拉选择、可见上传共用目标轻框。图标表示输入 / 选择 / 上传；隐藏上传只显示状态。</p></div>
+    <div><b>键盘与焦点</b><p>Tab 与普通按键定位真实焦点；无可见焦点时显示键盘状态。脚本引起的可见焦点使用相同轻框，并保留通用操作状态。</p></div>
+    <div><b>滚动提示</b><p>纵向、横向、按键引起的滚动共用上下箭头状态图标。页面内容按实际方向变化，状态图标本身没有额外方向动画。</p></div>
+    <div><b>没有网页落点的操作</b><p>导航显示导航状态；等待、读取 / 截图 / 提取、存储、窗口和原生对话框共用操作状态。读取保持位置；新页初始化，切回恢复已知位置。</p></div>
+    <div><b>手动与部分可见</b><p>手动为 0ms 立即跟随，并带手形标记。部分可见控件在可见区域定位；目标框暂时隐藏时，箭头仍保留该控件位置。</p></div>
+  </div></details>
+</div>
+<script>
+'use strict';
+(() => {
+  const POLICY = Object.freeze({initialInset:24,motionMs:120,manualMotionMs:0,targetVisibleMs:700,activityVisibleMs:900,rippleMs:360,motionEase:t=>1-(1-t)**3});
+  const W=900,H=510;
+  const $=id=>document.getElementById(id);
+  const ICONS={
+    input:'<path d="M12 20h-1a2 2 0 0 1-2-2 2 2 0 0 1-2 2H6"/><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"/><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"/><path d="M6 4h1a2 2 0 0 1 2 2 2 2 0 0 1 2-2h1"/><path d="M9 6v12"/>',
+    select:'<path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/>',
+    upload:'<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    key:'<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
+    focus:'<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+    scroll:'<path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/>',
+    navigation:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
+    operation:'<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
+    hand:'<path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>'
+  };
+  const icon=(name,size=12)=>'<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICONS[name]+'</svg>';
+  document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon,16));
+  for(let i=1;i<=8;i++) $('scroll-content').insertAdjacentHTML('beforeend','<div class="sample-item"><div class="item-symbol">'+String(i).padStart(2,'0')+'</div><div class="item-detail">Sample item '+i+'<small>Example description '+i+'</small></div><span class="item-label">Sample detail →</span></div>');
+  const GROUPS=[['mouse','位置与鼠标'],['target','控件目标'],['keyboard','键盘与焦点'],['scroll','滚动提示'],['status','无落点操作'],['other','手动与部分可见']];
+  const ev=(at,fields)=>({at,...fields});
+  const point=(x,y)=>({x,y});
+  const move=(at,to,fields={})=>ev(at,{to,...fields});
+  const target=(at,id,kind,fields={})=>ev(at,{to:id,target:{id,kind},activity:{kind,pending:false},...fields});
+  const stateOnly=(kind='operation',patch={})=>[ev(380,{activity:{kind,pending:true},note:'操作进行中，状态留在已有指针旁。'}),ev(1100,{activity:{kind,pending:false},patch,note:'操作完成，状态短暂保留；指针位置不变。'})];
+  const baseStart=point(97,421), stationary=point(593,403);
+  const SCENES=[
+    {id:'initial',group:'mouse',name:'初始化 / 常驻',hint:'首帧起点 · 空闲后仍在',icon:'navigation',family:'常驻箭头',description:'位置未知时，从画面内留边 24 CSS px 的展示起点出现；轻量提示结束后，箭头继续常驻。',duration:2300,key:300,start:'seed',events:()=>[ev(0,{note:'这是展示起点，没有模拟移动或点击。'}),ev(1400,{note:'没有操作时，仍保留同一枚箭头。'})]},
+    {id:'move',group:'mouse',name:'平滑移动',hint:'AI · 120ms ease-out',icon:'navigation',family:'同一箭头的平滑位移',description:'AI 的新位置用 120ms 三次 ease-out 接续；移动结束后停留，不附加点击环或轨迹。',duration:2600,key:449,events:()=>[move(400,'sample-name',{note:'开始移动；120ms 后抵达输入框位置。'}),move(1300,'sample-action',{note:'下一次移动从当前可见位置接续。'})]},
+    {id:'retarget',group:'mouse',name:'最新目标接续',hint:'移动中更新目标',icon:'navigation',family:'共用 120ms 平滑位移',description:'移动途中收到更新位置，直接从当前可见点去往最新目标；不会依次跑完已经过时的位置。',duration:2300,key:500,events:()=>[move(400,'sample-name'),move(435,'sample-select'),move(470,'sample-action',{note:'三次快速位置更新；最后一次成为当前目标。'})]},
+    {id:'hover',group:'mouse',name:'悬停',hint:'共用移动 · 没有点击环',icon:'navigation',family:'平滑移动 + 网页自身悬停态',description:'悬停使用同一种位置移动。按钮颜色变化来自示例页面的悬停态，指针没有另一个“悬停动画”。',duration:2500,key:670,events:()=>[move(400,'sample-action'),ev(530,{patch:{hover:true},note:'抵达按钮后悬停；箭头仍是休息态。'}),move(1600,point(471,431),{patch:{hover:false}})]},
+    {id:'drag',group:'mouse',name:'拖拽 / 按住',hint:'按下变色 · 释放恢复',icon:'hand',family:'真实 down 环 + 按住外形 + 移动',description:'拖拽从真实按下开始出现同一个点击环；按住时指针变为较深雾蓝，移动后释放恢复，没有单独拖尾。',duration:2700,key:1030,events:()=>[move(250,'drag-card'),ev(450,{down:true,note:'真实按下：出现环，箭头切换按住配色。'}),...Array.from({length:6},(_,i)=>move(680+i*70,{id:'drag-card',offsetX:(i+1)*13},{patch:{drag:(i+1)*13},note:'正在按住并移动。'})),ev(1310,{up:true,note:'释放后恢复休息配色，位置保持。'})]},
+    {id:'click',group:'mouse',name:'单击',hint:'真实按下 · 一枚 360ms 环',icon:'hand',family:'按下配色 + 单个扩散环',description:'真实 down 到达后，在真实按下点显示 360ms 轻环；释放恢复指针配色。环结束，箭头仍在。',duration:2400,key:688,events:()=>[move(320,'sample-action'),ev(580,{down:true,note:'真实 down：轻环开始扩散。'}),ev(730,{up:true,note:'已释放；环仍按 360ms 时长淡出。'})]},
+    {id:'double',group:'mouse',name:'双击',hint:'两次 down · 环依次更新',icon:'hand',family:'共用真实 down 点击环',description:'双击有两次真实按下。当前每次 down 更新同一个环；第二次会重新开始，不叠出两圈，也没有专属双击图案。',duration:2600,key:843,events:()=>[move(320,'sample-action'),ev(580,{down:true}),ev(640,{up:true}),ev(740,{down:true,note:'第二次真实 down：当前环重新开始。'}),ev(800,{up:true})]},
+    {id:'input',group:'target',name:'输入 / 连续填表',hint:'输入框 · 多行 · 富文本',icon:'input',family:'共用目标框 + 输入 / 选择图标',description:'输入框、多行文本、富文本共用目标轻框和输入图标。连续填表依次定位当前控件；输入本身不生成点击环。',duration:2700,key:700,variants:[['single','输入框'],['textarea','多行文本'],['rich','富文本'],['form','连续填表']],events:v=>v==='form'?[target(400,'sample-name','input',{patch:{name:'Sample name'}}),target(1250,'sample-note','input',{patch:{note:'Sample form note'}}),target(2090,'sample-select','select',{patch:{select:'c'},note:'连续填表：下一控件接续同一枚指针。'})]:[target(400,v==='textarea'?'sample-note':v==='rich'?'sample-rich':'sample-name','input',{patch:v==='textarea'?{note:'Example note\nSample second line'}:v==='rich'?{rich:'Sample formatted text'}:{name:'Sample input text'},note:'输入成功：轻框定位当前控件，旁边显示输入图标。'})]},
+    {id:'select',group:'target',name:'下拉选择',hint:'同一轻框 · 筛选图标',icon:'select',family:'共用目标框 + 选择图标',description:'原生 select / option 的选值结果用控件轻框和选择图标表示；这种直接选值不会制造鼠标 down。',duration:2600,key:700,events:()=>[target(400,'sample-select','select',{patch:{select:'b'},note:'已选中 Option B；共用目标框，没有点击环。'})]},
+    {id:'upload-visible',group:'target',name:'上传：可见控件',hint:'同一轻框 · 上传图标',icon:'upload',family:'共用目标框 + 上传图标',description:'可见文件控件取得目标轻框，旁边显示上传图标。本地演示只填入虚构 Sample 文件，不打开真实文件选择器。',duration:2600,key:700,events:()=>[target(400,'sample-file','upload',{patch:{file:true},note:'可见上传目标：轻框和上传图标，没有额外点击环。'})]},
+    {id:'upload-hidden',group:'target',name:'上传：隐藏控件',hint:'只有上传状态 · 保持位置',icon:'upload',family:'上传状态；没有目标框',description:'隐藏上传控件没有可见网页矩形，保留已有位置，只显示上传状态。不会把附近按钮当成它的落点。',duration:2600,key:700,start:stationary,events:()=>stateOnly('upload',{result:'Sample upload complete'})},
+    {id:'upload-chooser',group:'target',name:'上传：点击触发',hint:'真实点击后接上传目标',icon:'upload',family:'真实触发点击 + 上传状态 / 目标',description:'需要点触发控件的上传路径会保留真实点击环；随后有可见目标才显示上传轻框。原生文件选择器本身没有网页目标框。',duration:2900,key:1230,events:()=>[move(260,'sample-action'),ev(500,{down:true,note:'触发控件的真实点击保留点击环。'}),ev(570,{up:true}),ev(630,{activity:{kind:'upload',pending:true},note:'上传进行中：保留上传状态。'}),target(1020,'sample-file','upload',{patch:{file:true},note:'示例采用可见最终控件：出现同一种目标轻框。'})]},
+    {id:'tab',group:'keyboard',name:'Tab 焦点切换',hint:'定位按键后的真实焦点',icon:'key',family:'共用目标框 + 键盘图标',description:'Tab 后跟随实际新焦点；目标框和键盘图标属于键盘反馈，不在输入框之间补假点击。',duration:3100,key:1560,events:()=>[target(400,'sample-name','key',{note:'按键后焦点在 Sample name。'}),target(1300,'sample-select','key',{note:'Tab 后的新焦点：Sample option。'}),target(2210,'sample-note','key',{note:'再次 Tab：焦点移到多行文本。'})]},
+    {id:'key',group:'keyboard',name:'普通按键',hint:'当前焦点 · 同一轻框',icon:'key',family:'共用目标框 + 键盘图标',description:'可见焦点处的普通按键使用相同目标框和键盘图标。输入文字使用输入图标；按键不会自动变成鼠标点击。',duration:2600,key:700,events:()=>[target(400,'sample-name','key',{patch:{name:'Example!'},note:'在当前焦点按键；目标框保持在该控件。'})]},
+    {id:'focus',group:'keyboard',name:'焦点变化',hint:'脚本结果 · 共用目标框',icon:'focus',family:'共用目标框 + 通用操作状态',description:'操作产生可靠的可见焦点变化时，用相同轻框定位焦点。当前这条路径的旁侧提示共用通用操作状态。',duration:2600,key:700,events:()=>[target(400,'sample-note','focus',{activity:{kind:'operation',pending:false},note:'实际焦点变化：目标是 focus，旁侧共用操作图标。'})]},
+    {id:'key-no-focus',group:'keyboard',name:'按键：无可见焦点',hint:'只有键盘状态',icon:'key',family:'键盘状态；没有目标框',description:'没有能可靠定位的可见焦点时，保留已有位置并显示键盘状态，不随意选择一个输入框。',duration:2500,key:700,start:stationary,events:()=>stateOnly('key',{result:'Sample key complete'})},
+    {id:'scroll-y',group:'scroll',name:'纵向滚动',hint:'页面滚动 · 上下箭头状态',icon:'scroll',family:'滚动状态 + 页面内容变化',description:'纵向滚动显示指针旁的上下箭头图标。这里保留已有位置，列表内容纵向变化；不产生点击环。',duration:2700,key:820,start:point(750,186),events:()=>[ev(400,{activity:{kind:'scroll',pending:false},scroll:{x:0,y:104},note:'实际滚动结果：列表向下 104 CSS px。'}),ev(1460,{activity:{kind:'scroll',pending:false},scroll:{x:0,y:205},note:'再次滚动：仍使用同一个状态图标。'})]},
+    {id:'scroll-x',group:'scroll',name:'横向滚动',hint:'同一图标 · 横向内容变化',icon:'scroll',family:'共用滚动状态',description:'横向滚动共用上下箭头图标，状态本身没有另一个左右箭头动画；横向结果由页面内容变化体现。',duration:2600,key:820,start:point(750,186),events:()=>[ev(400,{activity:{kind:'scroll',pending:false},scroll:{x:148,y:0},note:'实际横向滚动：列表内容向左移动。'})]},
+    {id:'scroll-key',group:'scroll',name:'按键引起滚动',hint:'键盘反馈 → 实际滚动状态',icon:'scroll',family:'键盘状态接续滚动状态',description:'PageDown 等按键先有键盘反馈，可靠观察到滚动后接续同一种滚动状态；不添加鼠标点击。',duration:2600,key:930,start:point(750,186),events:()=>[ev(400,{activity:{kind:'key',pending:false},note:'PageDown 按键反馈。'}),ev(670,{activity:{kind:'scroll',pending:false},scroll:{x:0,y:144},note:'已观察到滚动，旁侧提示切换为滚动图标。'})]},
+    {id:'navigation',group:'status',name:'导航 / 返回 / 刷新',hint:'导航图标 · 同页位置保留',icon:'navigation',family:'导航状态 + 页面变化',description:'导航、返回和刷新靠导航状态与新页面画面表示。同一页保留已有指针位置，不模拟点击地址栏。',duration:3000,key:1510,start:stationary,events:()=>[ev(400,{activity:{kind:'operation',pending:true},note:'导航开始，已有位置保持。'}),ev(1240,{activity:{kind:'navigation',pending:false},patch:{page:'B',result:'Sample navigation complete'},note:'新页面画面出现，旁侧为导航图标；旧点击环不重播。'})]},
+    {id:'wait',group:'status',name:'等待 / 进行中',hint:'pending 时状态持续保持',icon:'operation',family:'共用操作状态；未完成时保持',description:'等待没有网页落点。通用操作图标在操作未结束时持续显示，超过 900ms 也保持；完成后再短暂保留。',duration:5000,key:1900,start:stationary,events:()=>[ev(300,{activity:{kind:'operation',pending:true},note:'等待进行中：超过 900ms 仍保留状态。'}),ev(3150,{activity:{kind:'operation',pending:false},patch:{result:'Sample wait complete'},note:'等待已结束，状态再短暂保留。'})]},
+    {id:'read',group:'status',name:'读取 / 截图 / 提取',hint:'共用状态 · 不搬动箭头',icon:'operation',family:'共用操作状态',description:'快照、截图、文本 / 列表提取、控制台和网络读取共用操作状态。读取不搬动箭头，也不会给截图区域新增框。',duration:2700,key:700,start:stationary,variants:[['snapshot','快照 / 当前页面'],['screenshot','截图'],['extract','文本 / 列表提取'],['console','控制台读取'],['network','网络读取']],events:v=>stateOnly('operation',{result:'Sample '+v+' complete'})},
+    {id:'storage',group:'status',name:'存储读取 / 写入',hint:'共用状态 · 没有网页落点',icon:'operation',family:'共用操作状态',description:'Cookie 等存储读取、写入、删除与清空共用操作状态。这里仅演示提示，不读取或更改任何真实账号数据。',duration:2700,key:700,start:stationary,variants:[['read','读取'],['write','写入'],['delete','删除 / 清空']],events:v=>stateOnly('operation',{result:'Sample storage '+v+' complete'})},
+    {id:'window',group:'status',name:'窗口读取 / 调整',hint:'共用状态 · 不点 OS 按钮',icon:'operation',family:'共用操作状态',description:'窗口边界读取和调整共用操作状态；真实尺寸变化由页面画面体现，没有网页里的 OS 窗口按钮落点。',duration:2700,key:700,start:stationary,variants:[['read','读取窗口'],['adjust','调整窗口']],events:v=>stateOnly('operation',{result:v==='read'?'Sample bounds read':'Sample bounds adjusted'})},
+    {id:'dialog',group:'status',name:'原生对话框',hint:'当前共用通用操作状态',icon:'operation',family:'共用操作状态',description:'原生对话框处理当前共用通用操作状态。对话框不属于网页可定位控件，因此不在预览里画假的确认按钮或点击环。',duration:2700,key:700,start:stationary,events:()=>stateOnly('operation',{result:'Sample dialog handled'})},
+    {id:'pages',group:'status',name:'新页 / 切回 / 关闭',hint:'未知页起点 · 已知位置恢复',icon:'navigation',family:'各页的位置初始化 / 恢复',description:'新页先用展示起点，切回已有页恢复该页已知位置。关闭页后按实际选中页恢复，不模拟点浏览器标签栏。',duration:3600,key:1970,start:stationary,events:()=>[move(500,'seed',{immediate:true,patch:{page:'B'},note:'新 Page B：未知位置从展示起点出现。'}),move(1650,stationary,{immediate:true,patch:{page:'A'},note:'切回 Page A：直接恢复该页已知位置。'}),move(2600,'seed',{immediate:true,patch:{page:'B'},note:'示例关闭 Page A：选中 Page B，保留它的起点。'})]},
+    {id:'manual',group:'other',name:'手动立即跟随',hint:'0ms · 手形标记 · 可体验',icon:'hand',family:'同一箭头立即位移 + 手形标记',description:'手动位置立即更新，旁边用手形标记。播放时看自动示例；把鼠标移入预览区域，可直接体验 0ms 跟随和真实按下。',duration:3000,key:1010,events:()=>[move(0,baseStart,{actor:'manual',immediate:true}),move(500,'sample-name',{actor:'manual',immediate:true}),move(950,'sample-select',{actor:'manual',immediate:true}),move(1400,'sample-action',{actor:'manual',immediate:true}),move(1900,point(750,183),{actor:'manual',immediate:true})]},
+    {id:'clipped',group:'other',name:'部分可见控件',hint:'可见落点保留 · 框不乱跳',icon:'focus',family:'共用目标框 + 控件可见区域位置',description:'控件只露出一部分时，箭头定位在可见区域。目标框暂时隐藏时仍保留该控件位置；可拖时间轴或改变窗口宽度观察。',duration:3600,key:1710,events:()=>[target(400,'clip-input','input',{note:'控件中心在裁切区外，箭头停在露出的部分。'}),target(1200,'clip-input','input',{note:'同一控件的新反馈，位置保持。'}),ev(1300,{frameMatched:false,note:'这一刻目标框暂时隐藏，箭头仍保留在控件可见区域。'}),ev(1730,{frameMatched:true,note:'画面与目标匹配后，只恢复仍在显示期限内的提示。'}),target(2010,'clip-input','input',{patch:{clipWidth:94},note:'裁切范围变窄，位置重新取控件可见区域。'})]}
+  ];
+  const refs={viewport:$('viewport'),plane:$('plane'),pointer:$('pointer'),ripple:$('press-ripple'),frame:$('target-frame'),badge:$('activity-badge'),slider:$('timeline')};
+  let selected=SCENES.find(s=>s.id==='input'),variant='single',time=700,playing=false,speed=1,zoom=1,lastFrame=null;
+  let manual=null,lastIcon='',lastPatch='',lastTargetKind='',rendered=null;
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  const escapeText=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const groupName=id=>GROUPS.find(g=>g[0]===id)[1];
+  $('category-filter').innerHTML='<option value="all">全部效果（28 项）</option>'+GROUPS.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join('');
+  function makeList(){
+    const filter=$('category-filter').value;
+    $('scene-list').innerHTML=GROUPS.filter(g=>filter==='all'||filter===g[0]).map(([group,name])=>{
+      const rows=SCENES.filter(s=>s.group===group);
+      return '<div class="group-heading"><span>'+name+'</span><span>'+rows.length+'</span></div>'+rows.map(s=>'<button type="button" class="scene-button" data-scene="'+s.id+'" aria-pressed="'+(s===selected)+'"><span class="scene-icon">'+icon(s.icon,17)+'</span><span class="scene-text"><b>'+escapeText(s.name)+'</b><small>'+escapeText(s.hint)+'</small></span><span class="scene-play">▶</span></button>').join('');
+    }).join('');
+    $('scene-count').textContent=(filter==='all'?28:SCENES.filter(s=>s.group===filter).length)+' 项';
+  }
+  function keyTime(){if(selected.id==='input'&&variant==='form')return 2320;return selected.key;}
+  function duration(){return selected.id==='input'&&variant==='form'?3600:selected.duration;}
+  function selectScene(id,auto=true){
+    selected=SCENES.find(s=>s.id===id);variant=selected.variants?selected.variants[0][0]:'';manual=null;time=auto?0:keyTime();playing=auto;lastFrame=null;
+    $('scene-title').textContent=selected.name;$('scene-category').textContent=groupName(selected.group);$('effect-family').textContent=selected.family;$('scene-description').textContent=selected.description;
+    $('variant').hidden=!selected.variants;
+    $('variant').innerHTML=(selected.variants||[]).map(([value,title])=>'<option value="'+value+'">'+title+'</option>').join('');
+    $('scene-index').textContent=String(SCENES.indexOf(selected)+1).padStart(2,'0')+' / 28';
+    refs.viewport.dataset.manual=String(selected.id==='manual');refs.slider.max=duration();makeList();
+    const list=$('scene-list'),active=list.querySelector('[aria-pressed="true"]'),box=list.getBoundingClientRect(),row=active?.getBoundingClientRect();
+    if(row&&row.top<box.top)list.scrollTop+=row.top-box.top-8;
+    else if(row&&row.bottom>box.bottom)list.scrollTop+=row.bottom-box.bottom+8;
+    render();
+  }
+  function fit(){return refs.plane.clientWidth/W;}
+  function elementRect(id,clip=true){
+    const rect=$(id).getBoundingClientRect(),host=refs.plane.getBoundingClientRect();
+    let r={x:(rect.left-host.left)/zoom,y:(rect.top-host.top)/zoom,width:rect.width/zoom,height:rect.height/zoom};
+    if(clip){
+      let left=Math.max(0,r.x),top=Math.max(0,r.y),right=Math.min(refs.plane.clientWidth,r.x+r.width),bottom=Math.min(refs.plane.clientHeight,r.y+r.height);
+      for(let p=$(id).parentElement;p&&p!==refs.plane;p=p.parentElement){
+        const css=getComputedStyle(p),b=p.getBoundingClientRect();
+        if(/(auto|scroll|hidden|clip)/.test(css.overflowX)){left=Math.max(left,(b.left-host.left)/zoom);right=Math.min(right,(b.right-host.left)/zoom);}
+        if(/(auto|scroll|hidden|clip)/.test(css.overflowY)){top=Math.max(top,(b.top-host.top)/zoom);bottom=Math.min(bottom,(b.bottom-host.top)/zoom);}
+      }
+      r={x:left,y:top,width:Math.max(0,right-left),height:Math.max(0,bottom-top)};
+    }
+    return r;
+  }
+  function resolve(to,geometryPatch=null){
+    if(to==='seed')return{x:POLICY.initialInset*fit(),y:POLICY.initialInset*fit()};
+    const dragShift=Number($('drag-card').style.transform.match(/translateX\(([-\d.]+)px\)/)?.[1]||0)*fit();
+    if(typeof to==='string'){const r=elementRect(to);const cx=to==='clip-input'&&geometryPatch?r.x+r.width-(geometryPatch.clipWidth||142)*fit()/2:r.x+r.width/2;return{x:cx-(to==='drag-card'?dragShift:0),y:r.y+r.height/2};}
+    if(to.id){const r=elementRect(to.id);return{x:r.x+r.width/2-(to.id==='drag-card'?dragShift:0)+(to.offsetX||0)*fit(),y:r.y+r.height/2};}
+    return{x:to.x*fit(),y:to.y*fit()};
+  }
+  function sample(m,at){const p=m.duration===0?1:Math.min(1,Math.max(0,(at-m.at)/m.duration)),e=POLICY.motionEase(p);return{x:m.from.x+(m.to.x-m.from.x)*e,y:m.from.y+(m.to.y-m.from.y)*e};}
+  function setPatch(p){
+    const signature=JSON.stringify(p);if(signature===lastPatch)return;lastPatch=signature;
+    $('sample-name').value=p.name||'Example';$('sample-note').value=p.note||'Sample note';$('sample-rich').textContent=p.rich||'Example text';$('sample-select').value=p.select||'a';
+    const dt=new DataTransfer();if(p.file)dt.items.add(new File(['Sample file content'],'sample.txt',{type:'text/plain'}));$('sample-file').files=dt.files;
+    $('sample-action').classList.toggle('observed-hover',!!p.hover);
+    /* Card content moves with the simulated drag. Mouse observations remain a separate path. */
+    $('drag-card').style.transform='translateX('+(p.drag||0)+'px)';
+    $('sample-title').textContent='Sample workspace'+(p.page==='B'?' · Page B':'');$('sample-address').textContent=p.page==='B'?'example.test / sample-b':'example.test / sample';$('page-label').textContent='Page '+(p.page||'A')+' · 本地示例';
+    $('sample-result').textContent=p.result||'Sample page ready';$('clip-area').style.width=(p.clipWidth||142)+'px';
+  }
+  function derive(){
+    const events=selected.events(variant),patch={};let scroll={x:0,y:0},frameMatched=true,note='等待下一项示例动作。';
+    /* Apply local page outcomes first so every geometry read uses the currently displayed page. */
+    for(const e of events){if(e.at>time)break;if(e.patch)Object.assign(patch,e.patch);if(e.scroll)scroll=e.scroll;if(e.frameMatched!==undefined)frameMatched=e.frameMatched;if(e.note)note=e.note;}
+    setPatch(patch);$('scroll-box').scrollLeft=scroll.x;$('scroll-box').scrollTop=scroll.y;
+    let actor='ai',position=resolve(selected.start||baseStart),motion={from:position,to:position,at:0,duration:0};
+    let targetState=null,activity=null,press=null,buttons=0,pressArrived=false;const geometryPatch={};
+    for(const e of events){
+      if(e.at>time)break;
+      if(e.patch)Object.assign(geometryPatch,e.patch);
+      const current=sample(motion,e.at);
+      if(press&&!press.skipped&&!press.started&&e.at>=motion.at+motion.duration&&motion.to.x===press.point.x&&motion.to.y===press.point.y){press.started=motion.at+motion.duration;pressArrived=true;}
+      if(e.actor)actor=e.actor;
+      if(e.to){
+        const to=resolve(e.to,geometryPatch);
+        if(press&&press.started===null&&(to.x!==press.point.x||to.y!==press.point.y))press.skipped=true;
+        const immediate=actor==='manual'||e.immediate||reduced.matches;
+        if(immediate||to.x!==motion.to.x||to.y!==motion.to.y)motion={from:current,to,at:e.at,duration:immediate||(to.x===current.x&&to.y===current.y)?0:POLICY.motionMs};
+        targetState=e.target?{...e.target,at:e.at,arrived:Math.max(e.at,motion.at+motion.duration)}:null;
+      }
+      if(e.activity)activity={...e.activity,at:e.at};
+      if(e.down){buttons=1;pressArrived=false;press={point:motion.to,at:e.at,started:e.at>=motion.at+motion.duration?e.at:null,skipped:false};if(press.started!==null)pressArrived=true;targetState=null;}
+      if(e.up)buttons=0;
+    }
+    position=sample(motion,time);
+    if(press&&!press.skipped&&press.started===null&&time>=motion.at+motion.duration){press.started=Math.max(press.at,motion.at+motion.duration);pressArrived=true;}
+    const arrived=time>=motion.at+motion.duration;
+    const pressed=buttons!==0&&!targetState&&(arrived||pressArrived);
+    const targetVisible=targetState&&frameMatched&&time>=targetState.arrived&&time<targetState.arrived+POLICY.targetVisibleMs;
+    const activityVisible=activity&&(activity.pending||time<activity.at+POLICY.activityVisibleMs);
+    const ringVisible=press&&!press.skipped&&press.started!==null&&time>=press.started&&time<press.started+POLICY.rippleMs;
+    return{position,pressed,target:targetVisible?targetState:null,retainedTarget:targetState,activity:activityVisible?activity:null,ring:ringVisible?press:null,actor,origin:targetState?'element':selected.start==='seed'||selected.id==='pages'?'initial':'mouse',note,frameMatched,patch};
+  }
+  function draw(s){
+    const {x,y}=s.position;refs.pointer.style.left=x+'px';refs.pointer.style.top=y+'px';refs.pointer.dataset.pressed=String(s.pressed);refs.pointer.dataset.actor=s.actor;refs.pointer.dataset.origin=s.origin;
+    $('arrow-body').setAttribute('fill','url(#mist-'+(s.pressed?'press':'rest')+')');
+    refs.frame.hidden=!s.target;
+    if(s.target){const r=elementRect(s.target.id);Object.assign(refs.frame.style,{left:r.x+'px',top:r.y+'px',width:r.width+'px',height:r.height+'px'});refs.frame.dataset.screenPointerTarget=s.target.kind;lastTargetKind=s.target.kind;}
+    else{delete refs.frame.dataset.screenPointerTarget;lastTargetKind='';}
+    const kind=s.actor==='manual'?'hand':s.activity?.kind;
+    const badgeVisible=!!s.activity||(s.actor==='manual'&&!s.activity);
+    refs.badge.hidden=!badgeVisible;
+    if(badgeVisible){if(lastIcon!==kind){refs.badge.innerHTML=icon(kind);lastIcon=kind;}refs.badge.style.left=(x+18)+'px';refs.badge.style.top=(y+22)+'px';refs.badge.dataset.screenPointerActivity=s.activity?.kind||'manual';refs.badge.dataset.screenPointerActor=s.actor;refs.badge.dataset.pending=String(!!s.activity?.pending);}
+    refs.ripple.hidden=!s.ring;
+    if(s.ring){refs.ripple.style.left=s.ring.point.x+'px';refs.ripple.style.top=s.ring.point.y+'px';const animation=refs.ripple.getAnimations()[0];if(animation){animation.pause();animation.currentTime=s.ring.elapsed??time-s.ring.started;}}
+    refs.plane.style.setProperty('--view-x',(x/refs.plane.clientWidth*100)+'%');refs.plane.style.setProperty('--view-y',(y/refs.plane.clientHeight*100)+'%');
+    refs.slider.value=time;$('time-readout').textContent=(time/1000).toFixed(2)+' / '+(duration()/1000).toFixed(2)+'s';$('play').textContent=playing?'Ⅱ 暂停':'▶ 播放';
+    $('play-state').textContent=manual?'手动体验':playing?'播放中':time>=duration()?'已结束':'已定格';
+    $('live-note').textContent=manual?'手动：鼠标位置立即显示；按下时出现真实同款环。':s.note;
+    $('viewport-label').textContent=zoom===2?'局部放大 2× · 同一枚指针':manual?'手动体验 · 0ms 跟随':'本地示例 · 指针 20 × 22';
+    $('reduced-note').classList.toggle('visible',reduced.matches);
+    rendered={scene:selected.id,variant,time,duration:duration(),playing,speed,zoom,manual:!!manual,position:s.position,pressed:s.pressed,origin:s.origin,actor:s.actor,target:!!s.target,targetKind:s.target?.kind||null,retainedTarget:s.retainedTarget?.id||null,activity:s.activity?.kind||null,pending:!!s.activity?.pending,ring:!!s.ring,frameMatched:s.frameMatched};
+  }
+  function render(){
+    const s=derive();
+    if(manual){s.position=manual.point;s.actor='manual';s.origin='mouse';s.target=null;s.retainedTarget=null;s.activity=null;s.pressed=manual.down;s.ring=manual.pressAt!==null&&manual.clock-manual.pressAt<POLICY.rippleMs?{point:manual.pressPoint,started:manual.pressAt,elapsed:manual.clock-manual.pressAt}:null;}
+    draw(s);
+  }
+  function resetPlayback(auto=true){manual=null;time=0;playing=auto;lastFrame=null;render();}
+  $('scene-list').addEventListener('click',e=>{const b=e.target.closest('[data-scene]');if(b)selectScene(b.dataset.scene);});
+  $('category-filter').addEventListener('change',()=>{const filter=$('category-filter').value;makeList();if(filter!=='all')selectScene(SCENES.find(s=>s.group===filter).id);});
+  $('variant').addEventListener('change',()=>{variant=$('variant').value;refs.slider.max=duration();resetPlayback();});
+  $('play').addEventListener('click',()=>{manual=null;if(time>=duration())time=0;playing=!playing;lastFrame=null;render();});
+  $('replay').addEventListener('click',()=>resetPlayback());
+  $('freeze').addEventListener('click',()=>{manual=null;playing=false;time=keyTime();lastFrame=null;render();});
+  refs.slider.addEventListener('input',()=>{manual=null;playing=false;time=Number(refs.slider.value);lastFrame=null;render();});
+  $('speed').addEventListener('change',()=>{speed=Number($('speed').value);lastFrame=null;$('speed-note').textContent=speed===1?'1× 使用正式效果时长；动作间的短停留仅方便观察。可拖动时间轴逐帧查看。':speed+'× 预览慢放：移动、轻框、状态和点击环的时间同比减慢；正式参数保持不变。';render();});
+  function theme(value){document.documentElement.dataset.theme=value;$('light-theme').setAttribute('aria-pressed',String(value==='light'));$('dark-theme').setAttribute('aria-pressed',String(value==='dark'));render();}
+  $('light-theme').addEventListener('click',()=>theme('light'));$('dark-theme').addEventListener('click',()=>theme('dark'));
+  $('zoom').addEventListener('change',()=>{zoom=Number($('zoom').value);manual=null;refs.plane.style.setProperty('--zoom',zoom);render();});
+  document.addEventListener('keydown',e=>{if(e.target.closest('button,input,select,textarea,[contenteditable]'))return;if(e.code==='Space'){e.preventDefault();$('play').click();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();manual=null;playing=false;time=Math.max(0,Math.min(duration(),time+(e.code==='ArrowRight'?1:-1)*33));render();}});
+  const hit=$('manual-hit');
+  function manualPoint(e){const b=refs.viewport.getBoundingClientRect();return{x:Math.max(0,Math.min(refs.plane.clientWidth,e.clientX-b.left)),y:Math.max(0,Math.min(refs.plane.clientHeight,e.clientY-b.top))};}
+  function takeManual(e){if(selected.id!=='manual')return;playing=false;const p=manualPoint(e);if(!manual)manual={point:p,down:false,pressAt:null,pressPoint:p,clock:0};manual.point=p;render();}
+  hit.addEventListener('pointermove',takeManual);
+  hit.addEventListener('pointerdown',e=>{e.preventDefault();takeManual(e);manual.down=true;manual.pressAt=manual.clock;manual.pressPoint={...manual.point};hit.setPointerCapture(e.pointerId);render();});
+  hit.addEventListener('pointerup',e=>{if(manual){manual.down=false;render();}if(hit.hasPointerCapture(e.pointerId))hit.releasePointerCapture(e.pointerId);});
+  hit.addEventListener('pointercancel',()=>{if(manual){manual.down=false;render();}});
+  /* Local sample controls are visual observations; prevent opening native pickers. */
+  $('sample-page').addEventListener('pointerdown',e=>e.preventDefault());$('sample-page').addEventListener('click',e=>e.preventDefault());
+  reduced.addEventListener('change',render);
+  const observer=new ResizeObserver(()=>{refs.plane.style.setProperty('--fit',fit());render();});observer.observe(refs.viewport);observer.observe($('clip-area'));
+  window.addEventListener('resize',render);
+  function tick(at){
+    if(lastFrame===null)lastFrame=at;const delta=Math.min(100,at-lastFrame);lastFrame=at;
+    if(playing){time=Math.min(duration(),time+delta*speed);if(time>=duration())playing=false;render();}
+    else if(manual&&manual.pressAt!==null&&manual.clock-manual.pressAt<POLICY.rippleMs){manual.clock+=delta*speed;render();}
+    requestAnimationFrame(tick);
+  }
+  refs.plane.style.setProperty('--fit',fit());makeList();selectScene('input',false);requestAnimationFrame(tick);
+  /* Read-only diagnostics for isolated file:// validation; no application connection. */
+  Object.defineProperty(window,'pointerDemo',{value:Object.freeze({getState:()=>({...rendered,policy:{initialInset:POLICY.initialInset,motionMs:POLICY.motionMs,manualMotionMs:POLICY.manualMotionMs,targetVisibleMs:POLICY.targetVisibleMs,activityVisibleMs:POLICY.activityVisibleMs,rippleMs:POLICY.rippleMs}}),scenes:SCENES.map(s=>({id:s.id,group:s.group,variants:(s.variants||[]).map(v=>v[0])}))})});
+})();
+</script>
+</body>
+</html>

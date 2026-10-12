@@ -43,9 +43,10 @@ window.addEventListener('error',event=>window.sampleState.errors.push(event.mess
 function App(){
  const [open,setOpen]=useState(false);
  const [hidden,setHidden]=useState(false);
- window.sampleUi={fullscreen:setOpen,hidden:setHidden,close:()=>screenFeeds.close()};
+ const [interactive,setInteractive]=useState(false);
+ window.sampleUi={fullscreen:setOpen,hidden:setHidden,interactive:setInteractive,close:()=>screenFeeds.close()};
  return <RendererRuntimeProvider runtime={{screenFeeds}}><main>
-  <div data-example="inline" style={{width:480,height:360}}><BrowserScreenView subagentId="sample-agent" browserId="sample-browser" browserReady={true}/></div>
+  <div data-example="inline" style={{width:480,height:360}}><BrowserScreenView subagentId="sample-agent" browserId="sample-browser" browserReady={true} interactive={interactive}/></div>
   <div data-example="scroll" style={{width:260,height:420}}><BrowserScreenView subagentId="sample-agent" browserId="sample-browser" browserReady={true}/></div>
   <div style={{width:360,height:240}}><div data-example="scaled" style={{width:600,height:400,transform:'scale(.6)',transformOrigin:'0 0'}}><BrowserScreenView subagentId="sample-agent" browserId="sample-browser" browserReady={true} fidelity={hidden?'hidden':'visible'}/></div></div>
   <ScreenFullscreen open={open} onClose={()=>setOpen(false)} subagentId="sample-agent" browserId="sample-browser" title="Example screen"/>

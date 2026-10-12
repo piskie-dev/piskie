@@ -62,7 +62,7 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
   /** 浏览器 ID */
   private browserId?: string;
   // ─── 浏览器子流程运行时私有状态 ─────────────────────────
-  /** navigateTo 成功后才为 true，防止 ScreenPreview 提前订阅 */
+  /** 首次真实使用已连接且有可展示 Page 的浏览器后为 true。 */
   private browserLaunched = false;
   private cancelDeferredLaunch?: () => void;
   /** 绑定环境只有成功声明占用后才取得关闭权，避免冲突回滚误关当前占用者。 */
@@ -151,7 +151,9 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
             backgroundMode: this.config.advancedSettings?.backgroundMode ?? true,
           }),
       () => {
-        if (!this.stopped && this.config.browserEnvironmentId) {
+        if (this.stopped) return;
+        this.markBrowserLaunched();
+        if (this.config.browserEnvironmentId) {
           browserEnvironmentRuntime.recordAgentBrowserStarted(
             this.config.browserEnvironmentId,
             browserId,

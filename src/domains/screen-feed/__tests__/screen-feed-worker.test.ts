@@ -269,7 +269,7 @@ describe('ScreenFeedWorker', () => {
     await settle();
     expect(viewport.canvas.width).toBe(1600);
     expect(test.outgoing).toContainEqual({ type: 'viewport-frame', epoch: 1, leaseId: 'sample-inline',
-      frame: { page: next, width: 800, height: 600, mapping: { scale: 1.25, offsetX: 0, offsetY: 0 } }, pointer: null });
+      frame: { page: next, width: 800, height: 600, mapping: { scale: 1.25, offsetX: 0, offsetY: 0 }, timestamp: 2, seq: 2, scrollX: undefined, scrollY: undefined }, pointer: null });
     expect(test.outgoing.some((message) => message.type === 'viewport-frame' && message.leaseId === 'sample-hidden')).toBe(false);
     expect(hidden.context.drawImage).not.toHaveBeenCalled();
   });
@@ -368,7 +368,7 @@ describe('ScreenFeedWorker', () => {
     expect(hidden.context.drawImage).toHaveBeenCalledExactlyOnceWith(visible.canvas, 0, 0);
     expect(test.decode).toHaveBeenCalledTimes(2);
     expect(port.sent.filter((message) => message.type === 'ack')).toHaveLength(2);
-    expect(test.outgoing).toContainEqual({ type: 'viewport-frame', epoch: 1, leaseId: 'hidden', frame: { page: next, width: 1280, height: 720, mapping: undefined }, pointer: null });
+    expect(test.outgoing).toContainEqual({ type: 'viewport-frame', epoch: 1, leaseId: 'hidden', frame: { page: next, width: 1280, height: 720, mapping: undefined, timestamp: 2, seq: 2, scrollX: undefined, scrollY: undefined }, pointer: null });
     test.worker.accept({ type: 'close', epoch: 2 });
   });
 
@@ -545,6 +545,36 @@ describe('ScreenFeedWorker', () => {
     expect(pending.close).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
     test.worker.accept({ type: 'close', epoch: 3 });
+  });
+
+  it('publishes actual new frame times to every viewport during target refresh while continuing to draw and close bitmaps', async () => {
+    const test = harness();
+    const port = new FakePort();
+    const first = fakeViewport(), second = fakeViewport();
+    const bitmaps = [1, 2, 3].map(() => ({ width: 800, height: 600, close: vi.fn() }) as unknown as ImageBitmap);
+    for (const bitmap of bitmaps) test.decode.mockResolvedValueOnce(bitmap);
+    test.worker.accept({ type: 'init-feed', epoch: 1, streamPort: port as unknown as MessagePort, demand: { fps: 30 } });
+    test.worker.accept({ type: 'attach-viewport', epoch: 1, leaseId: 'sample-inline', canvas: first.canvas, visible: true });
+    test.worker.accept({ type: 'attach-viewport', epoch: 1, leaseId: 'sample-fullscreen', canvas: second.canvas, visible: true });
+    const page = { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 };
+    const pointer = { page, seq: 0, action: 'initialize' as const, x: 24, y: 24, buttons: 0, clickCount: 0, timestamp: 1, revision: 1,
+      target: { page, seq: 2, timestamp: 1, kind: 'input' as const, actor: 'ai' as const, x: 130, y: 80,
+        rect: { x: 80, y: 60, width: 100, height: 40 }, scrollX: 0, scrollY: 0, frameBefore: 1 } };
+    port.emit({ type: 'screen-state', browserId: 'sample-browser', page, pointer });
+    for (const seq of [1, 2, 3]) {
+      port.emit({ ...frame(seq), meta: { ...frame(seq).meta, timestamp: 1, width: 800, height: 600, page, scrollX: 0, scrollY: 0 } });
+      await settle();
+    }
+    for (const leaseId of ['sample-inline', 'sample-fullscreen']) {
+      const drawn = test.outgoing.filter((message): message is Extract<ScreenWorkerOutgoingMessage, { type: 'viewport-frame' }> => message.type === 'viewport-frame' && message.leaseId === leaseId);
+      expect(drawn.map((message) => message.frame.timestamp)).toEqual([1, 1, 1]);
+      expect(drawn.map((message) => message.frame.seq)).toEqual([1, 2, 3]);
+      expect(drawn.every((message) => message.pointer?.target?.seq === 2)).toBe(true);
+    }
+    expect(first.context.drawImage).toHaveBeenCalledTimes(3);
+    expect(second.context.drawImage).toHaveBeenCalledTimes(3);
+    expect(bitmaps.every((bitmap) => vi.mocked(bitmap.close).mock.calls.length === 1)).toBe(true);
+    test.worker.accept({ type: 'close', epoch: 2 });
   });
 
   it('disconnects the current port, ignores stale frames, and confirms close', async () => {

@@ -136,6 +136,7 @@ export const BrowserScreenView = memo<BrowserScreenViewProps>(
                 role="application"
                 aria-label={t('sessionWorkbenchUi.screen.interactiveAria')}
                 data-active={stream.ready ? 'true' : 'false'}
+                data-pointer-visible={stream.pointer ? 'true' : 'false'}
                 onPointerDown={input.onPointerDown}
                 onPointerMove={input.onPointerMove}
                 onPointerUp={input.onPointerUp}

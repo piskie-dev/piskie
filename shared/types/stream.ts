@@ -28,6 +28,7 @@ export type ScreenStreamRequest = BrowserStreamRequest;
 export interface ScreenPageIdentity {
   readonly connectionId: string;
   readonly pageId: number;
+  /** Screen revision for replacement of the main document or an embedded frame. */
   readonly navigationSequence: number;
 }
 
@@ -46,7 +47,41 @@ export function sameScreenPage(
   return sameScreenPageInstance(left, right) && left!.navigationSequence === right!.navigationSequence;
 }
 
-/** Latest successful public mouse observation; its position lives with the Page/Mouse instance. */
+export type ScreenInputActor = 'ai' | 'manual';
+export type ScreenOperationKind = 'input' | 'select' | 'upload' | 'key' | 'focus' | 'scroll' | 'navigation' | 'operation' | 'dialog';
+
+export interface ScreenOperationActivity {
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly timestamp: number;
+  readonly kind: ScreenOperationKind;
+  readonly actor: ScreenInputActor;
+  readonly pending: boolean;
+  /** Actual observed scroll delta, or the successful wheel input when no delta is known yet. */
+  readonly scroll?: { readonly x: number; readonly y: number };
+}
+
+export interface ScreenElementTarget {
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly timestamp: number;
+  readonly kind: 'input' | 'select' | 'upload' | 'key' | 'focus';
+  readonly actor: ScreenInputActor;
+  /** Main-frame viewport CSS geometry, clipped to the visible control. */
+  readonly x: number;
+  readonly y: number;
+  readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly scrollX: number;
+  readonly scrollY: number;
+  /** A scroll/layout result must not highlight pixels captured before that change. */
+  readonly frameAfter?: number;
+  /** Newer painted pixels require a fresh layout/connection read before highlighting. */
+  readonly frameBefore?: number;
+  /** Captured image validated by this geometry read, including images sharing one millisecond. */
+  readonly frameSeq?: number;
+}
+
+/** Session-owned operation feedback. Mouse origin fields are never rewritten by an element target. */
 export interface ScreenPointer {
   /** Call-time frame identity of this observation, preserved across later navigation. */
   readonly page: ScreenPageIdentity;
@@ -54,7 +89,16 @@ export interface ScreenPointer {
   readonly x: number;
   readonly y: number;
   readonly buttons: number;
-  readonly action: 'move' | 'down' | 'up';
+  readonly action: 'move' | 'down' | 'up' | 'wheel' | 'initialize';
+  readonly origin?: 'mouse' | 'initial';
+  readonly actor?: ScreenInputActor;
+  /** Ordering at the shared input owner; the source's own seq and timestamp remain intact. */
+  readonly sourceOrder?: number;
+  readonly revision?: number;
+  readonly target?: ScreenElementTarget;
+  /** Last known element position, with no active target highlight. */
+  readonly positionTarget?: ScreenElementTarget;
+  readonly activity?: ScreenOperationActivity;
   readonly clickCount: number;
   /** Unix milliseconds, shared with frame timestamps. */
   readonly timestamp: number;
@@ -66,6 +110,8 @@ export interface ScreenPointer {
     readonly y: number;
     readonly timestamp: number;
     readonly clickCount: number;
+    readonly actor?: ScreenInputActor;
+    readonly order?: number;
   };
 }
 

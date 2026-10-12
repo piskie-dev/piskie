@@ -4,7 +4,7 @@ import type { BrowserLaunchSpec } from '../../../piskiepilot/browser/core/browse
 const h = vi.hoisted(() => {
   const cancelDeferredLaunch = vi.fn();
   return {
-    claim: vi.fn(() => ({ ok: true })),
+    claim: vi.fn((): { ok: boolean; heldBy?: { occupantName: string } } => ({ ok: true })),
     hasBrowser: vi.fn(() => false),
     planLaunch: vi.fn(async () => ({
       generation: 'sample-generation',
@@ -128,7 +128,7 @@ describe('BrowserModule bound environment ownership', () => {
     expect(h.recordStarted).toHaveBeenCalledWith(
       'sample-environment', 'sample-browser', 'sample-profile',
     );
-    expect(module.getBrowserReady()).toBe(false);
+    expect(module.getBrowserReady()).toBe(true);
   });
 
   it('records acquired borrowed browsers without planning and still closes them on destroy', async () => {

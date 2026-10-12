@@ -10,13 +10,15 @@ function fakePage(url: string) {
   const events = new EventEmitter();
   const client = new EventEmitter();
   let currentUrl = url;
-  const frame = {} as Frame;
+  const frame = { page: () => page } as unknown as Frame;
   const locator = {
     click: vi.fn(async () => undefined),
     fill: vi.fn(async () => undefined),
     hover: vi.fn(async () => undefined),
   };
   const handle = {
+    frame,
+    evaluateHandle: vi.fn(async () => ({ asElement: () => null, dispose: vi.fn(async () => undefined) })),
     dispose: vi.fn(async () => undefined),
     evaluate: vi.fn(async () => false),
     asLocator: vi.fn(() => locator),
@@ -112,8 +114,9 @@ describe('BrowserAutomationSession', () => {
     const pending = first.page.mouse.move(70, 90);
     first.page.emit('framenavigated', first.frame);
     await pending;
-    expect(events[0]).toMatchObject({ type: 'target', target: { identity: { navigationSequence: 1 } } });
-    expect(events[1]).toMatchObject({ type: 'pointer', pointer: { page: firstTarget.identity, x: 70, y: 90 } });
+    expect(events[0]).toMatchObject({ type: 'feedback', pointer: { origin: 'initial', action: 'initialize', seq: 0 } });
+    expect(events[1]).toMatchObject({ type: 'target', target: { identity: { navigationSequence: 1 } } });
+    expect(events[2]).toMatchObject({ type: 'pointer', pointer: { page: firstTarget.identity, x: 70, y: 90 } });
     expect(session.getCurrentScreenPointer()).toMatchObject({ page: firstTarget.identity, x: 70, y: 90 });
     await session.selectPageByIndex(1);
     expect(session.getScreenTarget().identity.pageId).not.toBe(firstTarget.identity.pageId);
@@ -138,7 +141,7 @@ describe('BrowserAutomationSession', () => {
     session.dispose();
   });
 
-  it('keeps a valid idle position through same-Page navigation, expires press replay and clears on selection, return and disposal', async () => {
+  it('keeps idle position through navigation, restores each Page on return and clears on disposal', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const first = fakePage('https://example.test/sample');
     const second = fakePage('https://example.test/next');
@@ -157,14 +160,15 @@ describe('BrowserAutomationSession', () => {
     await first.page.mouse.move(90, 130);
     const beforeNavigation = session.getCurrentScreenPointer();
     first.page.emit('framenavigated', first.frame);
-    expect(session.getCurrentScreenPointer()).toBe(beforeNavigation);
+    expect(session.getCurrentScreenPointer()).toMatchObject({ page: beforeNavigation!.page, seq: beforeNavigation!.seq, timestamp: beforeNavigation!.timestamp,
+      activity: { kind: 'navigation', page: session.getScreenTarget().identity } });
     expect(session.getCurrentScreenPointer()!.page.navigationSequence).toBe(0);
     expect(session.getScreenTarget().identity.navigationSequence).toBe(1);
     await first.page.mouse.move(100, 140);
     await session.selectPageByIndex(1);
-    expect(session.getCurrentScreenPointer()).toBeNull();
+    expect(session.getCurrentScreenPointer()).toMatchObject({ origin: 'initial', x: 24, y: 24 });
     await session.selectPageByIndex(0);
-    expect(session.getCurrentScreenPointer()).toBeNull();
+    expect(session.getCurrentScreenPointer()).toMatchObject({ origin: 'mouse', x: 100, y: 140 });
     await first.page.mouse.move(110, 150);
     session.dispose();
     expect(session.getCurrentScreenPointer()).toBeNull();
@@ -181,7 +185,7 @@ describe('BrowserAutomationSession', () => {
     const down = session.getCurrentScreenPointer()!;
     current.page.emit('framenavigated', current.frame);
     expect(current.page.mouse).toBe(mouse);
-    expect(session.getCurrentScreenPointer()).toBe(down);
+    expect(session.getCurrentScreenPointer()).toMatchObject({ page: down.page, seq: down.seq, timestamp: down.timestamp, press: down.press });
     expect(listener.mock.calls.filter(([event]) => event.type === 'pointer')).toHaveLength(2);
     expect(listener.mock.calls.at(-1)![0].type).toBe('target');
     await mouse.up();
@@ -189,12 +193,12 @@ describe('BrowserAutomationSession', () => {
     expect(up).toMatchObject({ page: session.getScreenTarget().identity, seq: 3, x: 80, y: 120,
       buttons: 0, press: { page: down.page, seq: 2 } });
     current.page.emit('framenavigated', current.frame);
-    expect(session.getCurrentScreenPointer()).toBe(up);
+    expect(session.getCurrentScreenPointer()).toMatchObject({ page: up.page, seq: up.seq, timestamp: up.timestamp, press: up.press });
     expect(up.page.navigationSequence).toBe(1);
     expect(up.press!.page.navigationSequence).toBe(0);
     const replay = vi.fn();
     session.subscribeScreen(replay)();
-    expect(replay.mock.calls[0]![0].pointer).toBe(up);
+    expect(replay.mock.calls[0]![0].pointer).toMatchObject({ page: up.page, seq: up.seq, timestamp: up.timestamp, press: up.press });
     session.dispose();
   });
 
@@ -214,6 +218,43 @@ describe('BrowserAutomationSession', () => {
     expect(listener).toHaveBeenCalledOnce();
     expect(listener.mock.calls[0]![0].pointer).toBe(session.getCurrentScreenPointer());
     session.dispose();
+  });
+
+  it('keeps a manual release current when its older move completes late, with original origin seq/time', async () => {
+    const current = fakePage('https://example.test/sample');
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+    const identity = session.getScreenTarget().identity;
+    const firstOrder = session.reserveInputOrder();
+    const nextOrder = session.reserveInputOrder();
+    session.observeManualInput({ page: current.page, identity, seq: 2, timestamp: 200,
+      sourceOrder: nextOrder, event: { kind: 'mouse', type: 'mouseReleased', x: 200, y: 100, buttons: 0 } });
+    session.observeManualInput({ page: current.page, identity, seq: 1, timestamp: 100,
+      sourceOrder: firstOrder, event: { kind: 'mouse', type: 'mouseMoved', x: 60, y: 40, buttons: 1 } });
+    expect(session.getCurrentScreenPointer()).toMatchObject({ actor: 'manual', page: identity, seq: 2, timestamp: 200,
+      x: 200, y: 100, buttons: 0, action: 'up' });
+    session.dispose();
+  });
+
+  it('does not replay old press feedback when switching away and returning to a known Page', async () => {
+    const first = fakePage('https://example.test/sample');
+    const second = fakePage('https://example.test/next');
+    const session = await BrowserAutomationSession.create(fakeBrowser([first.page, second.page]));
+    await first.page.mouse.move(80, 120); await first.page.mouse.down(); await first.page.mouse.up();
+    const source = session.getCurrentScreenPointer()!;
+    await session.selectPageByIndex(1); await session.selectPageByIndex(0);
+    expect(session.getCurrentScreenPointer()).toMatchObject({ page: source.page, seq: source.seq, timestamp: source.timestamp,
+      x: 80, y: 120, press: undefined });
+    session.dispose();
+  });
+
+  it('does not let a failed display consumer prevent the actual keyboard action', async () => {
+    const current = fakePage('https://example.test/sample');
+    const session = await BrowserAutomationSession.create(fakeBrowser([current.page]));
+    session.subscribeScreen(() => { throw new Error('Sample display consumer failure'); });
+    await expect(session.typeText('Sample input')).resolves.toMatchObject({ domSettled: true });
+    expect(current.page.keyboard.type).toHaveBeenCalledExactlyOnceWith('Sample input');
+    session.dispose();
+    expect(current.page.listenerCount('framedetached')).toBe(0);
   });
 
   it('keeps one active snapshot and invalidates UIDs on replacement, selection, and navigation', async () => {

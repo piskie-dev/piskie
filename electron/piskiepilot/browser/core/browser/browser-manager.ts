@@ -723,7 +723,8 @@ export class BrowserManager {
         }
 
         signal?.throwIfAborted();
-        return await this.runOperation(instance, operation, signal);
+        return await this.runOperation(instance, ({ automation, browser }) =>
+          automation.withOperationFeedback(() => operation({ automation, browser })), signal);
       } finally {
         guard.dispose();
       }
@@ -779,6 +780,8 @@ export class BrowserManager {
           }
           const deferredLaunch = this.deferredLaunches.get(browserId);
           if (deferredLaunch) {
+            // A real selected Page is available; this does not navigate or create a target.
+            instance.automation.getScreenTarget();
             this.deferredLaunches.delete(browserId);
             deferredLaunch.onConnected();
           }

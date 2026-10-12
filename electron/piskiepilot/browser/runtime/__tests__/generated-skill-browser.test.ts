@@ -49,6 +49,7 @@ vi.mock('../../core/browser/browser-operations.js', () => ({
   BrowserOperations: { navigate: mocks.navigateTo },
 }));
 
+import { BrowserInputDriver } from '../../core/session/browser-input-driver.js';
 import { createGeneratedBrowserSkillRuntime } from '../generated-skill-browser.js';
 import { BROWSER_SKILL_SDK_REFERENCE } from '../generated-skill-browser-reference.js';
 
@@ -60,6 +61,7 @@ describe('generated Browser Skill facade', () => {
   let createdRoots: string[];
   let page: ReturnType<typeof makePage>;
   let context: {
+    input: BrowserInputDriver;
     getSelectedPage: ReturnType<typeof vi.fn>;
     listPages: ReturnType<typeof vi.fn>;
     getSelectedPageIndex: ReturnType<typeof vi.fn>;
@@ -75,6 +77,7 @@ describe('generated Browser Skill facade', () => {
     createdRoots = [];
     page = makePage();
     context = {
+      input: new BrowserInputDriver({ begin: () => null, finish: () => {}, element: () => {}, focus: () => {} }),
       getSelectedPage: vi.fn(() => page),
       listPages: vi.fn(async () => [{ pageId: 1, page, navigationSequence: 0 }]),
       getSelectedPageIndex: vi.fn(() => 0),
@@ -1018,12 +1021,15 @@ function makeElement(domElement?: FakeElement) {
   };
   locator.setTimeout.mockReturnValue(locator);
   return {
+    frame: { page: () => ({}) },
     locator,
     asLocator: vi.fn(() => locator),
     select: vi.fn(async (value: string) => [value]),
     uploadFile: vi.fn(async (_filePath: string) => undefined),
     evaluate: vi.fn(
       async (fn: (element: FakeElement, request?: unknown) => unknown, request?: unknown) => {
+        if (fn.name === 'isToggleControl') return false;
+        if (fn.name === 'isSelectControl') return domElement?.tagName === 'SELECT';
         if (domElement) return fn(domElement, request);
         if (fn.name === 'inspectElementActionability') {
           return {

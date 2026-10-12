@@ -58,6 +58,25 @@
   animation: press-ring var(--pointer-ripple-ms) ease-out both;
 }
 
+.target {
+  position: absolute;
+  border: 1.5px solid #69a7c3; /* style-token-ignore: selected mist-blue target feedback */
+  background: #8fbfd414; /* style-token-ignore: subtle target tint */
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px #d6f3ff33; /* style-token-ignore: selected mist-blue target feedback */
+}
+
+.activity {
+  position: absolute;
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--cyber-border);
+  border-radius: 5px;
+  color: var(--cyber-text);
+  background: var(--cyber-surface);
+  opacity: 0.9;
+}
+
 @keyframes press-ring {
   from { opacity: 0.9; transform: translate(-50%, -50%) scale(0.65); }
   to { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }

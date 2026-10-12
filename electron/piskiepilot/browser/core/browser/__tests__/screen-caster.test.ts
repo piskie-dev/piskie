@@ -57,6 +57,37 @@ describe('ScreenCaster capture ownership', () => {
     await caster.stop();
   });
 
+  it('coalesces requested current screenshots, fences late pixels by capture owner and stops requesting after disposal', async () => {
+    const first = fixture(), next = fixture();
+    const caster = new ScreenCaster(first.page, {}, identity());
+    const frames: ScreencastFrame[] = [];
+    caster.on('frame', (frame) => frames.push(frame));
+    await caster.start();
+    first.screenshot.resolve({ data: 'sample-initial' });
+    await flush();
+    const held = deferred<{ data: string }>();
+    const originalSend = first.session.send.getMockImplementation()!;
+    first.session.send.mockImplementation((method) => method === 'Page.captureScreenshot' ? held.promise : originalSend(method));
+    const refresh = caster.refreshFrame();
+    expect(caster.refreshFrame()).toBe(refresh);
+    expect(first.session.send.mock.calls.filter(([method]) => method === 'Page.captureScreenshot')).toHaveLength(2);
+    const rebinding = caster.rebind(next.page, identity(2));
+    await caster.refreshFrame();
+    expect(first.session.send.mock.calls.filter(([method]) => method === 'Page.captureScreenshot')).toHaveLength(2);
+    await rebinding;
+    held.resolve({ data: 'sample-obsolete-refresh' });
+    await refresh;
+    next.screenshot.resolve({ data: 'sample-current' });
+    await flush();
+    expect(frames.map((frame) => frame.data)).toEqual(['sample-initial', 'sample-current']);
+    expect(frames.at(-1)?.page).toEqual(identity(2));
+    expect(first.session.send.mock.calls.some(([method]) => method.startsWith('Input.'))).toBe(false);
+    await caster.stop();
+    const calls = next.session.send.mock.calls.length;
+    await caster.refreshFrame();
+    expect(next.session.send).toHaveBeenCalledTimes(calls);
+  });
+
   it('restarts the capture identity on navigation of the same Page and measures first screenshot without page.viewport', async () => {
     const first = fixture();
     const next = fixture();
@@ -247,9 +278,22 @@ describe('ScreenCaster capture ownership', () => {
   it('forwards manual mouse input directly to CDP without producing AI mouse observations', async () => {
     const test = fixture();
     const caster = new ScreenCaster(test.page, {}, identity());
+    const inputs: unknown[] = [];
+    caster.on('input', (input) => inputs.push(input));
+    await caster.dispatchInput({ kind: 'mouse', type: 'mouseMoved', x: 17, y: 25 });
+    expect(inputs).toEqual([]);
     await caster.start();
     await caster.dispatchInput({ kind: 'mouse', type: 'mouseMoved', x: 17, y: 25 });
     expect(test.session.send).toHaveBeenCalledWith('Input.dispatchMouseEvent', expect.objectContaining({ x: 17, y: 25, type: 'mouseMoved' }));
+    expect(inputs).toEqual([expect.objectContaining({ event: { kind: 'mouse', type: 'mouseMoved', x: 17, y: 25 }, identity: identity(), page: test.page, seq: 1 })]);
+    const send = test.session.send.getMockImplementation()!;
+    test.session.send.mockImplementation((method) => method === 'Input.dispatchMouseEvent' ? Promise.reject<void>(new Error('Sample send failure')) : send(method));
+    await expect(caster.dispatchInput({ kind: 'mouse', type: 'mousePressed', x: 17, y: 25 })).rejects.toThrow('Sample send failure');
+    expect(inputs).toHaveLength(1);
+    test.session.send.mockImplementation(send);
+    caster.on('input', () => { throw new Error('Sample observer failure'); });
+    await expect(caster.dispatchInput({ kind: 'text', text: 'Sample text' })).resolves.toBeUndefined();
+    expect(inputs).toHaveLength(2);
     await caster.stop();
   });
 });
