@@ -24,10 +24,10 @@ export interface AIRequestInfo {
   stopReason: AIStopReason;
   /** 整个逻辑请求耗时，包含 retry、backoff 与 overflow recovery。 */
   latencyMs: number;
-  /** 最终成功 Provider attempt 到首个非空 Think/正文 delta。 */
-  firstVisibleContentLatencyMs?: number;
-  /** 首个非空 Think/正文 delta 到 response.completed。 */
-  generationDurationMs?: number;
+  /** 最终成功 Provider attempt 到首次收到非空正文、推理文本或工具参数（TTFT）。 */
+  firstTokenLatencyMs?: number;
+  /** 最终成功 Provider attempt 开始到完成的完整耗时，包含首 token 等待。 */
+  attemptDurationMs?: number;
   usage: {
     inputTokens?: number;
     outputTokens?: number;

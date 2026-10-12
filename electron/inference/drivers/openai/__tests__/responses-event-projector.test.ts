@@ -78,6 +78,7 @@ describe('OpenAI Responses event projector', () => {
     ])));
 
     expect(events).toEqual([
+      { kind: 'response.first_token' },
       { kind: 'reasoning.delta', text: 'Inspect the page.' },
       {
         kind: 'reasoning.item',
@@ -112,6 +113,66 @@ describe('OpenAI Responses event projector', () => {
       },
       { kind: 'response.completed', stopReason: 'tool_use' },
     ]);
+  });
+
+  it('ignores lifecycle metadata, empty message and reasoning blocks, empty deltas and tool identity', async () => {
+    const tool = { type: 'function_call', id: 'fc_example', call_id: 'call_example', name: 'lookup', arguments: '' };
+    const events = await collect(projectOpenAiResponsesStream(stream([
+      { type: 'response.created', response: { output: [] } },
+      { type: 'response.in_progress', response: { output: [] } },
+      { type: 'response.output_item.added', item: { type: 'message', content: [] } },
+      { type: 'response.content_part.added', part: { type: 'output_text', text: '' } },
+      { type: 'response.output_item.added', item: { type: 'reasoning', summary: [], content: [], encrypted_content: 'opaque' } },
+      { type: 'response.reasoning_summary_part.added', part: { type: 'summary_text', text: '' } },
+      { type: 'response.output_text.delta', delta: '' },
+      { type: 'response.reasoning_summary_text.delta', delta: '' },
+      { type: 'response.reasoning_text.delta', delta: '' },
+      { type: 'response.refusal.delta', delta: '' },
+      { type: 'response.output_item.added', output_index: 1, item: tool },
+      { type: 'response.function_call_arguments.delta', item_id: tool.id, delta: '' },
+      { type: 'response.output_item.done', output_index: 1, item: tool },
+      { type: 'response.completed', response: { output: [] } },
+    ])));
+
+    expect(events.map((event) => event.kind)).toEqual(['tool.started', 'tool.completed', 'response.completed']);
+  });
+
+  it.each([
+    { name: 'text', event: { type: 'response.output_text.delta', delta: 'answer' } },
+    { name: 'reasoning summary', event: { type: 'response.reasoning_summary_text.delta', delta: 'thought' } },
+    { name: 'reasoning text', event: { type: 'response.reasoning_text.delta', delta: 'thought' } },
+    { name: 'refusal', event: { type: 'response.refusal.delta', delta: 'declined' } },
+    { name: 'initial tool arguments', event: { type: 'response.output_item.added', output_index: 0, item: { type: 'function_call', id: 'fc_example', call_id: 'call_example', name: 'lookup', arguments: '{}' } } },
+    { name: 'tool argument delta', event: { type: 'response.function_call_arguments.delta', item_id: 'fc_example', delta: '{}' } },
+    { name: 'completed tool arguments', event: { type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', id: 'fc_example', call_id: 'call_example', name: 'lookup', arguments: '{}' } } },
+    { name: 'reasoning item text', event: { type: 'response.output_item.done', item: { type: 'reasoning', id: 'rs_example', summary: [{ type: 'summary_text', text: 'thought' }] } } },
+  ])('signals only once on the first nonempty $name', async ({ name, event }) => {
+    const tool = { type: 'function_call', id: 'fc_example', call_id: 'call_example', name: 'lookup', arguments: '' };
+    const toolCase = name.includes('tool');
+    const raw = [
+      { type: 'response.created', response: { output: [] } },
+      { type: 'response.output_text.delta', delta: '' },
+      ...(toolCase ? [{ type: 'response.output_item.added', output_index: 0, item: tool }] : []),
+      event,
+      ...(toolCase && name !== 'completed tool arguments'
+        ? [{ type: 'response.output_item.done', output_index: 0, item: { ...tool, arguments: '{}' } }]
+        : []),
+      { type: 'response.output_text.delta', delta: 'later' },
+      { type: 'response.completed', response: { output: [] } },
+    ];
+    let received = -1;
+    const signals: number[] = [];
+    const source = (async function* () {
+      for (const [index, value] of raw.entries()) {
+        received = index;
+        yield value as OpenAI.Responses.ResponseStreamEvent;
+      }
+    })();
+    for await (const projected of projectOpenAiResponsesStream(source)) {
+      if (projected.kind === 'response.first_token') signals.push(received);
+    }
+
+    expect(signals).toEqual([toolCase ? 3 : 2]);
   });
 
   it.each([

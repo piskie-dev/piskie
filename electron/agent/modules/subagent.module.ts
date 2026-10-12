@@ -76,6 +76,7 @@ interface SubagentRuntimeMeta {
   lastProgressAt: number;
   terminalAt?: number;
   terminalType?: string;
+  taskState?: import('../../../shared/types/agent-control.js').ChildTaskState;
 }
 
 /** 终态宽限期默认时长（5 分钟）：终态后保留子代理供父续任务/追问，到期自动回收 */
@@ -323,6 +324,10 @@ export class SubagentModule implements AgentModule {
     return this.subagents;
   }
 
+  getChildTaskState(id: string) {
+    return this.subagentMeta.get(id)?.taskState;
+  }
+
   /**
    * 创建子流程通知处理器
    * @returns 处理器返回投递结果：true = 已入父 Mailbox 或已直达 sync waiter；
@@ -361,7 +366,17 @@ export class SubagentModule implements AgentModule {
         priority: normalized.type === 'need_user_action' ? 'high' : 'normal',
         metadata: { notificationType: normalized.type, subagentId },
       };
-      return this.host.post(agentInputEvent);
+      const delivered = this.host.post(agentInputEvent);
+      const displayedType = meta?.taskState?.notification?.type;
+      const hasDisplayedTerminal = displayedType === 'completed' || displayedType === 'failed' || displayedType === 'user_stopped';
+      if (delivered && meta && (isTerminal || !hasDisplayedTerminal)) {
+        meta.taskState = {
+          inputAt: meta.taskState?.inputAt ?? meta.startedAt,
+          notification: { type: normalized.type, at: agentInputEvent.timestamp.getTime() },
+        };
+        this.host.emitStateChange();
+      }
+      return delivered;
     };
   }
 
@@ -478,6 +493,8 @@ export class SubagentModule implements AgentModule {
     if (!meta) return;
 
     meta.lastProgressAt = Date.now();
+    meta.taskState = { inputAt: meta.lastProgressAt };
+    this.host.emitStateChange();
     meta.stalledReported = false;
     meta.closureCheckSent = false;
     if (meta.terminalAt) {
@@ -668,6 +685,7 @@ export class SubagentModule implements AgentModule {
         closureCheckSent: false,
         startedAt: nowMs,
         lastProgressAt: nowMs,
+        taskState: { inputAt: nowMs },
       });
 
       // 竞争条件检查

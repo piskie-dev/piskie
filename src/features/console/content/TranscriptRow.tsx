@@ -2,12 +2,13 @@ import { memo, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
-import { resolvePresentationText } from '../data/presentationText';
+import { transcriptNodeText } from '../data/transcriptNodePresentation';
 import { isPendingTranscriptNode, type TranscriptRow as Row } from '../data/transcriptRows';
-import { isActiveStatus } from '../data/status';
+import { isWorkerUnfinished } from '../data/workerActivity';
 import type { WorkerRef } from '../data/vm';
 import { formatActivityDuration } from './formatActivityDuration';
 import { ToolTypeIcon } from './ToolTypeIcon';
+import { WorkerActivityVisibility } from './workerActivityVisibility';
 import activeTextStyles from './activeText.module.css';
 import styles from './Transcript.module.css';
 
@@ -25,22 +26,32 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
   row, renderNode, openGroups, deferredNodeIds, onToggle, toolsActive, workers,
 }) {
   const { t } = useTranslation();
-  if (row.kind === 'node') return renderNode(row.node);
+  const renderContent = (node: TranscriptNode) => node.kind === 'worker' ? (
+    <WorkerActivityVisibility.Provider value={!!row.workerCards?.some((card) => card.id === node.id)}>
+      {renderNode(node)}
+    </WorkerActivityVisibility.Provider>
+  ) : renderNode(node);
+  const renderWorkerCards = (cards: readonly Extract<TranscriptNode, { kind: 'worker' }>[]) => cards.map((node) => (
+    <div key={node.workerId} data-worker-summary={node.id}>
+      <WorkerActivityVisibility.Provider value={true}>{renderNode(node)}</WorkerActivityVisibility.Provider>
+    </div>
+  ));
+  const inlineWorkers = row.kind === 'process' ? [] : (row.workerCards ?? []).filter((card) => (
+    workers?.some((worker) => worker.id === card.workerId)
+    && !(row.kind === 'node' && row.node.kind === 'worker' && row.node.id === card.id)
+  ));
+  if (row.kind === 'node') return <>{renderContent(row.node)}{renderWorkerCards(inlineWorkers)}</>;
 
   const open = openGroups.has(row.id);
   const activeWorkers = row.kind === 'process' ? row.workerCards.filter((node) => {
     const worker = workers?.find((candidate) => candidate.id === node.workerId);
-    return worker && isActiveStatus(worker.status);
+    return worker && isWorkerUnfinished(worker);
   }) : [];
   let text: string;
   let running = false;
   if (row.kind === 'tools') {
     const latest = row.latest;
-    const title = t(latest.titleKey, latest.titleArgs ?? {});
-    const summary = latest.kind === 'tool' && latest.fileOp?.kind === 'read'
-      ? latest.fileOp.path
-      : latest.summary && resolvePresentationText(latest.summary, (key, values) => t(key, values ?? {}));
-    text = summary ? `${title} · ${summary}` : title;
+    text = transcriptNodeText(latest, t);
     running = toolsActive;
   } else {
     const elapsed = row.durationMs ?? row.observedDurationMs;
@@ -69,7 +80,7 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
 
   const renderCell = (node: TranscriptNode) => (
     <div key={node.id} className={styles.cell} data-node-id={node.id} data-deferred={deferredNodeIds.has(node.id) || undefined}>
-      {renderNode(node)}
+      {renderContent(node)}
     </div>
   );
   const pendingNodes = row.kind === 'tools' ? row.nodes.filter(isPendingTranscriptNode) : [];
@@ -115,13 +126,10 @@ export const TranscriptRow = memo<TranscriptRowProps>(function TranscriptRow({
       )}
       {!open && activeWorkers.length > 0 && (
         <div className={styles.groupBody}>
-          {activeWorkers.map((node) => (
-            <div key={node.id} data-worker-summary={node.id}>
-              {renderNode(node)}
-            </div>
-          ))}
+          {renderWorkerCards(activeWorkers)}
         </div>
       )}
+      {inlineWorkers.length > 0 && <div className={styles.groupBody}>{renderWorkerCards(inlineWorkers)}</div>}
       {!open && pendingNodes.length > 0 && (
         <div className={styles.groupBody}>{pendingNodes.map(renderCell)}</div>
       )}

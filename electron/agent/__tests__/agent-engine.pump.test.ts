@@ -122,7 +122,7 @@ class PumpTestEngine extends AgentEngine {
   get visibleApproval(): PendingToolCall | undefined { return this.pendingApprovals.values().next().value?.pending; }
   setStateProbe(cb: (state: AgentControlState) => void): void { this.stateChangeCallback = cb; }
   setActivityStartedAt(startedAt: number): void {
-    this.activityTracker.aiStarted(startedAt);
+    this.activityTracker.aiStarted(startedAt, 'activity-request');
     this.recordToolExecutionStarted('activity-probe', startedAt);
   }
   startToolMetric(callId: string, startedAt: number): void {

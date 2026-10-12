@@ -154,24 +154,47 @@ describe('manual thread order', () => {
 });
 
 describe('sortThreadRows', () => {
-  it('实时运行排在纯历史之前', () => {
+  it('orders live and historical rows together by last activity', () => {
     const rows = buildThreadRows({
-      sessions: [session({ agentId: 'live', createdAt: '2026-01-01T00:00:00.000Z' })],
-      history: [record({ agentId: 'past', lastActiveAt: '2026-07-27T00:00:00.000Z' })],
+      sessions: [
+        session({ agentId: 'live-older', createdAt: '2026-01-01T00:00:00.000Z' }),
+        session({ agentId: 'live-newer', createdAt: '2026-07-28T00:00:00.000Z' }),
+      ],
+      history: [
+        record({ agentId: 'past-middle', lastActiveAt: '2026-07-27T00:00:00.000Z' }),
+        record({ agentId: 'past-newest', lastActiveAt: '2026-07-29T00:00:00.000Z' }),
+      ],
     });
 
-    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual(['live', 'past']);
+    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual([
+      'past-newest',
+      'live-newer',
+      'past-middle',
+      'live-older',
+    ]);
   });
 
-  it('实时运行按 phase 排序，纯历史按最近活跃倒序', () => {
-    const liveRows = buildThreadRows({
+  it('orders all live phases by last activity', () => {
+    const rows = buildThreadRows({
       sessions: [
-        session({ agentId: 'waiting', phase: 'waiting', status: 'waiting' }),
-        session({ agentId: 'executing', phase: 'executing', status: 'running' }),
+        session({ agentId: 'waiting', phase: 'waiting', status: 'waiting', createdAt: '2026-01-04T00:00:00.000Z' }),
+        session({ agentId: 'executing', phase: 'executing', createdAt: '2026-01-01T00:00:00.000Z' }),
+        session({ agentId: 'stopping', phase: 'stopping', createdAt: '2026-01-02T00:00:00.000Z' }),
+        session({ agentId: 'thinking', phase: 'thinking', createdAt: '2026-01-03T00:00:00.000Z' }),
       ],
       history: [],
     });
-    const historyRows = buildThreadRows({
+
+    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual([
+      'waiting',
+      'thinking',
+      'stopping',
+      'executing',
+    ]);
+  });
+
+  it('orders historical rows by last activity', () => {
+    const rows = buildThreadRows({
       sessions: [],
       history: [
         record({ agentId: 'older', lastActiveAt: '2026-07-01T00:00:00.000Z' }),
@@ -179,32 +202,44 @@ describe('sortThreadRows', () => {
       ],
     });
 
-    expect(sortThreadRows(liveRows).map((row) => row.agentId)).toEqual([
-      'executing',
-      'waiting',
-    ]);
-    expect(sortThreadRows(historyRows).map((row) => row.agentId)).toEqual([
+    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual([
       'newer',
       'older',
     ]);
   });
 
-  it('places pinned rows first and keeps the existing order within each pin state', () => {
+  it('uses merged last activity rather than creation time for live rows', () => {
     const rows = buildThreadRows({
       sessions: [session({ agentId: 'live', createdAt: '2026-01-01T00:00:00.000Z' })],
+      history: [
+        record({ agentId: 'live', lastActiveAt: '2026-07-28T00:00:00.000Z' }),
+        record({ agentId: 'past', lastActiveAt: '2026-07-27T00:00:00.000Z' }),
+      ],
+    });
+
+    expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual(['live', 'past']);
+  });
+
+  it('places pinned rows first and orders each pin state by last activity', () => {
+    const rows = buildThreadRows({
+      sessions: [
+        session({ agentId: 'live', createdAt: '2026-01-01T00:00:00.000Z' }),
+        session({ agentId: 'pinned-live', createdAt: '2026-07-01T00:00:00.000Z' }),
+      ],
       history: [
         record({ agentId: 'pinned-older', lastActiveAt: '2026-01-02T00:00:00.000Z' }),
         record({ agentId: 'newer', lastActiveAt: '2026-07-26T00:00:00.000Z' }),
         record({ agentId: 'pinned-newer', lastActiveAt: '2026-07-20T00:00:00.000Z' }),
       ],
-      pinnedAgentRunIds: ['pinned-older', 'pinned-newer'],
+      pinnedAgentRunIds: ['pinned-older', 'pinned-newer', 'pinned-live'],
     });
 
     expect(sortThreadRows(rows).map((row) => row.agentId)).toEqual([
       'pinned-newer',
+      'pinned-live',
       'pinned-older',
-      'live',
       'newer',
+      'live',
     ]);
   });
 });

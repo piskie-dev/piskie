@@ -5,6 +5,9 @@ import type {
   MessagingConnectionConfig,
 } from '../../../shared/types/im-gateway.js';
 import type { ConfigValidationIssue } from '../../../shared/types/config.js';
+import type { InferenceSelections } from '../../../shared/types/inference.js';
+import type { TaskDefinition } from '../../../shared/types/index.js';
+import type { InferenceControlPlane } from '../../inference/control/control-plane.js';
 import { CHANNEL_DESCRIPTORS } from '../../im-gateway/channel-descriptors.js';
 import type {
   ConfigDomainIntegrations,
@@ -169,6 +172,7 @@ export function createImBotsDomain(
   rootDirectory: string,
   integration: ConfigDomainIntegrations['imBots'],
   readDomain: ConfigDomainReader,
+  inference: Pick<InferenceControlPlane, 'assertSelectableTarget'>,
 ) {
   return createManagedDomain<ImBotsDocument, ImBotsRead, ImBotsWrite>(rootDirectory, {
     contract: {
@@ -192,17 +196,48 @@ export function createImBotsDomain(
           .sort(([left], [right]) => left.localeCompare(right))),
         agentBindings: normalizeAgentBindings(current, patched),
       }),
-      dependencyRevisions: async () => ({
-        'task-definitions': revisionOf(await readDomain('task-definitions')),
-      }),
+      dependencyRevisions: async (candidate) => {
+        const current = await readDomain('im-bots') as ImBotsRead;
+        const changesBinding = Object.entries(candidate.bots).some(([botId, bot]) => (
+          bot.definitionId && bot.definitionId !== current.bots[botId]?.definitionId
+        ));
+        const domains = ['task-definitions',
+          ...(changesBinding ? ['inference-selections', 'inference', 'model-catalog'] : [])];
+        const documents = await Promise.all(domains.map((domain) => readDomain(domain)));
+        return Object.fromEntries(domains.map((domain, index) => [domain, revisionOf(documents[index])]));
+      },
       validateSemantic: async (candidate) => {
+        const definitions = await readDomain('task-definitions') as {
+          definitions: Record<string, Pick<TaskDefinition, 'purpose' | 'model'>>;
+        };
+        const current = await readDomain('im-bots') as ImBotsRead;
         const issues = [
-          ...validateTaskDefinitionBindings(
-            candidate,
-            await readDomain('task-definitions'),
-          ),
+          ...validateTaskDefinitionBindings(candidate, definitions),
           ...validateAgentBindings(candidate),
         ];
+        for (const [botId, bot] of Object.entries(candidate.bots)) {
+          if (!bot.definitionId || bot.definitionId === current.bots[botId]?.definitionId) continue;
+          const definition = definitions.definitions[bot.definitionId];
+          if (!definition || definition.purpose !== 'messaging') continue;
+          const selections = await readDomain('inference-selections') as InferenceSelections;
+          const model = definition.model ?? selections.ai;
+          const path = `/bots/${escapePointer(botId)}/definitionId`;
+          if (!model) {
+            issues.push({
+              stage: 'reference', code: 'IM_BOT_MODEL_REQUIRED', path,
+              message: `Task Definition ${bot.definitionId} follows the global default, but no available default AI model is configured. Choose a default model or specify one in the template.`,
+            });
+            continue;
+          }
+          try {
+            await inference.assertSelectableTarget(model, 'ai');
+          } catch (cause) {
+            issues.push({
+              stage: 'reference', code: 'IM_BOT_MODEL_UNAVAILABLE', path,
+              message: `${definition.model ? 'Template-specified' : 'Global default'} AI model ${model.providerId}/${model.modelId} is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
+            });
+          }
+        }
         if (issues.length === 0) await integration.validate(toBotConfigs(candidate));
         return { valid: issues.length === 0, issues };
       },

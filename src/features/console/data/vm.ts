@@ -14,8 +14,10 @@ import { useTranslation } from 'react-i18next';
 import type {
   AgentControlState,
   AgentPhase,
+  AgentOutputTokens,
   AgentRunMetrics,
   ChildControlState,
+  ChildTaskState,
   PendingAgentEventView,
 } from '../../../../shared/types/agent-control';
 import { canPause, canStop, isInterrupted } from '../../../../shared/types/agent-control';
@@ -116,6 +118,7 @@ export interface AgentVM {
   readonly conversationLength: number;
   readonly contextUsage?: ContextUsage;
   readonly activeStartedAt?: number;
+  readonly activeOutputTokens?: AgentOutputTokens;
   readonly activeLlmStartedAt?: number;
   readonly activeToolPhaseStartedAt?: number;
   readonly runMetrics: AgentRunMetrics;
@@ -124,7 +127,7 @@ export interface AgentVM {
   readonly pendingEvents: readonly PendingAgentEventView[];
   /**
    * 待作答的 ask_user 快照（从尾部未配对 tool_use 纯派生）。
-   * 只有主 Agent 有——`WorkerVM` 结构上不带这个字段，提问门因此进不了 worker 面板。
+   * 主会话用于提问门；Worker 只读投影用于当前动作的等待说明。
    */
   readonly askUser?: AskUserVM;
   readonly taskBoard?: { readonly taskSummary: string; readonly items: readonly TaskItem[] };
@@ -151,6 +154,9 @@ export interface WorkerRef {
   readonly subject: string;
   readonly type: string;
   readonly status: StatusKey;
+  readonly taskState?: ChildTaskState;
+  readonly browserId?: string;
+  readonly browserReady?: boolean;
 }
 
 function projectAgent(
@@ -177,6 +183,7 @@ function projectAgent(
     conversationLength: state.conversationLength,
     contextUsage: state.contextUsage,
     activeStartedAt: state.activeStartedAt,
+    activeOutputTokens: state.activeOutputTokens,
     activeLlmStartedAt: state.activeLlmStartedAt,
     activeToolPhaseStartedAt: state.activeToolPhaseStartedAt,
     runMetrics: state.runMetrics,
@@ -193,6 +200,9 @@ function projectAgent(
       subject: child.subject,
       type: child.type,
       status: resolveStatus(child),
+      taskState: child.taskState,
+      browserId: child.browserId,
+      browserReady: child.browserReady,
     })),
     imageNodeIds: (state.imageNodes ?? []).map((node) => node.id),
     browserEnvironmentIds: state.browserEnvironmentIds ?? EMPTY_ENVIRONMENT_IDS,
@@ -233,12 +243,15 @@ export interface WorkerVM {
   readonly conversationLength: number;
   readonly contextUsage?: ContextUsage;
   readonly activeStartedAt?: number;
+  readonly activeOutputTokens?: AgentOutputTokens;
   readonly activeLlmStartedAt?: number;
   readonly activeToolPhaseStartedAt?: number;
   readonly runMetrics: AgentRunMetrics;
   readonly request?: RequestVM;
   readonly pendingToolCall?: PendingToolCall;
   readonly pendingEvents: readonly PendingAgentEventView[];
+  readonly taskState?: ChildTaskState;
+  readonly askUser?: AskUserVM;
   /** 能力位：决定辅助面板出哪些槽（屏幕） */
   readonly browserId?: string;
   /** 创建时绑定的浏览器环境；浏览器 Worker 未绑定即临时浏览器。 */
@@ -269,12 +282,15 @@ function projectWorker(
     conversationLength: child.conversationLength,
     contextUsage: child.contextUsage,
     activeStartedAt: child.activeStartedAt,
+    activeOutputTokens: child.activeOutputTokens,
     activeLlmStartedAt: child.activeLlmStartedAt,
     activeToolPhaseStartedAt: child.activeToolPhaseStartedAt,
     runMetrics: child.runMetrics,
     request: resolveConversationRequest(child.aiRequestState, incident),
     pendingToolCall: child.pendingToolCall,
     pendingEvents: child.pendingEvents,
+    taskState: child.taskState,
+    askUser: child.pendingQuestion ? { id: child.pendingQuestion.id, items: child.pendingQuestion.questions } : undefined,
     browserId: child.browserId,
     browserEnvironmentId: child.browserEnvironmentId,
     browserReady: child.browserReady,

@@ -21,7 +21,7 @@ export function UsageOverview({ report, drill }: { report: UsageReport; drill(fi
   const quality = [
     ['successRate', percent(successRate(s)), t('modelUsage.endedCoverage', { ended: s.calls - s.running, running: s.running })],
     ['cacheRate', percent(cacheRate(s)), t('modelUsage.samples', { count: s.cacheSamples })],
-    ['averageFirst', duration(s.firstResponseSamples ? s.firstResponseTotal / s.firstResponseSamples : undefined), t('modelUsage.samples', { count: s.firstResponseSamples })],
+    ['averageFirstToken', duration(s.firstTokenSamples ? s.firstTokenLatencyTotalMs / s.firstTokenSamples : undefined), t('modelUsage.samples', { count: s.firstTokenSamples })],
   ];
   return <>
     <div className={styles.metrics}>{cards.map(([key, amount, hint]) => <section className={styles.metricCard} key={key} data-metric={key}>

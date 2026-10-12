@@ -393,6 +393,7 @@
 /* 标签和标题共用一个流光坐标系，短标签不再独立闪动。 */
 .workerCreationText {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8px;
   min-inline-size: 0;
@@ -420,7 +421,29 @@
   color: var(--thread-text-soft);
 }
 
+.workerCreationAction {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--thread-text-soft);
+  font-weight: 400;
+}
+
+.workerCreationTaskTitle {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workerCreationSubject[data-has-action='true'] .workerCreationTaskTitle {
+  max-inline-size: 45%;
+}
+
 .workerCreationSubject {
+  display: flex;
+  flex: 1;
   min-inline-size: 0;
   overflow: hidden;
   font-weight: 500;

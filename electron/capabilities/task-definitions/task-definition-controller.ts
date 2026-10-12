@@ -4,6 +4,7 @@ import {
   type TaskDefinitionCreateInput,
   type TaskDefinitionUpdateInput,
 } from '../../../shared/electron-contracts/task-definitions.js';
+import { taskModelWriteSchema } from '../../config/domains/task-definitions.adapter.js';
 import type { ControllerContext, OperationDefinition } from '../catalog.js';
 import { args, identifier } from '../validation.js';
 import type { TaskDefinitionApplication } from './task-definition-application.js';
@@ -31,6 +32,7 @@ const definitionFields = {
   description: z.string(),
   category: z.string().trim().min(1).optional(),
   purpose: z.enum(['general', 'messaging']),
+  model: taskModelWriteSchema.optional(),
   promptTemplate: z.string(),
   systemPrompt: z.string().optional(),
   defaultModeId: z.enum(['normal', 'plan']).optional(),
@@ -41,7 +43,7 @@ const definitionFields = {
   mcpServers: z.array(identifier).optional(),
 };
 const createSchema = z.object(definitionFields).strict();
-const updateSchema = createSchema.partial();
+const updateSchema = createSchema.partial().extend({ model: taskModelWriteSchema.nullable().optional() });
 
 export function createTaskDefinitionController(
   application: TaskDefinitionApplication,

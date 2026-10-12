@@ -164,7 +164,7 @@ function selections(
 }
 
 function api(currentConfig: InferenceConfig, currentSelections: InferenceSelections) {
-  let configChangeListener: ((event: ConfigDomainRevisionChangedEvent) => void) | undefined;
+  const configChangeListeners = new Set<(event: ConfigDomainRevisionChangedEvent) => void>();
   const unsubscribeConfig = vi.fn();
   let currentCatalog = {
     version: 'local:1',
@@ -257,8 +257,8 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
       { domain, expectedRevision, healthy: true, issues: [] }
     )),
     observeChanges: vi.fn((listener: (event: ConfigDomainRevisionChangedEvent) => void) => {
-      configChangeListener = listener;
-      return unsubscribeConfig;
+      configChangeListeners.add(listener);
+      return () => { configChangeListeners.delete(listener); unsubscribeConfig(); };
     }),
   };
 
@@ -281,7 +281,7 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
     inference,
     config: configClient,
     setCatalogModels: (models: typeof catalogByGateway) => { catalogByGateway = models; },
-    emitConfigChanged: (event: ConfigDomainRevisionChangedEvent) => configChangeListener?.(event),
+    emitConfigChanged: (event: ConfigDomainRevisionChangedEvent) => configChangeListeners.forEach((listener) => listener(event)),
     unsubscribeConfig,
   };
 }
@@ -387,7 +387,18 @@ describe('inferenceStore configuration mutations', () => {
     await vi.waitFor(() => expect(useInferenceStore.getState().config?.revision).toBe(15));
     expect(gateway.config.read).toHaveBeenCalledWith('inference');
     unsubscribe();
-    expect(gateway.unsubscribeConfig).toHaveBeenCalledOnce();
+    expect(gateway.unsubscribeConfig).toHaveBeenCalledTimes(3);
+  });
+
+  it('refreshes the global default after an external selection change', async () => {
+    const next = selections({ providerId: 'provider-next', modelId: 'model-next' }, 2);
+    const gateway = api(config(), next);
+    resetStore(config(), selections());
+    const unsubscribe = useInferenceStore.getState().subscribeToConfigChanges();
+    gateway.emitConfigChanged({ domain: 'inference-selections', revision: 2,
+      descriptorHash: descriptors['inference-selections'].descriptorHash, source: 'external' });
+    await vi.waitFor(() => expect(useInferenceStore.getState().selections?.ai).toEqual(next.ai));
+    unsubscribe();
   });
 
   it('uses the shared config transaction and its Plan CAS revision', async () => {

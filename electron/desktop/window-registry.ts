@@ -39,7 +39,6 @@ export interface MainWindowOptions {
   readonly development: boolean;
 }
 
-const PANEL_BROWSER_MIN_WIDTH = 1024;
 const DEVELOPMENT_RENDERER_RECOVERY_DELAY_MS = 1_500;
 const DEVELOPMENT_RENDERER_RECOVERY_LIMIT = 3;
 const MAX_FILE_PREVIEWS_PER_WINDOW = 256;
@@ -218,9 +217,15 @@ export class WindowRegistry implements DesktopPresentationPort {
         window && !window.isDestroyed()
           ? screen.getDisplayMatching(window.getBounds())
           : screen.getPrimaryDisplay();
-      const { width, height } = display.workAreaSize;
-      if (width < PANEL_BROWSER_MIN_WIDTH || height <= 0) return undefined;
-      return Object.freeze({ width: PANEL_BROWSER_MIN_WIDTH, height });
+      const area = display.workArea;
+      if (area.width <= 0 || area.height <= 0) return undefined;
+      const split = Math.floor(area.width / 2);
+      return Object.freeze({
+        width: area.width - split,
+        height: area.height,
+        x: area.x + split,
+        y: area.y,
+      });
     } catch (error) {
       appLog.warn({
         event: 'desktop.browser_bounds.resolve.degraded',

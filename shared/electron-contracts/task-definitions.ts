@@ -1,5 +1,6 @@
 import type {
   ApprovalMode,
+  ModelTarget,
   StandardTaskBindings,
   TaskAdvancedSettings,
   TaskDefinition,
@@ -23,6 +24,7 @@ export interface TaskDefinitionCreateInput {
   description: string;
   category?: string;
   purpose: TaskDefinitionPurpose;
+  model?: ModelTarget;
   promptTemplate: string;
   systemPrompt?: string;
   defaultModeId?: TaskDefinitionModeId;
@@ -33,7 +35,10 @@ export interface TaskDefinitionCreateInput {
   mcpServers?: string[];
 }
 
-export type TaskDefinitionUpdateInput = Partial<TaskDefinitionCreateInput>;
+export type TaskDefinitionUpdateInput = Partial<Omit<TaskDefinitionCreateInput, 'model'>> & {
+  /** Omitted: keep the current choice. Null: remove the fixed model. */
+  model?: ModelTarget | null;
+};
 
 export interface TaskDefinitionClient {
   list(): Promise<TaskDefinitionSnapshot[]>;

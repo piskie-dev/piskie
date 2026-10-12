@@ -140,6 +140,41 @@
   aspect-ratio: var(--frame-ratio, 1.7777);
 }
 
+.viewport[data-fit='full'] {
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.viewport[data-fit='full'] .stage {
+  inline-size: min(100%, calc(100cqh * var(--frame-ratio, 1.6)));
+  block-size: auto;
+  aspect-ratio: var(--frame-ratio, 1.6);
+}
+
+.viewport[data-fit='detail'] {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.viewport[data-fit='detail'] .stage {
+  inline-size: max(100%, 1280px);
+  block-size: auto;
+  aspect-ratio: var(--frame-ratio, 1.6);
+}
+
+.frozenLabel {
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 8px;
+  inline-size: fit-content;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--surface-1);
+  color: var(--cyber-text-muted);
+  font-size: 11px;
+}
+
 .canvas {
   display: block;
   inline-size: 100%;
@@ -160,6 +195,10 @@
   touch-action: none;
   cursor: default;
   outline: none;
+}
+
+.inputHost[data-active='true'][data-pointer-visible='true'] {
+  cursor: none;
 }
 
 .inputHost[data-active='true']:focus-visible {

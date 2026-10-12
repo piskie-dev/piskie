@@ -80,6 +80,47 @@ describe('TaskDefinitionRepository', () => {
     expect(repository.state.getState().definitions).toEqual([canonical]);
   });
 
+  it('publishes the saved snapshot before a delayed refresh and ignores an older query', async () => {
+    const existing = definition('existing');
+    const sibling = definition('sibling');
+    const saved = { ...existing, promptTemplate: 'Saved task prompt' };
+    const canonical = { ...saved, description: 'Canonical task description' };
+    let resolveOlder!: (value: TaskDefinitionSnapshot[]) => void;
+    let resolveNewer!: (value: TaskDefinitionSnapshot[]) => void;
+    const list = vi.fn()
+      .mockResolvedValueOnce([existing, sibling])
+      .mockReturnValueOnce(new Promise<TaskDefinitionSnapshot[]>((resolve) => { resolveOlder = resolve; }))
+      .mockReturnValueOnce(new Promise<TaskDefinitionSnapshot[]>((resolve) => { resolveNewer = resolve; }));
+    const repository = createTaskDefinitionRepository(client({ list, update: vi.fn(async () => saved) }));
+    await repository.refresh();
+    const older = repository.refresh();
+
+    await expect(repository.update(existing.definitionId, { promptTemplate: saved.promptTemplate })).resolves.toEqual(saved);
+    expect(repository.state.getState()).toMatchObject({ phase: 'refreshing', definitions: [saved, sibling] });
+    resolveOlder([existing, sibling]);
+    await older;
+    expect(repository.state.getState().definitions).toEqual([saved, sibling]);
+    resolveNewer([canonical, sibling]);
+    await settle();
+    expect(repository.state.getState()).toMatchObject({ phase: 'ready', definitions: [canonical, sibling] });
+  });
+
+  it('retains the closed state when a pending update completes', async () => {
+    let resolveUpdate!: (value: TaskDefinitionSnapshot) => void;
+    const list = vi.fn(async () => [definition('existing')]);
+    const repository = createTaskDefinitionRepository(client({
+      list,
+      update: vi.fn(() => new Promise<TaskDefinitionSnapshot>((resolve) => { resolveUpdate = resolve; })),
+    }));
+    await repository.refresh();
+    const update = repository.update('existing', { promptTemplate: 'Saved task prompt' });
+    repository.close();
+    resolveUpdate({ ...definition('existing'), promptTemplate: 'Saved task prompt' });
+    await update;
+    expect(repository.state.getState()).toMatchObject({ phase: 'idle', definitions: [] });
+    expect(list).toHaveBeenCalledOnce();
+  });
+
   it('keeps retained data and scopes a query failure to this repository', async () => {
     const existing = definition('existing');
     const list = vi.fn()

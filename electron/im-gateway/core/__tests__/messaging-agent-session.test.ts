@@ -81,6 +81,24 @@ describe('IM Agent launch resolution', () => {
     expect(source.metadata?.boundEnvironmentIds).toEqual(['browser-1']);
   });
 
+  it('uses the latest template model only for new IM conversations', async () => {
+    const source = definition({ model: { providerId: 'sample-provider', modelId: 'first-model' } });
+    definitions.set(source.definitionId, source);
+    const first = resolveImAgentLaunch(bot(), { kind: 'direct', id: 'sample-peer' });
+    source.model!.modelId = 'next-model';
+    expect(first.launch.runConfig.model?.modelId).toBe('first-model');
+    const target = conversation('new');
+    const bindings = inMemoryBindings();
+    const agents = { hasAgentInMemory: vi.fn(() => false), resumeAgent: vi.fn(),
+      startAgent: vi.fn(async () => ({ agentId: 'sample-run' })), stopAgent: vi.fn() };
+    const sessions = new MessagingAgentSession(agents as never, bindings);
+    await sessions.ensure(target, () => resolveImAgentLaunch(bot(), { kind: 'direct', id: 'sample-peer' }).launch);
+    expect(agents.startAgent).toHaveBeenCalledWith(expect.objectContaining({
+      runConfig: expect.objectContaining({ model: { providerId: 'sample-provider', modelId: 'next-model' } }),
+    }));
+    expect(bindings.set).toHaveBeenCalledWith(target, 'sample-run');
+  });
+
   it('rejects an unbound or missing TaskDefinition', () => {
     expect(() => resolveImAgentLaunch(bot({ definitionId: undefined }), {
       kind: 'direct',
@@ -112,7 +130,7 @@ describe('MessagingAgentSession', () => {
       stopAgent: vi.fn(),
     };
     const sessions = new MessagingAgentSession(agents as never, bindings);
-    const resolveLaunch = vi.fn(launch);
+    const resolveLaunch = vi.fn(() => { throw new Error('Current template model is unavailable'); });
 
     await expect(sessions.ensure(active, resolveLaunch)).resolves.toBe('main-active');
     await expect(sessions.ensure(cold, resolveLaunch)).resolves.toBe('main-cold');

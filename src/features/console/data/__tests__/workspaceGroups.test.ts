@@ -90,12 +90,12 @@ describe('groupByWorkspace', () => {
     expect(groups.map((group) => group.label)).toEqual(['new', 'old']);
   });
 
-  it('组内沿用会话排序：executing 先于 waiting', () => {
+  it('orders rows within a workspace by last activity regardless of phase', () => {
     const groups = groupByWorkspace([
-      row({ agentId: 'w', workspace: '/w/p', phase: 'waiting', status: 'waiting' }),
-      row({ agentId: 'e', workspace: '/w/p', phase: 'executing', status: 'running' }),
+      row({ agentId: 'e', workspace: '/w/p', phase: 'executing', status: 'running', createdAt: '2026-07-01T00:00:00.000Z' }),
+      row({ agentId: 'w', workspace: '/w/p', phase: 'waiting', status: 'waiting', createdAt: '2026-07-25T00:00:00.000Z' }),
     ], DEFAULT_WORKSPACE);
-    expect(groups[0]?.rows.map((item) => item.agentId)).toEqual(['e', 'w']);
+    expect(groups[0]?.rows.map((item) => item.agentId)).toEqual(['w', 'e']);
   });
 
   it('applies pins inside each workspace without changing workspace order', () => {

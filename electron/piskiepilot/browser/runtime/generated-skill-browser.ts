@@ -3,9 +3,8 @@ import {
   type ConnectedBrowserSession,
 } from '../core/browser/browser-manager.js';
 import { BrowserOperations } from '../core/browser/browser-operations.js';
-import { uploadFileThroughElement } from '../core/session/browser-automation-session.js';
 import { validatePathWithinRoots } from '../core/session/file-roots.js';
-import { parseKeyCombination, typeKeyboardText } from '../core/session/keyboard.js';
+import { parseKeyCombination } from '../core/session/keyboard.js';
 
 type BrowserSession = ConnectedBrowserSession['automation'];
 type BrowserPage = ReturnType<BrowserSession['getSelectedPage']>;
@@ -110,7 +109,7 @@ export interface GeneratedSkillPage {
     locator: BrowserSkillLocator | readonly BrowserSkillLocator[],
     options?: BrowserActionOptions
   ): Promise<BrowserPageObservation>;
-  /** Replace the value of the first matching input, textarea, or contenteditable. */
+  /** Replace an input, textarea or contenteditable value. Use click to activate checkboxes, radios and switches. */
   fill(
     locator: BrowserSkillLocator | readonly BrowserSkillLocator[],
     value: string,
@@ -376,7 +375,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
         await context.waitForAction(() =>
-          element.asLocator().setTimeout(timeout(options.timeoutMs)).fill(value)
+          context.input.fill(element, value, timeout(options.timeoutMs), 'reject')
         );
         return observe(context.getSelectedPage());
       }
@@ -396,7 +395,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       { requirement: 'attached', sideEffect: true },
       async (page, element, context) => {
         context.throwIfDialogOpen();
-        await uploadFileThroughElement(page, element, filePath, timeout(options.timeoutMs));
+        await context.input.upload(page, element, filePath, timeout(options.timeoutMs));
         return observe(context.getSelectedPage());
       }
     );
@@ -413,7 +412,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
         await context.waitForAction(async () => {
-          const selected = await element.select(value);
+          const selected = await context.input.select(element, value);
           if (selected.length === 0) {
             throw new Error(`Select option was not found: ${JSON.stringify(value)}`);
           }
@@ -425,29 +424,16 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
 
   async typeText(text: string): Promise<BrowserPageObservation> {
     return this.#withLockedContext(async (page, context) => {
-      await context.waitForAction(() => typeKeyboardText(page.keyboard, text));
+      await context.waitForAction(() => context.input.typeText(page, text));
       return observe(context.getSelectedPage());
     });
   }
 
   async press(key: string): Promise<BrowserPageObservation> {
     if (!key.trim()) throw new Error('Browser Skill press key cannot be empty');
-    const [primaryKey, ...modifiers] = parseKeyCombination(key);
+    parseKeyCombination(key);
     return this.#withLockedContext(async (page, context) => {
-      await context.waitForAction(async () => {
-        const heldModifiers: typeof modifiers = [];
-        try {
-          for (const modifier of modifiers) {
-            await page.keyboard.down(modifier);
-            heldModifiers.push(modifier);
-          }
-          await page.keyboard.press(primaryKey);
-        } finally {
-          for (let index = heldModifiers.length - 1; index >= 0; index -= 1) {
-            await page.keyboard.up(heldModifiers[index]);
-          }
-        }
-      });
+      await context.waitForAction(() => context.input.press(page, key));
       return observe(context.getSelectedPage());
     });
   }

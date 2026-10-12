@@ -83,8 +83,8 @@ export class ModelUsageService {
       },
       event: (event) => {
         if (!record || event.attempt !== record.attempt || record.status !== 'running') return;
-        if ((event.kind === 'text.delta' || event.kind === 'reasoning.delta') && event.text.length && record.firstResponseMs === undefined) {
-          record.firstResponseMs = Math.max(0, event.emittedAt - record.startedAt);
+        if (event.kind === 'response.first_token' && record.firstTokenLatencyMs === undefined) {
+          record.firstTokenLatencyMs = Math.max(0, event.emittedAt - record.startedAt);
         }
         if (event.kind === 'usage.updated') {
           record.usage = { ...record.usage, ...Object.fromEntries(Object.entries(event.usage).filter(([, value]) => value !== undefined)) };

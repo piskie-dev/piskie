@@ -328,7 +328,9 @@ describe('Anthropic Messages SDK driver', () => {
       receivedBody = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
 
       response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.write(': keepalive\n\n');
       const events: Array<Record<string, unknown>> = [
+        { type: 'ping' },
         {
           type: 'message_start',
           message: {
@@ -425,6 +427,7 @@ describe('Anthropic Messages SDK driver', () => {
         // 直接使用 input_tokens 会漏掉缓存两项，导致长会话用量严重低报。
         usage: { totalInputTokens: 16, totalOutputTokens: 1, cachedInputTokens: 2, cacheWriteTokens: 3, reasoningTokens: 1 },
       },
+      { kind: 'response.first_token' },
       { kind: 'reasoning.delta', text: 'fresh thought' },
       {
         kind: 'reasoning.item',

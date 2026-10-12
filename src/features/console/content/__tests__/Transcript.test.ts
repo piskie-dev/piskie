@@ -103,6 +103,7 @@ const outsideIds = () => [...container.querySelectorAll<HTMLElement>('[data-node
   .map((element) => element.dataset.nodeId);
 const node = (id: string) => container.querySelector<HTMLElement>(`[data-node-id="${id}"]`);
 const group = (kind: 'tools' | 'process') => container.querySelector<HTMLElement>(`[data-transcript-group="${kind}"]`);
+const processById = (id: string) => container.querySelector<HTMLElement>(`[data-transcript-group="process"][data-group-id="${id}"]`);
 const toggle = (kind: 'tools' | 'process') => group(kind)?.querySelector<HTMLButtonElement>('button') ?? null;
 const click = async (element: HTMLElement | null) => {
   expect(element).not.toBeNull();
@@ -188,7 +189,7 @@ describe('target presentation memory', () => {
     expect(processes[0]!.querySelector('button')?.getAttribute('aria-expanded')).toBe(String(open));
   });
 
-  it('advances a retained process boundary after remount when the same turn finishes again', async () => {
+  it.each([false, true])('restores independent processes and open states when notification work finishes after remount (original open: %s)', async (open) => {
     const { session, append, show } = await start([
       user(), assistant('sample-first-work', [call('sample-first-tool')]),
       result('sample-first-tool'), assistant('sample-first-final', 'First reply.', 8000),
@@ -196,19 +197,33 @@ describe('target presentation memory', () => {
     await show({ memoryKey: 'target-main' });
     await show({ memoryKey: 'target-main', processSettled: true });
     expect(outsideIds()).toEqual(['sample-user', 'sample-first-final']);
+    if (open) await click(toggle('process'));
 
     await renderEntries([{ ...user(), id: 'sample-worker-user' }], { memoryKey: 'target-worker' });
     await show({ memoryKey: 'target-main', processSettled: true });
     expect(group('process')?.dataset.groupId).toBe('process:sample-user');
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe(String(open));
 
+    append({ t: 'msg', role: 'user', subtype: 'subagent_notification', id: 'sample-wakeup', ts: 9000,
+      content: '<subagent_event id="sample-worker" type="message">Sample update.</subagent_event>' });
     append(assistant('sample-resumed-work', [call('sample-resumed-tool')], 10000));
     append({ ...result('sample-resumed-tool'), ts: 11000 });
     append(assistant('sample-latest-final', 'Latest reply.', 12000));
     await show({ memoryKey: 'target-main', processSettled: true });
-    expect(outsideIds()).toEqual(['sample-user', 'sample-latest-final']);
-    await click(toggle('process'));
-    expect(group('process')?.contains(node('sample-first-final'))).toBe(true);
-    expect(group('process')?.contains(node('sample-resumed-tool'))).toBe(true);
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-latest-final']);
+    const resumed = processById('process:after:sample-first-final')!;
+    expect(resumed.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe(String(open));
+    await click(resumed.querySelector('button'));
+    expect(resumed.contains(node('sample-resumed-tool'))).toBe(true);
+    expect(resumed.contains(node('sample-first-final'))).toBe(false);
+    expect(group('process')?.contains(node('sample-first-final'))).toBe(false);
+
+    await renderEntries([{ ...user(), id: 'sample-worker-user' }], { memoryKey: 'target-worker' });
+    await show({ memoryKey: 'target-main', processSettled: true });
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-latest-final']);
+    expect(toggle('process')?.getAttribute('aria-expanded')).toBe(String(open));
+    expect(processById('process:after:sample-first-final')?.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
     session.close();
   });
 
@@ -249,7 +264,8 @@ describe('target presentation memory', () => {
 describe('workers in collapsed processes', () => {
   const workers: readonly WorkerRef[] = [
     { id: 'worker-beta', subject: 'Review beta', type: 'local-worker', status: 'running' },
-    { id: 'worker-complete', subject: 'Review complete', type: 'browser-worker', status: 'waiting' },
+    { id: 'worker-complete', subject: 'Review complete', type: 'browser-worker', status: 'waiting',
+      taskState: { inputAt: 1000, notification: { type: 'completed', at: 5000 } } },
     { id: 'worker-alpha', subject: 'Review alpha', type: 'explore', status: 'thinking' },
   ];
   const entries = (startedAt = 1000): readonly ConversationEntry[] => [
@@ -322,22 +338,28 @@ describe('workers in collapsed processes', () => {
     },
   );
 
-  it('removes each summary as existing worker statuses settle without changing transcript nodes', async () => {
+  it('keeps waiting and interrupted tasks visible until a real terminal notification arrives', async () => {
     const projector = new TranscriptProjector();
     projector.reset(0, entries());
     const { nodes, responses } = projector.snapshot();
     const props = { nodes, responses, workers, processSettled: true };
     await render(props);
     const beta = summaryButton('worker-beta-call');
-    await render({ ...props, workers: workers.map((worker) => worker.id === 'worker-alpha' ? { ...worker, status: 'waiting' } : worker) });
+    await render({ ...props, workers: workers.map((worker) => worker.id === 'worker-alpha' ? {
+      ...worker, status: 'waiting', taskState: { inputAt: 1000, notification: { type: 'completed', at: 9000 } },
+    } : worker) });
     expect(summaryIds()).toEqual(['worker-beta-call']);
     expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(summaryButton('worker-beta-call')).toBe(beta);
     for (const status of ['waiting', 'interrupted', 'stopping'] as const) {
       await render({ ...props, workers: workers.map((worker) => ({ ...worker, status })) });
-      expect(summaryIds()).toEqual([]);
-      expect(group('process')!.textContent).toBe('用时 7秒');
+      expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+      expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束');
     }
+    await render({ ...props, workers: workers.map((worker) => ({ ...worker, taskState: {
+      inputAt: 1000, notification: { type: 'completed' as const, at: 9000 },
+    } })) });
+    expect(summaryIds()).toEqual([]);
     expect(buildTranscriptRows(nodes, responses, true).rows.find((row) => row.kind === 'process')?.workerProgress?.unfinished).toBe(3);
     await click(toggle('process'));
     expect(toggle('process')!.textContent).toBe('用时 7秒');
@@ -387,8 +409,8 @@ describe('workers in collapsed processes', () => {
     append(workerEvent('worker-alpha', 'message', 8500, 16500));
     append(workerEvent('worker-alpha', 'completed', 9000, 17000));
     await show({ processSettled: true, workers });
-    expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
-    expect(header.textContent).toBe('用时 7秒 · 2 个子流程未结束');
+    expect(summaryIds()).toEqual(['worker-beta-call']);
+    expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     await show({ processSettled: true, workers: [] });
     expect(header.textContent).toBe('用时 7秒');
     append(workerEvent('worker-beta', 'completed', 12000, 18000));
@@ -399,7 +421,10 @@ describe('workers in collapsed processes', () => {
     expect(header.textContent).toBe('用时 7秒');
     append(assistant('sample-followup-final', 'Final update', 20000));
     await show({ processSettled: true, workers: [] });
-    expect(header.textContent).toBe('用时 19秒');
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 11秒');
+    expect(processById('process:after:sample-final')?.querySelector('button')?.textContent).toBe('用时 4秒');
+    expect(outsideIds()).toContain('sample-final');
+    expect(outsideIds()).toContain('sample-followup-final');
     session.close();
   });
 
@@ -409,15 +434,16 @@ describe('workers in collapsed processes', () => {
     append(workerEvent('worker-complete', 'completed', 5000, 9000));
     append(workerEvent('worker-alpha', 'failed', 10000, 11000));
     await show({ processSettled: true, workers });
-    expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束 · 1 个失败');
-    expect(summaryIds()).toEqual(['worker-alpha-call', 'worker-beta-call']);
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个子流程未结束 · 1 个失败');
+    expect(summaryIds()).toEqual(['worker-beta-call']);
     append(workerEvent('worker-beta', 'user_stopped', 12000, 13000));
     await show({ processSettled: true, workers });
-    expect(toggle('process')!.textContent).toBe('用时 7秒 · 2 个子流程未结束 · 1 个失败 · 1 个已停止 · 本轮总用时 11秒');
+    expect(toggle('process')!.textContent).toBe('用时 7秒 · 1 个失败 · 1 个已停止 · 本轮总用时 11秒');
+    expect(summaryIds()).toEqual([]);
     session.close();
   });
 
-  it('resets the count for same-turn follow-up but does not assign a later turn to the original process', async () => {
+  it('moves the same-turn live count to the continuation while retaining historical execution duration', async () => {
     const { session, append, show } = await start([
       user(), assistant('sample-work', [
         call('sample-worker-call', 'subagent', { subject: 'Sample work', type: 'local-worker' }),
@@ -435,12 +461,13 @@ describe('workers in collapsed processes', () => {
     append({ ...result('sample-send'), ts: 12000 });
     await show({ processSettled: true });
     expect(header.textContent).toBe('用时 7秒');
+    expect(container.querySelector('[data-worker-summary="sample-worker-call"]')).not.toBeNull();
     append(workerEvent('sample-worker', 'completed', 13000, 14000));
     await show({ processSettled: true });
     expect(header.textContent).toBe('用时 7秒 · 本轮总用时 12秒');
     append(assistant('sample-followup-final', 'Follow-up done', 14000));
     await show({ processSettled: true });
-    expect(header.textContent).toBe('用时 13秒');
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 12秒');
 
     append({ ...user(15000), id: 'next-sample-user' });
     append(assistant('sample-next-task', [
@@ -449,7 +476,7 @@ describe('workers in collapsed processes', () => {
     append({ ...result('sample-send-again'), ts: 17000 });
     append(workerEvent('sample-worker', 'completed', 19000, 20000));
     await show({ processSettled: true });
-    expect(header.textContent).toBe('用时 13秒');
+    expect(header.textContent).toBe('用时 7秒 · 本轮总用时 12秒');
     session.close();
   });
 
@@ -491,17 +518,18 @@ describe('workers in collapsed processes', () => {
 
     await click(first.querySelector('button'));
     expect(first.querySelector('[data-node-id="sample-worker-call"]')).not.toBeNull();
-    expect(originalButton('sample-worker-call')?.outerHTML).toBe(summary?.outerHTML);
+    expect(originalButton('sample-worker-call')?.dataset.live).toBe('false');
+    expect(originalButton('sample-worker-call')?.textContent).toBe(summary?.textContent);
     await click(originalButton('sample-worker-call'));
     expect(openWorker.mock.calls).toEqual([['sample-worker'], ['sample-worker']]);
     await click(next.querySelector('button'));
     expect(next.querySelector('[data-transcript-group="tools"]')).not.toBeNull();
     await click(next.querySelector('[data-transcript-group="tools"] > button'));
     expect(next.querySelector('[data-node-id="sample-send"]')).not.toBeNull();
-    expect(next.querySelector('[data-worker-summary]')).toBeNull();
+    expect(next.querySelectorAll('[data-worker-summary]')).toHaveLength(1);
     await click(next.querySelector('button'));
     await show({ toolsActive: true, workers: waitingWorkers });
-    expect(next.querySelector('[data-worker-summary]')).toBeNull();
+    expect(next.querySelector('[data-worker-summary]')).not.toBeNull();
     session.close();
   });
 
@@ -630,7 +658,7 @@ describe('resuming a settled process', () => {
   });
   const activeWorkers: readonly WorkerRef[] = defaultWorkers.map((worker) => ({ ...worker, status: 'running' }));
 
-  it.each([false, true])('retains the same process through wakeup, tools and final commit (manually open: %s)', async (open) => {
+  it.each([false, true])('pins the completed process and reply while resumed work finishes independently (manually open: %s)', async (open) => {
     const { session, append, stream, finish, show } = await start(initialEntries());
     stream('sample-first-request', 'First reply');
     await show({ workers: activeWorkers });
@@ -687,6 +715,7 @@ describe('resuming a settled process', () => {
     const tools = toggle('tools')!;
     expect(tools.querySelector('svg.lucide-file-text')).not.toBeNull();
     expect(tools.textContent).toContain('/tmp/example.txt');
+    await click(tools);
     await show({ toolsActive: true, workers: activeWorkers });
     expect(tools.querySelector(`.${activeTextStyles.text}`)).not.toBeNull();
     stream('sample-final-request', 'Latest reply');
@@ -711,28 +740,41 @@ describe('resuming a settled process', () => {
     expect(group('process')).toBe(process);
     expect(toggle('process')).toBe(header);
     expect(header.getAttribute('aria-expanded')).toBe(String(open));
-    expect(header.textContent).toBe('用时 19秒 · 1 个子流程未结束');
-    expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(1);
-    expect(outsideIds()).toEqual(['sample-user', 'sample-latest-final-text', 'sample-latest-final-text-1']);
-    if (open) {
-      expect(process.contains(node('sample-first-final'))).toBe(true);
-      expect(process.contains(node('sample-notification'))).toBe(true);
-    } else {
-      expect(node('sample-first-final')).toBeNull();
-      expect(node('sample-notification')).toBeNull();
+    expect(header.textContent).toBe('用时 7秒 · 1 个子流程未结束');
+    expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(2);
+    expect(outsideIds()).toEqual([
+      'sample-user', 'sample-first-final', 'sample-latest-final-text', 'sample-latest-final-text-1',
+    ]);
+    const resumed = processById('process:after:sample-first-final')!;
+    const resumedHeader = resumed.querySelector('button')!;
+    expect(resumedHeader.textContent).toBe('用时 11秒');
+    expect(resumedHeader.getAttribute('aria-expanded')).toBe('false');
+    expect(node('sample-first-final')).not.toBeNull();
+    expect(process.contains(node('sample-first-final'))).toBe(false);
+    expect(node('sample-notification')).toBeNull();
+    if (!open) {
       await click(process.querySelector('[data-worker-summary="sample-worker-call"] button'));
       expect(openWorker).toHaveBeenCalledExactlyOnceWith('sample-worker');
       expect(header.getAttribute('aria-expanded')).toBe('false');
       expect(dom.window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
       expect(node('sample-worker-call')).toBeNull();
-      expect(node('sample-first-final')).toBeNull();
-      expect(node('sample-notification')).toBeNull();
+      expect(node('sample-first-final')).not.toBeNull();
       await click(header);
       expect(header.getAttribute('aria-expanded')).toBe('true');
-      expect(process.contains(node('sample-first-final'))).toBe(true);
+      expect(process.contains(node('sample-first-final'))).toBe(false);
       await click(header);
     }
-    await show({ processSettled: true, workers: defaultWorkers });
+    await click(resumedHeader);
+    expect(resumed.contains(node('sample-notification'))).toBe(true);
+    expect(resumed.contains(node('sample-followup-text'))).toBe(true);
+    expect(resumed.querySelector('[data-transcript-group="tools"] > button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(resumed.contains(node('sample-first-final'))).toBe(false);
+    expect(resumed.contains(node('sample-latest-final-text'))).toBe(false);
+    expect(header.getAttribute('aria-expanded')).toBe(String(open));
+    await click(resumedHeader);
+    await show({ processSettled: true, workers: defaultWorkers.map((worker) => ({
+      ...worker, taskState: { inputAt: 1000, notification: { type: 'completed', at: 21000 } },
+    })) });
     expect(container.querySelector('[data-worker-summary]')).toBeNull();
     expect(group('process')).toBe(process);
     session.close();
@@ -776,41 +818,72 @@ describe('resuming a settled process', () => {
     // The user input is consumed after the tool batch; the resumed activity has no normal final reply.
     append({ ...user(15000), id: 'sample-next-user', content: 'Inspect another example.' });
     await show({ toolsActive: true, workers: activeWorkers });
-    const process = group('process')!;
-    const header = toggle('process')!;
-    expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(1);
-    expect(process.dataset.groupId).toBe('process:sample-user');
+    const process = processById('process:after:sample-first-final')!;
+    const header = process.querySelector('button')!;
+    expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(hasWork ? 2 : 1);
     if (hasWork) {
-      expect(process).toBe(previousProcess);
-      expect(header).toBe(previousHeader);
+      expect(group('process')).toBe(previousProcess);
+      expect(toggle('process')).toBe(previousHeader);
+      expect(previousHeader?.textContent).toBe('用时 7秒 · 1 个子流程未结束');
+      expect(previousHeader?.getAttribute('aria-expanded')).toBe(String(open));
     }
-    expect(header.textContent).toBe('执行过程 · 用时 10秒 · 1 个子流程未结束');
-    expect(header.getAttribute('aria-expanded')).toBe(String(open));
-    expect(outsideIds()).toEqual(['sample-user', 'sample-next-user']);
+    const label = hasWork ? '执行过程 · 用时 2秒' : '执行过程 · 用时 2秒 · 1 个子流程未结束';
+    expect(header.textContent).toBe(label);
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-next-user']);
+    expect(node('sample-resumed-work-text')).toBeNull();
     if (!open) {
-      expect(node('sample-first-final')).toBeNull();
-      expect(node('sample-resumed-work-text')).toBeNull();
-      const summary = process.querySelector<HTMLButtonElement>('[data-worker-summary="sample-worker-call"] button')!;
+      const owner = hasWork ? previousProcess! : process;
+      const summary = owner.querySelector<HTMLButtonElement>('[data-worker-summary="sample-worker-call"] button')!;
       expect(summary.outerHTML).toBe(workerMarkup);
       expect(summary.querySelector(`.${activeTextStyles.text}`)).not.toBeNull();
       await click(summary);
       expect(openWorker).toHaveBeenCalledExactlyOnceWith('sample-worker');
       expect(header.getAttribute('aria-expanded')).toBe('false');
       expect(dom.window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
-      await click(header);
     }
+    await click(header);
     expect(toggle('tools')!.getAttribute('aria-expanded')).toBe('true');
-    for (const id of ['sample-first-final', 'sample-notification', 'sample-resumed-work-think-0', 'sample-resumed-work-text', 'sample-resumed-first', 'sample-resumed-last']) {
+    for (const id of ['sample-notification', 'sample-resumed-work-think-0', 'sample-resumed-work-text', 'sample-resumed-first', 'sample-resumed-last']) {
       expect(process.contains(node(id))).toBe(true);
     }
+    expect(process.contains(node('sample-first-final'))).toBe(false);
     expect(process.contains(node('sample-next-user'))).toBe(false);
     append(assistant('sample-next-final', 'Independent answer.', 18000));
     await show({ processSettled: true, workers: activeWorkers });
-    expect(group('process')).toBe(process);
-    expect(header.textContent).toBe('执行过程 · 用时 10秒 · 1 个子流程未结束');
+    expect(processById('process:after:sample-first-final')).toBe(process);
+    expect(header.textContent).toBe(label);
     expect(header.getAttribute('aria-expanded')).toBe('true');
-    expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-final']);
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-next-user', 'sample-next-final']);
     session.close();
+  });
+
+  it.each([false, true])('reconstructs completed replies on a fresh mount without presentation memory (continuation finished: %s)', async (finished) => {
+    const entries: ConversationEntry[] = [
+      ...initialEntries(), assistant('sample-first-final', 'First reply', 8000), notification(),
+      assistant('sample-resumed-work', [call('sample-resumed-tool')], 10000),
+      { ...result('sample-resumed-tool'), ts: 11000 },
+      ...(finished ? [assistant('sample-latest-final', 'Latest reply', 12000)] : []),
+    ];
+    for (const key of ['sample-cold-first', 'sample-cold-remount']) {
+      await renderEntries(entries, { processSettled: finished, toolsActive: !finished }, undefined, key);
+      expect(node('sample-first-final')).not.toBeNull();
+      expect(group('process')?.contains(node('sample-first-final'))).toBe(false);
+      expect(toggle('process')?.getAttribute('aria-expanded')).toBe('false');
+      expect(outsideIds()).toEqual(finished
+        ? ['sample-user', 'sample-first-final', 'sample-latest-final']
+        : ['sample-user', 'sample-first-final', 'sample-notification', 'sample-resumed-tool']);
+      expect(container.querySelectorAll('[data-transcript-group="process"]')).toHaveLength(finished ? 2 : 1);
+      await click(toggle('process'));
+      expect(node('sample-first-final')).not.toBeNull();
+      if (finished) {
+        const resumed = processById('process:after:sample-first-final')!;
+        await click(resumed.querySelector('button'));
+        expect(resumed.contains(node('sample-resumed-tool'))).toBe(true);
+        expect(resumed.contains(node('sample-first-final'))).toBe(false);
+        expect(resumed.contains(node('sample-latest-final'))).toBe(false);
+      }
+    }
   });
 
   it('keeps the earlier reply outside when a later canonical response contains only a hidden tool', async () => {
@@ -824,7 +897,7 @@ describe('resuming a settled process', () => {
     append(result('sample-task'));
     await show({ processSettled: true });
     expect(toggle('process')).toBe(header);
-    expect(header!.textContent).toBe('用时 7秒');
+    expect(header!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-notification']);
     session.close();
   });
@@ -852,7 +925,7 @@ describe('resuming a settled process', () => {
     await show({ processSettled: false });
     expect(group('process')).toBe(process);
     expect(toggle('process')).toBe(header);
-    expect(header!.textContent).toBe('用时 7秒');
+    expect(header!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(header!.getAttribute('aria-expanded')).toBe('false');
     expect(node('sample-first-final')).not.toBeNull();
     expect(node('sample-decision')).not.toBeNull();
@@ -875,24 +948,32 @@ describe('resuming a settled process', () => {
     finish('sample-cancelled-request', 'cancelled');
     await show();
     expect(toggle('process')).toBe(header);
-    expect(header!.textContent).toBe('用时 7秒');
+    expect(header!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
     expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-notification', 'sample-cancelled-final']);
     append({ ...user(15000), id: 'sample-next-user', content: 'Inspect another example.' });
     append(assistant('sample-next-work', [call('sample-next-tool')]));
     await show({ toolsActive: true });
     expect(toggle('process')).toBe(header);
-    expect(header!.textContent).toBe('执行过程 · 用时 11秒');
-    expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-tool']);
+    expect(header!.textContent).toBe('用时 7秒 · 1 个子流程未结束');
+    expect(processById('process:after:sample-first-final')?.querySelector('button')?.textContent).toBe('执行过程 · 用时 3秒');
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-next-user', 'sample-next-tool']);
     append(result('sample-next-tool'));
     append(assistant('sample-next-final', 'Independent reply', 19000));
     await show({ processSettled: true });
     const processes = [...container.querySelectorAll<HTMLElement>('[data-transcript-group="process"]')];
-    expect(processes.map((element) => element.dataset.groupId)).toEqual(['process:sample-user', 'process:sample-next-user']);
-    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual(['执行过程 · 用时 11秒', '用时 4秒']);
-    expect(outsideIds()).toEqual(['sample-user', 'sample-next-user', 'sample-next-final']);
+    expect(processes.map((element) => element.dataset.groupId)).toEqual([
+      'process:sample-user', 'process:after:sample-first-final', 'process:sample-next-user',
+    ]);
+    expect(processes.map((element) => element.querySelector('button')!.textContent)).toEqual([
+      '用时 7秒 · 1 个子流程未结束', '执行过程 · 用时 3秒', '用时 4秒',
+    ]);
+    expect(outsideIds()).toEqual(['sample-user', 'sample-first-final', 'sample-next-user', 'sample-next-final']);
     await click(header);
-    expect(group('process')!.contains(node('sample-first-final'))).toBe(true);
-    expect(group('process')!.contains(node('sample-cancelled-final'))).toBe(true);
+    expect(group('process')!.contains(node('sample-first-final'))).toBe(false);
+    const resumed = processById('process:after:sample-first-final')!;
+    await click(resumed.querySelector('button'));
+    expect(resumed.contains(node('sample-cancelled-final'))).toBe(true);
+    expect(resumed.contains(node('sample-first-final'))).toBe(false);
     session.close();
   });
 });
@@ -974,7 +1055,9 @@ describe('user input during execution', () => {
     expect(process.contains(node('sample-next-user'))).toBe(false);
     await click(header);
     expect(process.querySelector('[data-worker-summary="sample-worker-call"]')).not.toBeNull();
-    await show({ processSettled: true, workers: defaultWorkers });
+    await show({ processSettled: true, workers: defaultWorkers.map((worker) => ({
+      ...worker, taskState: { inputAt: 1000, notification: { type: 'completed', at: 21000 } },
+    })) });
     expect(process.querySelector('[data-worker-summary]')).toBeNull();
     expect(header.textContent).toBe('执行过程 · 用时 2秒');
     expect(header.getAttribute('aria-expanded')).toBe('false');

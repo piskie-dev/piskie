@@ -11,17 +11,31 @@ import type { ThreadViewProps } from '../ThreadView';
 import type { FilePreviewDescriptor } from '@shared/electron-contracts/desktop';
 import type { ReviewSlotProps } from '../../../content/ReviewSlot';
 import { deferred } from '../../../attachments/__tests__/fixtures';
+import { BrowserScreenView, type BrowserScreenViewProps } from '../../../content/ScreenView';
 
-vi.mock('../../../data/vm', () => ({
-  useAgentVM: (agentId: string) => ({
-    agentId, title: agentId, status: 'waiting', workers: [
-      { id: 'worker-one', subject: 'Worker one', type: 'browser-worker', status: 'waiting' },
-    ],
-  }),
-  useWorkerVM: (_agentId: string, workerId?: string) => workerId ? {
-    id: workerId, subject: 'Worker one', browserId: 'automation-one', browserReady: true,
-  } : null,
+const vm = vi.hoisted(() => ({
+  workers: [
+    { id: 'worker-one', subject: 'Worker one', type: 'browser-worker', status: 'waiting', browserId: 'automation-one', browserReady: true },
+    { id: 'worker-two', subject: 'Worker two', type: 'browser-worker', status: 'waiting', browserId: 'automation-two', browserReady: false },
+  ],
+  emptyWorkers: [],
+  listeners: new Set<() => void>(),
 }));
+vi.mock('../../../data/vm', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => {
+    vm.listeners.add(listener);
+    return () => { vm.listeners.delete(listener); };
+  };
+  const useWorkers = () => useSyncExternalStore(subscribe, () => vm.workers);
+  return {
+    useAgentVM: (agentId: string) => ({
+      agentId, title: agentId, status: 'waiting', workers: agentId === 'session-alpha' ? useWorkers() : (useWorkers(), vm.emptyWorkers),
+    }),
+    useWorkerVM: (_agentId: string, workerId?: string) => useWorkers().find((worker) => worker.id === workerId) ?? null,
+  };
+});
+vi.mock('../../../data/useWorkerActivity', () => ({ useWorkerActivity: () => ({ text: 'Sample current action', unfinished: true }) }));
 vi.mock('../../../data/actions', () => ({ useConsoleActions: () => ({}) }));
 vi.mock('../../../data/useImageNodes', () => ({ useImageNodes: () => [] }));
 vi.mock('../../../content/ThreadSidebar', () => ({ ThreadSidebar: () => null }));
@@ -37,13 +51,18 @@ vi.mock('../../../content/ReviewSlot', () => ({ ReviewSlot: (props: ReviewSlotPr
     ...target, preview: { ...target.preview, revision: 'revision-two' },
   }) }, 'Refresh sample snapshot'));
 } }));
-vi.mock('../ThreadView', () => ({ ThreadView: ({ onToggleFileChanges, fileChangesOpen, onOpenFileChange }: ThreadViewProps) => createElement('div', null,
+vi.mock('../ThreadView', () => ({ ThreadView: ({ onToggleFileChanges, fileChangesOpen, onOpenFileChange, readingAreaRef }: ThreadViewProps) => createElement('div', { ref: readingAreaRef },
   createElement(FileChangeSummary, { changes: { filesChanged: 1, added: 1, removed: 0 }, expanded: fileChangesOpen, onToggle: onToggleFileChanges }),
   createElement('button', { onClick: () => onOpenFileChange?.('sample-call') }, 'Open sample call'),
 ) }));
 vi.mock('../../../chrome/Tooltip', () => ({ Tooltip: ({ children }: { children: ReactNode }) => children }));
 vi.mock('../../../content/ScreenView', () => ({
-  BrowserScreenView: ({ browserId }: { browserId: string }) => createElement('div', { 'data-screen': browserId }),
+  BrowserScreenView: vi.fn(({ browserId, browserReady, fidelity, interactive, controls }: BrowserScreenViewProps) => createElement('div', {
+    'data-screen': controls === false ? undefined : browserId,
+    'data-monitor-screen': controls === false ? browserId : undefined,
+    'data-ready': String(browserReady), 'data-fidelity': fidelity,
+    'data-interactive': String(interactive),
+  }, browserReady ? null : '等待浏览器启动…')),
 }));
 vi.mock('@/components/content-links', () => ({
   ContentLinkUrlScope: ({ children, onOpenUrl, onOpenLocalFile }: {
@@ -103,6 +122,11 @@ beforeAll(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  vm.workers = [
+    { id: 'worker-one', subject: 'Worker one', type: 'browser-worker', status: 'waiting', browserId: 'automation-one', browserReady: true },
+    { id: 'worker-two', subject: 'Worker two', type: 'browser-worker', status: 'waiting', browserId: 'automation-two', browserReady: false },
+  ];
+  vm.listeners.clear();
   preview.mockReset().mockResolvedValue({ kind: 'directory', revision: 'revision-one' });
   reviewInstances.length = 0;
   states.clear();
@@ -133,6 +157,248 @@ function button(label: string): HTMLButtonElement {
 }
 async function click(label: string) { await act(async () => button(label).click()); }
 const address = () => container.querySelector<HTMLInputElement>('input');
+const visibleScreen = () => container.querySelector<HTMLElement>('[data-screen][data-fidelity="visible"]');
+async function removeBrowsers() {
+  await act(async () => {
+    vm.workers = [];
+    for (const listener of vm.listeners) listener();
+  });
+}
+function frameCallback(fps: number) {
+  const props = vi.mocked(BrowserScreenView).mock.calls.findLast(([props]) => (
+    props.browserId === 'automation-one' && props.controls === false && props.fps === fps
+  ))?.[0];
+  expect(props?.onFrameChange).toBeDefined();
+  return props!.onFrameChange!;
+}
+async function updateBrowserReady(workerId: string, browserReady: boolean) {
+  await act(async () => {
+    vm.workers = vm.workers.map((worker) => worker.id === workerId ? { ...worker, browserReady } : worker);
+    for (const listener of vm.listeners) listener();
+  });
+}
+
+describe('thread screen readiness', () => {
+  it('selects a newly allocated Worker without a screen shell, then opens its screen on the ready update', async () => {
+    await render();
+    await click('Worker two');
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Worker two');
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-panel-hidden="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-screen]')).toBeNull();
+    expect(vi.mocked(BrowserScreenView).mock.calls.some(([props]) => props.controls !== false)).toBe(false);
+    expect(container.querySelector('[data-screen]')?.textContent).toBeUndefined();
+
+    await updateBrowserReady('worker-two', true);
+
+    expect(button('收起右侧栏').getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('[data-panel-hidden="true"]')).toBeNull();
+    expect(visibleScreen()?.dataset.screen).toBe('automation-two');
+    expect(visibleScreen()?.dataset.ready).toBe('true');
+    expect(visibleScreen()?.dataset.interactive).toBe('true');
+    expect(api.open).not.toHaveBeenCalled();
+    expect(api.navigate).not.toHaveBeenCalled();
+  });
+
+  it('switches between ready and unready Workers without changing navigation', async () => {
+    await render();
+    await click('Worker one');
+    expect(visibleScreen()?.dataset.screen).toBe('automation-one');
+    await click('Worker two');
+    expect(container.querySelector('[data-screen]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+    await click('Worker one');
+    expect(visibleScreen()?.dataset.screen).toBe('automation-one');
+    await click('session-alpha');
+    expect(container.querySelector('[data-screen]')).toBeNull();
+  });
+
+  it.each(['closed', 'collapsed'] as const)('preserves a %s screen across readiness changes until the user restores it', async (state) => {
+    await render();
+    await click('Worker one');
+    await click(state === 'closed' ? '关闭屏幕' : '收起右侧栏');
+    await updateBrowserReady('worker-one', false);
+    await updateBrowserReady('worker-one', true);
+    expect(container.querySelector('[data-screen]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+
+    await click('展开右侧栏');
+    expect(visibleScreen()?.dataset.screen).toBe('automation-one');
+    expect(api.open).not.toHaveBeenCalled();
+  });
+
+  it.each(['browser', 'review'] as const)('retains the user-selected %s panel when the screen becomes available', async (panel) => {
+    await render();
+    await click('Worker two');
+    await click(panel === 'browser' ? 'Open preview link' : 'Open sample directory');
+    const label = panel === 'browser' ? '浏览器' : '审阅';
+    const selected = () => button(label).closest('[data-selected="true"]');
+    expect(selected()).not.toBeNull();
+    expect(container.querySelector('[data-screen]')).toBeNull();
+
+    await updateBrowserReady('worker-two', true);
+    expect(selected()).not.toBeNull();
+    expect(button('屏幕')).toBeDefined();
+    await click('屏幕');
+    expect(visibleScreen()?.dataset.screen).toBe('automation-two');
+    await click(label);
+    await updateBrowserReady('worker-two', false);
+    expect(container.querySelector('button[aria-label="关闭屏幕"]')).toBeNull();
+    await updateBrowserReady('worker-two', true);
+    expect(selected()).not.toBeNull();
+    if (panel === 'browser') expect(address()?.value).toBe('https://example.test/page');
+    else expect(container.querySelector('[data-review-kind]')?.getAttribute('data-review-kind')).toBe('path');
+  });
+
+  it('unmounts an unready cached screen while another ready Worker stays visible', async () => {
+    await updateBrowserReady('worker-two', true);
+    await render();
+    await click('Worker one');
+    await click('Worker two');
+    expect(container.querySelector('[data-screen="automation-one"]')?.getAttribute('data-fidelity')).toBe('hidden');
+
+    await updateBrowserReady('worker-one', false);
+    expect(container.querySelector('[data-screen="automation-one"]')).toBeNull();
+    expect(visibleScreen()?.dataset.screen).toBe('automation-two');
+    expect(visibleScreen()?.textContent).not.toContain('等待浏览器启动');
+    await updateBrowserReady('worker-one', true);
+    expect(container.querySelector('[data-screen="automation-one"]')?.getAttribute('data-fidelity')).toBe('hidden');
+    expect(visibleScreen()?.dataset.screen).toBe('automation-two');
+  });
+});
+
+describe('main browser monitoring', () => {
+  it('shows allocated browser tasks together, including an accurate unready placeholder', async () => {
+    await render();
+    expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
+    expect(container.querySelectorAll('[data-monitor-task]')).toHaveLength(2);
+    expect(container.querySelector('[data-monitor-task="worker-two|automation-two"]')?.textContent).toContain('等待浏览器启动');
+    for (const [props] of vi.mocked(BrowserScreenView).mock.calls.filter(([props]) => props.controls === false)) {
+      expect(props.fit).toBe('full');
+      expect(props.fps).toBe(4);
+      expect(props.interactive).not.toBe(true);
+    }
+  });
+  it.each(['review', 'browser', 'collapsed', 'closed'] as const)('retains the %s choice when a new browser joins the collection', async (choice) => {
+    await render();
+    if (choice === 'review') await click('Open sample directory');
+    if (choice === 'browser') await click('Open preview link');
+    if (choice === 'collapsed') await click('收起右侧栏');
+    if (choice === 'closed') await click('关闭监控');
+    await act(async () => {
+      vm.workers = [...vm.workers, { id: 'worker-three', subject: 'Worker three', type: 'browser-worker', status: 'running', browserId: 'automation-three', browserReady: false }];
+      for (const listener of vm.listeners) listener();
+    });
+    if (choice === 'review' || choice === 'browser') expect(button(choice === 'review' ? '审阅' : '浏览器').closest('[data-selected="true"]')).not.toBeNull();
+    else expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+  });
+  it.each(['review', 'browser', 'collapsed', 'closed'] as const)('returns a floating preview to the shared monitor from %s', async (choice) => {
+    await render();
+    await click('打开Worker one的预览');
+    expect(container.querySelector('[data-monitor-window="worker-one|automation-one"]')).not.toBeNull();
+    if (choice === 'review') await click('Open sample directory');
+    if (choice === 'browser') await click('Open preview link');
+    if (choice === 'collapsed') await click('收起右侧栏');
+    if (choice === 'closed') await click('关闭监控');
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    try {
+      await click('回监控栏');
+      expect(container.querySelector('[data-monitor-window]')).toBeNull();
+      expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
+      expect(button('收起右侧栏').getAttribute('aria-expanded')).toBe('true');
+      expect(document.activeElement).toBe(input);
+      expect(api.close).not.toHaveBeenCalled();
+      if (choice === 'review') expect(button('审阅')).toBeDefined();
+      if (choice === 'browser') {
+        expect(button('浏览器')).toBeDefined();
+        expect(api.navigate).toHaveBeenCalledOnce();
+      }
+    } finally { input.remove(); }
+  });
+  it('closes a floating preview without opening an empty monitor after all uncaptured resources close', async () => {
+    await render();
+    await click('打开Worker one的预览');
+    await removeBrowsers();
+    await click('回监控栏');
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+    expect(api.open).not.toHaveBeenCalled();
+  });
+  it('retains a captured panel frame when returning a released floating resource to the monitor', async () => {
+    await render();
+    const panelFrame = frameCallback(4);
+    await act(async () => panelFrame(true));
+    const preview = container.querySelector('[data-monitor-task="worker-one|automation-one"] [data-monitor-screen]');
+    await click('打开Worker one的预览');
+    await act(async () => frameCallback(30)(true));
+    await removeBrowsers();
+    await click('Open sample directory');
+    await click('回监控栏');
+    expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"] [data-monitor-screen]')).toBe(preview);
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.getAttribute('hidden')).toBeNull();
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+  });
+  it('removes a frame fact only when its final mounted preview loses the picture', async () => {
+    await render();
+    const panelFrame = frameCallback(4);
+    await act(async () => panelFrame(true));
+    await click('打开Worker one的预览');
+    await act(async () => frameCallback(30)(true));
+    await removeBrowsers();
+    await act(async () => panelFrame(false));
+    expect(button('监控')).toBeDefined();
+    await click('回监控栏');
+    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+  });
+  it('discards departed canvas facts and ignores queued callbacks even after returning to the same conversation', async () => {
+    await render();
+    const oldPanelFrame = frameCallback(4);
+    await act(async () => oldPanelFrame(true));
+    await click('打开Worker one的预览');
+    const oldFloatingFrame = frameCallback(30);
+    await act(async () => oldFloatingFrame(true));
+    await render('session-beta');
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+    await removeBrowsers();
+    await act(async () => { oldPanelFrame(true); oldFloatingFrame(true); });
+    await render();
+    await act(async () => { oldPanelFrame(true); oldFloatingFrame(true); });
+    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.hasAttribute('hidden')).toBe(true);
+  });
+  it('keeps restored window parking per conversation and lets only the new preview own its frame', async () => {
+    await render();
+    const oldFrame = frameCallback(4);
+    await act(async () => oldFrame(true));
+    await click('打开Worker one的预览');
+    await click('缩小');
+    await render('session-beta');
+    expect(container.querySelector('[data-monitor-parking]')).toBeNull();
+    await render();
+    expect(container.querySelector('[data-monitor-parking]')).not.toBeNull();
+    expect(container.querySelector('[data-monitor-window]')?.hasAttribute('hidden')).toBe(true);
+    await act(async () => frameCallback(4)(true));
+    await act(async () => oldFrame(false));
+    await removeBrowsers();
+    expect(button('监控')).toBeDefined();
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.hasAttribute('hidden')).toBe(false);
+  });
+  it('removes the monitor entry when there are no resources or retained frames to view', async () => {
+    await render();
+    await act(async () => {
+      vm.workers = [];
+      for (const listener of vm.listeners) listener();
+    });
+    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
+    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+  });
+});
 
 describe('thread preview controls', () => {
   it('retains refreshed descriptors across panel and conversation switches and rejects callbacks from another scope', async () => {
@@ -226,9 +492,9 @@ describe('thread preview controls', () => {
     expect(api.open).not.toHaveBeenCalled();
     await click('关闭浏览器');
     expect(api.close).toHaveBeenCalledWith({ agentId: 'session-alpha', workerId: undefined });
-    await click('展开右侧栏');
-    expect(api.open).toHaveBeenCalledOnce();
-    expect(address()?.value).toBe('');
+    expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
+    expect(api.open).not.toHaveBeenCalled();
+    expect(address()).toBeNull();
   });
 
   it('consumes Escape while cancelling an address edit', async () => {

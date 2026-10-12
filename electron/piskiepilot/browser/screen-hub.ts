@@ -11,9 +11,10 @@
  * 背压(1-in-flight + latest-wins)由 sink 适配器实现,hub 对每帧只管调 send。
  */
 
-import { ScreenCaster, type ScreencastFrame } from './core/browser/screen-caster.js';
+import { ScreenCaster, type ScreencastFrame, type SuccessfulScreenInput } from './core/browser/screen-caster.js';
 import { BrowserManager } from './core/browser/browser-manager.js';
-import type { RemoteInputEvent, StreamServerMessage } from '@shared/types/stream.js';
+import { sameScreenPage, sameScreenPageInstance, type RemoteInputEvent, type StreamServerMessage } from '@shared/types/stream.js';
+import type { BrowserAutomationSession, BrowserScreenTarget } from './core/session/browser-automation-session.js';
 
 /** 流下行通道抽象(MessagePort/测试桩均可实现) */
 export interface ViewerSink {
@@ -42,6 +43,10 @@ interface CasterEntry {
   viewers: Map<ViewerSink, ViewerInfo>;
   seq: number;
   lastFrame: ScreencastFrame | null;
+  target: BrowserScreenTarget | null;
+  session: BrowserAutomationSession;
+  unsubscribe: () => void;
+  unsubscribeConnection: () => void;
   /** 逻辑选中页跟随定时器；停流时清除 */
   follow: ReturnType<typeof setInterval> | null;
 }
@@ -93,26 +98,45 @@ export class ScreenStreamHub {
    * 失败时向 sink 发 error 消息(语义同旧 addViewer)。
    */
   async addViewer(browserId: string, sink: ViewerSink, opts: ViewerOptions = {}): Promise<void> {
+    if (!sink.isOpen()) return;
     let entry = this.casters.get(browserId);
     const info = toViewerInfo(opts);
 
     if (!entry) {
       try {
-        const page = await BrowserManager.getSelectedPage(browserId);
-        const caster = new ScreenCaster(page, {
+        const session = await BrowserManager.getScreenSession(browserId);
+        if (!sink.isOpen()) return;
+        // Another request can establish the shared owner while this request awaits connection.
+        const shared = this.casters.get(browserId);
+        if (shared) return this.addViewerToEntry(browserId, shared, sink, info);
+        const target = session.getScreenTarget();
+        const caster: ScreenCaster = new ScreenCaster(target.page, {
           quality: info.quality,
           maxWidth: info.maxWidth,
           maxHeight: info.maxHeight,
           everyNthFrame: everyNthFrameOf(info.fps),
-        });
+        }, target.identity, (): number => owner.session.reserveInputOrder());
 
-        entry = { caster, viewers: new Map(), seq: 0, lastFrame: null, follow: null };
+        entry = { caster, viewers: new Map(), seq: 0, lastFrame: null, follow: null,
+          target, session, unsubscribe: () => {}, unsubscribeConnection: () => {} };
         this.casters.set(browserId, entry);
 
-        caster.on('frame', (frame: ScreencastFrame) => this.broadcastFrame(browserId, frame));
+        this.bindSession(browserId, entry, session);
+        const owner: CasterEntry = entry;
+        entry.unsubscribeConnection = BrowserManager.subscribeScreenSession(browserId, (connected) => {
+          if (this.casters.get(browserId) !== owner) return;
+          if (connected !== owner.session) this.bindSession(browserId, owner, connected);
+          this.updateTarget(browserId, owner, connected.getScreenTarget());
+        });
+        caster.on('frame', (frame: ScreencastFrame) => {
+          if (this.casters.get(browserId) === owner) this.broadcastFrame(browserId, frame);
+        });
+        caster.on('input', (input: SuccessfulScreenInput) => {
+          if (this.casters.get(browserId) === owner) owner.session.observeManualInput(input);
+        });
         caster.on('error', (error: Error) => {
           const e = this.casters.get(browserId);
-          if (e) {
+          if (e === owner) {
             for (const viewer of e.viewers.keys()) {
               if (viewer.isOpen()) {
                 viewer.send({
@@ -126,6 +150,7 @@ export class ScreenStreamHub {
 
         entry.viewers.set(sink, info);
         sink.send({ type: 'started', browserId });
+        this.sendState(sink, browserId, entry);
 
         await caster.start();
         if (this.casters.get(browserId) !== entry || entry.viewers.size === 0) {
@@ -133,35 +158,47 @@ export class ScreenStreamHub {
           return;
         }
         entry.follow = setInterval(() => {
-          void BrowserManager.getSelectedPage(browserId)
-            .then((selectedPage) => caster.rebind(selectedPage))
+          void BrowserManager.getScreenSession(browserId)
+            .then((connected) => {
+              if (this.casters.get(browserId) !== owner) return;
+              if (connected !== owner.session) this.bindSession(browserId, owner, connected);
+              this.updateTarget(browserId, owner, connected.getScreenTarget());
+            })
             .catch(() => undefined);
         }, FOLLOW_SELECTED_PAGE_MS);
         await this.reconcile(browserId);
         return;
       } catch (error) {
         if (entry?.follow) clearInterval(entry.follow);
+        entry?.unsubscribe();
+        entry?.unsubscribeConnection();
         await entry?.caster.stop().catch(() => undefined);
-        this.casters.delete(browserId);
-        sink.send({
-          type: 'error',
-          failure: {
-            code: entry ? 'caster-failed' : 'target-not-ready',
-            retryable: true,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        });
+        if (this.casters.get(browserId) === entry) this.casters.delete(browserId);
+        const failedViewers = new Set(entry?.viewers.keys() ?? []);
+        failedViewers.add(sink);
+        for (const viewer of failedViewers) {
+          if (!viewer.isOpen()) continue;
+          viewer.send({
+            type: 'error',
+            failure: {
+              code: entry ? 'caster-failed' : 'target-not-ready',
+              retryable: true,
+              message: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
         return;
       }
     }
 
+    return this.addViewerToEntry(browserId, entry, sink, info);
+  }
+
+  private async addViewerToEntry(browserId: string, entry: CasterEntry, sink: ViewerSink, info: ViewerInfo): Promise<void> {
     entry.viewers.set(sink, info);
     sink.send({ type: 'started', browserId });
-
-    if (entry.lastFrame) {
-      this.sendFrameToViewer(sink, browserId, entry, entry.lastFrame);
-    }
-
+    this.sendState(sink, browserId, entry);
+    if (entry.lastFrame) this.sendFrameToViewer(sink, browserId, entry, entry.lastFrame);
     await this.reconcile(browserId);
   }
 
@@ -172,6 +209,8 @@ export class ScreenStreamHub {
     entry.viewers.delete(sink);
     if (entry.viewers.size === 0) {
       if (entry.follow) clearInterval(entry.follow);
+      entry.unsubscribe();
+      entry.unsubscribeConnection();
       entry.caster.stop().catch(() => undefined);
       this.casters.delete(browserId);
     } else {
@@ -231,12 +270,52 @@ export class ScreenStreamHub {
     });
   }
 
+  private bindSession(browserId: string, entry: CasterEntry, session: BrowserAutomationSession): void {
+    entry.unsubscribe();
+    entry.session = session;
+    this.updateTarget(browserId, entry, session.getScreenTarget());
+    entry.unsubscribe = session.subscribeScreen((event) => {
+      if (this.casters.get(browserId) !== entry) return;
+      if (event.type === 'target') this.updateTarget(browserId, entry, event.target);
+      else if (sameScreenPageInstance(event.pointer.page, entry.target?.identity)) {
+        for (const sink of entry.viewers.keys()) this.sendState(sink, browserId, entry);
+        const geometry = event.pointer.target ?? event.pointer.positionTarget;
+        const after = geometry?.frameAfter;
+        if (after !== undefined && sameScreenPage(geometry?.page, entry.target?.identity)
+          && (entry.lastFrame?.timestamp ?? 0) < after) void entry.caster.refreshFrame().catch(() => undefined);
+      }
+    });
+  }
+
+  private updateTarget(browserId: string, entry: CasterEntry, target: BrowserScreenTarget | null): void {
+    if (target?.page === entry.target?.page && sameScreenPage(target?.identity, entry.target?.identity)) return;
+    entry.target = target;
+    entry.lastFrame = null;
+    for (const sink of entry.viewers.keys()) this.sendState(sink, browserId, entry);
+    if (!target) {
+      void entry.caster.stop().catch(() => undefined);
+      return;
+    }
+    void entry.caster.rebind(target.page, target.identity).then(async () => {
+      if (this.casters.get(browserId) === entry && entry.target === target) await entry.caster.start();
+    }).catch(() => undefined);
+  }
+
+  private sendState(sink: ViewerSink, browserId: string, entry: CasterEntry): void {
+    const pointer = entry.session.getCurrentScreenPointer();
+    if (sink.isOpen()) sink.send({ type: 'screen-state', browserId,
+      page: entry.target?.identity ?? null,
+      pointer: sameScreenPageInstance(pointer?.page, entry.target?.identity) ? pointer : null });
+  }
+
   private broadcastFrame(browserId: string, frame: ScreencastFrame): void {
     const entry = this.casters.get(browserId);
-    if (!entry) return;
+    if (!entry || !sameScreenPage(frame.page, entry.target?.identity)) return;
 
     entry.lastFrame = frame;
     entry.seq++;
+    if (frame.page) entry.session.refreshTargetForFrame(frame.page, { width: frame.deviceWidth, height: frame.deviceHeight,
+      scrollX: frame.scrollOffsetX, scrollY: frame.scrollOffsetY, timestamp: frame.timestamp, seq: entry.seq });
 
     for (const sink of entry.viewers.keys()) {
       this.sendFrameToViewer(sink, browserId, entry, frame);
@@ -261,6 +340,8 @@ export class ScreenStreamHub {
         scrollX: frame.scrollOffsetX,
         scrollY: frame.scrollOffsetY,
         timestamp: frame.timestamp,
+        page: frame.page,
+        mapping: frame.mapping,
       },
       data: Buffer.from(frame.data, 'base64'),
     });
@@ -280,6 +361,8 @@ export class ScreenStreamHub {
   close(): void {
     for (const [, entry] of this.casters) {
       if (entry.follow) clearInterval(entry.follow);
+      entry.unsubscribe();
+      entry.unsubscribeConnection();
       entry.caster.stop().catch(() => undefined);
     }
     this.casters.clear();

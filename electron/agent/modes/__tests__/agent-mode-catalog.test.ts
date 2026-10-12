@@ -185,6 +185,21 @@ describe('AgentModeCatalog', () => {
     });
   });
 
+  it('snapshots the template model independently and keeps the explicit launch override', async () => {
+    const { agent, catalog, definitions } = harness();
+    const model = { providerId: 'sample-provider', modelId: 'template-model' };
+    const source = taskDefinition({ model });
+    definitions.set(source.definitionId, source);
+    await catalog.start({ definitionId: source.definitionId, launchOptions: { initialModel: 'sample-provider::override-model' } });
+    const launch = agent.startAgent.mock.calls[0]![0];
+    expect(launch.runConfig.model).toEqual(model);
+    expect(launch.launchOptions.initialModel).toBe('sample-provider::override-model');
+    source.model!.modelId = 'changed-model';
+    expect(launch.runConfig.model.modelId).toBe('template-model');
+    await catalog.start({ definitionId: source.definitionId });
+    expect(agent.startAgent.mock.calls[1]![0].runConfig.model.modelId).toBe('changed-model');
+  });
+
   it('rejects unavailable definitions, empty input, and unregistered modes before start', async () => {
     const { agent, catalog } = harness();
 

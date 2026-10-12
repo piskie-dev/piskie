@@ -185,7 +185,7 @@ export function ModelUsagePage() {
           <td data-field="model"><button className={styles.link} title={r.modelName} onClick={() => void openDetail(r.id)}>{r.modelName}</button><small title={r.providerName}>{r.providerName}</small><time dateTime={new Date(r.startedAt).toISOString()} title={new Date(r.startedAt).toLocaleString()}>{new Date(r.startedAt).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time></td>
           <td data-field="session"><button className={styles.link} title={r.runName || r.mainAgentId} onClick={() => void openDetail(r.id)}>{r.runName || r.mainAgentId || t('modelUsage.none')}</button><small>{r.agentType || t('modelUsage.none')} · {t(`modelUsage.${r.purpose}`)}</small></td>
           <td data-label={t('modelUsage.tokens')}>{r.usage.totalInputTokens !== undefined || r.usage.totalOutputTokens !== undefined ? number(knownTokens(r.usage)) : '—'}<small>{t('modelUsage.input')} {number(r.usage.totalInputTokens)}<br />{t('modelUsage.output')} {number(r.usage.totalOutputTokens)}</small></td>
-          <td data-label={t('modelUsage.duration')}>{duration(r.endedAt === undefined ? undefined : r.endedAt - r.startedAt)}<small>{t('modelUsage.firstResponse')} {duration(r.firstResponseMs)}</small></td>
+          <td data-label={t('modelUsage.duration')}>{duration(r.endedAt === undefined ? undefined : r.endedAt - r.startedAt)}<small>{t('modelUsage.firstToken')} {duration(r.firstTokenLatencyMs)}</small></td>
           <td data-field="status"><span className={styles.badge} data-status={r.status}>{t(`modelUsage.${r.status}`)}</span><small>{t('modelUsage.attempt')} {r.attempt}</small></td>
         </tr>)}</tbody></table></div>
       <footer className={styles.pagination}><span>{t('modelUsage.total', { count: report.total })}</span><button disabled={pageBusy || offset === 0} onClick={() => void page(offset - 50)}>{t('modelUsage.previous')}</button><span>{t('modelUsage.page', { page: Math.floor(offset / 50) + 1, pages: Math.ceil(report.total / 50) })}</span><button disabled={pageBusy || offset + 50 >= report.total} onClick={() => void page(offset + 50)}>{t('modelUsage.next')}</button></footer>
@@ -217,7 +217,7 @@ function UsageDetail({ detail, close, drill }: { detail?: { record: UsageRecord;
       <dl>{([
         ['mainAgentId', r.runName || r.mainAgentId || t('modelUsage.none')], ['agentId', r.agentId], ['agentType', r.agentType], ['purpose', t(`modelUsage.${r.purpose}`)],
         ['requestId', r.requestId], ['runId', r.runId], ['attempt', r.attempt], ['protocol', r.protocol], ['reasoning', r.reasoning],
-        ['duration', duration(r.endedAt === undefined ? undefined : r.endedAt - r.startedAt)], ['firstResponse', duration(r.firstResponseMs)],
+        ['duration', duration(r.endedAt === undefined ? undefined : r.endedAt - r.startedAt)], ['firstToken', duration(r.firstTokenLatencyMs)],
       ] as const).map(([key, value]) => <div key={key}><dt>{t(`modelUsage.${key}`)}</dt><dd>{value ?? '—'}</dd></div>)}</dl>
       <h3>{t('modelUsage.tokens')}</h3><dl>{([
         ['input', r.usage.totalInputTokens], ['output', r.usage.totalOutputTokens], ['cacheRead', r.usage.cachedInputTokens], ['cacheWrite', r.usage.cacheWriteTokens], ['reasoningTokens', r.usage.reasoningTokens],

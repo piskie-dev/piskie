@@ -351,6 +351,55 @@ describe('ScreenFeed state machine', () => {
     expect(test.worker.incoming.filter((message) => message.type === 'input')).toHaveLength(1);
   });
 
+  it('projects each viewport presentation on its drawn frame through navigation and forwards commit acknowledgements', async () => {
+    const test = feedHarness();
+    const feed = new ScreenFeed('sample-agent', 'sample-browser', test.dependencies);
+    const inline = feed.createLease(false, { visible: true, fps: 30 }, () => {});
+    const fullscreen = feed.createLease(false, { visible: true, fps: 30 }, () => {});
+    const hidden = feed.createLease(false, { visible: false, fps: 30 }, () => {});
+    for (const lease of [inline, fullscreen, hidden]) lease.attach(fakeCanvas());
+    await settle();
+    const epoch = lastMessage(test.worker, 'init-feed').epoch;
+    const page = { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 };
+    const pointer = { page, framePage: page, seq: 1, x: 80, y: 120, buttons: 0, clickCount: 0, action: 'move' as const,
+      timestamp: Date.now(), visibleAt: null, pressVisibleAt: null };
+    test.worker.emit({ type: 'feed-ready', epoch });
+    test.worker.emit({ type: 'screen-state', epoch, page, pointer });
+    expect(inline.snapshot().pointer).toBeNull();
+    for (const lease of [inline, fullscreen, hidden]) {
+      test.worker.emit({ type: 'viewport-frame', epoch, leaseId: lease.id, frame: { page, width: 800, height: 600 }, pointer });
+      test.worker.emit({ type: 'viewport-ready', epoch, leaseId: lease.id });
+      test.worker.emit({ type: 'viewport-pointer', epoch, leaseId: lease.id, pointer, clearId: 0 });
+    }
+    expect(inline.snapshot().pointer).toBe(pointer);
+    expect(fullscreen.snapshot().pointer).toBe(pointer);
+    expect(hidden.snapshot().pointer).toBeNull();
+    inline.pointerPresented(pointer, 1234);
+    expect(lastMessage(test.worker, 'pointer-presented')).toMatchObject({ epoch, leaseId: inline.id, page, seq: 1, at: 1234 });
+    const next = { ...page, navigationSequence: 1 };
+    test.worker.emit({ type: 'screen-state', epoch, page: next, pointer: null });
+    expect(inline.snapshot().ready).toBe(true);
+    expect(inline.snapshot().pointer).toBe(pointer);
+    test.worker.emit({ type: 'viewport-pointer', epoch, leaseId: inline.id, pointer: null, clearId: 1 });
+    expect(inline.snapshot().pointer).toBeNull();
+    expect(inline.snapshot().pointerClearId).toBe(1);
+    inline.pointerCleared(1);
+    expect(lastMessage(test.worker, 'pointer-cleared')).toEqual({ type: 'pointer-cleared', epoch, leaseId: inline.id, clearId: 1 });
+    const projected = { ...pointer, framePage: next };
+    test.worker.emit({ type: 'viewport-frame', epoch, leaseId: inline.id, frame: { page: next, width: 800, height: 600 }, pointer: projected });
+    expect(inline.snapshot().pointer).toBe(projected);
+    expect(inline.snapshot().pointer!.page).toBe(page);
+    inline.pointerPresented(projected, 1235);
+    expect(lastMessage(test.worker, 'pointer-presented')).toMatchObject({ page: next, seq: pointer.seq, at: 1235 });
+    test.worker.emit({ type: 'viewport-pointer', epoch: epoch - 1, leaseId: inline.id, pointer, clearId: 0 });
+    expect(inline.snapshot().pointer).toBe(projected);
+    inline.release();
+    const sent = test.worker.incoming.length;
+    inline.pointerPresented(pointer, 1235);
+    inline.pointerCleared(1);
+    expect(test.worker.incoming).toHaveLength(sent);
+  });
+
   it('terminates after a missing close acknowledgement and reports degraded close', async () => {
     const test = feedHarness();
     const feed = new ScreenFeed('agent-a', 'browser-a', test.dependencies);

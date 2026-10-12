@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="六款虚拟光标的独立样式对比：真实尺寸、深浅与图片背景、移动点击和放大轮廓。" />
+    <title>虚拟光标 · 六款样式对比</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' stroke='%2326323b' stroke-width='1.4' stroke-linejoin='round' d='M4 2v17l5-4 4 7 3-2-4-7h8Z'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="demo.js" defer></script>
+  </head>
+  <body data-preview-background="light">
+    <!-- Inline artwork keeps file:// previews independent of fetch and SVG file permissions. -->
+    <svg class="art-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="mist-rest" x1="0" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#fff" />
+          <stop offset="0.47" stop-color="#d6f3ff" />
+          <stop offset="1" stop-color="#8fbfd4" />
+        </linearGradient>
+        <linearGradient id="mist-press" x1="0" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#e7faff" />
+          <stop offset="1" stop-color="#69a7c3" />
+        </linearGradient>
+      </defs>
+      <symbol id="cursor-a" viewBox="0 0 19 22">
+        <path class="edge" d="M2 1.5V16.5L6.15 12.7L9.35 20.05Q9.55 20.55 10.05 20.3L12.35 19.3Q12.8 19.1 12.6 18.65L9.45 11.5H15.65Z" />
+        <path class="core" d="M2 1.5V16.5L6.15 12.7L9.35 20.05Q9.55 20.55 10.05 20.3L12.35 19.3Q12.8 19.1 12.6 18.65L9.45 11.5H15.65Z" />
+      </symbol>
+      <symbol id="cursor-b" viewBox="0 0 18 22">
+        <path class="edge" d="M1.8 1.5L3.5 16.3L6.15 11.3L11.5 20L13.1 19L7.8 10.45L12.1 10.2Z" />
+        <path class="core" d="M1.8 1.5L3.5 16.3L6.15 11.3L11.5 20L13.1 19L7.8 10.45L12.1 10.2Z" />
+        <path class="glint" d="M3.15 5.6L4.15 13.85" />
+      </symbol>
+      <symbol id="cursor-c" viewBox="0 0 20 22">
+        <path class="edge" d="M2 1.5L2.7 14.3Q2.73 14.9 3.2 14.55L6.15 12.2L9.7 18.8Q10 19.35 10.55 19.05L12.5 18Q13.05 17.75 12.73 17.2L9.3 10.75L15.8 10.5Q16.4 10.45 15.9 10.1Z" />
+        <path class="core" d="M2 1.5L2.7 14.3Q2.73 14.9 3.2 14.55L6.15 12.2L9.7 18.8Q10 19.35 10.55 19.05L12.5 18Q13.05 17.75 12.73 17.2L9.3 10.75L15.8 10.5Q16.4 10.45 15.9 10.1Z" />
+        <path class="facet" d="M3.2 4.3L3.8 12.95L6 10.95L13.5 9.85Z" />
+        <path class="accent" d="M8 12.85L10.9 17.55" />
+      </symbol>
+      <symbol id="cursor-d" viewBox="0 0 20 22">
+        <path class="edge" d="M2.15 1.65L4.5 19.1Q4.58 19.62 4.94 19.17L8.85 13.92L16.7 13.5Q17.22 13.47 16.82 13.12Z" />
+        <path class="core" d="M2.15 1.65L4.5 19.1Q4.58 19.62 4.94 19.17L8.85 13.92L16.7 13.5Q17.22 13.47 16.82 13.12Z" />
+        <path class="facet" d="M3.4 4.1L5.14 16.08L8.05 12.15Z" />
+        <path class="fold" d="M4 5.15L8.85 13.92" />
+      </symbol>
+      <symbol id="cursor-e" viewBox="0 0 12 12">
+        <circle class="dot-edge" cx="6" cy="6" r="4.35" />
+        <circle class="dot-core" cx="6" cy="6" r="3.65" />
+        <circle class="dot-center" cx="6" cy="6" r="1.1" />
+      </symbol>
+      <symbol id="cursor-f" viewBox="0 0 16 16">
+        <path class="reticle-edge" d="M8 1.65V4.35M8 11.65V14.35M1.65 8H4.35M11.65 8H14.35" />
+        <path class="reticle-core" d="M8 1.65V4.35M8 11.65V14.35M1.65 8H4.35M11.65 8H14.35" />
+        <circle class="reticle-dot" cx="8" cy="8" r="0.9" />
+      </symbol>
+    </svg>
+
+    <main class="page">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-line"></span>虚拟光标 · 样式提案</p>
+          <h1>六种指向，各有轻重<span class="title-dot">。</span></h1>
+          <p class="intro">先看真实尺寸，再看轮廓细节。所有款式同步移动、同步点击。</p>
+        </div>
+        <div class="preview-note"><span></span>独立预览</div>
+      </header>
+
+      <section class="toolbar" aria-label="预览控制">
+        <div class="background-controls">
+          <span class="control-label">背景</span>
+          <div class="segmented" role="group" aria-label="切换预览背景">
+            <button type="button" data-background="light" aria-pressed="true"><span class="swatch swatch-light"></span>浅色</button>
+            <button type="button" data-background="dark" aria-pressed="false"><span class="swatch swatch-dark"></span>深色</button>
+            <button type="button" data-background="image" aria-pressed="false"><span class="swatch swatch-image"></span>图片</button>
+          </div>
+        </div>
+        <div class="playback-controls" role="group" aria-label="同步演示控制">
+          <button class="control-button" id="toggle-play" type="button" aria-pressed="false">
+            <svg class="pause-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4v8M10.5 4v8" /></svg>
+            <svg class="play-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 6 4.5-6 4.5Z" /></svg>
+            <span>暂停</span>
+          </button>
+          <button class="control-button" id="replay" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6a5 5 0 1 1 .2 4M3 2.5V6h3.5" /></svg>重播</button>
+          <button class="control-button" id="freeze-press" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.75" /><circle class="filled" cx="8" cy="8" r="1.6" /></svg>定格点击</button>
+          <span class="toolbar-divider"></span>
+          <button class="control-button zoom-trigger" id="open-details" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M2 10v4h4M14 10v4h-4" /></svg>放大对比</button>
+        </div>
+      </section>
+
+      <div class="comparison-caption">
+        <p>真实尺寸 <span>1×</span><span class="caption-divider">/</span>轮廓细节 <span>3×</span></p>
+        <p class="timeline-label"><span class="status-light"></span><span id="phase-label" aria-live="off">同步演示 · 停留</span><span class="progress-track" aria-hidden="true"><span id="progress-fill"></span></span></p>
+      </div>
+      <section class="options-grid" id="options-grid" aria-label="六款光标样式"></section>
+      <footer class="page-footer"><p>箭头以尖端落点，圆点与准星以中心落点。</p><p>点击面板里的按钮，也可以定格查看。</p></footer>
+      <noscript><p class="no-script">请启用 JavaScript，以查看光标对比与同步演示。</p></noscript>
+    </main>
+
+    <dialog id="details-dialog" class="details-dialog" aria-labelledby="details-title">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">轮廓细节</p><h2 id="details-title">放大之后，也要干净。</h2><p class="dialog-intro">6× · 左侧正常，右侧按下</p></div>
+        <button type="button" id="close-details" class="close-button" aria-label="关闭放大对比"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg></button>
+      </div>
+      <div class="dialog-toolbar">
+        <div class="segmented" role="group" aria-label="切换放大对比背景">
+          <button type="button" data-background="light" aria-pressed="true"><span class="swatch swatch-light"></span>浅色</button>
+          <button type="button" data-background="dark" aria-pressed="false"><span class="swatch swatch-dark"></span>深色</button>
+          <button type="button" data-background="image" aria-pressed="false"><span class="swatch swatch-image"></span>图片</button>
+        </div>
+        <span>六款并排看轮廓</span>
+      </div>
+      <div class="zoom-grid" id="zoom-grid"></div>
+    </dialog>
+  </body>
+</html>

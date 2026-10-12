@@ -87,6 +87,11 @@ function fakeBrowser() {
   };
 }
 
+function feedbackSession() {
+  return { withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
+    getScreenTarget: () => ({ page: {}, identity: { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 } }) };
+}
+
 beforeEach(() => {
   manager.instances.clear();
   manager.initialized = true;
@@ -94,7 +99,7 @@ beforeEach(() => {
   vi.spyOn(manager, 'readPersistedBrowserConfig').mockResolvedValue(null);
   vi.spyOn(manager, 'savePersisted').mockResolvedValue(undefined);
   vi.spyOn(manager, 'deletePersisted').mockResolvedValue(undefined);
-  vi.spyOn(BrowserAutomationSession, 'create').mockResolvedValue({ dispose: vi.fn() } as never);
+  vi.spyOn(BrowserAutomationSession, 'create').mockResolvedValue({ ...feedbackSession(), dispose: vi.fn() } as never);
   vi.spyOn(WindowController, 'initialize').mockResolvedValue(undefined);
 });
 
@@ -121,6 +126,7 @@ describe('BrowserManager stop cancellation', () => {
     const bodyStarted = deferred<void>();
     const processStopped = deferred<boolean>();
     vi.mocked(BrowserAutomationSession.create).mockResolvedValue({
+      ...feedbackSession(),
       dispose: vi.fn(),
       throwIfDialogOpen: vi.fn(),
       getNetworkRequestId: () => 1,
@@ -213,17 +219,20 @@ describe('BrowserManager stop cancellation', () => {
 });
 
 describe('BrowserManager managed-kernel launch', () => {
-  it('uses fingerprint-chromium for a bound profile and preserves launch settings', async () => {
+  it.each([
+    [{ width: 1024, height: 900 }, '--window-position=0,0'],
+    [{ width: 1280, height: 800, x: -1440, y: 140 }, '--window-position=-1440,140'],
+  ])('uses fingerprint-chromium for a bound profile and preserves launch settings %j', async (windowSize, positionArg) => {
     const browser = fakeBrowser();
     let running = false;
     const launch = vi
       .spyOn(fingerprintBrowser, 'launch')
-      .mockImplementation(async (profileId, fp) => {
+      .mockImplementation(async (_profileId, fp) => {
       running = true;
       return {
         seed: 7,
         config: {
-          platform: fp.platform || 'windows',
+          platform: fp?.platform || 'windows',
           seed: 7,
         },
         browserWSEndpoint: 'ws://managed-kernel',
@@ -240,7 +249,7 @@ describe('BrowserManager managed-kernel launch', () => {
       BrowserManager.getOrCreate('browser-a', {
         launchSpec: {
           ...launchSpec('browser-a', 'profile-a'),
-          windowSize: { width: 1024, height: 900 },
+          windowSize,
         },
         callerWindow: { windowId: '0x123' },
       })
@@ -257,15 +266,15 @@ describe('BrowserManager managed-kernel launch', () => {
       proxy: { server: 'http://127.0.0.1:8080' },
       userDataDir: path.join(getUserDataRoot(), 'profile-a', 'chrome-data'),
     });
-    expect(fpConfig.extraArgs).toEqual(
+    expect(fpConfig!.extraArgs).toEqual(
       expect.arrayContaining([
-        '--window-size=1024,900',
-        '--window-position=0,0',
+        `--window-size=${windowSize.width},${windowSize.height}`,
+        positionArg,
         '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
         '--proxy-bypass-list=localhost',
       ])
     );
-    expect(fpConfig.extraArgs).not.toContain('--start-maximized');
+    expect(fpConfig!.extraArgs).not.toContain('--start-maximized');
     expect(connect).toHaveBeenCalledWith({
       browserWSEndpoint: 'ws://managed-kernel',
       defaultViewport: null,
@@ -305,7 +314,7 @@ describe('BrowserManager managed-kernel launch', () => {
       return true;
     });
     vi.spyOn(puppeteer, 'connect').mockResolvedValue(browser as never);
-    const automation = { dispose: vi.fn() };
+    const automation = { ...feedbackSession(), dispose: vi.fn() };
     vi.mocked(BrowserAutomationSession.create).mockResolvedValue(automation as never);
     let finishWindowInitialization!: () => void;
     vi.mocked(WindowController.initialize).mockImplementationOnce(() =>
@@ -444,8 +453,8 @@ describe('BrowserManager managed-kernel launch', () => {
   it('recovers before runExclusive and dispatches the operation exactly once', async () => {
     const firstConnection = fakeBrowser();
     const recoveredConnection = fakeBrowser();
-    const firstContext = { generation: 'first', dispose: vi.fn() };
-    const recoveredContext = { generation: 'recovered', dispose: vi.fn() };
+    const firstContext = { ...feedbackSession(), generation: 'first', dispose: vi.fn() };
+    const recoveredContext = { ...feedbackSession(), generation: 'recovered', dispose: vi.fn() };
     vi.mocked(manager.readPersistedBrowserConfig).mockResolvedValue({
       userDataId: 'profile-a',
       wsEndpoint: 'ws://managed-kernel',

@@ -21,6 +21,9 @@ export interface BrowserLaunchIdentity {
 export interface BrowserLaunchWindowSize {
   readonly width: number;
   readonly height: number;
+  /** Optional desktop work-area position; explicit sizes without it retain origin positioning. */
+  readonly x?: number;
+  readonly y?: number;
 }
 
 /** Immutable, generation-scoped inputs that must be fixed before Chromium is spawned. */

@@ -64,6 +64,7 @@ import { WorkerCreationRow } from './WorkerCreationRow';
 import type { StatusKey } from '../data/status';
 import type { WorkerRef } from '../data/vm';
 import { useEffectiveConsoleShortcut } from '../data/shortcuts';
+import { hasVisibleTranscriptContent, transcriptNodeSummary, transcriptNodeText, transcriptNodeTitle, transcriptThinkPreview } from '../data/transcriptNodePresentation';
 
 const ICON = 14;
 
@@ -419,17 +420,6 @@ const CollapsibleCard = memo<{
 
 CollapsibleCard.displayName = 'CollapsibleCard';
 
-function firstLine(text: string): string {
-  const newline = text.indexOf('\n');
-  return newline === -1 ? text : text.slice(0, newline);
-}
-
-function latestLine(text: string): string {
-  const visible = text.trimEnd();
-  const newline = visible.lastIndexOf('\n');
-  return newline === -1 ? visible : visible.slice(newline + 1);
-}
-
 /** Think stays a one-line disclosure while streaming; the full Markdown is opt-in. */
 const ThinkDisclosure = memo<{
   readonly cell: ThinkNode;
@@ -439,7 +429,7 @@ const ThinkDisclosure = memo<{
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
-  const summary = cell.live ? latestLine(cell.markdown) : firstLine(cell.markdown);
+  const summary = transcriptThinkPreview(cell);
   const toggle = useCallback(() => setOpen((value) => !value), []);
   const toggleFromKeyboard = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
@@ -480,7 +470,7 @@ const ThinkDisclosure = memo<{
           )}
         </span>
         <span className={`${styles.thinkLabel} ${cell.live ? activeTextStyles.text : ''}`}>
-          {cell.live ? t('transcript.thinking') : t('transcript.title.thinking')}
+          {transcriptNodeTitle(cell, t)}
         </span>
         {!open && (
           <>
@@ -512,6 +502,7 @@ ThinkDisclosure.displayName = 'ThinkDisclosure';
 
 export interface ThreadCellProps {
   readonly cell: TranscriptNode;
+  readonly mainAgentId?: string;
   readonly conversationStatus?: StatusKey;
   readonly workers?: readonly WorkerRef[];
   readonly onOpenWorker?: (workerId: string) => void;
@@ -528,6 +519,7 @@ export interface ThreadCellProps {
 
 export const ThreadCell = memo<ThreadCellProps>(({
   cell,
+  mainAgentId,
   conversationStatus,
   workers,
   onOpenWorker,
@@ -538,12 +530,13 @@ export const ThreadCell = memo<ThreadCellProps>(({
 }) => {
   const { t } = useTranslation();
   const promoteShortcut = useEffectiveConsoleShortcut('tool.promoteToBackground');
-  const title = t(cell.titleKey, cell.titleArgs ?? {});
+  const title = transcriptNodeTitle(cell, t);
   const present = (value: PresentationText): string => (
     resolvePresentationText(value, (key, values) => t(key, values ?? {}))
   );
-  const summary = cell.summary ? present(cell.summary) : undefined;
+  const summary = transcriptNodeSummary(cell, t);
   const meta = cell.meta?.map(present);
+  if (!hasVisibleTranscriptContent(cell)) return null;
   switch (cell.kind) {
     case 'user':
       if (cell.origin === 'parent') {
@@ -679,13 +672,11 @@ export const ThreadCell = memo<ThreadCellProps>(({
         && cell.fileOp.endLine !== undefined
         ? cell.fileOp
         : undefined;
-      const actionSummary = read?.path ?? summary;
-
       return (
         <div className={styles.cell}>
           <ActionLine
             icon={toolIcon(cell)}
-            text={actionSummary ? `${title} · ${actionSummary}` : title}
+            text={transcriptNodeText(cell, t)}
             metadata={read ? t(
               read.startLine === read.endLine ? 'transcript.fileRead.line' : 'transcript.fileRead.lineRange',
               { start: read.startLine, end: read.endLine },
@@ -744,7 +735,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
       return (
         <CollapsibleCard
           icon={<ToolTypeIcon cell={cell} size={16} />}
-          title={t('transcript.title.executionPlan')}
+          title={title}
           subtitle={cell.taskSummary}
           // 计划正文恒默认展开：它是会话的关键产物，收起反而要多点一下。
           // 仍可手动收起——「可收起」与「默认展开」不冲突。
@@ -766,6 +757,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
       return (
         <WorkerCreationRow
           cell={cell}
+          mainAgentId={mainAgentId}
           status={cell.creating ? conversationStatus : worker?.status}
           onActivate={worker && onOpenWorker ? () => onOpenWorker(worker.id) : undefined}
         />
@@ -790,7 +782,7 @@ export const ThreadCell = memo<ThreadCellProps>(({
           <FlowEventDisclosure
             direction="incoming"
             icon={<ArrowDownLeft size={ICON} />}
-            title={t('transcript.notice.workerMessage')}
+            title={title}
             summary={summary}
             tone={cell.tone}
             badge={cell.badge}

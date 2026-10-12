@@ -113,6 +113,7 @@ export type AiEvent =
       configRevision: number;
     })
   | (AiEventBase & { kind: 'response.retrying'; retryAt: number; error: GatewayCallError })
+  | (AiEventBase & { kind: 'response.first_token' })
   | (AiEventBase & { kind: 'text.delta'; text: string })
   | (AiEventBase & { kind: 'reasoning.delta'; text: string })
   | (AiEventBase & { kind: 'reasoning.signature'; signature: string })
@@ -132,6 +133,8 @@ export type AiEvent =
   | (AiEventBase & { kind: 'response.cancelled'; reason?: string });
 
 export type AiAttemptEvent =
+  /** First nonempty text, reasoning text, or tool arguments received by this attempt. */
+  | { kind: 'response.first_token' }
   | { kind: 'text.delta'; text: string }
   | { kind: 'reasoning.delta'; text: string }
   | { kind: 'reasoning.signature'; signature: string }

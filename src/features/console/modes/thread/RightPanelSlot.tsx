@@ -36,7 +36,7 @@ export const RightPanelSlot = memo<RightPanelSlotProps>(
     const fidelity = hidden ? 'hidden' : 'visible';
 
     if (panel === 'screen') {
-      if (worker?.browserId) {
+      if (worker?.browserId && worker.browserReady) {
         return (
           <BrowserScreenView
             subagentId={worker.id}

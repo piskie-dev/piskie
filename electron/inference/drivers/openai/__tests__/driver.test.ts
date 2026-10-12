@@ -187,7 +187,9 @@ describe('OpenAI SDK driver', () => {
       for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
       receivedBody = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
       response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.write(': keepalive\n\n');
       const events = [
+        { id: 'chat-1', object: 'chat.completion.chunk', created: 1, model: 'wire-model', choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }] },
         { id: 'chat-1', object: 'chat.completion.chunk', created: 1, model: 'wire-model', choices: [{ index: 0, delta: { content: 'hello ' }, finish_reason: null }] },
         { id: 'chat-1', object: 'chat.completion.chunk', created: 1, model: 'wire-model', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{"id"' } }] }, finish_reason: null }] },
         { id: 'chat-1', object: 'chat.completion.chunk', created: 1, model: 'wire-model', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: ':"42"}' } }] }, finish_reason: 'tool_calls' }] },
@@ -239,6 +241,7 @@ describe('OpenAI SDK driver', () => {
       messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     });
     expect(events).toEqual([
+      { kind: 'response.first_token' },
       { kind: 'text.delta', text: 'hello ' },
       { kind: 'tool.started', callId: 'call-1', name: 'lookup' },
       { kind: 'tool.arguments.delta', callId: 'call-1', delta: '{"id"' },
@@ -267,10 +270,13 @@ describe('OpenAI SDK driver', () => {
       receivedBody = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
 
       response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.write(': keepalive\n\n');
       const reasoning = {
         type: 'reasoning', id: 'rs_1', summary: [], encrypted_content: 'encrypted', status: 'completed',
       };
       const events = [
+        { type: 'response.created', response: { output: [] } },
+        { type: 'response.in_progress', response: { output: [] } },
         { type: 'response.output_item.done', output_index: 0, sequence_number: 1, item: reasoning },
         {
           type: 'response.output_text.delta', item_id: 'msg_1', output_index: 1,
@@ -330,6 +336,7 @@ describe('OpenAI SDK driver', () => {
           status: 'completed',
         },
       },
+      { kind: 'response.first_token' },
       { kind: 'text.delta', text: 'hello' },
       {
         kind: 'usage.updated',

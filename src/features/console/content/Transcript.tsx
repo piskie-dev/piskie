@@ -18,10 +18,12 @@ import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, u
 import { ArrowDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import type { AgentOutputTokens } from '@shared/types/agent-control';
 import type { TranscriptNode } from '@/domains/transcript/nodes';
 import type { TranscriptResponse } from '@/domains/transcript/types';
 import { buildTranscriptRows, type TranscriptProcessBoundaries } from '../data/transcriptRows';
 import type { WorkerRef } from '../data/vm';
+import { latestWorkerNotification } from '../data/workerActivity';
 import { TranscriptRow } from './TranscriptRow';
 import { useStickToBottom } from './useStickToBottom';
 import { readScrollMemory, saveScrollMemory } from './scrollMemory';
@@ -62,6 +64,7 @@ export interface TranscriptProps {
   readonly onLoadEarlier?: () => void;
   readonly emptyText?: string;
   readonly activeStartedAt?: number;
+  readonly activeOutputTokens?: AgentOutputTokens;
   /**
    * 是否提供"回到底部"浮钮（thread 用；依 Codex 截图它**只在上翻时出现**）。
    * 放在这里而不是外层：滚动状态由本组件持有，外层拿不到，
@@ -88,6 +91,7 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
       onLoadEarlier,
       emptyText,
       activeStartedAt,
+      activeOutputTokens,
       scrollAffordance,
       memoryKey,
     },
@@ -99,6 +103,10 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
     const processBoundaries = useRef<TranscriptProcessBoundaries>(
       memoryKey ? readTranscriptProcessBoundaries(memoryKey) ?? new Map() : new Map(),
     );
+    const currentWorkers = useMemo(() => workers?.map((worker) => worker.taskState ? worker : ({
+      ...worker,
+      taskState: { inputAt: 0, notification: latestWorkerNotification(nodes, worker.id) },
+    })), [nodes, workers]);
     const { rows, boundaries } = useMemo(
       () => buildTranscriptRows(nodes, responses, processSettled && activeStartedAt === undefined, processBoundaries.current),
       [nodes, responses, processSettled, activeStartedAt],
@@ -229,7 +237,7 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
                   deferredNodeIds={deferredNodeIds}
                   onToggle={toggleGroup}
                   toolsActive={row.id === activeToolGroupId}
-                  workers={workers}
+                  workers={currentWorkers}
                 />
               </div>
             ))}
@@ -238,7 +246,7 @@ const TranscriptImpl = forwardRef<HTMLDivElement, TranscriptProps>(
               <div className={styles.empty}>{emptyText ?? t('sessionWorkbenchUi.transcript.empty')}</div>
             )}
             {activeStartedAt !== undefined && (
-              <AgentActivityRow activeStartedAt={activeStartedAt} />
+              <AgentActivityRow activeStartedAt={activeStartedAt} activeOutputTokens={activeOutputTokens} />
             )}
           </div>
         </div>

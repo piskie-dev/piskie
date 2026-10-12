@@ -32,7 +32,8 @@ export interface UsageRecord extends UsageAttribution {
   attempt: number;
   startedAt: number;
   endedAt?: number;
-  firstResponseMs?: number;
+  /** Attempt start to first nonempty text, reasoning text, or tool arguments (TTFT). */
+  firstTokenLatencyMs?: number;
   providerId: string;
   providerName: string;
   modelId: string;
@@ -82,8 +83,8 @@ export interface UsageSummary {
   cacheHit: number;
   latencySamples: number;
   latencyTotal: number;
-  firstResponseSamples: number;
-  firstResponseTotal: number;
+  firstTokenSamples: number;
+  firstTokenLatencyTotalMs: number;
 }
 
 export type UsageDimension = 'modelId' | 'providerId' | 'mainAgentId' | 'agentType' | 'purpose';

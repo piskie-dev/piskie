@@ -233,6 +233,7 @@ export const DockPanel = memo<DockPanelProps>(
       (cell: TranscriptNode) => (
         <ThreadCell
           cell={cell}
+          mainAgentId={agentId}
           conversationStatus={request?.status}
           workspace={request?.workspace}
           workers={agent?.workers}
@@ -242,7 +243,7 @@ export const DockPanel = memo<DockPanelProps>(
           onAction={(target_, action) => void runCellAction(target_, action)}
         />
       ),
-      [agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, request?.workspace, runCellAction],
+      [agentId, agent?.workers, onOpenWorker, onPreviewImage, openFileChange, request?.status, request?.workspace, runCellAction],
     );
 
     const chips = useMemo(() => activityChips(transcript.nodes), [transcript.nodes]);
@@ -371,6 +372,7 @@ export const DockPanel = memo<DockPanelProps>(
             ? t('sessionWorkbenchUi.transcript.emptyLoaded')
             : t('sessionWorkbenchUi.transcript.loading')}
           activeStartedAt={request.activeStartedAt}
+          activeOutputTokens={request.activeOutputTokens}
           scrollAffordance
         />
 

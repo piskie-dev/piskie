@@ -104,11 +104,8 @@ export class DefaultAiGateway implements AiGateway {
         return result;
       }
       const event = result.value;
-      if (
-        (event.kind === 'reasoning.delta' || event.kind === 'text.delta') &&
-        event.text.length > 0
-      ) {
-        safelyCollectStatistics(() => collector.onVisibleContent(event.emittedAt), undefined);
+      if (event.kind === 'response.first_token') {
+        safelyCollectStatistics(() => collector.onFirstToken(event.emittedAt), undefined);
       }
       if (
         event.kind === 'response.completed' ||

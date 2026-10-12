@@ -66,7 +66,7 @@ async function fixture(configs: MessagingConnectionConfig[]) {
   registry.register(createImBotsDomain(directory, {
     validate: (snapshot) => gateway.validateConfigSnapshot(snapshot),
     publish: (snapshot) => gateway.publishConfigSnapshot(snapshot),
-  }, async () => ({ revision: 1 })));
+  }, async () => ({ revision: 1 }), { assertSelectableTarget: async () => undefined }));
   const config = new ConfigHost(registry);
   await config.initialize();
   const observations = createAgentObservations();

@@ -42,6 +42,26 @@ describe('transcript presentation memory', () => {
     ]);
   });
 
+  it.each(['work-one', null])('keeps a completed boundary fixed across later and stale commits (preceding work: %s)', (endNodeId) => {
+    const original = new Map([['process:user-one', { endNodeId, finalTextNodeId: 'answer-one' }]]);
+    mergeTranscriptProcessBoundaries('target-main', original, ['user-one', 'work-one', 'answer-one']);
+    mergeTranscriptProcessBoundaries('target-main', new Map([
+      ['process:user-one', { endNodeId: 'work-two', finalTextNodeId: 'answer-two' }],
+      ['process:after:answer-one', { endNodeId: 'work-two', finalTextNodeId: 'answer-two' }],
+    ]), ['user-one', 'work-one', 'answer-one', 'notice-one', 'work-two', 'answer-two']);
+    mergeTranscriptProcessBoundaries('target-main', new Map([['process:user-one', null]]), ['user-one', 'work-one']);
+    expect(readTranscriptProcessBoundaries('target-main')?.get('process:user-one')).toEqual(original.get('process:user-one'));
+    expect(readTranscriptProcessBoundaries('target-main')?.get('process:after:answer-one')).toEqual({
+      endNodeId: 'work-two', finalTextNodeId: 'answer-two',
+    });
+    mergeTranscriptProcessBoundaries('target-main', new Map([
+      ['process:user-one', { endNodeId, finalTextNodeId: 'answer-one', durationMs: 2000 }],
+    ]), ['user-one', 'work-one', 'answer-one']);
+    expect(readTranscriptProcessBoundaries('target-main')?.get('process:user-one')).toEqual({
+      endNodeId, finalTextNodeId: 'answer-one', durationMs: 2000,
+    });
+  });
+
   it('isolates targets and changes open groups only through explicit updates', () => {
     mergeTranscriptProcessBoundaries('target-main', boundaries([['process:user-one', 'work-one']]), ['work-one']);
     mergeTranscriptProcessBoundaries('target-worker', boundaries([['process:user-two', 'work-two']]), ['work-two']);

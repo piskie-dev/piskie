@@ -7,6 +7,7 @@ import type {
 export function snapshotTaskDefinition(definition: TaskDefinition): AgentRunConfig {
   return {
     name: definition.name,
+    ...(definition.model ? { model: { ...definition.model } } : {}),
     description: definition.description,
     ...(definition.category ? { category: definition.category } : {}),
     promptTemplate: definition.promptTemplate,

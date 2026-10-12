@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { testConfig, testModel } from '../../../inference/control/__tests__/fixtures.js';
+import { useInferenceStore } from '../../../../src/store/inferenceStore';
 import { useMessagingStore } from '../../../../src/store/messagingStore';
 import type { MessagingClient, MessagingConnectionConfig } from '../../../../shared/electron-contracts/messaging';
 import { MessagingApplication } from '../messaging-application.js';
@@ -20,6 +22,7 @@ import * as runtimeModule from '../../../../src/renderer-runtime/renderer-runtim
 import { createRendererRuntime } from '../../../../src/renderer-runtime/createRendererRuntime';
 
 const initialStore = useMessagingStore.getState();
+const initialInference = useInferenceStore.getState();
 
 const state = vi.hoisted(() => ({
   connectorDescriptors: [], senderAuthorizationRequests: [], authorizedUsers: [],
@@ -35,7 +38,7 @@ const runtime = vi.hoisted(() => ({
 }));
 const templates = vi.hoisted(() => [
   { definitionId: 'td-first', name: 'First template', purpose: 'messaging' },
-  { definitionId: 'td-second', name: 'Second template', purpose: 'messaging' },
+  { definitionId: 'td-second', name: 'Second template', purpose: 'messaging', model: { providerId: 'primary', modelId: 'chat' } },
 ]);
 vi.mock('../../../../src/renderer-runtime/hooks', () => ({
   useTaskDefinitionRepository: () => templates, useRendererRuntime: () => runtime,
@@ -79,6 +82,7 @@ beforeEach(() => {
     this.dispatchEvent(new dom.window.Event('close'));
   };
   useMessagingStore.setState({ ...initialStore, ...state });
+  useInferenceStore.setState({ ...initialInference, refresh: async () => undefined, subscribeToConfigChanges: () => () => undefined });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -90,6 +94,7 @@ afterEach(async () => {
   });
   await act(async () => root.unmount());
   useMessagingStore.getState().clearError();
+  useInferenceStore.setState(initialInference, true);
   dom.window.close();
   vi.unstubAllGlobals();
   await Promise.all(temporaryDirectories.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true })));
@@ -108,10 +113,15 @@ async function savedBotFixture(channel = 'openclaw-weixin') {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'piskie-im-save-ui-'));
   temporaryDirectories.push(directory);
   const registry = new ConfigDomainRegistry();
-  registry.register(createImBotsDomain(directory, { validate() {}, publish() {} }, async () => ({
-    revision: 1,
-    definitions: Object.fromEntries(templates.map((template) => [template.definitionId, template])),
-  })));
+  const assertSelectableTarget = vi.fn(async () => undefined);
+  registry.register(createImBotsDomain(directory, { validate() {}, publish() {} }, async (domain) => {
+    if (domain === 'im-bots') return registry.get(domain).show!();
+    return {
+      revision: 1,
+      ai: { providerId: 'sample-provider', modelId: 'sample-chat' },
+      definitions: Object.fromEntries(templates.map((template) => [template.definitionId, template])),
+    };
+  }, { assertSelectableTarget }));
   const host = new ConfigHost(registry);
   const startBot = vi.fn(async () => undefined);
   const application = new MessagingApplication({ config: host, gateway: { getBotStates: () => [], startBot } as never });
@@ -142,7 +152,7 @@ async function savedBotFixture(channel = 'openclaw-weixin') {
   const readStored = async () => JSON.parse(await fs.readFile(configDomainStoragePaths(directory, 'im-bots').configFile, 'utf8')) as {
     bots: Record<string, { autoStart: boolean }>;
   };
-  return { application, host, saveBot, startBot, status, onSaved, onDismiss, onFlash, render, readStored };
+  return { application, host, saveBot, startBot, status, onSaved, onDismiss, onFlash, render, readStored, assertSelectableTarget };
 }
 
 async function input(id: string, value: string) {
@@ -182,6 +192,36 @@ async function save(waitForRefresh = true) {
     }
   });
 }
+
+it('previews the selected template model, tracks global changes and identifies unavailable fixed choices', async () => {
+  const f = await savedBotFixture();
+  await fillDraft();
+  await act(async () => useInferenceStore.setState({ config: testConfig(), models: { ai: [testModel()], image: [] },
+    availableTargets: { ai: [{ providerId: 'primary', modelId: 'chat', catalogId: 'custom/chat' }], image: [] },
+    selections: { schemaVersion: 1, revision: 1, ai: { providerId: 'primary', modelId: 'chat' } } }));
+  expect(container.textContent).toContain('跟随全局默认 · Primary / Test Chat');
+  await act(async () => useInferenceStore.setState({ selections: { schemaVersion: 1, revision: 2 } }));
+  expect(container.textContent).toContain('未配置可用的全局默认 AI 模型');
+  await pickTemplate('Second template');
+  expect(container.textContent).toContain('模板指定 · Primary / Test Chat');
+  await act(async () => useInferenceStore.setState({ availableTargets: { ai: [], image: [] } }));
+  expect(container.textContent).toContain('模板指定 · Primary / Test Chat · 当前不可用');
+  expect(container.textContent).toContain('primary / chat');
+  expect(f.saveBot).not.toHaveBeenCalled();
+});
+
+it('shows the new-session model source and exposes trusted binding validation failures', async () => {
+  const f = await savedBotFixture();
+  await fillDraft();
+  expect(container.textContent).toContain('跟随全局默认');
+  expect(container.textContent).toContain('未配置可用的全局默认 AI 模型');
+  f.assertSelectableTarget.mockRejectedValue(new Error('Sample model is unavailable'));
+  await save();
+  expect(useMessagingStore.getState().error).toContain('sample-provider/sample-chat');
+  expect(useMessagingStore.getState().error).toContain('unavailable');
+  expect((await f.application.status()).configs).toEqual([]);
+  expect(f.onSaved).not.toHaveBeenCalled();
+});
 
 describe('Bot auto-start settings', () => {
   function toggle() {

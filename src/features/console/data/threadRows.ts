@@ -7,7 +7,7 @@
 
 import { hasUnreadMessages, type AgentRunMessageState } from '@shared/agent-run-messages';
 import type { AgentRunAttention } from '@/domains/agent-runs/agent-run-attention';
-import { phaseOrder, type HistoryRow, type SessionRow } from './sessionRow';
+import type { HistoryRow, SessionRow } from './sessionRow';
 import type { WorkspaceSessionSort } from '../../../store/uiStore';
 
 export interface ThreadRow {
@@ -103,13 +103,7 @@ export function buildThreadRows(input: {
   }));
 }
 
-/**
- * 组内排序：置顶恒在前；同为置顶或未置顶时，在跑的优先（再按 phase 细分），
- * 其余按最近活跃倒序。
- *
- * 这里不再走 `sortSessionRows`——它只认 `SessionRow` 且不处理 live/history 混排，
- * 但 phase 权重仍取自 `phaseOrder` 同一张表。
- */
+/** Within a workspace, pins lead; automatic order uses descending last activity. */
 export function sortThreadRows(rows: readonly ThreadRow[], preference?: WorkspaceSessionSort): ThreadRow[] {
   if (preference?.mode === 'manual') {
     const positions = new Map(preference.order.map((id, index) => [id, index]));
@@ -121,13 +115,6 @@ export function sortThreadRows(rows: readonly ThreadRow[], preference?: Workspac
   }
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    if (!!a.live !== !!b.live) return a.live ? -1 : 1;
-
-    if (a.live && b.live) {
-      const order = phaseOrder(a.live.phase) - phaseOrder(b.live.phase);
-      if (order !== 0) return order;
-    }
-
     return timeOf(b.lastActiveAt) - timeOf(a.lastActiveAt);
   });
 }

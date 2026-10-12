@@ -8,22 +8,25 @@ export interface ToolIntervalRow {
   readonly id: string;
   readonly nodes: readonly TranscriptNode[];
   readonly latest: ToolIntervalNode;
+  readonly workerCards?: readonly WorkerNode[];
 }
 
 export type TranscriptContentRow =
-  | { readonly kind: 'node'; readonly id: string; readonly node: TranscriptNode }
+  | { readonly kind: 'node'; readonly id: string; readonly node: TranscriptNode; readonly workerCards?: readonly WorkerNode[] }
   | ToolIntervalRow;
 
 export type TranscriptRow = TranscriptContentRow | {
   readonly kind: 'process';
   readonly id: string;
   readonly rows: readonly TranscriptContentRow[];
+  /** Unique current dispatch references; historical creations remain in rows. */
   readonly workerCards: readonly WorkerNode[];
   readonly durationMs?: number;
   readonly observedDurationMs?: number;
   readonly workerProgress?: ProcessWorkerProgress;
 };
 
+/** Historical execution facts, independent of the current summary locations. */
 export interface ProcessWorkerProgress {
   readonly unfinished: number;
   readonly failed: number;
@@ -31,12 +34,12 @@ export interface ProcessWorkerProgress {
   readonly totalDurationMs?: number;
 }
 
-/** Only fold positions and observed normal completion are retained between renders. */
+/** Retains each execution's fold position and observed normal completion between renders. */
 export interface ProcessBoundary {
   /** Null records a normal direct reply with no preceding work to fold. */
   readonly endNodeId: string | null;
   readonly durationMs?: number;
-  /** Identifies the last normally completed response, even when there was no work to fold. */
+  /** Anchors a completed response and the following execution, including direct replies. */
   readonly finalTextNodeId?: string;
 }
 
@@ -104,12 +107,12 @@ function workerActivity(nodes: readonly TranscriptNode[]): {
   readonly positions: ReadonlyMap<string, number>;
   readonly actions: ReadonlyMap<string, readonly WorkerAction[]>;
   readonly creations: ReadonlyMap<string, WorkerNode>;
-  readonly assignedTurn: ReadonlyMap<string, string | undefined>;
+  readonly assignedNode: ReadonlyMap<string, string>;
 } {
   const positions = new Map<string, number>();
   const actions = new Map<string, WorkerAction[]>();
   const creations = new Map<string, WorkerNode>();
-  const assignedTurn = new Map<string, string | undefined>();
+  const assignedNode = new Map<string, string>();
   let turnId: string | undefined;
   const add = (id: string, action: WorkerAction) => {
     const timeline = actions.get(id) ?? [];
@@ -121,11 +124,11 @@ function workerActivity(nodes: readonly TranscriptNode[]): {
     if (node.kind === 'worker' && node.workerId) {
       positions.set(node.id, index);
       creations.set(node.workerId, node);
-      assignedTurn.set(node.workerId, turnId);
+      assignedNode.set(node.workerId, node.id);
     }
     if (node.kind === 'tool' && node.state.phase === 'ok' && node.workerMessage?.targetId) {
       add(node.workerMessage.targetId, { kind: 'sent', index, turnId });
-      assignedTurn.set(node.workerMessage.targetId, turnId);
+      assignedNode.set(node.workerMessage.targetId, node.id);
     }
     if (node.kind === 'notice' && node.source && (
       node.eventType === 'completed' || node.eventType === 'failed' || node.eventType === 'user_stopped'
@@ -133,23 +136,29 @@ function workerActivity(nodes: readonly TranscriptNode[]): {
       add(node.source, { kind: 'terminal', index, eventType: node.eventType, at: node.eventAt ?? node.ts });
     }
   });
-  return { positions, actions, creations, assignedTurn };
+  return { positions, actions, creations, assignedNode };
 }
 
-function processWorkerCards(
-  folded: readonly TranscriptNode[],
-  turnId: string | undefined,
-  activity: ReturnType<typeof workerActivity>,
-): WorkerNode[] {
-  const seen = new Set<string>();
-  return folded.flatMap((node) => {
+function rowWorkerCards(nodes: readonly TranscriptNode[], activity: ReturnType<typeof workerActivity>): WorkerNode[] {
+  return nodes.flatMap((node) => {
     const workerId = node.kind === 'worker' ? node.workerId
       : node.kind === 'tool' && node.state.phase === 'ok' ? node.workerMessage?.targetId : undefined;
-    if (!workerId || seen.has(workerId)) return [];
-    seen.add(workerId);
+    if (!workerId || activity.assignedNode.get(workerId) !== node.id) return [];
     const creation = activity.creations.get(workerId);
-    return creation && activity.assignedTurn.get(workerId) === turnId ? [creation] : [];
+    return creation ? [creation] : [];
   });
+}
+
+function assignContentWorkerCards(row: TranscriptContentRow, activity: ReturnType<typeof workerActivity>): TranscriptContentRow {
+  const workerCards = rowWorkerCards(row.kind === 'node' ? [row.node] : row.nodes, activity);
+  return workerCards.length > 0 ? { ...row, workerCards } : row;
+}
+
+/** Ownership follows the last successful dispatch's actual row, across stable process boundaries. */
+function assignWorkerCards(row: TranscriptRow, activity: ReturnType<typeof workerActivity>): TranscriptRow {
+  if (row.kind !== 'process') return assignContentWorkerCards(row, activity);
+  const rows = row.rows.map((child) => assignContentWorkerCards(child, activity));
+  return { ...row, rows, workerCards: rows.flatMap((child) => child.workerCards ?? []) };
 }
 
 function processWorkerProgress(
@@ -204,8 +213,12 @@ export function buildTranscriptRows(
   settled: boolean,
   previousBoundaries: TranscriptProcessBoundaries = new Map(),
 ): { readonly rows: TranscriptRow[]; readonly boundaries: TranscriptProcessBoundaries } {
-  const lastResponseByUser = new Map<string | undefined, TranscriptResponse>();
-  for (const response of responses) lastResponseByUser.set(response.afterUserId, response);
+  const responsesByUser = new Map<string | undefined, TranscriptResponse[]>();
+  for (const response of responses) {
+    const userResponses = responsesByUser.get(response.afterUserId) ?? [];
+    userResponses.push(response);
+    responsesByUser.set(response.afterUserId, userResponses);
+  }
   const rows: TranscriptRow[] = [];
   const boundaries = new Map<string, ProcessBoundary | null>();
   const activity = workerActivity(nodes);
@@ -216,65 +229,105 @@ export function buildTranscriptRows(
     const current = nextUser === undefined;
     const segmentId = user?.id ?? segment[0]?.id;
     if (segmentId === undefined) return;
-    const groupId = `process:${segmentId}`;
-    const previous = previousBoundaries.get(groupId);
-    let boundary = previous ?? null;
-    let collapseAt = previous?.endNodeId ? segment.findIndex((node) => node.id === previous.endNodeId) + 1 : 0;
-    const response = lastResponseByUser.get(user?.id);
-    // Historical segments can be inferred on first sight. A normal reply supplies the completion time.
-    // Awaiting-commit live text is no longer animated but is still incomplete.
-    const canConfirm = (current ? settled : !previousBoundaries.has(groupId))
-      && !segment.some((node) => node.sourceIndex === -1 || isPendingTranscriptNode(node));
-    if (canConfirm && !response?.hasToolUse) {
-      const finalTextIds = new Set(response?.textNodeIds);
-      const finalIndex = segment.findIndex((node) => finalTextIds.has(node.id));
-      if (finalIndex >= 0 && finalIndex >= collapseAt) {
-        collapseAt = finalIndex;
+    const userResponses = responsesByUser.get(user?.id) ?? [];
+    let groupId = `process:${segmentId}`;
+    let offset = 0;
+    let afterSourceIndex = -1;
+    let startedAt = user?.ts;
+    let observedCompletion = false;
+
+    do {
+      const part = segment.slice(offset);
+      const partResponses = userResponses.filter((response) => response.sourceIndex > afterSourceIndex);
+      const previous = previousBoundaries.get(groupId);
+      let boundary = previous ?? null;
+      let collapseAt = previous?.endNodeId ? part.findIndex((node) => node.id === previous.endNodeId) + 1 : 0;
+      if (previous?.finalTextNodeId !== undefined) {
+        observedCompletion = true;
+        const response = partResponses.find((candidate) => candidate.textNodeIds.includes(previous.finalTextNodeId!));
         boundary = {
-          endNodeId: segment[finalIndex - 1]?.id ?? null,
-          durationMs: durationBetween(user?.ts, response!.ts) ?? boundary?.durationMs,
-          finalTextNodeId: segment[finalIndex]!.id,
+          ...previous,
+          durationMs: response ? durationBetween(startedAt, response.ts) ?? previous.durationMs : previous.durationMs,
         };
-      } else if (finalIndex < 0 && !boundary && segment.length > 0) {
-        // A partial history page can expose work without an identifiable final reply.
-        collapseAt = segment.length;
-        boundary = { endNodeId: segment.at(-1)!.id };
+      } else {
+        // A persisted no-tool reply ends runTurn. A later subagent event lets history
+        // recover that completion even if the UI never observed the intervening idle state.
+        const beforeNotice = part.filter((node) => node.kind === 'notice' && node.eventType !== undefined)
+          .map((notice) => partResponses.filter((response) => response.sourceIndex < notice.sourceIndex).at(-1))
+          .find((response) => response !== undefined && !response.hasToolUse && response.textNodeIds.length > 0);
+        const response = beforeNotice ?? partResponses.at(-1);
+        const finalIndex = part.findIndex((node) => response?.textNodeIds.includes(node.id));
+        const completionEnd = finalIndex < 0 ? part.length
+          : part.findIndex((node, index) => index > finalIndex && node.sourceIndex !== response!.sourceIndex);
+        // Awaiting-commit live text and pending decisions remain visible. Later active
+        // work does not prevent recovering an earlier reply before a notification.
+        const confirmationNodes = beforeNotice && completionEnd >= 0 ? part.slice(0, completionEnd) : part;
+        const canConfirm = (beforeNotice !== undefined || (current ? settled : !previousBoundaries.has(groupId)))
+          && !confirmationNodes.some((node) => node.sourceIndex === -1 || isPendingTranscriptNode(node));
+        if (canConfirm && !response?.hasToolUse) {
+          if (finalIndex >= collapseAt && finalIndex >= 0) {
+            collapseAt = finalIndex;
+            boundary = {
+              endNodeId: part[finalIndex - 1]?.id ?? null,
+              durationMs: durationBetween(startedAt, response!.ts) ?? boundary?.durationMs,
+              finalTextNodeId: part[finalIndex]!.id,
+            };
+          } else if (finalIndex < 0 && !boundary && offset === 0 && part.length > 0) {
+            // A partial history page can expose work without an identifiable final reply.
+            collapseAt = part.length;
+            boundary = { endNodeId: part.at(-1)!.id };
+          }
+        }
+        // Only the unfinished execution folds at new input. A notification alone
+        // leaves the preceding reply and the notification visible.
+        if (boundary?.finalTextNodeId === undefined && (previous === null || (offset > 0 && observedCompletion))
+          && (offset === 0 || partResponses.length > 0) && nextUser?.origin === 'user'
+          && !previousBoundaries.has(`process:${nextUser.id}`) && part.length > 0) {
+          collapseAt = part.length;
+          boundary = { endNodeId: part.at(-1)!.id };
+        }
       }
-    }
-    // Compare response identities so notifications and status-only wakeups preserve the final reply.
-    const hasUnfinishedContinuation = previous?.finalTextNodeId !== undefined && response !== undefined
-      && !response.textNodeIds.includes(previous.finalTextNodeId);
-    // A new user input also folds resumed work that has not reached another normal final reply.
-    if ((previous === null || hasUnfinishedContinuation) && nextUser?.origin === 'user'
-      && !previousBoundaries.has(`process:${nextUser.id}`) && segment.length > 0) {
-      collapseAt = segment.length;
-      boundary = { endNodeId: segment.at(-1)!.id };
-    }
-    boundaries.set(groupId, boundary);
-    if (collapseAt > 0) {
-      const folded = segment.slice(0, collapseAt);
-      // Without a final reply, stop at the last persisted activity, not the next user input.
-      const lastActivityAt = folded.reduce(
-        (latest, node) => node.sourceIndex >= 0 && Number.isFinite(node.ts) ? Math.max(latest, node.ts) : latest,
-        0,
-      );
-      const observedDurationMs = boundary?.durationMs === undefined
-        ? durationBetween(user?.ts, lastActivityAt)
+      boundaries.set(groupId, boundary);
+      if (collapseAt > 0) {
+        const folded = part.slice(0, collapseAt);
+        // Without a final reply, stop at the last persisted activity, not the next user input.
+        const lastActivityAt = folded.reduce(
+          (latest, node) => node.sourceIndex >= 0 && Number.isFinite(node.ts) ? Math.max(latest, node.ts) : latest,
+          0,
+        );
+        const observedDurationMs = boundary?.durationMs === undefined
+          ? durationBetween(startedAt, lastActivityAt)
+          : undefined;
+        rows.push({
+          kind: 'process',
+          id: groupId,
+          rows: groupToolIntervals(folded),
+          workerCards: [],
+          durationMs: boundary?.durationMs,
+          observedDurationMs,
+          workerProgress: processWorkerProgress(
+            folded, user?.id, startedAt, boundary?.durationMs ?? observedDurationMs, !current || settled, activity,
+          ),
+        });
+      }
+      const finalIndex = part.findIndex((node) => node.id === boundary?.finalTextNodeId);
+      if (finalIndex < 0) {
+        rows.push(...groupToolIntervals(part.slice(collapseAt)));
+        break;
+      }
+      // Keep the complete final response outside, then give subsequent work its own
+      // stable group keyed by that reply, even when the reply itself needed no fold.
+      afterSourceIndex = part[finalIndex]!.sourceIndex;
+      const nextIndex = part.findIndex((node, index) => index > finalIndex && node.sourceIndex !== afterSourceIndex);
+      const replyEnd = nextIndex < 0 ? part.length : nextIndex;
+      rows.push(...groupToolIntervals(part.slice(collapseAt, replyEnd)));
+      offset += replyEnd;
+      groupId = `process:after:${boundary!.finalTextNodeId}`;
+      const first = segment[offset];
+      startedAt = first
+        ? userResponses.find((response) => response.sourceIndex === first.sourceIndex)?.ts ?? first.ts
         : undefined;
-      rows.push({
-        kind: 'process',
-        id: groupId,
-        rows: groupToolIntervals(folded),
-        workerCards: processWorkerCards(folded, user?.id, activity),
-        durationMs: boundary?.durationMs,
-        observedDurationMs,
-        workerProgress: processWorkerProgress(
-          folded, user?.id, user?.ts, boundary?.durationMs ?? observedDurationMs, !current || settled, activity,
-        ),
-      });
-    }
-    // The previous final reply and all resumed work stay outside until another boundary is confirmed.
-    rows.push(...groupToolIntervals(segment.slice(collapseAt)));
+    } while (offset < segment.length);
     segment = [];
   };
 
@@ -288,5 +341,5 @@ export function buildTranscriptRows(
     }
   }
   flush();
-  return { rows, boundaries };
+  return { rows: rows.map((row) => assignWorkerCards(row, activity)), boundaries };
 }

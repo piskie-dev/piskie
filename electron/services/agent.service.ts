@@ -423,7 +423,9 @@ export class AgentService {
 
     const selections = await this.readEffectiveInferenceSelections();
     const initialModel =
-      launch.launchOptions?.initialModel || selectedModelReference(selections.ai);
+      launch.launchOptions?.initialModel
+      || selectedModelReference(launch.runConfig.model)
+      || selectedModelReference(selections.ai);
     if (!initialModel) {
       throw new Error('未配置 AI 模型，请在设置页面配置 Provider 和默认模型');
     }

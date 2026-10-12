@@ -1,34 +1,20 @@
-/**
- * 右栏可用面板的判定——纯函数，零 React。
- *
- * ## 判据：**有内容才有 tab**
- *
- * | tab | 出现条件 |
- * |---|---|
- * | 审阅 | 用户点了某条文件操作或本地路径 |
- * | 屏幕 | worker 且有 browserId |
- * | 浏览器 | 用户手动开启（入口按钮或点流水里的链接） |
- *
- * 右栏只放这两页。任务是执行的伴随信息，归阅读列底部的共享 `TaskList`；
- * 生成的图片归流水尾部的审核块与工具行缩略图（`ToolNode.generatedImages`），
- * 右栏再开一页只会是它的真子集。
- *
- * 无条件放进列表的话，0 条时 tab 照样在、点进去只有一句「还没有任务」，纯噪音。
- *
- * **右栏该不该出现 = 有没有可用 tab**，不另算一套 `hasPanelContent` 条件——
- * 两套并行条件必然漂移。
+/** Available right-panel tabs are derived from actual content.
+ * Review and manual browsing follow user selection. Worker screens require readiness;
+ * the main monitor also includes allocated browsers waiting for their first picture.
  */
 
-export type PanelKey = 'review' | 'screen' | 'browser';
+export type PanelKey = 'review' | 'screen' | 'browser' | 'monitor';
 
 export interface PanelCapability {
   /** worker 才可能有屏幕；主会话恒 false */
   readonly isWorker: boolean;
+  /** 已分配 browserId 且 browserReady 为 true，屏幕可以订阅 */
   readonly hasScreen: boolean;
   /** 当前会话/worker 有一个用户明确打开的文件操作或本地路径 */
   readonly hasReviewTarget: boolean;
   /** 内嵌浏览器：纯手动开启——用户点了入口或点了流水里的链接 */
   readonly hasBrowser: boolean;
+  readonly hasMonitor?: boolean;
 }
 
 export function availablePanels(capability: PanelCapability): readonly PanelKey[] {
@@ -40,6 +26,8 @@ export function availablePanels(capability: PanelCapability): readonly PanelKey[
 
   // 内嵌浏览器：手动开启才出现，人驱动，与 agent 浏览器完全隔离
   if (capability.hasBrowser) panels.push('browser');
+
+  if (!capability.isWorker && capability.hasMonitor) panels.push('monitor');
 
   return panels;
 }

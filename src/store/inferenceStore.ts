@@ -323,16 +323,21 @@ export const useInferenceStore = create<InferenceState>((set, get) => ({
     return result;
   },
 
-  subscribeToConfigChanges: () => subscribeToConfigDomainRevisions({
-    domain: 'inference',
-    subscribe: (listener) => window.piskie.configuration.observeChanges(listener),
-    getSnapshot: () => ({
-      revision: get().config?.revision,
-      descriptorHash: get().descriptors?.inference.descriptorHash,
-    }),
-    refresh: () => refreshStateCoalesced(set),
-    onError: (error) => set({ error: mutationError(error) }),
-  }),
+  subscribeToConfigChanges: () => {
+    const domains = ['inference', 'inference-selections', 'model-catalog'] as const;
+    const unsubscribes = domains.map((domain) => subscribeToConfigDomainRevisions({
+      domain,
+      subscribe: (listener) => window.piskie.configuration.observeChanges(listener),
+      getSnapshot: () => ({
+        revision: domain === 'inference' ? get().config?.revision
+          : domain === 'inference-selections' ? get().selections?.revision : get().localCatalog?.revision,
+        descriptorHash: get().descriptors?.[domain].descriptorHash,
+      }),
+      refresh: () => refreshStateCoalesced(set),
+      onError: (error) => set({ error: mutationError(error) }),
+    }));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  },
 
   addProvider: (gateway, providerId, provider, modelId) => serializeMutation(set, async () => {
     const current = get().config;

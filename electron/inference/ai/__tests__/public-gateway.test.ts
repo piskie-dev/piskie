@@ -9,6 +9,8 @@ import {
 import type { AiAttemptEvent, AiEvent, AiRequest } from '../contracts.js';
 import { DefaultAiGateway } from '../public-gateway.js';
 import { AIRequestInfoCollector } from '../request-info-collector.js';
+import type OpenAI from 'openai';
+import { projectOpenAiChatStream } from '../../drivers/openai/event-projector.js';
 
 const request: AiRequest = {
   model: { providerId: 'chosen-provider', modelId: 'chosen-model' },
@@ -269,36 +271,44 @@ describe('DefaultAiGateway', () => {
     await expect(run.statistics).resolves.toEqual({});
   });
 
-  it('measures visible latency and generation duration at Gateway boundaries', async () => {
+  it('measures first token latency and full attempt duration before iterator cleanup', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(100);
     try {
       const selected = target(async function* (): AsyncIterable<AiAttemptEvent> {
-        vi.setSystemTime(140);
-        yield { kind: 'reasoning.delta', text: 'thought' };
-        vi.setSystemTime(200);
-        yield { kind: 'response.completed', stopReason: 'end_turn' };
+        try {
+          vi.setSystemTime(140);
+          yield { kind: 'response.first_token' };
+          yield { kind: 'reasoning.delta', text: 'thought' };
+          vi.setSystemTime(160);
+          yield { kind: 'text.delta', text: 'answer' };
+          vi.setSystemTime(200);
+          yield { kind: 'response.completed', stopReason: 'end_turn' };
+        } finally {
+          vi.setSystemTime(500);
+        }
       });
       const run = gatewayWith(selected).open(request, context());
 
       await collect(run.events);
 
       await expect(run.statistics).resolves.toEqual({
-        firstVisibleContentLatencyMs: 40,
-        generationDurationMs: 60,
+        firstTokenLatencyMs: 40,
+        attemptDurationMs: 100,
       });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('reports visible timing from the successful retry attempt', async () => {
+  it('reports first token timing from the successful retry attempt', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(100);
     try {
       const selected = target(async function* (_request, attemptContext): AsyncIterable<AiAttemptEvent> {
         if (attemptContext.attempt === 1) {
           vi.setSystemTime(120);
+          yield { kind: 'response.first_token' };
           yield { kind: 'text.delta', text: 'partial' };
           vi.setSystemTime(130);
           throw new GatewayCallError({
@@ -314,6 +324,7 @@ describe('DefaultAiGateway', () => {
           });
         }
         vi.setSystemTime(160);
+        yield { kind: 'response.first_token' };
         yield { kind: 'text.delta', text: 'replacement' };
         vi.setSystemTime(200);
         yield { kind: 'response.completed', stopReason: 'end_turn' };
@@ -323,36 +334,84 @@ describe('DefaultAiGateway', () => {
       await collect(run.events);
 
       await expect(run.statistics).resolves.toEqual({
-        firstVisibleContentLatencyMs: 30,
-        generationDurationMs: 40,
+        firstTokenLatencyMs: 30,
+        attemptDurationMs: 70,
       });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not manufacture visible timing for a tool-only response', async () => {
-    const selected = target(async function* (): AsyncIterable<AiAttemptEvent> {
-      yield { kind: 'tool.started', callId: 'call-1', name: 'lookup' };
-      yield { kind: 'tool.arguments.delta', callId: 'call-1', delta: '{}' };
-      yield { kind: 'tool.completed', callId: 'call-1' };
-      yield { kind: 'response.completed', stopReason: 'tool_use' };
-    });
-    const run = gatewayWith(selected).open(request, context());
+  it('times tool-only Chat arguments when received before the tool id and name', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100);
+    try {
+      const selected = target(() => projectOpenAiChatStream((async function* () {
+        const chunk = (delta: unknown, finish_reason: string | null = null) => ({
+          id: 'chat-example', object: 'chat.completion.chunk', created: 1, model: 'example-model',
+          choices: [{ index: 0, delta, finish_reason }],
+        }) as OpenAI.Chat.Completions.ChatCompletionChunk;
+        vi.setSystemTime(110);
+        yield chunk({ role: 'assistant', content: '' });
+        vi.setSystemTime(140);
+        yield chunk({ tool_calls: [{ index: 0, function: { arguments: '{"value":' } }] });
+        vi.setSystemTime(170);
+        yield chunk({ tool_calls: [{ index: 0, id: 'call-example', function: { name: 'lookup', arguments: '1}' } }] });
+        vi.setSystemTime(200);
+        yield chunk({}, 'tool_calls');
+      })()));
+      const run = gatewayWith(selected).open(request, context());
+      const events = await collect(run.events);
 
-    await collect(run.events);
+      expect(events.filter((event) => event.kind === 'response.first_token')).toMatchObject([
+        { emittedAt: 140, attempt: 1 },
+      ]);
+      expect(events.find((event) => event.kind === 'tool.arguments.delta')).toMatchObject({
+        emittedAt: 170, delta: '{"value":1}',
+      });
+      await expect(run.statistics).resolves.toEqual({
+        firstTokenLatencyMs: 40,
+        attemptDurationMs: 100,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    await expect(run.statistics).resolves.toEqual({});
+  it('measures a tool-only attempt with usage and no generated argument tokens', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100);
+    try {
+      const selected = target(async function* (): AsyncIterable<AiAttemptEvent> {
+        vi.setSystemTime(140);
+        yield { kind: 'tool.started', callId: 'call-example', name: 'example_tool' };
+        yield { kind: 'tool.completed', callId: 'call-example' };
+        vi.setSystemTime(180);
+        yield { kind: 'usage.updated', usage: { totalOutputTokens: 3 } };
+        vi.setSystemTime(200);
+        yield { kind: 'response.completed', stopReason: 'tool_use' };
+      });
+      const run = gatewayWith(selected).open(request, context());
+      const events = await collect(run.events);
+
+      expect(events.map((event) => event.kind)).toEqual([
+        'response.started', 'tool.started', 'tool.completed', 'usage.updated', 'response.completed',
+      ]);
+      await expect(run.statistics).resolves.toEqual({ attemptDurationMs: 100 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps events unchanged and resolves empty statistics when collection fails', async () => {
     const attempt = vi.spyOn(AIRequestInfoCollector.prototype, 'onAttemptStarted')
       .mockImplementation(() => { throw new Error('attempt statistics failed'); });
-    const visible = vi.spyOn(AIRequestInfoCollector.prototype, 'onVisibleContent')
-      .mockImplementation(() => { throw new Error('visible statistics failed'); });
+    const firstToken = vi.spyOn(AIRequestInfoCollector.prototype, 'onFirstToken')
+      .mockImplementation(() => { throw new Error('first token statistics failed'); });
     const complete = vi.spyOn(AIRequestInfoCollector.prototype, 'complete')
       .mockImplementation(() => { throw new Error('completion statistics failed'); });
     const selected = target(async function* (): AsyncIterable<AiAttemptEvent> {
+      yield { kind: 'response.first_token' };
       yield { kind: 'text.delta', text: 'still visible' };
       yield { kind: 'response.completed', stopReason: 'end_turn' };
     });
@@ -362,16 +421,17 @@ describe('DefaultAiGateway', () => {
 
       await expect(collect(run.events)).resolves.toMatchObject([
         { kind: 'response.started' },
+        { kind: 'response.first_token' },
         { kind: 'text.delta', text: 'still visible' },
         { kind: 'response.completed', stopReason: 'end_turn' },
       ]);
       await expect(run.statistics).resolves.toEqual({});
       expect(attempt).toHaveBeenCalledOnce();
-      expect(visible).toHaveBeenCalledOnce();
+      expect(firstToken).toHaveBeenCalledOnce();
       expect(complete).toHaveBeenCalledOnce();
     } finally {
       attempt.mockRestore();
-      visible.mockRestore();
+      firstToken.mockRestore();
       complete.mockRestore();
     }
   });

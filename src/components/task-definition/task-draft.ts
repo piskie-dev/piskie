@@ -9,6 +9,7 @@
  * `mcpServers: undefined`（不设上界）；空数组是「刻意全部禁用」，二者语义不同。
  */
 
+import type { ModelTarget } from '../../../shared/types/inference';
 import type {
   TaskDefinitionCreateInput,
   TaskDefinitionSnapshot,
@@ -28,6 +29,7 @@ export interface TaskDraft {
   readonly mode: 'plan' | 'normal';
   readonly approval: 'confirm' | 'auto';
   readonly im: boolean;
+  readonly model?: ModelTarget;
   /** 绑定的浏览器环境 id（有序） */
   readonly envIds: readonly string[];
   /** MCP 能力上界：'all' = 使用全部生效项；数组 = 有序白名单 */
@@ -62,6 +64,7 @@ export function draftFromTaskDefinition(definition: TaskDefinitionSnapshot): Tas
     envIds: getTaskDefinitionEnvironmentIds(definition),
     mcp: definition.mcpServers === undefined ? 'all' : [...definition.mcpServers],
     workspace: definition.workspace,
+    ...(definition.model ? { model: { ...definition.model } } : {}),
     background: definition.advancedSettings?.backgroundMode,
   };
 }
@@ -118,6 +121,7 @@ export function draftToTaskDefinitionInput(draft: TaskDraft): TaskDefinitionCrea
     defaultModeId: draft.mode,
     defaultApprovalMode: draft.im ? 'auto' : draft.approval,
     workspace: draft.workspace,
+    ...(draft.model ? { model: { ...draft.model } } : {}),
     mcpServers: draft.mcp === 'all' ? undefined : [...draft.mcp],
   };
 }
@@ -134,6 +138,7 @@ export function draftToTaskDefinitionUpdateInput(
 
   return {
     ...input,
+    model: draft.model ?? null,
     category: original.category,
     systemPrompt:
       draft.im || original.purpose === 'messaging'

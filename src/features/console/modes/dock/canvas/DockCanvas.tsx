@@ -83,6 +83,7 @@ function toWorkerInput(worker: CanvasWorker): CanvasWorkerInput {
   return {
     id: worker.id,
     browserId: worker.browserId,
+    browserReady: worker.browserReady,
   };
 }
 

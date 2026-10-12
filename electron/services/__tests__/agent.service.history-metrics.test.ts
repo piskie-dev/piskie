@@ -50,7 +50,7 @@ describe('AgentService history activity state', () => {
         toolDurationMs: 0,
         coverage: {
           toolTiming: 'none',
-          firstVisibleContent: 'none',
+          firstToken: 'none',
           throughput: 'none',
           inputTokens: 'none',
           outputTokens: 'none',

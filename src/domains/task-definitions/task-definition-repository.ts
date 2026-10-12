@@ -94,6 +94,13 @@ export function createTaskDefinitionRepository(
     async update(definitionId, updates) {
       ensureAccepting();
       const definition = await client.update(definitionId, updates);
+      if (accepting) {
+        state.setState((current) => ({
+          definitions: current.definitions.map((item) => (
+            item.definitionId === definition.definitionId ? definition : item
+          )),
+        }));
+      }
       invalidate();
       return definition;
     },

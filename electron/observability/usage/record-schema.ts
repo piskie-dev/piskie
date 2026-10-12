@@ -4,7 +4,7 @@ const count = z.number().finite().nonnegative();
 const text = z.string().max(1024);
 export const usageRecordSchema = z.object({
   schemaVersion: z.literal(1), id: text, runId: text, attempt: z.number().int().positive(),
-  startedAt: count, endedAt: count.optional(), firstResponseMs: count.optional(),
+  startedAt: count, endedAt: count.optional(), firstTokenLatencyMs: count.optional(),
   mainAgentId: text.optional(), agentId: text.optional(), agentType: text.optional(),
   runName: text.optional(), requestId: text.optional(),
   purpose: z.enum(['inference', 'compaction', 'test']),

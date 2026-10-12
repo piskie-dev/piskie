@@ -7,7 +7,7 @@ vi.mock('../../observability/incidents/agent-incident-store.js', () => ({
   agentIncidentStore: { raise: vi.fn(), recover: vi.fn() },
 }));
 
-import type { AgentControlState } from '../../../shared/types/agent-control.js';
+import type { AgentControlState, AgentOutputTokens } from '../../../shared/types/agent-control.js';
 import type { AgentInputEvent } from '../../../shared/types/index.js';
 import type { AiEvent } from '../../inference/ai/contracts.js';
 import { DefaultAiGateway } from '../../inference/ai/public-gateway.js';
@@ -72,6 +72,13 @@ function port(fetch: typeof globalThis.fetch, events: AiEvent[]): DefaultAgentIn
 }
 
 class RetryIntegrationEngine extends AgentEngine {
+  readonly outputUpdates: Array<AgentOutputTokens & { attempt: number }> = [];
+  override emitStateChange(): void {
+    const output = this.getActivityState().activeOutputTokens;
+    if (output) this.outputUpdates.push({ ...output, attempt: this.aiRequestState?.attempt ?? 0 });
+    super.emitStateChange();
+  }
+
   readonly executeTool = vi.fn(async (raw: { callId: string; modelName: string; rawParams: unknown }) =>
     new PendingSettlement(raw.callId, raw.modelName, { ok: true, text: 'Sample tool result' }));
 
@@ -121,9 +128,12 @@ describe('Agent inference retries through the OpenAI SDK', () => {
         case 2:
           return sse([chunk({}, 'stop', { prompt_tokens: 50, completion_tokens: 0 })]);
         case 3:
-          return sse([chunk({ tool_calls: [{
-            index: 0, id: 'call-fresh', type: 'function', function: { name: 'lookup', arguments: '{"id":2}' },
-          }] }, 'tool_calls', { prompt_tokens: 7, completion_tokens: 3 })]);
+          return sse([
+            chunk({ tool_calls: [{
+              index: 0, id: 'call-fresh', type: 'function', function: { name: 'lookup', arguments: '{"id":2}' },
+            }] }, null),
+            chunk({}, 'tool_calls', { prompt_tokens: 7, completion_tokens: 3 }),
+          ]);
         default:
           return sse([chunk({ content: 'Finished.' }, 'stop')]);
       }
@@ -150,6 +160,11 @@ describe('Agent inference retries through the OpenAI SDK', () => {
     expect(successful[0]!.result.usage.cachedInputTokens).toBeUndefined();
     expect(JSON.stringify(context.getAllMessages())).not.toContain('stale');
     expect(JSON.stringify(bodies[3])).not.toContain('stale');
+    // The pure tool-argument stream updates the activity before its final usage and execution.
+    expect(engine.outputUpdates).toContainEqual({ attempt: 2, count: 2, estimated: true });
+    expect(engine.outputUpdates).toContainEqual({ attempt: 2, count: 3, estimated: false });
+    expect(engine.outputUpdates).toContainEqual({ attempt: 0, count: 40, estimated: false });
+    expect(engine.outputUpdates.at(-1)).toEqual({ attempt: 0, count: 6, estimated: true });
     expect(agentIncidentStore.raise).not.toHaveBeenCalled();
   });
 

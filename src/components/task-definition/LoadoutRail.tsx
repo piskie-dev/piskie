@@ -30,10 +30,11 @@ import { useBrowserEnvironmentStore } from '../../store/browserEnvironmentStore'
 import { Toggle } from './controls';
 import { nudgeMcp, type TaskDraft } from './task-draft';
 import type { McpCatalog } from './useEffectiveMcp';
+import { useTaskModel } from './useTaskModel';
 import styles from './taskDefinitionModal.module.css';
 
-type TileKey = 'mode' | 'approval' | 'im' | 'env' | 'mcp' | 'ws' | 'bg';
-type FlyKey = 'mode' | 'approval' | 'env' | 'mcp' | 'ws';
+type TileKey = 'model' | 'mode' | 'approval' | 'im' | 'env' | 'mcp' | 'ws' | 'bg';
+type FlyKey = 'model' | 'mode' | 'approval' | 'env' | 'mcp' | 'ws';
 type FlyAnim = 'deploy' | 'retract' | 'arm' | 'unfold' | null;
 
 /** 牌面摘要用末级目录名——全路径在浮层里完整多行展示 */
@@ -71,6 +72,7 @@ export const LoadoutRail: React.FC<{
   mcp: McpCatalog;
 }> = ({ draft, patch, mcp }) => {
   const { t } = useTranslation();
+  const model = useTaskModel(draft.model);
 
   const environments = useBrowserEnvironmentStore((state) => state.environments);
   const environmentsLoading = useBrowserEnvironmentStore((state) => state.isLoading);
@@ -238,6 +240,12 @@ export const LoadoutRail: React.FC<{
     onFlip?: (on: boolean) => void;
   }> = [
     {
+      key: 'model',
+      label: t('console.taskModel'),
+      value: `${model.source} · ${model.current.summary}`,
+      lit: !!draft.model,
+    },
+    {
       key: 'mode',
       label: t('console.modeId'),
       value: draft.mode === 'plan' ? t('sharedUi.agentParams.plan') : t('sharedUi.agentParams.normal'),
@@ -287,6 +295,7 @@ export const LoadoutRail: React.FC<{
   ];
 
   const flyLit: Record<FlyKey, boolean> = {
+    model: !!draft.model,
     mode: draft.mode !== 'normal',
     approval: approvalAuto,
     env: draft.envIds.length > 0,
@@ -294,6 +303,7 @@ export const LoadoutRail: React.FC<{
     ws: !!draft.workspace,
   };
   const flyLabel: Record<FlyKey, string> = {
+    model: t('console.taskModel'),
     mode: t('console.modeId'),
     approval: t('console.approvalMode'),
     env: t('console.browserEnvBinding'),
@@ -302,6 +312,38 @@ export const LoadoutRail: React.FC<{
   };
 
   const panelFor = (key: FlyKey): React.ReactNode => {
+    if (key === 'model') {
+      return (
+        <>
+          <Choice
+            on={!draft.model}
+            title={t('console.taskModelFollow')}
+            desc={model.globalDefault.summary}
+            onPick={() => patch({ model: undefined })}
+          />
+          {draft.model && (
+            <p className={styles.noteText} data-tone={model.current.unavailable ? 'waiting' : undefined} title={model.current.reference}>
+              {model.source} · {model.current.summary} ({model.current.reference})
+            </p>
+          )}
+          {model.groups.map((group) => (
+            <React.Fragment key={group.options[0]!.target.providerId}>
+              <p className={styles.noteText}>{group.label}</p>
+              {group.options.map((option) => (
+                <Choice
+                  key={option.value}
+                  on={draft.model?.providerId === option.target.providerId && draft.model.modelId === option.target.modelId}
+                  title={option.label}
+                  desc={`${option.target.providerId} / ${option.target.modelId}`}
+                  onPick={() => patch({ model: { ...option.target } })}
+                />
+              ))}
+            </React.Fragment>
+          ))}
+          {draft.im && <p className={styles.noteText}>{t('console.taskModelSessionHint')}</p>}
+        </>
+      );
+    }
     if (key === 'mode') {
       return (
         <>
@@ -568,7 +610,7 @@ export const LoadoutRail: React.FC<{
                     {tile.label}
                     <span className={styles.dot} />
                   </span>
-                  <span className={styles.tileValue}>
+                  <span className={styles.tileValue} title={tile.value}>
                     {tile.key === 'approval' && approvalAuto && <ShieldAlert size={13} />}
                     {tile.value}
                   </span>

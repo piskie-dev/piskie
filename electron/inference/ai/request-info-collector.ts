@@ -1,35 +1,35 @@
 export interface AiRunStatistics {
-  firstVisibleContentLatencyMs?: number;
-  generationDurationMs?: number;
+  firstTokenLatencyMs?: number;
+  attemptDurationMs?: number;
 }
 
 /** Keeps absolute timestamps private to one Gateway run. */
 export class AIRequestInfoCollector {
   private attemptStartedAt?: number;
-  private firstVisibleContentAt?: number;
-  private firstVisibleContentLatencyMs?: number;
+  private firstTokenAt?: number;
+  private firstTokenLatencyMs?: number;
 
   onAttemptStarted(at: number): void {
     this.attemptStartedAt = at;
-    this.firstVisibleContentAt = undefined;
-    this.firstVisibleContentLatencyMs = undefined;
+    this.firstTokenAt = undefined;
+    this.firstTokenLatencyMs = undefined;
   }
 
-  onVisibleContent(at: number): void {
-    if (this.firstVisibleContentAt !== undefined) return;
-    this.firstVisibleContentAt = at;
+  onFirstToken(at: number): void {
+    if (this.firstTokenAt !== undefined) return;
+    this.firstTokenAt = at;
     if (this.attemptStartedAt !== undefined) {
-      this.firstVisibleContentLatencyMs = at - this.attemptStartedAt;
+      this.firstTokenLatencyMs = at - this.attemptStartedAt;
     }
   }
 
   complete(at: number): AiRunStatistics {
     return {
-      ...(this.firstVisibleContentLatencyMs !== undefined && {
-        firstVisibleContentLatencyMs: this.firstVisibleContentLatencyMs,
+      ...(this.firstTokenLatencyMs !== undefined && {
+        firstTokenLatencyMs: this.firstTokenLatencyMs,
       }),
-      ...(this.firstVisibleContentAt !== undefined && {
-        generationDurationMs: at - this.firstVisibleContentAt,
+      ...(this.attemptStartedAt !== undefined && {
+        attemptDurationMs: at - this.attemptStartedAt,
       }),
     };
   }

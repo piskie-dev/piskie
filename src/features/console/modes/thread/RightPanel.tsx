@@ -13,7 +13,7 @@
  * 可见 tab 的清单与关闭集都由模式层（`ThreadMode`）持有：它要用同一份信息决定整栏出不出。
  */
 
-import React, { memo, useCallback, useMemo, type RefObject } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, type RefObject } from 'react';
 import type { ImagePreviewHandler } from '@/components/image-preview/renderedImageContext';
 import { FileDiff, Globe, Monitor, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +37,7 @@ const PANEL_META: Record<PanelKey, { labelKey: string; icon: React.ReactNode }> 
   review: { labelKey: 'sessionWorkbenchUi.panels.review', icon: <FileDiff size={11} /> },
   screen: { labelKey: 'sessionWorkbenchUi.panels.screen', icon: <Monitor size={11} /> },
   browser: { labelKey: 'sessionWorkbenchUi.panels.browser', icon: <Globe size={11} /> },
+  monitor: { labelKey: 'sessionWorkbenchUi.panels.monitor', icon: <Monitor size={11} /> },
 };
 
 /** 槽键 → { ownerId, panel }；ownerId 是 worker id 或主 agent id */
@@ -73,6 +74,8 @@ export interface RightPanelProps {
   readonly browserTarget: AgentTarget;
   readonly browserLayoutAnchors: readonly RefObject<HTMLElement | null>[];
   readonly topRailActions?: React.ReactNode;
+  readonly hidden?: boolean;
+  readonly monitorContent?: React.ReactNode;
 }
 
 export const RightPanel = memo<RightPanelProps>(
@@ -90,11 +93,16 @@ export const RightPanel = memo<RightPanelProps>(
     browserTarget,
     browserLayoutAnchors,
     topRailActions,
+    hidden = false,
+    monitorContent,
   }) => {
     const { t } = useTranslation();
-    const selected = resolveSelectedPanel(wanted, panels);
+    const selected = hidden ? undefined : resolveSelectedPanel(wanted, panels);
     const currentKey = slotKeyOf(agentId, worker?.id, selected ?? 'review');
     const cache = useLruCache(CACHE_LIMIT, currentKey);
+    useEffect(() => {
+      if (selected === 'screen') cache.touch(currentKey);
+    }, [cache.touch, currentKey, selected]);
 
     /**
      * 切页**不清聚焦**。
@@ -152,6 +160,9 @@ export const RightPanel = memo<RightPanelProps>(
         </TopRail>
 
         <div className={styles.body}>
+          <div className={styles.slot} data-hidden={selected === 'monitor' ? undefined : 'true'}>
+            {monitorContent}
+          </div>
           {/* 浏览器页不进 LRU 缓存槽：页面状态活在主进程 WebContentsView，
               React 外壳卸载零成本 */}
           {selected === 'browser' ? (
@@ -173,8 +184,8 @@ export const RightPanel = memo<RightPanelProps>(
                 onPreviewImage={onPreviewImage}
               />
             </div>
-          ) : (
-          slots.map((key) => {
+          ) : selected === 'screen' ? (
+          slots.filter((key) => parseSlotKey(key).panel === 'screen').map((key) => {
             const slot = parseSlotKey(key);
             return (
               <div key={key} className={styles.slot} data-hidden={key === currentKey ? undefined : 'true'}>
@@ -187,7 +198,7 @@ export const RightPanel = memo<RightPanelProps>(
               </div>
             );
           })
-          )}
+          ) : null}
         </div>
       </div>
     );

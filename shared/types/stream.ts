@@ -7,7 +7,7 @@
  * 协议要点:
  * - frame_meta + binary 合并为单条 { type:'frame', ... } 消息(原子,无乱序)
  * - 无端口级重连:renderer reload = 端口 close + 重新 request(主进程按 close 摘除 viewer)
- * - 背压:JPEG 流按 sink "最多 1 帧在途 + latest-wins",Worker 每绘制一帧回 ack
+ * - 背压:JPEG 流按 sink "最多 1 帧在途 + latest-wins",Worker 每解码处理一帧回 ack
  */
 
 /** Renderer 通过 desktop capability 协商浏览器流的 child MessagePort。 */
@@ -24,6 +24,104 @@ export interface BrowserStreamRequest {
 
 export type ScreenStreamRequest = BrowserStreamRequest;
 
+/** Identity owned by the automation connection and its page registry. */
+export interface ScreenPageIdentity {
+  readonly connectionId: string;
+  readonly pageId: number;
+  /** Screen revision for replacement of the main document or an embedded frame. */
+  readonly navigationSequence: number;
+}
+
+/** Registry page IDs identify one live Page/Mouse object within an automation connection. */
+export function sameScreenPageInstance(
+  left: ScreenPageIdentity | null | undefined,
+  right: ScreenPageIdentity | null | undefined,
+): boolean {
+  return !!left && !!right && left.connectionId === right.connectionId && left.pageId === right.pageId;
+}
+
+export function sameScreenPage(
+  left: ScreenPageIdentity | null | undefined,
+  right: ScreenPageIdentity | null | undefined,
+): boolean {
+  return sameScreenPageInstance(left, right) && left!.navigationSequence === right!.navigationSequence;
+}
+
+export type ScreenInputActor = 'ai' | 'manual';
+export type ScreenOperationKind = 'input' | 'select' | 'upload' | 'key' | 'focus' | 'scroll' | 'navigation' | 'operation' | 'dialog';
+
+export interface ScreenOperationActivity {
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly timestamp: number;
+  readonly kind: ScreenOperationKind;
+  readonly actor: ScreenInputActor;
+  readonly pending: boolean;
+  /** Actual observed scroll delta, or the successful wheel input when no delta is known yet. */
+  readonly scroll?: { readonly x: number; readonly y: number };
+}
+
+export interface ScreenElementTarget {
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly timestamp: number;
+  readonly kind: 'input' | 'select' | 'upload' | 'key' | 'focus';
+  readonly actor: ScreenInputActor;
+  /** Main-frame viewport CSS geometry, clipped to the visible control. */
+  readonly x: number;
+  readonly y: number;
+  readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly scrollX: number;
+  readonly scrollY: number;
+  /** A scroll/layout result must not highlight pixels captured before that change. */
+  readonly frameAfter?: number;
+  /** Newer painted pixels require a fresh layout/connection read before highlighting. */
+  readonly frameBefore?: number;
+  /** Captured image validated by this geometry read, including images sharing one millisecond. */
+  readonly frameSeq?: number;
+}
+
+/** Session-owned operation feedback. Mouse origin fields are never rewritten by an element target. */
+export interface ScreenPointer {
+  /** Call-time frame identity of this observation, preserved across later navigation. */
+  readonly page: ScreenPageIdentity;
+  readonly seq: number;
+  readonly x: number;
+  readonly y: number;
+  readonly buttons: number;
+  readonly action: 'move' | 'down' | 'up' | 'wheel' | 'initialize';
+  readonly origin?: 'mouse' | 'initial';
+  readonly actor?: ScreenInputActor;
+  /** Ordering at the shared input owner; the source's own seq and timestamp remain intact. */
+  readonly sourceOrder?: number;
+  readonly revision?: number;
+  readonly target?: ScreenElementTarget;
+  /** Last known element position, with no active target highlight. */
+  readonly positionTarget?: ScreenElementTarget;
+  readonly activity?: ScreenOperationActivity;
+  readonly clickCount: number;
+  /** Unix milliseconds, shared with frame timestamps. */
+  readonly timestamp: number;
+  readonly press?: {
+    /** The actual down observation's frame; feedback belongs only to this image. */
+    readonly page: ScreenPageIdentity;
+    readonly seq: number;
+    readonly x: number;
+    readonly y: number;
+    readonly timestamp: number;
+    readonly clickCount: number;
+    readonly actor?: ScreenInputActor;
+    readonly order?: number;
+  };
+}
+
+/** Maps viewport CSS coordinates to the captured image's coordinate plane. */
+export interface ScreenFrameMapping {
+  readonly scale: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
 /** 帧元数据(语义同旧 WS frame_meta) */
 export interface StreamFrameMeta {
   seq: number;
@@ -33,6 +131,8 @@ export interface StreamFrameMeta {
   scrollX?: number;
   scrollY?: number;
   timestamp: number;
+  page?: ScreenPageIdentity;
+  mapping?: ScreenFrameMapping;
 }
 
 export interface ScreenStreamFailure {
@@ -44,6 +144,12 @@ export interface ScreenStreamFailure {
 /** 主进程 → Worker(经 MessagePort) */
 export type StreamServerMessage =
   | { type: 'started'; browserId: string }
+  | {
+      type: 'screen-state';
+      browserId: string;
+      page: ScreenPageIdentity | null;
+      pointer: ScreenPointer | null;
+    }
   | { type: 'frame'; meta: StreamFrameMeta; data: Uint8Array }
   | { type: 'error'; failure: ScreenStreamFailure };
 
@@ -96,6 +202,6 @@ export type StreamControlMessage =
    * 生效方式同 set-fps(hub 取所有 viewer 的最大值后重启 screencast)。
    */
   | { type: 'set-quality'; quality?: number; maxWidth?: number; maxHeight?: number }
-  /** 每绘制完一帧回执一次,驱动 1-in-flight 背压 */
+  /** 每解码处理一帧回执一次,驱动 1-in-flight 背压；视口可短暂保留已绘制帧。 */
   | { type: 'ack' }
   | { type: 'stop' };

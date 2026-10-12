@@ -14,7 +14,7 @@ let root: Root;
 let dom: JSDOM;
 const records: UsageRecord[] = [
   { schemaVersion: 1, id: 'gateway:1', runId: 'gateway', attempt: 1, startedAt: Date.now(), purpose: 'inference',
-    mainAgentId: 'session-1', runName: 'Example session', requestId: 'request-1', agentId: 'main', agentType: 'main', providerId: 'p', providerName: 'Provider', modelId: 'model', modelName: 'Model', protocol: 'test', configRevision: 0, status: 'success', usage: { totalInputTokens: 100, totalOutputTokens: 20 } },
+    mainAgentId: 'session-1', runName: 'Example session', requestId: 'request-1', agentId: 'main', agentType: 'main', providerId: 'p', providerName: 'Provider', modelId: 'model', modelName: 'Model', protocol: 'test', configRevision: 0, status: 'success', firstTokenLatencyMs: 1250, usage: { totalInputTokens: 100, totalOutputTokens: 20 } },
   { schemaVersion: 1, id: 'probe:1', runId: 'probe', attempt: 1, startedAt: Date.now(), purpose: 'test', providerId: 'p', providerName: 'Provider', modelId: 'model', modelName: 'Model', protocol: 'test', configRevision: 0, status: 'success', usage: {} },
 ];
 function report(filter: UsageFilter): UsageReport {
@@ -80,6 +80,22 @@ async function openFirstCall() {
 }
 
 describe('A report interactions', () => {
+  it.each([
+    { language: 'zh-CN', average: '平均首 token（TTFT）', firstToken: '首 token（TTFT）', details: '调用明细' },
+    { language: 'en-US', average: 'Average first token (TTFT)', firstToken: 'First token (TTFT)', details: 'Calls' },
+  ])('uses the same TTFT in $language overview, call row and detail', async ({ language, average, firstToken, details }) => {
+    await i18n.changeLanguage(language);
+    await render(React.createElement(ModelUsagePage));
+    const metric = [...container.querySelectorAll('strong')].find((node) => node.parentElement?.querySelector('span')?.textContent === average);
+    expect(metric?.textContent).toBe('1.25s');
+    await click(details);
+    expect(container.querySelectorAll('table tbody tr')[0]?.textContent).toContain(`${firstToken} 1.25s`);
+    expect(container.querySelectorAll('table tbody tr')[1]?.textContent).toContain(`${firstToken} —`);
+    await openFirstCall();
+    const definition = [...container.querySelectorAll('dialog[open] dt')].find((node) => node.textContent === firstToken);
+    expect(definition?.nextElementSibling?.textContent).toBe('1.25s');
+  });
+
   it('plots tokens and calls together on independent axes and keeps each scale independent of the other legend', async () => {
     const monthly = report({});
     const samples = Array.from({ length: 3 }, (_, i) => ({ ...records[0]!, id: `sample-${i}`, usage: { totalInputTokens: 1_000_000, totalOutputTokens: 10_000, cachedInputTokens: 400_000 } }));

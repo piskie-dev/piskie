@@ -241,8 +241,7 @@ export class ManagedConfigDomain<
       plan.baseRevision,
       plan.patch,
     );
-    const candidate = this.requireValidCandidate(plan, evaluated);
-    const committed = await this.registration.repository.commit(candidate, expectedRevision);
+    const committed = await this.commitCandidate(plan, evaluated, expectedRevision);
     const publishContext = {
       domain: this.contract.id,
       source: 'apply' as const,
@@ -308,11 +307,11 @@ export class ManagedConfigDomain<
       current.revision,
       [{ op: 'replace', path: '', value: historicalWrite }],
     );
-    const candidate = this.requireValidCandidate(
+    const committed = await this.commitCandidate(
       { id: `rollback:${targetRevision}` },
       evaluated,
+      current.revision,
     );
-    const committed = await this.registration.repository.commit(candidate, current.revision);
     const publishContext = {
       domain: this.contract.id,
       source: 'rollback' as const,
@@ -447,13 +446,7 @@ export class ManagedConfigDomain<
     }
     if (expectedDependencies && !sameRevisionMap(expectedDependencies, dependencyRevisions)) {
       valid = false;
-      issues.push({
-        stage: 'reference',
-        code: 'CONFIG_DEPENDENCY_REVISION_CHANGED',
-        path: '',
-        message: 'A referenced Config Domain changed after this Plan was created',
-        details: { expected: expectedDependencies, actual: dependencyRevisions },
-      });
+      issues.push(dependencyRevisionIssue(expectedDependencies, dependencyRevisions));
     }
     const impacts = await this.registration.adapter.analyzeImpact?.(current, candidate, context) ?? [];
     return {
@@ -462,6 +455,28 @@ export class ManagedConfigDomain<
       impacts,
       dependencyRevisions,
     };
+  }
+
+  private commitCandidate(
+    plan: Pick<ConfigPlanIdentity, 'id'>,
+    evaluated: CandidateEvaluation<TStored>,
+    expectedRevision: number,
+  ): Promise<TStored> {
+    const candidate = this.requireValidCandidate(plan, evaluated);
+    const expected = evaluated.dependencyRevisions;
+    return this.registration.repository.commit(candidate, expectedRevision, {
+      dependencyDomains: Object.keys(expected),
+      validate: async () => {
+        // Recheck under the same file locks held through the destination commit.
+        const actual = await this.registration.adapter.dependencyRevisions?.(candidate) ?? {};
+        if (!sameRevisionMap(expected, actual)) {
+          this.requireValidCandidate(plan, {
+            ...evaluated,
+            validation: { valid: false, issues: [dependencyRevisionIssue(expected, actual)] },
+          });
+        }
+      },
+    });
   }
 
   private deriveWriteView(stored: TStored): TWrite {
@@ -495,6 +510,19 @@ function zodIssues(error: ZodError): ConfigValidationIssue[] {
 
 function escapePointerToken(value: PropertyKey): string {
   return String(value).replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function dependencyRevisionIssue(
+  expected: Readonly<Record<string, number>>,
+  actual: Readonly<Record<string, number>>,
+): ConfigValidationIssue {
+  return {
+    stage: 'reference',
+    code: 'CONFIG_DEPENDENCY_REVISION_CHANGED',
+    path: '',
+    message: 'A referenced Config Domain changed before this configuration could be committed',
+    details: { expected, actual },
+  };
 }
 
 function sameRevisionMap(
