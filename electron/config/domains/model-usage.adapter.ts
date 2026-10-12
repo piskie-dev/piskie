@@ -5,6 +5,11 @@ import { createManagedDomain } from './domain-factory.js';
 export const modelUsageWriteSchema = z.strictObject({
   retentionDays: z.union([z.literal(30), z.literal(90), z.literal(180), z.literal(365), z.null()])
     .describe('UTC calendar days to retain, including today; null retains all. Shortening removes older report history at cleanup.'),
+  providerBudgets: z.record(z.string(), z.strictObject({
+    period: z.enum(['weekly', 'monthly']).describe('Whether the local token budget resets each week or month.'),
+    limit: z.number().int().positive().safe().describe('Maximum locally tracked input and output tokens per period.'),
+    resetAt: z.number().int().min(0).max(8_640_000_000_000_000).describe('A local-calendar reset boundary in milliseconds since epoch.'),
+  })).optional().describe('Display-only token budgets keyed by configured AI Provider ID.'),
 });
 export const modelUsageReadSchema = modelUsageWriteSchema.extend({
   schemaVersion: z.literal(1),

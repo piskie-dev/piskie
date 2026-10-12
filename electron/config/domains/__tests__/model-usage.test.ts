@@ -38,6 +38,22 @@ describe('model-usage managed configuration', () => {
     expect(plan.validation.valid).toBe(false);
   });
 
+  it('saves a provider budget without changing retention or legacy documents', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-config-')); roots.push(root);
+    const registry = new ConfigDomainRegistry(); registry.register(createModelUsageDomain(root));
+    const host = new ConfigHost(registry); await host.initialize();
+    const descriptor = host.describe('model-usage');
+    const field = descriptor.fields.find((entry) => entry.pathTemplate === '/providerBudgets');
+    expect(field).toBeDefined();
+    const budget = { period: 'weekly', limit: 500_000, resetAt: Date.parse('2026-10-05T00:00:00Z') };
+    const plan = await host.createPlan<ConfigPlan>('model-usage', { descriptorHash: descriptor.descriptorHash,
+      changes: [{ op: 'set', fieldId: field!.fieldId, value: { providerA: budget } }] });
+    expect(plan.validation.valid).toBe(true);
+    await host.apply(plan.id, 0);
+    expect(await host.show('model-usage')).toEqual({ schemaVersion: 1, revision: 1, retentionDays: 90,
+      providerBudgets: { providerA: budget } });
+  });
+
   it('reads legacy settings and saves or rolls them back without restoring retired prices', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-config-')); roots.push(root);
     const file = path.join(root, 'config/model-usage.json');

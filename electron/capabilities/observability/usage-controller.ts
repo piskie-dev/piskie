@@ -28,6 +28,8 @@ export function createUsageController(usage: ModelUsageService, presentation: De
     { id: operations.usageDetail, capability: 'observability', input: args([identifier, identifier]),
       execute: (_context, [snapshot, id]) => usage.detail(snapshot as string, id as string) },
     { id: operations.usageStatus, capability: 'observability', input: args([]), execute: () => usage.store.status() },
+    { id: operations.usageBudget, capability: 'observability', input: args([identifier]),
+      execute: (context, [providerId]) => usage.budget(providerId as string, context.signal) },
     { id: operations.usagePreview, capability: 'observability', input: args([z.union([z.literal(30), z.literal(90), z.literal(180), z.literal(365), z.null()]), z.boolean()]),
       execute: (_context, [days, all]) => usage.preview(days as number | null, all as boolean) },
     { id: operations.usageCleanup, capability: 'observability', input: args([z.boolean(), z.boolean()]),

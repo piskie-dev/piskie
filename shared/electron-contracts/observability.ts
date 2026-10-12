@@ -7,13 +7,14 @@ import type {
   LogQueryResponse,
   Occupancy,
 } from '../types/index.js';
-import type { UsageCleanupPreview, UsageFilter, UsagePage, UsageRecord, UsageReport, UsageSort, UsageStorageStatus } from '../types/model-usage.js';
+import type { ProviderTokenBudgetStatus, UsageCleanupPreview, UsageFilter, UsagePage, UsageRecord, UsageReport, UsageSort, UsageStorageStatus } from '../types/model-usage.js';
 
 export const OBSERVABILITY_OPERATIONS = Object.freeze({
   usageQuery: 'observability.usage.query',
   usagePage: 'observability.usage.page',
   usageDetail: 'observability.usage.detail',
   usageStatus: 'observability.usage.status',
+  usageBudget: 'observability.usage.budget',
   usageExport: 'observability.usage.export',
   usagePreview: 'observability.usage.previewCleanup',
   usageCleanup: 'observability.usage.cleanup',
@@ -69,6 +70,7 @@ export interface ObservabilityClient {
     page(snapshotId: string, offset: number, sort: UsageSort, descending: boolean): Promise<UsagePage>;
     detail(snapshotId: string, id: string): Promise<{ record: UsageRecord; related: UsageRecord[] }>;
     status(): Promise<UsageStorageStatus>;
+    budget(providerId: string): Promise<ProviderTokenBudgetStatus | null>;
     /** Returns null when the user cancels the save dialog. */
     export(snapshotId: string, language: AppSettings['language']): Promise<{ exportedCount: number; fileName: string } | null>;
     previewCleanup(days: number | null, all: boolean): Promise<UsageCleanupPreview>;

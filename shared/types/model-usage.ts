@@ -13,6 +13,24 @@ export interface ModelUsageConfig {
   revision: number;
   /** null means keep indefinitely. Includes the current UTC day. */
   retentionDays: 30 | 90 | 180 | 365 | null;
+  providerBudgets?: Record<string, ProviderTokenBudget>;
+}
+
+export interface ProviderTokenBudget {
+  period: 'weekly' | 'monthly';
+  limit: number;
+  /** One reset boundary; subsequent boundaries repeat in local calendar time. */
+  resetAt: number;
+}
+
+export interface ProviderTokenBudgetStatus {
+  budget: ProviderTokenBudget;
+  periodStart: number;
+  periodEnd: number;
+  used: number;
+  remaining?: number;
+  unmeasuredCalls: number;
+  complete: boolean;
 }
 
 export type UsageStatus = 'running' | 'success' | 'failed' | 'cancelled' | 'interrupted';
