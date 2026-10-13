@@ -2322,6 +2322,13 @@ export default {
     entryFacts: '记录事实',
   },
 
+  configValidation: {
+    failed: '配置校验未通过，请检查设置后重试。',
+    issueList: '{{first}}\n{{rest}}',
+    selectionModelStillReferenced: '此模型是当前默认模型，请先选择其他模型，再关闭或删除。',
+    selectionProviderStillReferenced: '此供应商包含当前默认模型，请先选择其他供应商的模型，再关闭或删除该供应商。',
+  },
+
   // 错误反馈
   error: {
     incidentTitle: '运行异常',

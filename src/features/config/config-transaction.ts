@@ -6,6 +6,7 @@ import type {
   ConfigVerificationReport,
 } from '../../../shared/types/config';
 import type { ConfigPlanSnapshot } from '../../../shared/electron-contracts/configuration';
+import { ConfigValidationError } from './config-validation-error';
 
 interface ConfigFieldTarget {
   pathTemplate: string;
@@ -51,9 +52,7 @@ export async function applyConfigFieldChanges(
 
   const plan = await window.piskie.configuration.validate(identity.id);
   if (!plan.validation.valid) {
-    throw new Error(plan.validation.issues
-      .map((issue) => `${issue.path || '/'}: ${issue.message}`)
-      .join('\n'));
+    throw new ConfigValidationError(domain, plan.validation.issues);
   }
 
   const receipt = await window.piskie.configuration.apply(identity.id, expectedRevision);

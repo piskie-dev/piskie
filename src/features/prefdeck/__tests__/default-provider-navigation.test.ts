@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { InferenceConfig, InferenceModelDefinition } from '@shared/types/inference';
+import { messageText } from '@/i18n/presentationText';
 import { useInferenceStore } from '@/store/inferenceStore';
 import { useProxyStore } from '@/store/proxyStore';
 import { useWebSearchStore } from '@/store/webSearchStore';
@@ -71,6 +72,7 @@ afterEach(async () => {
   useInferenceStore.setState(initialInference, true);
   useProxyStore.setState(initialProxy, true);
   useWebSearchStore.setState(initialSearch, true);
+  vi.useRealTimers();
 });
 
 afterAll(() => {
@@ -82,6 +84,34 @@ const twig = (gateway: 'ai' | 'image', id: string) =>
   [...container.querySelectorAll<HTMLButtonElement>(`[data-sub="${gateway}"] button`)]
     .find((button) => button.textContent?.includes(`Provider ${id}`))!;
 const visibleProvider = () => container.querySelector('main')?.textContent ?? '';
+
+it.each(['inference', 'search'] as const)('automatically closes %s errors and restarts the timer for repeated messages', async (source) => {
+  vi.useFakeTimers();
+  const store = source === 'inference' ? useInferenceStore : useWebSearchStore;
+  const showError = () => {
+    const error = messageText('configValidation.selectionModelStillReferenced');
+    if (source === 'inference') useInferenceStore.setState({ error });
+    else useWebSearchStore.setState({ error });
+  };
+  showError();
+  await act(async () => root.render(createElement(MemoryRouter, { initialEntries: ['/preferences?sect=ai'] },
+    createElement(PrefDeckPage))));
+
+  await act(async () => vi.advanceTimersByTime(3999));
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(store.getState().error).toBeNull();
+
+  await act(async () => showError());
+  await act(async () => vi.advanceTimersByTime(3000));
+  await act(async () => showError());
+  await act(async () => vi.advanceTimersByTime(1000));
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  await act(async () => vi.advanceTimersByTime(3000));
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(store.getState().error).toBeNull();
+});
 
 it('follows each gateway default after async config reads, while retaining explicit provider choices', async () => {
   await act(async () => root.render(createElement(MemoryRouter, { initialEntries: ['/preferences?sect=ai'] },

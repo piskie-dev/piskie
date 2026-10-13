@@ -117,6 +117,12 @@ async function validateReferences(
         code: 'INFERENCE_SELECTION_STILL_REFERENCED',
         path: `/providers/${escapePointer(target.providerId)}/models/${escapePointer(target.modelId)}`,
         message: `${gateway} selection still references ${target.providerId}/${target.modelId}.`,
+        details: {
+          gateway,
+          providerId: target.providerId,
+          modelId: target.modelId,
+          targetKind: candidate.providers[target.providerId]?.enabled ? 'model' : 'provider',
+        },
       });
     }
   }
