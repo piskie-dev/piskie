@@ -74,6 +74,11 @@ export interface ConnectedBrowserSession {
   readonly browser: Browser;
 }
 
+export interface BrowserExclusiveOptions {
+  readonly pageId?: number;
+  readonly feedback?: boolean;
+}
+
 /**
  * 浏览器生命周期句柄—— instances 表的 value。
  * 登记的是所有权不是成品：getOrCreate 在第一个创建 await 前同步登记，
@@ -710,7 +715,8 @@ export class BrowserManager {
   static async runExclusive<T>(
     browserId: string,
     operation: (session: ConnectedBrowserSession) => Promise<T> | T,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: BrowserExclusiveOptions = {},
   ): Promise<T> {
     for (;;) {
       signal?.throwIfAborted();
@@ -723,8 +729,12 @@ export class BrowserManager {
         }
 
         signal?.throwIfAborted();
-        return await this.runOperation(instance, ({ automation, browser }) =>
-          automation.withOperationFeedback(() => operation({ automation, browser })), signal);
+        return await this.runOperation(instance, ({ automation, browser }) => {
+          const dispatch = () => operation({ automation, browser });
+          return options.pageId !== undefined || options.feedback
+            ? automation.withTarget(options.pageId, dispatch, { feedback: options.feedback, signal })
+            : automation.withExecutionSignal(dispatch, signal);
+        }, signal);
       } finally {
         guard.dispose();
       }

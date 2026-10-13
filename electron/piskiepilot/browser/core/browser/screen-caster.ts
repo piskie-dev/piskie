@@ -91,6 +91,7 @@ export class ScreenCaster extends EventEmitter {
   private captureGeneration = 0;
   private targetGeneration = 0;
   private startRequested = false;
+  private readonly pendingStarts = new Map<Page, Promise<void>>();
   private identity: ScreenPageIdentity | undefined;
   private inputSequence = 0;
   private frameCapture: { session: CDPSession; generation: number; promise: Promise<void> } | null = null;
@@ -114,6 +115,27 @@ export class ScreenCaster extends EventEmitter {
    */
   async start(): Promise<void> {
     this.startRequested = true;
+    const requestedTargetGeneration = this.targetGeneration;
+    for (;;) {
+      if (this.isRunning) return;
+      const page = this.page;
+      const pending = this.pendingStarts.get(page);
+      if (pending) {
+        // Finish the Page's previous attach/detach before requesting its current capture.
+        // Other Pages can finish independently when an obsolete target stops responding.
+        await pending;
+        if (!this.startRequested || requestedTargetGeneration !== this.targetGeneration) return;
+        continue;
+      }
+      const starting = this.startCapture();
+      this.pendingStarts.set(page, starting);
+      try { await starting; }
+      finally { if (this.pendingStarts.get(page) === starting) this.pendingStarts.delete(page); }
+      return;
+    }
+  }
+
+  private async startCapture(): Promise<void> {
     if (this.isRunning) {
       logger('Screencast already running, skipping start');
       return;

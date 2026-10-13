@@ -1,6 +1,6 @@
 {
   "name": "piskie",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "description": "面向复杂任务的 AI 智能体桌面工作台，统一组织计划、工具与执行过程",
@@ -50,6 +50,9 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench:browser": "node benchmarks/browser/cli.mjs",
+    "bench:browser:test": "node --test benchmarks/browser/tests/*.test.mjs",
+    "bench:browser:core": "vitest run --config benchmarks/browser/vitest.config.ts",
     "test:electron-host:live": "node scripts/verify-electron-host-live.mjs",
     "catalog:pull": "node scripts/model-catalog/pull.mjs",
     "catalog:validate": "node scripts/model-catalog/pull.mjs --check"

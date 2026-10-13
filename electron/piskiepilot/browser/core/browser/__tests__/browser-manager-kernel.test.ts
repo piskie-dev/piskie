@@ -12,7 +12,7 @@ import { fingerprintBrowser } from '../../../fingerprint/runtime.js';
 import { BrowserAutomationSession } from '../../session/browser-automation-session.js';
 import { WindowController } from '../window-controller.js';
 import type { BrowserLaunchSpec } from '../browser-launch-spec.js';
-import { getNetworkRequest } from '../../../skills/browser/index.js';
+import { get_network_request } from '../../../skills/browser/index.js';
 
 type TestBrowserManager = {
   initialized: boolean;
@@ -88,7 +88,9 @@ function fakeBrowser() {
 }
 
 function feedbackSession() {
-  return { withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
+  return { withExecutionSignal: <T>(action: () => Promise<T> | T) => action(),
+    withTarget: <T>(_pageId: number | undefined, action: () => Promise<T> | T) => action(),
+    withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
     getScreenTarget: () => ({ page: {}, identity: { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 } }) };
 }
 
@@ -129,10 +131,13 @@ describe('BrowserManager stop cancellation', () => {
       ...feedbackSession(),
       dispose: vi.fn(),
       throwIfDialogOpen: vi.fn(),
-      getNetworkRequestId: () => 1,
-      getNetworkRequestById: () => ({
-        hasPostData: () => false,
-        response: () => ({ buffer: () => { bodyStarted.resolve(); return new Promise(() => {}); } }),
+      getPage: () => ({}),
+      getNetworkCollector: () => ({
+        getIdForResource: () => 1,
+        getById: () => ({
+          hasPostData: () => false,
+          response: () => ({ buffer: () => { bodyStarted.resolve(); return new Promise(() => {}); } }),
+        }),
       }),
     } as never);
     await BrowserManager.getOrCreate('browser-a', { launchSpec: launchSpec('browser-a', 'profile-a') });
@@ -140,7 +145,8 @@ describe('BrowserManager stop cancellation', () => {
     stop.mockReturnValueOnce(processStopped.promise);
     const controller = new AbortController();
     const reason = new Error('Task stopped');
-    const reading = getNetworkRequest({ browserId: 'browser-a', reqid: 1, signal: controller.signal });
+    const reading = get_network_request({ browserId: 'browser-a', pageId: 1, reqid: 1, signal: controller.signal,
+      files: { cwd: '/workspace', tempDir: '/tmp', allowedRoots: [] } });
     await bodyStarted.promise;
     const operation = vi.fn();
     const queued = BrowserManager.runExclusive('browser-a', operation, controller.signal);

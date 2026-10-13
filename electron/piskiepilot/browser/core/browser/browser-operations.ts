@@ -4,17 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * Navigation behavior from chrome-devtools-mcp 1.7.0 was adapted to Piskie's
+ * Navigation behavior from chrome-devtools-mcp 1.10.1 was adapted to Piskie's
  * BrowserManager lock and structured host/runtime results.
  */
 
-import type { CDPSession, Protocol } from 'puppeteer-core';
+import type { CDPSession, Page, Protocol } from 'puppeteer-core';
 import { BrowserManager } from './browser-manager.js';
 import type { ActionReceipt } from '../session/action-waiter.js';
 import type { BrowserAutomationSession } from '../session/browser-automation-session.js';
 
 export interface BrowserNavigateRequest {
   readonly browserId: string;
+  readonly pageId?: number;
+  readonly handleBeforeUnload?: 'accept' | 'dismiss';
+  readonly initScript?: string;
   readonly type?: 'url' | 'back' | 'forward' | 'reload';
   readonly url?: string;
   readonly ignoreCache?: boolean;
@@ -31,6 +34,7 @@ export interface BrowserNavigationResult extends BrowserPageObservation {
   readonly type: 'url' | 'back' | 'forward' | 'reload';
   readonly receipt: ActionReceipt;
   readonly error?: string;
+  readonly message: string;
 }
 
 export interface BrowserCookiesResult {
@@ -53,7 +57,8 @@ export class BrowserOperations {
     return BrowserManager.runExclusive(
       browserId,
       ({ automation }) => this.navigateInSession(automation, navigation),
-      signal
+      signal,
+      { pageId: request.pageId, feedback: true },
     );
   }
 
@@ -64,56 +69,65 @@ export class BrowserOperations {
     const type = request.type ?? (request.url ? 'url' : undefined);
     if (!type) throw new Error('Either URL or a type is required.');
 
-    const page = automation.getSelectedPage();
-    const timeout = request.timeout && request.timeout <= 0 ? undefined : request.timeout;
+    const page = automation.getPage(request.pageId);
+    const timeout = request.timeout !== undefined && request.timeout <= 0 ? undefined : request.timeout;
     let navigationError: string | undefined;
-
-    const receipt = await automation.waitForAction(async () => {
-      switch (type) {
-        case 'url':
-          if (!request.url) {
-            throw new Error('A URL is required for navigation of type=url.');
-          }
-          try {
-            await page.goto(request.url!, { timeout });
-          } catch (error) {
-            navigationError = errorMessage(error);
-          }
-          break;
-        case 'back':
-          try {
-            await page.goBack({ timeout });
-          } catch (error) {
-            navigationError = errorMessage(error);
-          }
-          break;
-        case 'forward':
-          try {
-            await page.goForward({ timeout });
-          } catch (error) {
-            navigationError = errorMessage(error);
-          }
-          break;
-        case 'reload':
-          try {
-            await page.reload({ timeout, ignoreCache: request.ignoreCache });
-          } catch (error) {
-            navigationError = errorMessage(error);
-          }
-          break;
-      }
-    }, {
-      navigationTimeoutMs: timeout,
-      handleDialog: { beforeunload: 'accept' },
-    });
-
-    if (receipt.dialog?.handled) automation.clearDialog();
-    const selectedPage = automation.getSelectedPage();
+    let initScriptId: string | undefined;
+    if (request.initScript) {
+      initScriptId = (await page.evaluateOnNewDocument(request.initScript)).identifier;
+    }
+    let receipt: ActionReceipt;
+    try {
+      receipt = await automation.waitForAction(async () => {
+        switch (type) {
+          case 'url':
+            if (!request.url) {
+              throw new Error('A URL is required for navigation of type=url.');
+            }
+            try {
+              await page.goto(request.url!, { timeout });
+            } catch (error) {
+              navigationError = errorMessage(error);
+            }
+            break;
+          case 'back':
+            try {
+              await page.goBack({ timeout });
+            } catch (error) {
+              navigationError = errorMessage(error);
+            }
+            break;
+          case 'forward':
+            try {
+              await page.goForward({ timeout });
+            } catch (error) {
+              navigationError = errorMessage(error);
+            }
+            break;
+          case 'reload':
+            try {
+              await page.reload({ timeout, ignoreCache: request.ignoreCache });
+            } catch (error) {
+              navigationError = errorMessage(error);
+            }
+            break;
+        }
+      }, {
+        pageId: request.pageId,
+        navigationTimeoutMs: timeout,
+        handleDialog: { beforeunload: request.handleBeforeUnload ?? 'accept' },
+      });
+    } finally {
+      if (initScriptId) await page.removeScriptToEvaluateOnNewDocument(initScriptId).catch(() => undefined);
+    }
+    if (receipt.dialogHandled) automation.clearDialog(request.pageId);
+    const message = navigationMessage(type, request.url, page.url(), navigationError);
     return {
       type,
-      url: selectedPage.url(),
-      title: await selectedPage.title(),
+      url: page.url(),
+      title: await fetchPageTitle(page),
       receipt,
+      message,
       ...(navigationError !== undefined ? { error: navigationError } : {}),
     };
   }
@@ -256,6 +270,33 @@ export class BrowserOperations {
         await client.detach().catch(() => undefined);
       }
     }, signal);
+  }
+}
+
+// Like McpResponse's optional title read, a paused/closed renderer cannot hold navigation results indefinitely.
+async function fetchPageTitle(page: Page): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      page.title().catch(() => ''),
+      new Promise<string>((resolve) => { timer = setTimeout(() => resolve(''), 1000); }),
+    ]);
+  } finally { if (timer) clearTimeout(timer); }
+}
+
+function navigationMessage(type: BrowserNavigationResult['type'], requestedUrl: string | undefined, finalUrl: string, error?: string): string {
+  if (error !== undefined) {
+    const actions = {
+      url: 'navigate in the selected page', back: 'navigate back in the selected page',
+      forward: 'navigate forward in the selected page', reload: 'reload the selected page',
+    };
+    return `Unable to ${actions[type]}: ${error}.`;
+  }
+  switch (type) {
+    case 'url': return `Successfully navigated to ${requestedUrl}.`;
+    case 'back': return `Successfully navigated back to ${finalUrl}.`;
+    case 'forward': return `Successfully navigated forward to ${finalUrl}.`;
+    case 'reload': return 'Successfully reloaded the page.';
   }
 }
 

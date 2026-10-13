@@ -20,7 +20,8 @@ const cardB = '[data-monitor-task="sample-worker-b|sample-browser-b"]';
 interface SampleWindow extends Window {
   sampleState: { ports: Record<string, number>; errors: string[]; inputs: unknown[]; manualClicked?: boolean };
   sampleUi: {
-    scope(value: string): void; panel(value: boolean): void; gate(value: boolean): void; interactive(value: boolean): void;
+    scope(value: string): void; panel(value: boolean): void; panelWidth(value: number): void; resources(count: number): void;
+    gate(value: boolean): void; interactive(value: boolean): void;
     closeResource(id: string): void; taskState(id: string, type: string | null): void;
     snapshot(): {
       windows: Array<{ key: string; rect: { x: number; y: number; width: number; height: number }; minimized: boolean }>;
@@ -87,7 +88,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium browser monitors',
           response.writeHead(200, { 'Content-Type': 'text/html' }); response.end(browserMonitorUiHtml);
         } else {
           response.writeHead(200, { 'Content-Type': 'text/html' });
-          response.end('<!doctype html><style>body{margin:0;background:#ddeaf5;font:20px sans-serif}button{position:absolute;left:160px;top:160px;width:160px;height:80px}</style><button id="sample-click" onclick="window.sampleClicks=(window.sampleClicks||0)+1">Sample button</button>');
+          response.end('<!doctype html><style>body{margin:0;background:#ddeaf5;font:20px sans-serif;animation:sample-paint 1s infinite alternate}@keyframes sample-paint{to{background:#cfdeec}}button{position:absolute;left:160px;top:160px;width:160px;height:80px}</style><button id="sample-click" onclick="window.sampleClicks=(window.sampleClicks||0)+1">Sample button</button>');
         }
       } catch (error) { response.destroy(error as Error); }
     });
@@ -161,7 +162,110 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium browser monitors',
     await display.mouse.move(x + dx, y + dy, { steps: 8 });
     await display.mouse.up();
   }
-  it('shares screen feeds, contains multiple windows, restores geometry, freezes released resources and forwards existing interactive input', async () => {
+  async function panelGeometry() {
+    return display.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('[data-browser-monitor]')!;
+      const bounds = panel.getBoundingClientRect();
+      const box = (element: Element) => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom };
+      };
+      return {
+        panel: box(panel), scrollHeight: panel.scrollHeight, height: panel.clientHeight, scrollWidth: panel.scrollWidth, width: panel.clientWidth,
+        cards: [...panel.querySelectorAll<HTMLElement>('[data-monitor-task]')].map((card) => {
+          const rect = card.getBoundingClientRect();
+          const screen = card.querySelector('[data-screen-state]')!;
+          const canvas = card.querySelector('canvas')!;
+          return { key: card.dataset.monitorTask, card: box(card), screen: box(screen), canvas: box(canvas),
+            footer: box(card.lastElementChild!), ratio: canvas.getBoundingClientRect().width / canvas.getBoundingClientRect().height,
+            contained: rect.left >= bounds.left && rect.right <= bounds.right + 1 && rect.top >= bounds.top && rect.bottom <= bounds.bottom + 1 };
+        }),
+      };
+    });
+  }
+  it('splits two monitors into one row and adapts single, multiple and resized panels to the available space', async () => {
+    await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.resources(2));
+    await display.waitForFunction(() => document.querySelectorAll('[data-browser-monitor] canvas[data-visible="true"]').length === 2);
+    const layouts = [];
+    for (const size of [{ width: 1440, height: 1000, panel: 560 }, { width: 1440, height: 650, panel: 1100 },
+      { width: 960, height: 400, panel: 280 }, { width: 1440, height: 400, panel: 800 }]) {
+      await display.setViewport({ width: size.width, height: size.height });
+      await display.evaluate((width) => (window as unknown as SampleWindow).sampleUi.panelWidth(width), size.panel);
+      await display.waitForFunction(() => document.querySelector('[data-browser-monitor]')!.getBoundingClientRect().height > 0);
+      const layout = await panelGeometry();
+      expect(layout.cards).toHaveLength(2);
+      const [a, b] = layout.cards;
+      expect(a!.card.y).toBeCloseTo(b!.card.y, 1);
+      expect(a!.card.right).toBeLessThan(b!.card.x);
+      expect(a!.card.width).toBeCloseTo(b!.card.width, 1);
+      expect(layout.scrollHeight).toBeLessThanOrEqual(layout.height + 1);
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+      for (const item of layout.cards) {
+        expect(item.contained).toBe(true);
+        expect(item.screen.height).toBeGreaterThan(0);
+        expect(item.canvas.right).toBeLessThanOrEqual(item.screen.right + 1);
+        expect(item.canvas.bottom).toBeLessThanOrEqual(item.screen.bottom + 1);
+        expect(item.footer.bottom).toBeLessThanOrEqual(item.card.bottom + 1);
+        expect(item.ratio).toBeCloseTo(1.6, 2);
+      }
+      layouts.push({ size, ...layout });
+      if (process.env.PISKIE_TEST_ARTIFACT_DIR && size.panel === 560) {
+        await display.screenshot({ path: join(process.env.PISKIE_TEST_ARTIFACT_DIR, 'monitor-two-column.png') });
+      }
+    }
+    evidence.panelLayouts = layouts;
+    await sources[0]!.setViewport({ width: 800, height: 2000 });
+    await sources[1]!.setViewport({ width: 1800, height: 600 });
+    await display.waitForFunction(() => {
+      const canvases = [...document.querySelectorAll<HTMLCanvasElement>('[data-browser-monitor] canvas')];
+      return Math.abs(canvases[0]!.getBoundingClientRect().width / canvases[0]!.getBoundingClientRect().height - 0.4) < 0.01
+        && Math.abs(canvases[1]!.getBoundingClientRect().width / canvases[1]!.getBoundingClientRect().height - 3) < 0.01;
+    });
+    const changedRatios = await panelGeometry();
+    expect(changedRatios.cards[0]!.card.y).toBeCloseTo(changedRatios.cards[1]!.card.y, 1);
+    expect(changedRatios.cards.every((item) => item.contained && item.canvas.bottom <= item.screen.bottom + 1)).toBe(true);
+    expect(changedRatios.scrollHeight).toBeLessThanOrEqual(changedRatios.height + 1);
+    if (process.env.PISKIE_TEST_ARTIFACT_DIR) {
+      await display.screenshot({ path: join(process.env.PISKIE_TEST_ARTIFACT_DIR, 'monitor-resized-ratios.png') });
+    }
+    await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.resources(1));
+    await display.waitForFunction(() => document.querySelectorAll('[data-monitor-task]').length === 1);
+    const single = await panelGeometry();
+    expect(single.cards[0]!.contained).toBe(true);
+    expect(single.cards[0]!.card.width).toBeGreaterThan(changedRatios.cards[0]!.card.width * 1.9);
+    expect(single.cards[0]!.screen.height).toBeGreaterThan(0);
+    expect(single.scrollHeight).toBeLessThanOrEqual(single.height + 1);
+    await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.resources(6));
+    await display.waitForFunction(() => document.querySelectorAll('[data-monitor-task]').length === 6);
+    const multiple = await panelGeometry();
+    expect(multiple.cards[0]!.card.y).toBeCloseTo(multiple.cards[1]!.card.y, 1);
+    expect(multiple.cards[2]!.card.y).toBeGreaterThan(multiple.cards[0]!.card.bottom);
+    expect(multiple.scrollHeight).toBeGreaterThan(multiple.height);
+    await display.$eval('[data-browser-monitor]', (panel) => { panel.scrollTop = panel.scrollHeight; });
+    const scrolled = await panelGeometry();
+    expect(scrolled.cards.slice(-2).every((item) => item.contained)).toBe(true);
+    expect(scrolled.cards.every((item) => item.screen.height > 0 && item.footer.bottom <= item.card.bottom + 1)).toBe(true);
+    evidence.panelLayouts = layouts;
+    evidence.changedFrameRatios = changedRatios;
+    evidence.singlePanel = single;
+    evidence.multiplePanel = scrolled;
+    await Promise.all(sources.map((source) => source.setViewport({ width: 1280, height: 800 })));
+    await display.setViewport({ width: 1440, height: 1000 });
+    await display.evaluate(() => {
+      (window as unknown as SampleWindow).sampleUi.resources(3);
+      (window as unknown as SampleWindow).sampleUi.panelWidth(560);
+    });
+    await display.$eval('[data-browser-monitor]', (panel) => { panel.scrollTop = 0; });
+    await display.waitForFunction(() => [...document.querySelectorAll<HTMLCanvasElement>('[data-browser-monitor] canvas[data-visible="true"]')]
+      .every((canvas) => Math.abs(canvas.getBoundingClientRect().width / canvas.getBoundingClientRect().height - 1.6) < 0.01));
+  }, 30_000);
+  it('shares screen feeds, contains multiple windows, restores geometry, removes released resources and forwards existing interactive input', async () => {
+    await Promise.all(sources.map((source) => source.setViewport({ width: 1280, height: 800 })));
+    await display.setViewport({ width: 1440, height: 1000 });
+    await display.evaluate(() => {
+      (window as unknown as SampleWindow).sampleUi.resources(3);
+      (window as unknown as SampleWindow).sampleUi.panelWidth(560);
+    });
     await display.waitForFunction(() => document.querySelectorAll('[data-browser-monitor] canvas[data-visible="true"]').length === 2);
     expect(await display.$eval('[data-monitor-task="sample-worker-c|sample-browser-c"]', (element) => element.textContent)).toContain('Waiting for the browser');
     const line = await display.$eval('[data-worker-line]', (element) => {
@@ -254,18 +358,22 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium browser monitors',
     expect(await display.$eval(cardA, (element) => element.textContent)).toContain('Executing');
     evidence.geometry = await geometry();
     if (process.env.PISKIE_TEST_ARTIFACT_DIR) await display.screenshot({ path: join(process.env.PISKIE_TEST_ARTIFACT_DIR, 'monitor-windows.png') });
-    const picture = await (await display.$(`${cardA} canvas`))!.boundingBox();
-    const pixelClip = { x: picture!.x + 10, y: picture!.y + 10, width: 8, height: 8 };
-    const beforeClosure = await display.screenshot({ clip: pixelClip });
     await BrowserManager.close('sample-browser-a');
     await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.closeResource('sample-worker-a'));
     await display.waitForFunction(() => (window as unknown as SampleWindow).sampleUi.snapshot().feeds === 1);
-    expect(await display.$eval(`${cardA} canvas`, (canvas) => canvas.getAttribute('data-visible'))).toBe('true');
-    expect(await display.$eval(winA, (element) => element.textContent)).toContain('Frozen last frame');
-    expect(Buffer.from(await display.screenshot({ clip: pixelClip }))).toEqual(Buffer.from(beforeClosure));
+    expect(await display.$(cardA)).toBeNull();
+    expect(await display.$(winA)).toBeNull();
+    expect(await display.$(`${cardB} canvas[data-visible="true"]`)).not.toBeNull();
+    expect(await display.$(winB)).not.toBeNull();
     await display.click('[data-monitor-task="sample-worker-c|sample-browser-c"] button');
     await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.closeResource('sample-worker-c'));
-    await display.waitForFunction(() => document.querySelector('[data-monitor-window="sample-worker-c|sample-browser-c"]')?.textContent?.includes('No captured frame'));
+    await display.waitForFunction(() => !document.querySelector('[data-monitor-window="sample-worker-c|sample-browser-c"]'));
+    expect(await display.$('[data-monitor-task="sample-worker-c|sample-browser-c"]')).toBeNull();
+    const remainingPanel = await panelGeometry();
+    expect(remainingPanel.cards).toHaveLength(1);
+    expect(remainingPanel.cards[0]!.contained).toBe(true);
+    if (process.env.PISKIE_TEST_ARTIFACT_DIR) await display.screenshot({ path: join(process.env.PISKIE_TEST_ARTIFACT_DIR, 'monitor-after-close.png') });
+    evidence.remainingPanel = remainingPanel;
     expect(await display.evaluate(() => (window as unknown as SampleWindow).sampleState.errors)).toEqual([]);
     evidence.ports = await display.evaluate(() => (window as unknown as SampleWindow).sampleState.ports);
     evidence.sourceViewport = [1280, 800];
@@ -279,7 +387,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium browser monitors',
     await display.click(`${winB} [aria-label="Minimize"]`);
     await display.waitForFunction(() => (window as unknown as SampleWindow).sampleUi.snapshot().windows.find((item) => item.key === 'sample-worker-b|sample-browser-b')?.minimized === true);
     await display.waitForSelector('[aria-label="Restore Sample task B"]');
-    const savedWindow = await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.snapshot().windows.find((item) => item.key === 'sample-worker-b|sample-browser-b'));
+
     await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.scope('sample-other-main'));
     await display.waitForFunction(() => (window as unknown as SampleWindow).sampleUi.snapshot().feeds === 0);
     expect(await display.$('[data-monitor-parking]')).toBeNull();
@@ -288,18 +396,19 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium browser monitors',
     await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.scope('sample-main'));
     await display.waitForFunction(() => {
       const state = (window as unknown as SampleWindow).sampleUi.snapshot();
-      return state.tasks.length === 3 && state.tasks.every((task) => task.closed && !task.hasFrame);
+      return state.tasks.length === 0 && state.windows.length === 0;
     });
     expect(await display.$('canvas[data-visible="true"]')).toBeNull();
     expect(await display.$(`${cardA}:not([hidden])`)).toBeNull();
     expect(await display.$(`${cardB}:not([hidden])`)).toBeNull();
     expect(await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.snapshot().feeds)).toBe(0);
-    expect(await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.snapshot().windows.find((item) => item.key === 'sample-worker-b|sample-browser-b'))).toEqual(savedWindow);
+    expect(await display.$('[data-monitor-window]')).toBeNull();
+    expect(await display.$('[data-monitor-parking]')).toBeNull();
+    expect(await display.$('[data-monitor-task]')).toBeNull();
     expect(await display.evaluate(() => (window as unknown as SampleWindow).sampleState.errors)).toEqual([]);
     evidence.departedFramesDiscarded = true;
     evidence.resourceClosedWhileAway = true;
-    evidence.parkedGeometryPreservedAcrossScope = true;
-    evidence.savedParkedWindow = savedWindow;
+    evidence.closedParkedWindowRemoved = true;
     evidence.afterScopeReturn = await display.evaluate(() => (window as unknown as SampleWindow).sampleUi.snapshot());
   }, 45_000);
 });

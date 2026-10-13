@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * Adapted from chrome-devtools-mcp@1.7.0 src/utils/pagination.ts.
+ * Adapted from chrome-devtools-mcp@1.10.1 src/utils/pagination.ts and
+ * src/McpResponse.ts (dataWithPagination).
  */
 
 export interface PaginationOptions {

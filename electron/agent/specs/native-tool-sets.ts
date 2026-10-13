@@ -14,19 +14,17 @@ export const WORKSPACE_TOOL_NAMES = [
 ] as const;
 
 const BROWSER_READ_NAV_FUNCTIONS = new Set([
-  'takeSnapshot',
-  'navigateTo',
-  'goBack',
-  'refresh',
-  'listPages',
-  'selectPage',
-  'takeScreenshot',
+  'take_snapshot',
+  'navigate_page',
+  'list_pages',
+  'select_page',
+  'take_screenshot',
 ]);
 
 const BROWSER_SCOUT_FUNCTIONS = new Set([
   ...BROWSER_READ_NAV_FUNCTIONS,
-  'clickByUid',
-  'hoverByUid',
+  'click',
+  'hover',
 ]);
 
 const BROWSER_BUILDER_EXCLUDED_FUNCTIONS = new Set([

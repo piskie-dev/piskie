@@ -84,8 +84,19 @@ function browserFixture() {
     dispose: vi.fn(),
     getScreenTarget: () => ({ page, identity: { connectionId: 'sample-connection', pageId: 1, navigationSequence: 0 } }),
     withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
+    withExecutionSignal: <T>(action: () => Promise<T> | T) => action(),
+    withTarget: <T>(_pageId: number | undefined, action: (target: typeof page) => Promise<T> | T) => action(page),
+    getPage: () => page,
+    getPageById: () => page,
     getSelectedPage: () => page,
+    getSelectedPageId: () => 1,
     getSelectedPageIndex: () => 0,
+    consumeSelectedPageFallback: () => undefined,
+    getDialog: () => undefined,
+    getActiveSnapshot: () => undefined,
+    getConsoleCollector: () => ({ getData: () => [] }),
+    getNetworkCollector: () => ({ getData: () => [] }),
+    getServiceWorkerConsoleCollector: () => ({ getData: () => [] }),
     listPages: vi.fn(async () => [{ pageId: 1, page }]),
     consumePageChanges: vi.fn(async () => ({ opened: [], closed: [] })),
     takeSnapshot: vi.fn(async () => ({
@@ -259,7 +270,10 @@ function calls(module: BrowserModule, approval?: ApprovalRequestPort) {
     async run(functionName: string, custom = false, args: Record<string, unknown> = {}) {
       const result = await coordinator.run({
         modelName: custom ? 'skill_call' : `browser_${functionName}`,
-        rawParams: custom ? { skill: 'sample-site', function: functionName, args } : args,
+        rawParams: custom ? { skill: 'sample-site', function: functionName, args } : {
+          ...(['take_snapshot', 'list_console_messages', 'list_network_requests'].includes(functionName) ? { pageId: 1 } : {}),
+          ...args,
+        },
         callId: 'sample-call',
       }, snapshot);
       if ('suspended' in result) throw new Error('Unexpected sample call suspension');
@@ -313,7 +327,7 @@ describe('BrowserModule lazy browser access', () => {
     expectNoStartup();
   });
 
-  it.each(['listPages', 'takeSnapshot', 'listConsoleMessages', 'listNetworkRequests', 'getAllCookies', 'getWindowBounds'])(
+  it.each(['list_pages', 'take_snapshot', 'list_console_messages', 'list_network_requests', 'getAllCookies', 'getWindowBounds'])(
     'starts on the first builtin %s read and marks its usable Page ready',
     async (functionName) => {
       const { module, emitStateChange } = await startModule();
@@ -366,7 +380,7 @@ describe('BrowserModule lazy browser access', () => {
     vi.mocked(puppeteer.connect).mockClear();
     const { module } = await startModule();
     expect(browserEnvironmentRuntime.recordAgentBrowserStarted).not.toHaveBeenCalled();
-    expect(await calls(module).run('listPages')).toMatchObject({ ok: true });
+    expect(await calls(module).run('list_pages')).toMatchObject({ ok: true });
     expect(browserEnvironmentRuntime.planLaunch).not.toHaveBeenCalled();
     expect(fingerprintBrowser.launch).not.toHaveBeenCalled();
     expect(puppeteer.connect).not.toHaveBeenCalled();
@@ -382,7 +396,7 @@ describe('BrowserModule lazy browser access', () => {
     const { module } = await startModule();
     const runtime = sdk(module);
     const reading = Promise.all([
-      module.core.listPages({ browserId: BROWSER_ID }),
+      module.core.list_pages({ browserId: BROWSER_ID }),
       runtime.page.currentPage(),
       runtime.listPages(),
     ]);
@@ -405,14 +419,14 @@ describe('BrowserModule lazy browser access', () => {
     const request = vi.fn(() => decision.promise);
     const { module } = await startModule();
     const tools = calls(module, { request });
-    const running = tools.run(custom ? 'currentPage' : 'listPages', custom);
+    const running = tools.run(custom ? 'currentPage' : 'list_pages', custom);
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
     expectNoStartup();
     decision.resolve({ callId: 'sample-call', decision: 'deny' });
     expect(await running).toEqual({ ok: false, text: REJECT.approvalDenied() });
     expectNoStartup();
     request.mockResolvedValueOnce({ callId: 'sample-call', decision: 'allow' });
-    expect(await tools.run(custom ? 'currentPage' : 'listPages', custom)).toMatchObject({ ok: true });
+    expect(await tools.run(custom ? 'currentPage' : 'list_pages', custom)).toMatchObject({ ok: true });
     expect(fingerprintBrowser.launch).toHaveBeenCalledOnce();
     expect(vi.mocked(fingerprintBrowser.launch).mock.invocationCallOrder[0]).toBeGreaterThan(request.mock.invocationCallOrder[1]);
   });
@@ -434,7 +448,7 @@ describe('BrowserModule lazy browser access', () => {
     const planning = deferred<BrowserLaunchSpec>();
     vi.mocked(browserEnvironmentRuntime.planLaunch).mockReturnValueOnce(planning.promise);
     const { module } = await startModule();
-    const reading = module.core.listPages({ browserId: BROWSER_ID });
+    const reading = module.core.list_pages({ browserId: BROWSER_ID });
     const rejected = expect(reading).rejects.toThrow('terminated');
     await vi.waitFor(() => expect(browserEnvironmentRuntime.planLaunch).toHaveBeenCalledOnce());
     const signal = vi.mocked(browserEnvironmentRuntime.planLaunch).mock.calls[0][4]!;
@@ -453,7 +467,7 @@ describe('BrowserModule lazy browser access', () => {
     const connecting = deferred<Awaited<ReturnType<typeof puppeteer.connect>>>();
     vi.mocked(puppeteer.connect).mockReturnValueOnce(connecting.promise);
     const { module } = await startModule();
-    const reading = module.core.listPages({ browserId: BROWSER_ID });
+    const reading = module.core.list_pages({ browserId: BROWSER_ID });
     const rejected = expect(reading).rejects.toThrow('terminated');
     await vi.waitFor(() => expect(puppeteer.connect).toHaveBeenCalledOnce());
     await module.onDestroyBegin();

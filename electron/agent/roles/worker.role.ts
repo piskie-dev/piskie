@@ -103,8 +103,8 @@ export class WorkerRole implements AgentRole {
       executeMode: () => (host.approvalMode === 'auto' ? 'parallel' : 'sequential'),
 
       onAfterExecute: (toolUse: ToolUseInput, result: unknown) => {
-        // navigateTo 成功后标记浏览器已启动，前端才开始订阅视频流
-        if (toolUse.name === 'browser_navigateTo' && (result as { ok?: boolean })?.ok) {
+        // 导航成功后开始展示浏览器。
+        if (toolUse.name === 'browser_navigate_page' && (result as { ok?: boolean })?.ok) {
           bcModule?.markBrowserLaunched();
         }
       },

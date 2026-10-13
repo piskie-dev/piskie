@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Page } from 'puppeteer-core';
-import type { AgentControlState, ConversationEntry } from '../../../../../../shared/types/agent-control.js';
+import type { AgentControlState } from '../../../../../../shared/types/agent-control.js';
 import { AgentEngine, type TurnOutcome } from '../../../../../agent/agent-engine.js';
 import type { TrustedBrowserSkillContext } from '../../../../core/skill/host.js';
 import { BrowserManager } from '../browser-manager.js';
@@ -36,15 +36,15 @@ class BrowserStopEngine extends AgentEngine {
   protected override applyEvents(): void {}
   protected override handlePumpCancelled(): void { this.cancelled = true; }
   protected override handlePumpFailure(error: unknown): void { this.failure = error; }
-  protected override appendConversationEntry(_entry: ConversationEntry): void {}
+  protected override appendConversationEntry(): void {}
   buildSystemPrompt(): string { return ''; }
   getControlState(): AgentControlState { return { agentId: this.id, phase: this.phase } as AgentControlState; }
 }
 
-function context(signal: AbortSignal): TrustedBrowserSkillContext {
+function context(signal: AbortSignal, root: string): TrustedBrowserSkillContext {
   return {
     browserId: 'browser-a', signal, log: vi.fn(),
-    workspace: { dir: '/workspace', tempDir: '/workspace/tmp' },
+    workspace: { dir: root, tempDir: root },
     browser: { core, notifyPageOpen: vi.fn() } as unknown as TrustedBrowserSkillContext['browser'],
   };
 }
@@ -131,7 +131,8 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('browser stop with a real managed
     const buffer = vi.spyOn(request.response()!, 'buffer');
     let rawBodySettled = false;
     void request.response()!.buffer().then(() => { rawBodySettled = true; }, () => { rawBodySettled = true; });
-    engine = new BrowserStopEngine((signal) => skill.functions.getNetworkRequest.run({ reqid }, context(signal)));
+    const pageId = (await BrowserManager.getScreenSession('browser-a')).getSelectedPageId();
+    engine = new BrowserStopEngine((signal) => skill.functions.get_network_request.run({ pageId, reqid }, context(signal, root)));
     engine.start();
     await vi.waitFor(() => expect(buffer).toHaveBeenCalledTimes(2));
     expect(rawBodySettled).toBe(false);
@@ -140,9 +141,10 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('browser stop with a real managed
   }, 15_000);
 
   it('destroys a runtime blocked on a page function that never returns', async () => {
-    engine = new BrowserStopEngine((signal) => skill.functions.evaluateScript.run({
-      function: '() => { window.pendingStopCheck = true; return new Promise(() => {}); }',
-    }, context(signal)));
+    const pageId = (await BrowserManager.getScreenSession('browser-a')).getSelectedPageId();
+    engine = new BrowserStopEngine((signal) => skill.functions.evaluate_script.run({
+      pageId, function: '() => { window.pendingStopCheck = true; return new Promise(() => {}); }',
+    }, context(signal, root)));
     engine.start();
     await page.waitForFunction('window.pendingStopCheck === true', { timeout: 5_000 });
     await stopAndCheckProcess();

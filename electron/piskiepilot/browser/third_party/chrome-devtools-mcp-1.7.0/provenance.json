@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
+  "recordStatus": "historical-baseline-with-retained-helpers",
+  "recordDescription": "Original 1.7.0 source hashes and adaptation descriptions are retained as historical attribution. Refreshed portions have a separate 1.10.1 source record; keyboard.ts and file-roots.ts still carry this baseline attribution.",
+  "updatedSourceRecord": "../chrome-devtools-mcp-1.10.1/provenance.json",
+  "currentRetainedFiles": [
+    "electron/piskiepilot/browser/core/session/keyboard.ts",
+    "electron/piskiepilot/browser/core/session/file-roots.ts"
+  ],
   "package": "chrome-devtools-mcp",
   "version": "1.7.0",
   "commit": "774d78f5eef5e610407a0c92fa6ec5ed74b027e8",

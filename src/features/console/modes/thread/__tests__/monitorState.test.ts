@@ -12,14 +12,23 @@ describe('monitor resource lifecycle', () => {
     }]);
     expect(completed[0]).toMatchObject({ ready: true, closed: false });
     const closed = reconcileMonitorTasks(completed.map((item) => ({ ...item, hasFrame: true })), []);
-    expect(closed[0]).toMatchObject({ closed: true, ready: false, hasFrame: true });
+    expect(closed).toEqual([]);
   });
-  it('distinguishes a removed browser from a never-captured picture and a new browser on the same worker', () => {
-    const old = reconcileMonitorTasks([], [task]);
+  it('replaces the previous browser key without carrying its captured picture into the new browser', () => {
+    const old = reconcileMonitorTasks([], [task]).map((item) => ({ ...item, hasFrame: true }));
     const next = reconcileMonitorTasks(old, [{ ...task, browserId: 'sample-next-browser' }]);
-    expect(next).toHaveLength(2);
-    expect(next[0]).toMatchObject({ closed: true, hasFrame: false });
-    expect(next[1]).toMatchObject({ closed: false, browserId: 'sample-next-browser' });
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({ key: 'sample-worker|sample-next-browser', closed: false, hasFrame: false });
+  });
+  it('removes departed browsers while preserving the current browser and its frame', () => {
+    const remaining = { ...task, id: 'sample-other-worker', browserId: 'sample-other-browser', browserReady: true };
+    const previous = reconcileMonitorTasks([], [task, remaining]).map((item) => ({ ...item, hasFrame: true }));
+    expect(reconcileMonitorTasks(previous, [remaining])).toEqual([previous[1]]);
+    expect(reconcileMonitorTasks(previous, [{ ...task, browserId: undefined }])).toEqual([]);
+  });
+  it('keeps an allocated browser while readiness changes', () => {
+    const previous = reconcileMonitorTasks([], [{ ...task, browserReady: true }]);
+    expect(reconcileMonitorTasks(previous, [task])[0]).toMatchObject({ ready: false, closed: false });
   });
 });
 describe('floating monitor geometry', () => {

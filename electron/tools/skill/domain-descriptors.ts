@@ -10,10 +10,8 @@ import type {
   ITool,
   ToolContext,
   ToolEffect,
-  ToolOutput,
   ToolScope,
 } from '../types.js';
-import { isToolSuspension } from '../types.js';
 import { buildSkillEntries } from './register-skill-functions.js';
 import { appLog } from '../../observability/logging/app-log.js';
 
@@ -51,32 +49,6 @@ function localContext(skillName: string, ctx: ToolContext) {
     taskId: ctx.agentId,
     executorId: ctx.agentId,
     log: skillLog(skillName, ctx),
-  };
-}
-
-function wrapBrowserScreenshot(
-  base: ITool<Record<string, unknown>, unknown>,
-): ITool<Record<string, unknown>, unknown> {
-  return {
-    def: base.def,
-    prepare: base.prepare?.bind(base),
-    async execute(params, ctx): Promise<ToolOutput<unknown>> {
-      if (!ctx.browser) throw new Error('Browser runtime is unavailable');
-      const target = await ctx.browser.prepareScreenshot(params);
-      try {
-        const output = await base.execute(params, ctx);
-        if (isToolSuspension(output)) {
-          await ctx.browser.cleanupScreenshot(target);
-          throw new Error('Browser screenshot cannot suspend');
-        }
-        if (output.ok) await ctx.browser.finalizeScreenshot(target);
-        else await ctx.browser.cleanupScreenshot(target);
-        return output;
-      } catch (error) {
-        await ctx.browser.cleanupScreenshot(target);
-        throw error;
-      }
-    },
   };
 }
 
@@ -164,7 +136,7 @@ export function descriptorFor<
   if (skill.domain === 'browser') {
     const trusted = skill.provenance.trust === 'builtin';
     const wrapExecute = trusted
-      ? { takeScreenshot: wrapBrowserScreenshot }
+      ? undefined
       : Object.fromEntries(
           Object.keys(skill.functions).map((functionName) => [functionName, wrapCustomBrowserCall])
         );

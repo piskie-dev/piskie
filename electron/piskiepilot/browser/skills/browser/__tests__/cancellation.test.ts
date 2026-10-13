@@ -14,30 +14,28 @@ import skill from '../skill.js';
 import * as core from '../index.js';
 
 const inputs = {
-  takeSnapshot: {},
-  clickByUid: { uid: '1_1' },
-  fillByUid: { uid: '1_1', value: 'example' },
-  typeText: { text: 'Example 中文😀\n' },
-  pressKey: { key: 'Enter' },
-  navigateTo: { url: 'https://example.test' },
-  goBack: {},
-  refresh: {},
-  newPage: { url: 'https://example.test' },
-  closePage: { pageIndex: 0 },
-  listPages: {},
-  selectPage: { pageIdx: 0 },
-  handleDialog: { action: 'dismiss' },
-  waitFor: { text: ['Ready'] },
-  hoverByUid: { uid: '1_1' },
-  drag: { fromUid: '1_1', toUid: '1_2' },
-  uploadFile: { uid: '1_1', filePath: '/workspace/input.txt' },
-  fillFormByUids: { elements: [{ uid: '1_1', value: 'example' }] },
-  takeScreenshot: {},
-  evaluateScript: { function: '() => 1' },
-  listConsoleMessages: {},
-  getConsoleMessage: { msgid: 1 },
-  listNetworkRequests: {},
-  getNetworkRequest: { reqid: 1 },
+  list_pages: {},
+  new_page: { url: 'https://example.test' },
+  select_page: { pageId: 7 },
+  close_page: { pageId: 7 },
+  navigate_page: { pageId: 7, url: 'https://example.test' },
+  take_snapshot: { pageId: 7 },
+  click: { pageId: 7, uid: '1_1' },
+  hover: { pageId: 7, uid: '1_1' },
+  fill: { pageId: 7, uid: '1_1', value: 'Sample value' },
+  fill_form: { pageId: 7, elements: [{ uid: '1_1', value: 'Sample value' }] },
+  type_text: { pageId: 7, text: 'Example 中文😀\n', submitKey: 'Enter' },
+  press_key: { pageId: 7, key: 'Enter' },
+  drag: { pageId: 7, from_uid: '1_1', to_uid: '1_2' },
+  upload_file: { pageId: 7, uid: '1_1', filePaths: ['/workspace/input.txt'] },
+  wait_for: { pageId: 7, text: ['Ready'] },
+  handle_dialog: { pageId: 7, action: 'dismiss' },
+  take_screenshot: { pageId: 7 },
+  evaluate_script: { pageId: 7, function: '() => 1' },
+  list_console_messages: { pageId: 7 },
+  get_console_message: { pageId: 7, msgid: 1 },
+  list_network_requests: { pageId: 7 },
+  get_network_request: { pageId: 7, reqid: 1 },
   getAllCookies: {},
   setCookies: { cookies: [] },
   deleteCookies: { cookies: [] },
@@ -62,12 +60,11 @@ describe('built-in browser cancellation', () => {
     const reason = new Error('Task stopped');
     controller.abort(reason);
     const definition = skill.functions[name as keyof typeof inputs];
-    const params = definition.params.parse(input);
     const run = definition.run as (params: unknown, ctx: TrustedBrowserSkillContext) => Promise<unknown>;
 
-    await expect(run(params, context(controller.signal))).rejects.toBe(reason);
+    await expect(run(definition.params.parse(input), context(controller.signal))).rejects.toBe(reason);
     expect(boundary.runExclusive).toHaveBeenCalledOnce();
-    expect(boundary.runExclusive).toHaveBeenCalledWith('browser-a', expect.any(Function), controller.signal);
+    expect(boundary.runExclusive.mock.calls[0].slice(0, 3)).toEqual(['browser-a', expect.any(Function), controller.signal]);
   });
 
   it('finishes browser closure even when the caller is cancelled', async () => {

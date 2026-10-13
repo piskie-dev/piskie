@@ -597,9 +597,6 @@ function browserRuntime(): BrowserHostRuntime {
     core: {} as BrowserHostRuntime['core'],
     notifyPageOpen: vi.fn(),
     createGeneratedRuntime: vi.fn(() => generated),
-    prepareScreenshot: vi.fn(),
-    finalizeScreenshot: vi.fn(),
-    cleanupScreenshot: vi.fn(),
   };
 }
 
@@ -633,9 +630,6 @@ function workflowBrowserRuntime(): {
       core: {} as BrowserHostRuntime['core'],
       notifyPageOpen: vi.fn(),
       createGeneratedRuntime: vi.fn(() => generated),
-      prepareScreenshot: vi.fn(),
-      finalizeScreenshot: vi.fn(),
-      cleanupScreenshot: vi.fn(),
     },
   };
 }

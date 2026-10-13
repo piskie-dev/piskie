@@ -1,0 +1,6 @@
+DEMO PARCEL NOTE
+Parcel: PAR-104
+Customer: Aster Demo Co
+Contents: twelve fictional field kits
+Handling: keep the demo seal intact
+This document contains only synthetic benchmark data.

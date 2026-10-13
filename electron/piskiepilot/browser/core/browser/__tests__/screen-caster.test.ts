@@ -33,6 +33,105 @@ async function flush() { for (let i = 0; i < 5; i++) await Promise.resolve(); }
 afterEach(() => vi.useRealTimers());
 
 describe('ScreenCaster capture ownership', () => {
+  it('shares a Page capture while both its CDP attach and screencast startup are pending', async () => {
+    const test = fixture();
+    const attaching = deferred<CDPSession>();
+    const starting = deferred<void>();
+    vi.mocked(test.page.createCDPSession).mockReturnValueOnce(attaching.promise);
+    const send = test.session.send.getMockImplementation()!;
+    test.session.send.mockImplementation((method) => method === 'Page.startScreencast' ? starting.promise : send(method));
+    const caster = new ScreenCaster(test.page, {}, identity());
+    const first = caster.start();
+    const second = caster.start();
+    expect(test.page.createCDPSession).toHaveBeenCalledOnce();
+    attaching.resolve(test.session as unknown as CDPSession);
+    await flush();
+    const third = caster.start();
+    expect(test.page.createCDPSession).toHaveBeenCalledOnce();
+    expect(test.session.send.mock.calls.filter(([method]) => method === 'Page.startScreencast')).toHaveLength(1);
+    starting.resolve();
+    await Promise.all([first, second, third]);
+    expect(test.session.detach).not.toHaveBeenCalled();
+    await caster.stop();
+    expect(test.session.detach).toHaveBeenCalledOnce();
+  });
+
+  it('serializes same-Page navigation behind an obsolete pending attach and keeps only its current generation', async () => {
+    const first = fixture();
+    const next = fixture();
+    const attaching = deferred<CDPSession>();
+    vi.mocked(first.page.createCDPSession).mockReturnValueOnce(attaching.promise)
+      .mockResolvedValueOnce(next.session as unknown as CDPSession);
+    const caster = new ScreenCaster(first.page, {}, identity());
+    const frames: ScreencastFrame[] = [];
+    caster.on('frame', frame => frames.push(frame));
+    const initial = caster.start();
+    const navigation = caster.rebind(first.page, identity(1, 1));
+    await flush();
+    const requested = caster.start();
+    expect(first.page.createCDPSession).toHaveBeenCalledOnce();
+    attaching.resolve(first.session as unknown as CDPSession);
+    await Promise.all([initial, navigation, requested]);
+    expect(first.session.detach).toHaveBeenCalledOnce();
+    expect(first.session.send).not.toHaveBeenCalled();
+    expect(first.page.createCDPSession).toHaveBeenCalledTimes(2);
+    expect(next.session.send.mock.calls.filter(([method]) => method === 'Page.startScreencast')).toHaveLength(1);
+    next.session.emit('Page.screencastFrame', { data: 'sample-current', sessionId: 1, metadata: {} });
+    next.ack.resolve();
+    await flush();
+    expect(frames).toEqual([expect.objectContaining({ page: identity(1, 1), data: 'sample-current' })]);
+    await caster.stop();
+  });
+
+  it('cancels every waiting start at stop and can restart the Page after the old attach settles', async () => {
+    const first = fixture();
+    const next = fixture();
+    const attaching = deferred<CDPSession>();
+    vi.mocked(first.page.createCDPSession).mockReturnValueOnce(attaching.promise)
+      .mockResolvedValueOnce(next.session as unknown as CDPSession);
+    const caster = new ScreenCaster(first.page, {}, identity());
+    const starts = [caster.start(), caster.start()];
+    await caster.stop();
+    attaching.resolve(first.session as unknown as CDPSession);
+    await Promise.all(starts);
+    expect(first.page.createCDPSession).toHaveBeenCalledOnce();
+    expect(first.session.detach).toHaveBeenCalledOnce();
+    expect(first.session.send).not.toHaveBeenCalled();
+    await caster.start();
+    expect(first.page.createCDPSession).toHaveBeenCalledTimes(2);
+    expect(next.session.send.mock.calls.filter(([method]) => method === 'Page.startScreencast')).toHaveLength(1);
+    await caster.stop();
+  });
+
+  it('settles stopped callers without waiting for a newly requested capture on the same Page', async () => {
+    const first = fixture();
+    const next = fixture();
+    const attaching = deferred<CDPSession>();
+    const ready = deferred<void>();
+    vi.mocked(first.page.createCDPSession).mockReturnValueOnce(attaching.promise)
+      .mockResolvedValueOnce(next.session as unknown as CDPSession);
+    const send = next.session.send.getMockImplementation()!;
+    next.session.send.mockImplementation((method) => method === 'Page.startScreencast' ? ready.promise : send(method));
+    const caster = new ScreenCaster(first.page, {}, identity());
+    const stopped = [caster.start(), caster.start()];
+    await caster.stop();
+    const resumed = caster.start();
+    let running = false;
+    void resumed.then(() => { running = true; });
+    expect(first.page.createCDPSession).toHaveBeenCalledOnce();
+    attaching.resolve(first.session as unknown as CDPSession);
+    await Promise.all(stopped);
+    await flush();
+    expect(running).toBe(false);
+    expect(first.session.detach).toHaveBeenCalledOnce();
+    expect(first.page.createCDPSession).toHaveBeenCalledTimes(2);
+    expect(first.session.detach.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(first.page.createCDPSession).mock.invocationCallOrder[1]!);
+    ready.resolve();
+    await resumed;
+    expect(next.session.send.mock.calls.filter(([method]) => method === 'Page.startScreencast')).toHaveLength(1);
+    await caster.stop();
+  });
+
   it('discards an ACK and screenshot that finish across page rebind, then emits only the new owner', async () => {
     const first = fixture();
     const next = fixture();

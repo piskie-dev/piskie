@@ -29,9 +29,12 @@ vi.mock('../../../data/vm', async () => {
   };
   const useWorkers = () => useSyncExternalStore(subscribe, () => vm.workers);
   return {
-    useAgentVM: (agentId: string) => ({
-      agentId, title: agentId, status: 'waiting', workers: agentId === 'session-alpha' ? useWorkers() : (useWorkers(), vm.emptyWorkers),
-    }),
+    useAgentVM: (agentId: string) => {
+      const workers = useWorkers();
+      return {
+        agentId, title: agentId, status: 'waiting', workers: agentId === 'session-alpha' ? workers : vm.emptyWorkers,
+      };
+    },
     useWorkerVM: (_agentId: string, workerId?: string) => useWorkers().find((worker) => worker.id === workerId) ?? null,
   };
 });
@@ -279,6 +282,35 @@ describe('main browser monitoring', () => {
       expect(props.interactive).not.toBe(true);
     }
   });
+  it('keeps terminal tasks during the browser grace period and keeps placeholders when readiness is lost', async () => {
+    await render();
+    await click('打开Worker one的预览');
+    await act(async () => {
+      vm.workers = vm.workers.map((worker) => ({ ...worker,
+        taskState: { inputAt: 1, notification: { type: 'completed', at: 2 } },
+      }));
+      for (const listener of vm.listeners) listener();
+    });
+    expect(container.querySelectorAll('[data-monitor-task]')).toHaveLength(2);
+    expect(container.querySelector('[data-monitor-window]')).not.toBeNull();
+    await updateBrowserReady('worker-one', false);
+    expect(container.querySelectorAll('[data-monitor-task]')).toHaveLength(2);
+    expect(container.querySelector('[data-monitor-window]')?.textContent).toContain('等待浏览器启动');
+    await removeBrowsers();
+    expect(container.querySelector('[data-monitor-task]')).toBeNull();
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+  });
+  it('keeps live monitors available when their pictures are lost', async () => {
+    await render();
+    const panelFrame = frameCallback(4);
+    await act(async () => panelFrame(true));
+    await click('打开Worker one的预览');
+    const floatingFrame = frameCallback(30);
+    await act(async () => { floatingFrame(true); panelFrame(false); floatingFrame(false); });
+    expect(container.querySelectorAll('[data-monitor-task]')).toHaveLength(2);
+    expect(container.querySelector('[data-monitor-window]')).not.toBeNull();
+    expect(button('监控')).toBeDefined();
+  });
   it.each(['review', 'browser', 'collapsed', 'closed'] as const)('retains the %s choice when a new browser joins the collection', async (choice) => {
     await render();
     if (choice === 'review') await click('Open sample directory');
@@ -317,43 +349,53 @@ describe('main browser monitoring', () => {
       }
     } finally { input.remove(); }
   });
-  it('closes a floating preview without opening an empty monitor after all uncaptured resources close', async () => {
+  it('automatically removes an uncaptured floating preview and the empty monitor entry when resources close', async () => {
     await render();
     await click('打开Worker one的预览');
     await removeBrowsers();
-    await click('回监控栏');
     expect(container.querySelector('[data-monitor-window]')).toBeNull();
+    expect(container.querySelector('[data-monitor-task]')).toBeNull();
     expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
     expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
     expect(api.open).not.toHaveBeenCalled();
   });
-  it('retains a captured panel frame when returning a released floating resource to the monitor', async () => {
+  it.each(['visible', 'minimized'] as const)('removes captured cards and a %s floating preview after resource closure', async (state) => {
     await render();
     const panelFrame = frameCallback(4);
     await act(async () => panelFrame(true));
-    const preview = container.querySelector('[data-monitor-task="worker-one|automation-one"] [data-monitor-screen]');
     await click('打开Worker one的预览');
-    await act(async () => frameCallback(30)(true));
+    const floatingFrame = frameCallback(30);
+    await act(async () => floatingFrame(true));
+    if (state === 'minimized') await click('缩小');
     await removeBrowsers();
-    await click('Open sample directory');
-    await click('回监控栏');
-    expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
-    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"] [data-monitor-screen]')).toBe(preview);
-    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.getAttribute('hidden')).toBeNull();
+    await act(async () => { panelFrame(true); floatingFrame(true); });
+    expect(container.querySelector('[data-monitor-task]')).toBeNull();
     expect(container.querySelector('[data-monitor-window]')).toBeNull();
-  });
-  it('removes a frame fact only when its final mounted preview loses the picture', async () => {
-    await render();
-    const panelFrame = frameCallback(4);
-    await act(async () => panelFrame(true));
-    await click('打开Worker one的预览');
-    await act(async () => frameCallback(30)(true));
-    await removeBrowsers();
-    await act(async () => panelFrame(false));
-    expect(button('监控')).toBeDefined();
-    await click('回监控栏');
+    expect(container.querySelector('[data-monitor-parking]')).toBeNull();
     expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
     expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+  });
+  it('removes only the departed resource while the remaining unready browser and review stay available', async () => {
+    await render();
+    const panelFrame = frameCallback(4);
+    await act(async () => panelFrame(true));
+    await click('打开Worker one的预览');
+    await click('打开Worker two的预览');
+    const remaining = container.querySelector('[data-monitor-task="worker-two|automation-two"]');
+    await click('Open sample directory');
+    await act(async () => {
+      vm.workers = vm.workers.filter((worker) => worker.id !== 'worker-one');
+      for (const listener of vm.listeners) listener();
+    });
+    await act(async () => panelFrame(true));
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')).toBeNull();
+    expect(container.querySelector('[data-monitor-window="worker-one|automation-one"]')).toBeNull();
+    expect(container.querySelector('[data-monitor-task="worker-two|automation-two"]')).toBe(remaining);
+    expect(container.querySelectorAll('[data-monitor-window]')).toHaveLength(1);
+    expect(button('审阅').closest('[data-selected="true"]')).not.toBeNull();
+    await click('回监控栏');
+    expect(button('监控').closest('[data-selected="true"]')).not.toBeNull();
+    expect(remaining?.textContent).toContain('等待浏览器启动');
   });
   it('discards departed canvas facts and ignores queued callbacks even after returning to the same conversation', async () => {
     await render();
@@ -370,7 +412,7 @@ describe('main browser monitoring', () => {
     await act(async () => { oldPanelFrame(true); oldFloatingFrame(true); });
     expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
     expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
-    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.hasAttribute('hidden')).toBe(true);
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')).toBeNull();
   });
   it('keeps restored window parking per conversation and lets only the new preview own its frame', async () => {
     await render();
@@ -386,17 +428,35 @@ describe('main browser monitoring', () => {
     await act(async () => frameCallback(4)(true));
     await act(async () => oldFrame(false));
     await removeBrowsers();
-    expect(button('监控')).toBeDefined();
-    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')?.hasAttribute('hidden')).toBe(false);
-  });
-  it('removes the monitor entry when there are no resources or retained frames to view', async () => {
+    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
+    expect(container.querySelector('[data-monitor-task]')).toBeNull();
+    expect(container.querySelector('[data-monitor-parking]')).toBeNull();
+    await render('session-beta');
     await render();
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+    expect(container.querySelector('[data-monitor-parking]')).toBeNull();
+  });
+  it('replaces a browser on the same worker and clears the previous floating and parked preview', async () => {
+    await render();
+    const previousFrame = frameCallback(4);
+    await act(async () => previousFrame(true));
+    await click('打开Worker one的预览');
+    await click('缩小');
     await act(async () => {
-      vm.workers = [];
+      vm.workers = vm.workers.map((worker) => worker.id === 'worker-one'
+        ? { ...worker, browserId: 'automation-next', browserReady: false } : worker);
       for (const listener of vm.listeners) listener();
     });
-    expect(container.querySelector('button[aria-label="关闭监控"]')).toBeNull();
-    expect(button('展开右侧栏').getAttribute('aria-expanded')).toBe('false');
+    await act(async () => previousFrame(true));
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-one"]')).toBeNull();
+    expect(container.querySelector('[data-monitor-task="worker-one|automation-next"]')?.textContent).toContain('等待浏览器启动');
+    expect(container.querySelectorAll('[data-monitor-task]')).toHaveLength(2);
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
+    expect(container.querySelector('[data-monitor-parking]')).toBeNull();
+    await click('打开Worker one的预览');
+    expect(container.querySelector('[data-monitor-window="worker-one|automation-next"]')).not.toBeNull();
+    await removeBrowsers();
+    expect(container.querySelector('[data-monitor-window]')).toBeNull();
   });
 });
 

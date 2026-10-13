@@ -2,14 +2,12 @@ import { appLog } from '@electron/observability/logging/app-log.js';
 /**
  * BrowserModule — 浏览器控制
  *
- * 负责浏览器资源绑定、截图管理、
+ * 负责浏览器资源绑定、
  * 占用声明与浏览器生命周期。
  *
  * 封装浏览器子流程所需的浏览器生命周期逻辑。
  */
 
-import fs from 'fs/promises';
-import path from 'path';
 import type { AgentModule } from './module.js';
 import type { AgentHost } from '../agent-host.js';
 import type { ToolContextBuilder } from '../tool-context.js';
@@ -18,13 +16,11 @@ import type { ResolvedBrowserBinding } from './browser-binding.js';
 import { occupancyRegistry } from '../../core/occupancy/index.js';
 import { browserEnvironmentRuntime } from '../../services/browser-environment-runtime.js';
 import { browserLaunchPlanner } from '../../core/pilot/launch/index.js';
-import { createUuid } from '@shared/utils/identifiers.js';
 import { renderAvailableSkillTeaching } from '../../skills/discovery/teaching.js';
 import type { SkillInventorySnapshot } from '../../../shared/types/skill.js';
 import { pathsService } from '../../services/paths.service.js';
 import type { SkillCatalogPort } from '../../core/pilot/pilot-manager.js';
 import type {
-  BrowserScreenshotTarget,
   BrowserHostRuntime,
 } from '../../piskiepilot/core/skill/host.js';
 import {
@@ -319,82 +315,5 @@ export class BrowserModule implements AgentModule, BrowserHostRuntime {
       }
     }
     return parts.join('\n\n');
-  }
-
-  /**
-   * 准备截图目标路径
-   */
-  async prepareScreenshot(params: Record<string, unknown>): Promise<BrowserScreenshotTarget> {
-    return this.reserveScreenshotFile(params);
-  }
-
-  private async reserveScreenshotFile(
-    params: Record<string, unknown>
-  ): Promise<BrowserScreenshotTarget> {
-    const scope = {
-      agentId: this.host.id,
-      mainAgentId: this.host.mainAgentId,
-    };
-    const format = (params.format as string) || 'png';
-    const identity = { id: createUuid(), timestamp: new Date() };
-    const filename = `${identity.timestamp.getTime()}-${identity.id.slice(0, 8)}.${format}`;
-    const filePath = path.join(
-      this.host.getConversationStore().paths.screenshotsDir(scope.mainAgentId, scope.agentId),
-      filename
-    );
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-
-    // 注入 filePath 到 piskiepilot 参数
-    params.filePath = filePath;
-
-    return {
-      id: identity.id,
-      mainAgentId: scope.mainAgentId,
-      agentId: scope.agentId,
-      filename,
-      filePath,
-      timestamp: identity.timestamp,
-      size: 0,
-      format: format as 'png' | 'jpeg' | 'webp',
-    };
-  }
-
-  /**
-   * 完成截图保存：获取文件大小
-   */
-  async finalizeScreenshot(metadata: BrowserScreenshotTarget): Promise<void> {
-    try {
-      const stats = await fs.stat(metadata.filePath);
-      metadata.size = stats.size;
-
-      appLog.info({
-        event: 'agent.screenshot.persist.completed',
-        message: 'Browser screenshot persisted',
-        context: {
-          scope: 'agent.screenshot',
-          screenshotId: metadata.id,
-          outputPath: metadata.filePath,
-          outputBytes: metadata.size,
-          agentId: this.host.id,
-          mainAgentId: this.host.mainAgentId,
-        },
-      });
-    } catch (error) {
-      appLog.error({
-        event: 'agent.screenshot.finalize.failed',
-        message: 'Browser screenshot finalization failed',
-        context: {
-          scope: 'agent.screenshot',
-          screenshotId: metadata.id,
-          outputPath: metadata.filePath,
-          agentId: this.host.id,
-        },
-        error,
-      });
-    }
-  }
-
-  async cleanupScreenshot(metadata: BrowserScreenshotTarget): Promise<void> {
-    await fs.unlink(metadata.filePath).catch(() => {});
   }
 }

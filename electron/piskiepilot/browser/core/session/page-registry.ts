@@ -4,16 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * Adapted from chrome-devtools-mcp@1.7.0 McpContext/McpPage. Piskie keeps its
- * existing page-index API and page-change text while using process-wide IDs.
+ * Adapted from chrome-devtools-mcp@1.10.1 McpContext/McpPage. Stable page IDs
+ * and named browser contexts share the host registry; SDK index access stays local.
  */
 
-import type { Browser, Dialog, Frame, HTTPRequest, Page, Target } from 'puppeteer-core';
+import type { Browser, BrowserContext, CDPSession, Dialog, Frame, HTTPRequest, Page, Target } from 'puppeteer-core';
 import {
   ConsoleCollector,
   type ConsoleObservation,
   NetworkCollector,
 } from './page-collector.js';
+import { ServiceWorkerConsoleCollector } from './service-worker-console.js';
+import { isAllowedUrl } from './url.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 10_000;
@@ -26,6 +28,7 @@ export interface RegisteredPage {
   readonly pageId: number;
   readonly page: Page;
   readonly navigationSequence: number;
+  readonly isolatedContextName?: string;
 }
 
 export interface PageIdentity {
@@ -43,6 +46,8 @@ interface PageRecord {
   readonly pageId: number;
   readonly page: Page;
   navigationSequence: number;
+  closed: boolean;
+  readonly isolatedContextName?: string;
   dialog?: Dialog;
   readonly onDialog: (dialog: Dialog) => void;
   readonly onFrameNavigated: (frame: Frame) => void;
@@ -56,6 +61,7 @@ interface PageRecord {
 export interface PageRegistryEvents {
   selectedPageChanged(previousPageId: number | undefined, pageId: number | undefined): void;
   mainFrameNavigated(pageId: number): void;
+  pageRemoved?(pageId: number): void;
   frameChanged?(page: RegisteredPage, frame: Frame): void;
   screenChanged?(page: RegisteredPage | undefined): void;
   observeMouse?(page: Page, current: () => RegisteredPage): () => void;
@@ -64,16 +70,21 @@ export interface PageRegistryEvents {
 export class PageRegistry {
   readonly #browser: Browser;
   readonly #events: PageRegistryEvents;
+  readonly #serviceWorkerConsoleCollector: ServiceWorkerConsoleCollector;
   readonly #records = new Map<Page, PageRecord>();
   readonly #opened = new Map<number, PageIdentity>();
   readonly #closed = new Map<number, PageIdentity>();
-  #selectedPageId: number | undefined;
+  readonly #isolatedContexts = new Map<string, BrowserContext>();
+  #nextIsolatedContextId = 1;
+  #selectedPage: PageRecord | undefined;
+  #selectedPageFallback: { wasClosed: boolean } | undefined;
   #initialized = false;
   #disposed = false;
 
   private constructor(browser: Browser, events: PageRegistryEvents) {
     this.#browser = browser;
     this.#events = events;
+    this.#serviceWorkerConsoleCollector = new ServiceWorkerConsoleCollector(browser);
   }
 
   static async create(browser: Browser, events: PageRegistryEvents): Promise<PageRegistry> {
@@ -94,14 +105,14 @@ export class PageRegistry {
   async refresh(): Promise<readonly RegisteredPage[]> {
     this.#assertActive();
     const pages = (await this.#browser.pages()).filter(isAutomatablePage);
+    this.#selectedPageFallback = undefined;
     const currentPages = new Set(pages);
 
     for (const page of pages) this.#register(page, this.#initialized);
     for (const record of [...this.#records.values()]) {
-      if (currentPages.has(record.page)) continue;
-      // This is the same selected-page guard used by McpContext 1.7.0: a live
-      // selected target is not silently replaced because of a transient list.
-      if (record.pageId === this.#selectedPageId && !record.page.isClosed()) continue;
+      // Target enumeration can omit a live Page while secondary CDP sessions detach.
+      // Keep its existing owner until Page.close or a URL policy change ends ownership.
+      if (!isClosedPage(record.page) && (currentPages.has(record.page) || isAutomatablePage(record.page))) continue;
       this.#remove(record);
     }
 
@@ -111,9 +122,9 @@ export class PageRegistry {
 
   selectedPage(): RegisteredPage {
     this.#assertActive();
-    const record = this.#recordById(this.#selectedPageId);
+    const record = this.#selectedPage;
     if (!record) throw new Error('No page selected');
-    if (record.page.isClosed()) {
+    if (record.closed || isClosedPage(record.page)) {
       throw new Error('The selected page has been closed. Call list_pages to see open pages.');
     }
     return toRegisteredPage(record);
@@ -143,29 +154,59 @@ export class PageRegistry {
     return toRegisteredPage(record);
   }
 
-  async newPage(): Promise<RegisteredPage> {
-    this.#assertActive();
-    const page = await this.#browser.newPage();
-    const record = this.#register(page, true);
+  selectById(pageId: number): RegisteredPage {
+    const record = this.#requireRecord(pageId);
     this.#select(record.pageId);
     return toRegisteredPage(record);
   }
 
-  async closeByIndex(pageIndex: number): Promise<void> {
+  async newPage(options: { background?: boolean; isolatedContext?: string } = {}): Promise<RegisteredPage> {
+    this.#assertActive();
+    let page: Page;
+    if (options.isolatedContext !== undefined) {
+      let context = this.#isolatedContexts.get(options.isolatedContext);
+      if (!context) {
+        context = await this.#browser.createBrowserContext();
+        this.#isolatedContexts.set(options.isolatedContext, context);
+      }
+      page = await context.newPage({ background: options.background });
+    } else {
+      page = await this.#browser.newPage({ background: options.background });
+    }
+    const record = this.#register(page, true);
+    if (!record) throw new Error('No page found');
+    await record.consoleCollector.devTools.ready;
+    await this.refresh();
+    this.#select(record.pageId);
+    return toRegisteredPage(record);
+  }
+
+  closeByIndex(pageIndex: number): Promise<void> {
+    return this.closeById(this.pageByIndex(pageIndex).pageId);
+  }
+
+  async closeById(pageId: number): Promise<void> {
     this.#assertActive();
     if (this.#records.size === 1) throw new Error(CLOSE_PAGE_ERROR);
-    const record = this.#recordById(this.pageByIndex(pageIndex).pageId)!;
+    const record = this.#requireRecord(pageId);
     await record.page.close({ runBeforeUnload: false });
-    this.#remove(record);
+    this.#remove(record, true);
   }
 
   getDialog(pageId?: number): Dialog | undefined {
-    return this.#recordById(pageId ?? this.#selectedPageId)?.dialog;
+    return this.#recordById(pageId ?? this.#selectedPage?.pageId)?.dialog;
   }
 
   clearDialog(pageId?: number): void {
-    const record = this.#recordById(pageId ?? this.#selectedPageId);
+    const record = this.#recordById(pageId ?? this.#selectedPage?.pageId);
     if (record) record.dialog = undefined;
+  }
+
+  getConsoleCollector(pageId?: number): ConsoleCollector { return this.#requireRecord(pageId).consoleCollector; }
+  getNetworkCollector(pageId?: number): NetworkCollector { return this.#requireRecord(pageId).networkCollector; }
+  getServiceWorkerConsoleCollector(): ServiceWorkerConsoleCollector {
+    this.#assertActive();
+    return this.#serviceWorkerConsoleCollector;
   }
 
   getConsoleData(includePreservedMessages = false, pageId?: number): readonly ConsoleObservation[] {
@@ -212,11 +253,14 @@ export class PageRegistry {
     this.#disposed = true;
     this.#browser.off('targetcreated', this.#onTargetCreated);
     this.#browser.off('targetdestroyed', this.#onTargetDestroyed);
+    this.#serviceWorkerConsoleCollector.dispose();
     for (const record of this.#records.values()) this.#detach(record);
     this.#records.clear();
     this.#opened.clear();
     this.#closed.clear();
-    this.#selectedPageId = undefined;
+    this.#isolatedContexts.clear();
+    this.#selectedPage = undefined;
+    this.#selectedPageFallback = undefined;
     this.#events.screenChanged?.(undefined);
   }
 
@@ -224,9 +268,9 @@ export class PageRegistry {
     this.#browser.on('targetcreated', this.#onTargetCreated);
     this.#browser.on('targetdestroyed', this.#onTargetDestroyed);
     try {
-      for (const page of await this.#browser.pages()) {
-        if (isAutomatablePage(page)) this.#register(page, false);
-      }
+      await this.#serviceWorkerConsoleCollector.init();
+      for (const page of await this.#browser.pages()) this.#register(page, false);
+      await Promise.all([...this.#records.values()].map(record => record.consoleCollector.devTools.ready));
       this.#selectFallback();
       for (const record of this.#records.values()) {
         this.#opened.set(record.pageId, this.#identity(record));
@@ -241,8 +285,13 @@ export class PageRegistry {
   #onTargetCreated = async (target: Target): Promise<void> => {
     try {
       const page = await target.page();
-      if (page && !this.#disposed && isAutomatablePage(page)) {
-        this.#register(page, this.#initialized);
+      if (page && !this.#disposed) {
+        const record = this.#register(page, this.#initialized);
+        if (!record) return;
+        await record.consoleCollector.devTools.ready;
+        if (!this.#disposed && this.#selectedPage === undefined && this.#records.get(page) === record) {
+          this.#select(record.pageId);
+        }
       }
     } catch {
       // Target creation can race target destruction; the next refresh is authoritative.
@@ -251,10 +300,13 @@ export class PageRegistry {
 
   #onTargetDestroyed = (target: Target): void => {
     const record = [...this.#records.values()].find((entry) => entry.page.target() === target);
-    if (record) this.#remove(record);
+    // A secondary-session detach does not close the Page's primary session.
+    // On real tab close, that session can detach before Page.isClosed() updates.
+    if (record && isClosedPage(record.page)) this.#remove(record, true);
   };
 
-  #register(page: Page, recordChange: boolean): PageRecord {
+  #register(page: Page, recordChange: boolean): PageRecord | undefined {
+    if (isClosedPage(page) || !isAutomatablePage(page)) return undefined;
     const existing = this.#records.get(page);
     if (existing) return existing;
 
@@ -263,6 +315,8 @@ export class PageRegistry {
       pageId: nextPageId++,
       page,
       navigationSequence: 0,
+      closed: false,
+      isolatedContextName: this.#getBrowserContextNames().get(page.browserContext()),
       onDialog: (dialog: Dialog) => {
         record.dialog = dialog;
       },
@@ -271,10 +325,9 @@ export class PageRegistry {
         if (frame !== page.mainFrame()) return;
         record.navigationSequence += 1;
         this.#events.mainFrameNavigated(record.pageId);
-        if (record.pageId === this.#selectedPageId) this.#events.screenChanged?.(toRegisteredPage(record));
       },
       onFrameDetached: (frame: Frame) => this.#events.frameChanged?.(toRegisteredPage(record), frame),
-      onClose: () => this.#remove(record),
+      onClose: () => this.#remove(record, true),
       consoleCollector: new ConsoleCollector(page),
       networkCollector: new NetworkCollector(page),
     } satisfies PageRecord);
@@ -285,26 +338,24 @@ export class PageRegistry {
     page.on('framenavigated', record.onFrameNavigated);
     page.on('framedetached', record.onFrameDetached);
     page.on('close', record.onClose);
+    updateTimeouts(page);
     void page.emulateFocusedPage(true).catch(() => undefined);
 
     if (recordChange) this.#opened.set(record.pageId, this.#identity(record));
-    if (this.#selectedPageId === undefined) this.#select(record.pageId);
     return record;
   }
 
-  #remove(record: PageRecord): void {
-    if (!this.#records.has(record.page)) return;
+  #remove(record: PageRecord, wasClosed = isClosedPage(record.page)): void {
+    if (this.#records.get(record.page) !== record) return;
+    record.closed = wasClosed;
     const identity = this.#identity(record);
     if (this.#opened.has(record.pageId)) this.#opened.set(record.pageId, identity);
     this.#detach(record);
     this.#records.delete(record.page);
+    this.#events.pageRemoved?.(record.pageId);
     if (this.#initialized) this.#closed.set(record.pageId, identity);
 
-    if (this.#selectedPageId === record.pageId) {
-      const previousPageId = this.#selectedPageId;
-      this.#selectedPageId = undefined;
-      this.#selectFallback(previousPageId);
-    }
+    if (this.#selectedPage === record && wasClosed) this.#events.screenChanged?.(undefined);
   }
 
   #detach(record: PageRecord): void {
@@ -318,26 +369,29 @@ export class PageRegistry {
     record.releaseMouse?.();
   }
 
-  #selectFallback(previousPageId?: number): void {
-    if (this.#selectedPageId !== undefined) return;
+  consumeSelectedPageFallback(): { wasClosed: boolean } | undefined {
+    const fallback = this.#selectedPageFallback;
+    this.#selectedPageFallback = undefined;
+    return fallback;
+  }
+
+  #selectFallback(): void {
+    // As in the fixed source, enumeration alone does not replace a live selection.
+    if (this.#selectedPage && !this.#selectedPage.closed && !isClosedPage(this.#selectedPage.page)) return;
     const first = this.#records.values().next().value as PageRecord | undefined;
-    if (first) {
-      this.#selectedPageId = first.pageId;
-      updateTimeouts(first.page);
-      this.#events.selectedPageChanged(previousPageId, first.pageId);
-      this.#events.screenChanged?.(toRegisteredPage(first));
-    } else if (previousPageId !== undefined) {
-      this.#events.selectedPageChanged(previousPageId, undefined);
-      this.#events.screenChanged?.(undefined);
-    }
+    if (!first) return;
+    const previous = this.#selectedPage;
+    this.#select(first.pageId);
+    if (previous) this.#selectedPageFallback = { wasClosed: previous.closed || isClosedPage(previous.page) };
   }
 
   #select(pageId: number): void {
-    if (this.#selectedPageId === pageId) return;
     const record = this.#recordById(pageId);
     if (!record) throw new Error('No page found');
-    const previousPageId = this.#selectedPageId;
-    this.#selectedPageId = pageId;
+    this.#selectedPageFallback = undefined;
+    if (this.#selectedPage === record) return;
+    const previousPageId = this.#selectedPage?.pageId;
+    this.#selectedPage = record;
     updateTimeouts(record.page);
     this.#events.selectedPageChanged(previousPageId, pageId);
     this.#events.screenChanged?.(toRegisteredPage(record));
@@ -349,9 +403,23 @@ export class PageRegistry {
   }
 
   #requireRecord(pageId?: number): PageRecord {
-    const record = this.#recordById(pageId ?? this.#selectedPageId);
-    if (!record) throw new Error('No page selected');
+    this.#assertActive();
+    const record = pageId === undefined ? this.#selectedPage : this.#recordById(pageId);
+    if (!record) throw new Error(pageId === undefined ? 'No page selected' : 'No page found');
     return record;
+  }
+
+  #getBrowserContextNames(): Map<BrowserContext, string> {
+    const names = new Map<BrowserContext, string>();
+    for (const [name, context] of this.#isolatedContexts) names.set(context, name);
+    const defaultContext = this.#browser.defaultBrowserContext();
+    for (const context of this.#browser.browserContexts()) {
+      if (context === defaultContext || context.closed || names.has(context)) continue;
+      const name = `isolated-context-${this.#nextIsolatedContextId++}`;
+      this.#isolatedContexts.set(name, context);
+      names.set(context, name);
+    }
+    return names;
   }
 
   #identity(record: PageRecord): PageIdentity {
@@ -367,8 +435,14 @@ export class PageRegistry {
   }
 }
 
+function isClosedPage(page: Page): boolean {
+  const primary = (page as Page & { _client?: () => CDPSession })._client?.();
+  return page.isClosed() || primary?.detached === true;
+}
+
 function isAutomatablePage(page: Page): boolean {
-  return !page.url().startsWith('devtools://');
+  const url = page.url();
+  return !url.startsWith('devtools://') && isAllowedUrl(url);
 }
 
 function updateTimeouts(page: Page): void {
@@ -381,5 +455,6 @@ function toRegisteredPage(record: PageRecord): RegisteredPage {
     pageId: record.pageId,
     page: record.page,
     navigationSequence: record.navigationSequence,
+    isolatedContextName: record.isolatedContextName,
   };
 }

@@ -11,14 +11,15 @@ export interface MonitorTask {
 }
 
 export function reconcileMonitorTasks(previous: readonly MonitorTask[], workers: readonly WorkerRef[]): MonitorTask[] {
-  const tasks = new Map(previous.map((task) => [task.key, { ...task, ready: false, closed: true }]));
+  const previousByKey = new Map(previous.map((task) => [task.key, task]));
+  const tasks = new Map<string, MonitorTask>();
   for (const worker of workers) {
     if (!worker.browserId) continue;
     const key = `${worker.id}|${worker.browserId}`;
     tasks.set(key, {
       key, workerId: worker.id, browserId: worker.browserId, title: worker.subject,
       ready: worker.browserReady === true, closed: false,
-      hasFrame: tasks.get(key)?.hasFrame ?? false,
+      hasFrame: previousByKey.get(key)?.hasFrame ?? false,
     });
   }
   return [...tasks.values()];

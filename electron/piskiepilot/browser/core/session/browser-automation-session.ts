@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * Adapted from chrome-devtools-mcp@1.7.0 McpContext, McpPage, and input
+ * Adapted from chrome-devtools-mcp@1.10.1 McpContext, McpPage, and input
  * tools. MCP transport and response plumbing were replaced by Piskie's
  * BrowserManager-owned session and browser contracts.
  */
 
 import {
   Locator,
+  TimeoutError,
   type Browser,
   type Dialog,
   type ElementHandle,
@@ -23,7 +24,8 @@ import { readOperationTarget, resolveOperationFocus } from './operation-target.j
 import { PageOperationFeedback } from './page-operation-feedback.js';
 import type { SuccessfulScreenInput } from '../browser/screen-caster.js';
 export { uploadFileThroughElement } from './browser-input-driver.js';
-import type { ConsoleObservation } from './page-collector.js';
+import type { ConsoleCollector, ConsoleObservation, NetworkCollector } from './page-collector.js';
+import type { ServiceWorkerConsoleCollector } from './service-worker-console.js';
 import { PageRegistry, type PageChangeSet, type RegisteredPage } from './page-registry.js';
 import {
   createTextSnapshot,
@@ -35,6 +37,7 @@ import {
 import { sameScreenPage, sameScreenPageInstance, type ScreenElementTarget, type ScreenInputActor, type ScreenOperationKind, type ScreenPageIdentity, type ScreenPointer } from '@shared/types/stream.js';
 import { isRecentScreenPress, reduceScreenPointer, SCREEN_POINTER_POLICY } from '@shared/screen-pointer.js';
 import { MouseObserver } from './mouse-observer.js';
+import { raceAbort } from '@electron/utils/abort.js';
 
 export interface BrowserScreenTarget {
   readonly page: Page;
@@ -62,11 +65,14 @@ interface TrackedOperationTarget {
   checkTimer?: ReturnType<typeof setTimeout>;
 }
 
-interface ActiveSnapshot {
-  readonly generation: string;
-  readonly pageId: number;
-  readonly navigationSequence: number;
-  readonly result: TextSnapshotResult;
+interface PageSnapshotState {
+  readonly identityMap: Map<string, string>;
+  snapshot?: TextSnapshotResult;
+}
+
+export interface BrowserTargetOptions {
+  readonly feedback?: boolean;
+  readonly signal?: AbortSignal;
 }
 
 export class BrowserDialogOpenError extends Error {
@@ -83,7 +89,10 @@ export class BrowserAutomationSession {
   readonly browser: Browser;
   readonly generation: string;
   #registry!: PageRegistry;
-  #activeSnapshot: ActiveSnapshot | undefined;
+  readonly #pageSnapshots = new Map<number, PageSnapshotState>();
+  #targetPageId: number | undefined;
+  #displayPageId: number | undefined;
+  #executionSignal: AbortSignal | undefined;
   #disposed = false;
   readonly input: BrowserInputDriver;
   readonly #pagePointers = new Map<number, ScreenPointer>();
@@ -112,29 +121,42 @@ export class BrowserAutomationSession {
     const session = new BrowserAutomationSession(browser);
     session.#registry = await PageRegistry.create(browser, {
       selectedPageChanged: (previousPageId, pageId) => {
-        session.#invalidateSnapshot();
-        if (previousPageId !== undefined && previousPageId !== pageId) {
+        if (session.#operationDepth === 0 && previousPageId !== undefined && previousPageId !== pageId) {
           session.#clearPageFeedback(previousPageId);
           if (pageId !== undefined) session.#clearPageFeedback(pageId);
         }
       },
+      pageRemoved: (pageId) => {
+        session.#pageSnapshots.delete(pageId);
+        if (session.#displayPageId === pageId) session.#publishScreen({ type: 'target', target: null });
+      },
       mainFrameNavigated: (pageId) => {
-        if (session.#activeSnapshot?.pageId === pageId) session.#invalidateSnapshot();
         session.#releaseTarget(pageId);
+        if (session.#currentScreenPage()?.pageId === pageId) {
+          session.#publishScreen({ type: 'target', target: session.getScreenTarget() });
+        }
       },
       frameChanged: (registered, frame) => {
         session.#screenSequences.set(registered.pageId, (session.#screenSequences.get(registered.pageId) ?? 0) + 1);
         session.#releaseTarget(registered.pageId);
+        const pointer = session.#pagePointers.get(registered.pageId);
+        if (pointer) {
+          const activity = { page: session.#screenTarget(registered).identity, seq: ++session.#screenSequence,
+            timestamp: Date.now(), kind: 'navigation' as const, actor: 'ai' as const, pending: false };
+          session.#pagePointers.set(registered.pageId, { ...pointer, activity,
+            positionTarget: pointer.target ?? pointer.positionTarget, target: undefined, revision: ++session.#revision });
+        }
         // Main navigation is published after the registry commits its snapshot identity.
         if (frame === registered.page.mainFrame()) return;
         if (session.#registry && !registered.page.isClosed()
-          && session.#registry.selectedPage().pageId === registered.pageId) {
+          && session.#currentScreenPage()?.pageId === registered.pageId) {
           session.#publishScreen({ type: 'target', target: session.#screenTarget(registered) });
         }
       },
-      screenChanged: (registered) => session.#publishScreen({
-        type: 'target', target: registered ? session.#screenTarget(registered) : null,
-      }),
+      screenChanged: (registered) => {
+        if (session.#displayPageId !== undefined && !session.#disposed) return;
+        session.#publishScreen({ type: 'target', target: registered ? session.#screenTarget(registered) : null });
+      },
       observeMouse: (page, current) => {
         const identity = session.#screenTarget(current()).identity;
         session.#screenSequences.set(identity.pageId, 0);
@@ -157,8 +179,15 @@ export class BrowserAutomationSession {
     return session;
   }
 
-  getScreenTarget(): BrowserScreenTarget {
-    return this.#screenTarget(this.#registry.selectedPage());
+  getScreenTarget(): BrowserScreenTarget | null {
+    const registered = this.#currentScreenPage();
+    return registered ? this.#screenTarget(registered) : null;
+  }
+
+  #currentScreenPage(): RegisteredPage | undefined {
+    if (this.#disposed || !this.#registry) return undefined;
+    if (this.#displayPageId !== undefined) return this.#registry.pageById(this.#displayPageId);
+    try { return this.#registry.selectedPage(); } catch { return undefined; }
   }
 
   subscribeScreen(listener: (event: BrowserScreenEvent) => void): () => void {
@@ -173,8 +202,8 @@ export class BrowserAutomationSession {
 
   getCurrentScreenPointer(): ScreenPointer | null {
     if (this.#disposed) return null;
-    let pageId: number;
-    try { pageId = this.#registry.selectedPage().pageId; } catch { return null; }
+    const pageId = this.#currentScreenPage()?.pageId;
+    if (pageId === undefined) return null;
     const pointer = this.#pagePointers.get(pageId);
     if (!pointer) return null;
     if (pointer.press && !isRecentScreenPress(pointer.press.timestamp, Date.now())) {
@@ -210,15 +239,7 @@ export class BrowserAutomationSession {
   }
 
   #publishScreen(event: BrowserScreenEvent): void {
-    if (event.type === 'target') {
-      const pointer = event.target ? this.#pagePointers.get(event.target.identity.pageId) : undefined;
-      if (event.target && pointer && !sameScreenPage(pointer.page, event.target.identity)) {
-        const activity = { page: event.target.identity, seq: ++this.#screenSequence, timestamp: Date.now(),
-          kind: 'navigation' as const, actor: 'ai' as const, pending: false };
-        this.#pagePointers.set(event.target.identity.pageId, { ...pointer, activity,
-          positionTarget: pointer.target ?? pointer.positionTarget, target: undefined, revision: ++this.#revision });
-      }
-    } else {
+    if (event.type !== 'target') {
       const before = this.#pagePointers.get(event.pointer.page.pageId);
       if (!before || this.#disposed) return;
       const pointer = reduceScreenPointer(before, event.pointer);
@@ -303,7 +324,7 @@ export class BrowserAutomationSession {
       }
       const kind = token.kind === 'operation' || token.kind === 'scroll' ? 'focus' : token.kind;
       if (kind !== 'input' && kind !== 'select' && kind !== 'upload' && kind !== 'key' && kind !== 'focus') return;
-      if (this.#registry.selectedPage().pageId !== token.page.pageId) {
+      if (this.#currentScreenPage()?.pageId !== token.page.pageId) {
         const positionTarget: ScreenElementTarget = { ...geometry, ...token, kind, timestamp: Date.now() };
         this.#storePointer({ ...pointer, target: undefined, positionTarget, revision: ++this.#revision });
         return;
@@ -324,7 +345,7 @@ export class BrowserAutomationSession {
   }
 
   refreshTargetForFrame(identity: ScreenPageIdentity, geometry: { width?: number; height?: number; scrollX?: number; scrollY?: number; timestamp: number; seq?: number }): void {
-    if (this.#disposed || !sameScreenPage(this.getScreenTarget().identity, identity)) return;
+    if (this.#disposed || !sameScreenPage(this.getScreenTarget()?.identity, identity)) return;
     const last = this.#screenFrames.get(identity.pageId);
     if (sameScreenPage(last?.identity, identity)
       && (geometry.seq === undefined ? geometry.timestamp <= last!.timestamp
@@ -408,24 +429,59 @@ export class BrowserAutomationSession {
     });
   }
 
-  /** Shared operation boundary also observes reliable script focus/scroll outcomes and read activity. */
-  async withOperationFeedback<T>(action: () => Promise<T> | T, actor: ScreenInputActor = 'ai'): Promise<T> {
+  /** One target scope shared by model page IDs and the SDK's internal page adapter. */
+  async withTarget<T>(pageId: number | undefined, action: (page: Page) => Promise<T> | T, options: BrowserTargetOptions = {}): Promise<T> {
+    const registered = this.#requirePage(pageId);
+    const previous = this.#targetPageId;
+    this.#targetPageId = registered.pageId;
+    try {
+      return await this.withExecutionSignal(() => options.feedback
+        ? this.withOperationFeedback(() => action(registered.page), 'ai', registered.pageId)
+        : action(registered.page), options.signal);
+    } finally { this.#targetPageId = previous; }
+  }
+
+  async withExecutionSignal<T>(action: () => Promise<T> | T, signal?: AbortSignal): Promise<T> {
+    const previous = this.#executionSignal;
+    this.#executionSignal = signal ?? previous;
+    try { this.#executionSignal?.throwIfAborted(); return await action(); }
+    finally { this.#executionSignal = previous; }
+  }
+
+  /** Shared feedback observes only the resolved operation Page, never changes logical selection. */
+  async withOperationFeedback<T>(action: () => Promise<T> | T, actor: ScreenInputActor = 'ai', pageId?: number): Promise<T> {
     if (this.#operationDepth > 0) return action();
-    const page = this.getSelectedPage();
-    const token = this.#beginOperation(page, 'operation', actor);
+    const registered = this.#requirePage(pageId);
+    const page = registered.page;
     this.#operationDepth++;
+    this.#displayPageId = registered.pageId;
+    this.#publishScreen({ type: 'target', target: this.#screenTarget(registered) });
+    const token = this.#beginOperation(page, 'operation', actor);
     // Start sampling before dispatch, without making the business promise await feedback or drawing.
-    const sample = this.#screenListeners.size && !this.#registry.getDialog()
+    const sample = this.#screenListeners.size && !this.#registry.getDialog(registered.pageId)
       ? PageOperationFeedback.capture(page).catch(() => null) : Promise.resolve(null);
+    let restored = false;
+    const restoreDisplay = () => {
+      if (restored) return;
+      restored = true;
+      this.#displayPageId = undefined;
+      const target = this.getScreenTarget();
+      this.#publishScreen({ type: 'target', target });
+      if (target?.identity.pageId !== registered.pageId) this.#clearPageFeedback(registered.pageId);
+    };
+    const cancellation = this.#executionSignal;
+    cancellation?.addEventListener('abort', restoreDisplay, { once: true });
     try { return await action(); }
     finally {
       this.#operationDepth--;
+      restoreDisplay();
+      cancellation?.removeEventListener('abort', restoreDisplay);
       if (token) {
         this.#finishOperation(token);
         void sample.then(async (watch) => {
           if (!watch) return;
           try {
-            if (this.#disposed || !sameScreenPage(this.#identityFor(page), token.page) || this.#registry.getDialog()) return;
+            if (this.#disposed || !sameScreenPage(this.#identityFor(page), token.page) || this.#registry.getDialog(registered.pageId)) return;
             let result = await watch.read();
             const deadline = Date.now() + SCREEN_POINTER_POLICY.scrollObservationMs;
             while (result.effects.changed && result.effects.at > 0
@@ -502,39 +558,33 @@ export class BrowserAutomationSession {
     }
   }
 
-  getSelectedPage(): Page {
-    return this.#registry.selectedPage().page;
-  }
+  getSelectedPage(): Page { return this.#registry.selectedPage().page; }
+  getSelectedPageId(): number { return this.#registry.selectedPage().pageId; }
+  getSelectedPageIndex(): number { return this.#registry.selectedPageIndex(); }
+  getPageByIndex(pageIndex: number): Page { return this.#registry.pageByIndex(pageIndex).page; }
+  getPageById(pageId: number): Page { return this.#requirePage(pageId).page; }
+  getPage(pageId?: number): Page { return this.#requirePage(pageId).page; }
 
-  getSelectedPageId(): number {
-    return this.#registry.selectedPage().pageId;
-  }
-
-  getSelectedPageIndex(): number {
-    return this.#registry.selectedPageIndex();
-  }
-
-  getPageByIndex(pageIndex: number): Page {
-    return this.#registry.pageByIndex(pageIndex).page;
-  }
-
-  async listPages(): Promise<readonly RegisteredPage[]> {
-    return this.#registry.refresh();
-  }
+  async listPages(): Promise<readonly RegisteredPage[]> { return this.#registry.refresh(); }
+  consumeSelectedPageFallback(): { wasClosed: boolean } | undefined { return this.#registry.consumeSelectedPageFallback(); }
 
   async selectPageByIndex(pageIndex: number): Promise<Page> {
     await this.#registry.refresh();
     return this.#registry.selectByIndex(pageIndex).page;
   }
 
-  async newPage(url?: string, timeoutMs?: number): Promise<Page> {
-    const registered = await this.#registry.newPage();
+  async selectPageById(pageId: number, bringToFront = false): Promise<Page> {
+    const page = this.#registry.selectById(pageId).page;
+    if (bringToFront) await page.bringToFront();
+    return page;
+  }
+
+  async newPage(url?: string, timeoutMs?: number, options: { background?: boolean; isolatedContext?: string } = {}): Promise<Page> {
+    const registered = await this.#registry.newPage(options);
     if (url !== undefined) {
-      const receipt = await this.waitForAction(
-        () => registered.page.goto(url, { timeout: timeoutMs }),
-        { navigationTimeoutMs: timeoutMs }
-      );
-      this.#throwIfUnhandledDialog(receipt);
+      await this.waitForAction(() => registered.page.goto(url, { timeout: timeoutMs }), {
+        pageId: registered.pageId, navigationTimeoutMs: timeoutMs,
+      });
     }
     return registered.page;
   }
@@ -544,207 +594,177 @@ export class BrowserAutomationSession {
     await this.#registry.closeByIndex(pageIndex);
   }
 
-  async takeSnapshot(verbose = false): Promise<TextSnapshotResult> {
+  async closePageById(pageId: number): Promise<void> {
+    await this.#registry.closeById(pageId);
+  }
+
+  async takeSnapshot(verbose = false, pageId?: number): Promise<TextSnapshotResult> {
     this.#assertActive();
-    this.throwIfDialogOpen();
-    const selected = this.#registry.selectedPage();
-    const result = await createTextSnapshot(selected.page, verbose);
-    const current = this.#registry.pageById(selected.pageId);
-    if (
-      !current ||
-      current.pageId !== this.#registry.selectedPage().pageId ||
-      current.navigationSequence !== selected.navigationSequence
-    ) {
-      throw new Error('Page changed while the accessibility snapshot was being created.');
-    }
-    this.#activeSnapshot = {
-      generation: this.generation,
-      pageId: selected.pageId,
-      navigationSequence: selected.navigationSequence,
-      result,
-    };
+    const registered = this.#requirePage(pageId);
+    const state = this.#snapshotState(registered.pageId);
+    const result = await createTextSnapshot(registered.page, verbose, { identityMap: state.identityMap });
+    state.snapshot = result;
     return result;
   }
 
-  getActiveSnapshot(): TextSnapshotResult | undefined {
-    return this.#activeSnapshot?.result;
+  getActiveSnapshot(pageId?: number): TextSnapshotResult | undefined {
+    return this.#pageSnapshots.get(this.#requirePage(pageId).pageId)?.snapshot;
   }
 
-  getAXNodeByUid(uid: string): TextSnapshotNode | undefined {
-    return this.#requireActiveSnapshot().idToNode.get(uid);
+  getAXNodeByUid(uid: string, pageId?: number): TextSnapshotNode | undefined {
+    return this.getActiveSnapshot(pageId)?.idToNode.get(uid);
   }
 
-  async getElementByUid(uid: string): Promise<ElementHandle<Element>> {
-    return resolveSnapshotElement(this.#requireActiveSnapshot(), uid);
+  async getElementByUid(uid: string, pageId?: number): Promise<ElementHandle<Element>> {
+    const registered = this.#requirePage(pageId);
+    return resolveSnapshotElement(this.#requireSnapshot(registered.pageId), uid, registered.pageId);
   }
 
-  async clickByUid(uid: string, clickCount: 1 | 2): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    const handle = await this.getElementByUid(uid);
+  async clickByUid(uid: string, clickCount: 1 | 2 = 1, pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    const handle = await this.getElementByUid(uid, registered.pageId);
     try {
-      const node = this.getAXNodeByUid(uid);
-      let receipt: ActionReceipt;
+      const node = this.getAXNodeByUid(uid, registered.pageId);
       try {
-        receipt = await this.waitForAction(async () => {
-          if (clickCount === 1 && node?.role === 'option' && await selectNativeOption(handle, this.input)) return;
-          await handle.asLocator().click({ count: clickCount });
-        });
+        return await this.waitForAction(async (signal) => {
+          if (clickCount === 1 && node?.role === 'option' && await selectNativeOption(handle, this.input, signal)) return;
+          await this.input.click(handle, clickCount, signal);
+        }, { pageId: registered.pageId });
       } catch (error) {
-        this.throwIfDialogOpen();
+        if (this.getDialog(registered.pageId)) return this.#interruptedReceipt(registered.pageId);
         throwActionError(error, uid);
       }
-      this.#throwIfUnhandledDialog(receipt);
-      return receipt;
-    } finally {
-      // Both the previous vendored handler and Puppeteer's `using` hook release
-      // remote handles without waiting on Runtime.releaseObject.
-      void handle.dispose();
-    }
+    } finally { void handle.dispose(); }
   }
 
-  async hoverByUid(uid: string): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    const handle = await this.getElementByUid(uid);
+  async hoverByUid(uid: string, pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    const handle = await this.getElementByUid(uid, registered.pageId);
     try {
-      let receipt: ActionReceipt;
       try {
-        receipt = await this.waitForAction(() => handle.asLocator().hover());
+        return await this.waitForAction((signal) => this.input.hover(handle, signal), { pageId: registered.pageId });
       } catch (error) {
-        this.throwIfDialogOpen();
+        if (this.getDialog(registered.pageId)) return this.#interruptedReceipt(registered.pageId);
         throwActionError(error, uid);
       }
-      this.#throwIfUnhandledDialog(receipt);
-      return receipt;
-    } finally {
-      void handle.dispose();
-    }
+    } finally { void handle.dispose(); }
   }
 
-  async dragByUids(fromUid: string, toUid: string): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    const fromHandle = await this.getElementByUid(fromUid);
+  async dragByUids(fromUid: string, toUid: string, pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    const fromHandle = await this.getElementByUid(fromUid, registered.pageId);
     let toHandle: ElementHandle<Element> | undefined;
     try {
-      toHandle = await this.getElementByUid(toUid);
-      const receipt = await this.waitForAction(async () => {
-        await fromHandle.drag(toHandle!);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        await toHandle!.drop(fromHandle);
-      });
-      this.#throwIfUnhandledDialog(receipt);
-      return receipt;
-    } finally {
-      void fromHandle.dispose();
-      void toHandle?.dispose();
-    }
+      toHandle = await this.getElementByUid(toUid, registered.pageId);
+      return await this.waitForAction(() => this.input.drag(fromHandle, toHandle!), { pageId: registered.pageId });
+    } finally { void fromHandle.dispose(); void toHandle?.dispose(); }
   }
 
-  async uploadFileByUid(uid: string, filePath: string): Promise<void> {
-    this.throwIfDialogOpen();
-    const handle = await this.getElementByUid(uid);
+  async uploadFileByUid(uid: string, filePaths: string | readonly string[], pageId?: number): Promise<void> {
+    const registered = this.#requirePage(pageId);
+    const handle = await this.getElementByUid(uid, registered.pageId);
     try {
-      await this.input.upload(this.getSelectedPage(), handle, filePath);
-    } finally {
-      void handle.dispose();
-    }
+      await this.withOperationFeedback(() => this.input.upload(registered.page, handle, filePaths), 'ai', registered.pageId);
+    } finally { void handle.dispose(); }
   }
 
-  async fillByUid(uid: string, value: string): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    let receipt: ActionReceipt;
+  fillByUid(uid: string, value: string, pageId?: number): Promise<ActionReceipt> {
+    return this.fillFormByUids([{ uid, value }], pageId);
+  }
+
+  async fillFormByUids(elements: readonly Readonly<{ uid: string; value: string }>[], pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    let currentUid: string | undefined;
     try {
-      receipt = await this.waitForAction(() => this.#fillElement(uid, value));
+      return await this.waitForAction(async (signal) => {
+        for (const { uid, value } of elements) {
+          const previousUid = currentUid;
+          currentUid = undefined;
+          const handle = await raceAbort(this.getElementByUid(uid, registered.pageId), signal).catch((error) => {
+            if (signal.aborted && previousUid) currentUid = previousUid;
+            throw error;
+          });
+          currentUid = uid;
+          try {
+            const node = this.getAXNodeByUid(uid, registered.pageId);
+            const options = node?.role === 'combobox' ? node.children.filter((child) => child.role === 'option') : [];
+            if (options.length) {
+              await raceAbort(selectOptionByText(handle, options, value, this.input, signal), signal);
+            } else {
+              const fillTimeout = registered.page.getDefaultTimeout() + value.length * 10;
+              await raceAbort(this.input.fill(handle, value, fillTimeout, 'boolean-text', signal), signal);
+            }
+            signal.throwIfAborted();
+          } finally { void handle.dispose(); }
+        }
+      }, { pageId: registered.pageId });
     } catch (error) {
-      this.throwIfDialogOpen();
-      throw error;
+      if (!currentUid) throw error;
+      if (this.getDialog(registered.pageId)) return { ...this.#interruptedReceipt(registered.pageId), interruptedUid: currentUid };
+      throwActionError(error, currentUid);
     }
-    this.#throwIfUnhandledDialog(receipt);
-    return receipt;
   }
 
-  async fillFormByUids(
-    elements: readonly Readonly<{ uid: string; value: string }>[]
-  ): Promise<ActionReceipt> {
-    let receipt = emptyReceipt();
-    for (const element of elements) {
-      receipt = await this.fillByUid(element.uid, element.value);
-    }
-    return receipt;
+  async typeText(text: string, submitKey?: string, pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    return this.waitForAction(() => this.input.typeText(registered.page, text, submitKey), { pageId: registered.pageId });
   }
 
-  async typeText(text: string): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    const page = this.getSelectedPage();
-    let receipt: ActionReceipt;
-    try {
-      receipt = await this.waitForAction(() => this.input.typeText(page, text));
-    } catch (error) {
-      this.throwIfDialogOpen();
-      throw error;
-    }
-    this.#throwIfUnhandledDialog(receipt);
-    return receipt;
+  async pressKey(keyInput: string, pageId?: number): Promise<ActionReceipt> {
+    const registered = this.#requirePage(pageId);
+    return this.waitForAction(() => this.input.press(registered.page, keyInput), { pageId: registered.pageId });
   }
 
-  async pressKey(keyInput: string): Promise<ActionReceipt> {
-    this.throwIfDialogOpen();
-    const page = this.getSelectedPage();
-    let receipt: ActionReceipt;
-    try {
-      receipt = await this.waitForAction(() => this.input.press(page, keyInput));
-    } catch (error) {
-      this.throwIfDialogOpen();
-      throw error;
-    }
-    this.#throwIfUnhandledDialog(receipt);
-    return receipt;
-  }
-
-  async waitForTextOnPage(text: readonly string[], timeoutMs?: number): Promise<void> {
-    this.throwIfDialogOpen();
-    const frames = this.getSelectedPage().frames();
-    let locator = Locator.race(
-      frames.flatMap((frame) => text.flatMap((value) => [
-        frame.locator(`aria/${value}`),
-        frame.locator(`text/${value}`),
-      ])),
-    );
+  async waitForTextOnPage(text: readonly string[], timeoutMs?: number, pageId?: number): Promise<void> {
+    const frames = this.getPage(pageId).frames();
+    let locator = Locator.race(frames.flatMap((frame) => text.flatMap((value) => [
+      frame.locator(`aria/${value}`), frame.locator(`text/${value}`),
+    ])));
     if (timeoutMs) locator = locator.setTimeout(timeoutMs);
-    await locator.wait();
+    await locator.wait({ signal: this.#executionSignal });
   }
 
-  getConsoleData(includePreservedMessages = false): readonly ConsoleObservation[] {
-    return this.#registry.getConsoleData(includePreservedMessages);
+  getConsoleCollector(pageId?: number): ConsoleCollector {
+    return this.#registry.getConsoleCollector(this.#requirePage(pageId).pageId);
+  }
+  getNetworkCollector(pageId?: number): NetworkCollector {
+    return this.#registry.getNetworkCollector(this.#requirePage(pageId).pageId);
+  }
+  getServiceWorkerConsoleCollector(): ServiceWorkerConsoleCollector { return this.#registry.getServiceWorkerConsoleCollector(); }
+  getServiceWorkerConsoleData(serviceWorkerId: string): readonly ConsoleObservation[] {
+    return this.getServiceWorkerConsoleCollector().getData(serviceWorkerId);
+  }
+  getServiceWorkerConsoleMessageId(message: ConsoleObservation): number {
+    return this.getServiceWorkerConsoleCollector().getIdForResource(message as Parameters<ServiceWorkerConsoleCollector['getIdForResource']>[0]);
   }
 
-  getConsoleMessageById(messageId: number): ConsoleObservation {
-    return this.#registry.getConsoleMessageById(messageId);
+  getConsoleData(includePreservedMessages = false, pageId?: number): readonly ConsoleObservation[] {
+    return this.#registry.getConsoleData(includePreservedMessages, this.#requirePage(pageId).pageId);
+  }
+  getConsoleMessageById(messageId: number, pageId?: number): ConsoleObservation {
+    return this.#registry.getConsoleMessageById(messageId, this.#requirePage(pageId).pageId);
+  }
+  getConsoleMessageId(message: ConsoleObservation, pageId?: number): number {
+    return this.#registry.getConsoleMessageId(message, this.#requirePage(pageId).pageId);
+  }
+  getNetworkRequests(includePreservedRequests = false, pageId?: number): readonly HTTPRequest[] {
+    return this.#registry.getNetworkRequests(includePreservedRequests, this.#requirePage(pageId).pageId);
+  }
+  getNetworkRequestById(requestId: number, pageId?: number): HTTPRequest {
+    return this.#registry.getNetworkRequestById(requestId, this.#requirePage(pageId).pageId);
+  }
+  getNetworkRequestId(request: HTTPRequest, pageId?: number): number {
+    return this.#registry.getNetworkRequestId(request, this.#requirePage(pageId).pageId);
   }
 
-  getConsoleMessageId(message: ConsoleObservation): number {
-    return this.#registry.getConsoleMessageId(message);
-  }
-
-  getNetworkRequests(includePreservedRequests = false): readonly HTTPRequest[] {
-    return this.#registry.getNetworkRequests(includePreservedRequests);
-  }
-
-  getNetworkRequestById(requestId: number): HTTPRequest {
-    return this.#registry.getNetworkRequestById(requestId);
-  }
-
-  getNetworkRequestId(request: HTTPRequest): number {
-    return this.#registry.getNetworkRequestId(request);
-  }
-
-  async waitForAction(
-    action: () => Promise<unknown>,
-    options: ActionWaitOptions = {}
-  ): Promise<ActionReceipt> {
+  async waitForAction(action: (signal: AbortSignal) => Promise<unknown>, options: ActionWaitOptions = {}): Promise<ActionReceipt> {
     this.#assertActive();
-    const before = new Set((await this.#registry.refresh()).map((page) => page.pageId));
-    const receipt = await this.withOperationFeedback(() => new ActionWaiter(this.getSelectedPage()).run(action, options));
-    const after = new Set((await this.#registry.refresh()).map((page) => page.pageId));
+    const registered = this.#requirePage(options.pageId);
+    const before = new Set(this.#registry.pages().map((page) => page.pageId));
+    const receipt = await this.withOperationFeedback(() => new ActionWaiter(registered.page).run(action, {
+      ...options, signal: options.signal ?? this.#executionSignal,
+    }), 'ai', registered.pageId);
+    const after = new Set(this.#registry.pages().map((page) => page.pageId));
     return {
       ...receipt,
       openedPageIds: Object.freeze([...after].filter((pageId) => !before.has(pageId))),
@@ -752,27 +772,24 @@ export class BrowserAutomationSession {
     };
   }
 
-  throwIfDialogOpen(): void {
-    const dialog = this.#registry.getDialog();
+  getDialog(pageId?: number): Dialog | undefined { return this.#registry.getDialog(pageId ?? this.#targetPageId); }
+
+  throwIfDialogOpen(pageId?: number): void {
+    const dialog = this.getDialog(pageId);
     if (dialog && !dialog.handled) throw new BrowserDialogOpenError(observeDialog(dialog));
   }
 
-  clearDialog(): void {
-    this.#registry.clearDialog();
-  }
+  clearDialog(pageId?: number): void { this.#registry.clearDialog(pageId ?? this.#targetPageId); }
 
-  async handleDialog(action: 'accept' | 'dismiss', promptText?: string): Promise<void> {
-    const pageId = this.#registry.selectedPage().pageId;
-    const dialog = this.#registry.getDialog(pageId);
+  async handleDialog(action: 'accept' | 'dismiss', promptText?: string, pageId?: number): Promise<void> {
+    const registered = this.#requirePage(pageId);
+    const dialog = this.#registry.getDialog(registered.pageId);
     if (!dialog) throw new Error('No open dialog found');
-
     try {
       if (action === 'dismiss') await dialog.dismiss();
       else await dialog.accept(promptText);
-    } catch {
-      // chrome-devtools-mcp treats a dialog handled outside automation as success.
-    }
-    this.#registry.clearDialog(pageId);
+    } catch { /* Source treats a dialog handled outside automation as success. */ }
+    this.#registry.clearDialog(registered.pageId);
   }
 
   async consumePageChanges(): Promise<PageChangeSet> {
@@ -785,7 +802,7 @@ export class BrowserAutomationSession {
     this.#disposed = true;
     for (const cancel of this.#feedbackDelays) cancel();
     this.#feedbackDelays.clear();
-    this.#invalidateSnapshot();
+    this.#pageSnapshots.clear();
     this.#registry.dispose();
     this.#pagePointers.clear();
     this.#targetOrders.clear();
@@ -795,53 +812,31 @@ export class BrowserAutomationSession {
     this.#screenListeners.clear();
   }
 
-  async #fillElement(uid: string, value: string): Promise<void> {
-    const handle = await this.getElementByUid(uid);
-    try {
-      const node = this.getAXNodeByUid(uid);
-      try {
-        const options = node?.role === 'combobox' ? optionDescendants(node) : [];
-        if (options.length > 0) {
-          await selectOptionByText(handle, options, value, this.input);
-          return;
-        }
-
-        const fillTimeout = this.getSelectedPage().getDefaultTimeout() + value.length * 10;
-        await this.input.fill(handle, value, fillTimeout, 'boolean-text');
-      } catch (error) {
-        throwActionError(error, uid);
-      }
-    } finally {
-      void handle.dispose();
-    }
-  }
-
-  #requireActiveSnapshot(): TextSnapshotResult {
+  #requirePage(pageId?: number): RegisteredPage {
     this.#assertActive();
-    const active = this.#activeSnapshot;
-    if (!active) throw new Error('No snapshot found. Use take_snapshot to capture one.');
-    const selected = this.#registry.selectedPage();
-    if (
-      active.generation !== this.generation ||
-      active.pageId !== selected.pageId ||
-      active.navigationSequence !== selected.navigationSequence
-    ) {
-      this.#invalidateSnapshot();
-      throw new Error(
-        'This uid is coming from a stale snapshot. Call take_snapshot to get a fresh snapshot.'
-      );
-    }
-    return active.result;
+    const id = pageId ?? this.#targetPageId;
+    if (id === undefined) return this.#registry.selectedPage();
+    const registered = this.#registry.pageById(id);
+    if (!registered) throw new Error('No page found');
+    return registered;
   }
 
-  #throwIfUnhandledDialog(receipt: ActionReceipt): void {
-    if (receipt.dialog && !receipt.dialog.handled) {
-      throw new BrowserDialogOpenError(receipt.dialog);
-    }
+  #snapshotState(pageId: number): PageSnapshotState {
+    let state = this.#pageSnapshots.get(pageId);
+    if (!state) { state = { identityMap: new Map() }; this.#pageSnapshots.set(pageId, state); }
+    return state;
   }
 
-  #invalidateSnapshot(): void {
-    this.#activeSnapshot = undefined;
+  #requireSnapshot(pageId: number): TextSnapshotResult {
+    const snapshot = this.#pageSnapshots.get(pageId)?.snapshot;
+    if (!snapshot) throw new Error(`No snapshot found for page ${pageId}. Use take_snapshot to capture one.`);
+    return snapshot;
+  }
+
+  #interruptedReceipt(pageId: number): ActionReceipt {
+    const dialog = this.#registry.getDialog(pageId);
+    return { ...emptyReceipt(), domSettled: false, interrupted: true,
+      ...(dialog ? { dialog: observeDialog(dialog) } : {}) };
   }
 
   #assertActive(): void {
@@ -849,7 +844,7 @@ export class BrowserAutomationSession {
   }
 }
 
-async function selectNativeOption(handle: ElementHandle<Element>, input: BrowserInputDriver): Promise<boolean> {
+async function selectNativeOption(handle: ElementHandle<Element>, input: BrowserInputDriver, signal: AbortSignal): Promise<boolean> {
   const selectHandle = await handle.evaluateHandle((node) => {
     if (!(node instanceof HTMLOptionElement)) return null;
     const select = node.closest('select');
@@ -866,9 +861,9 @@ async function selectNativeOption(handle: ElementHandle<Element>, input: Browser
   try {
     const valueHandle = await handle.getProperty('value');
     try {
-      const value = await valueHandle.jsonValue();
+      const value = await raceAbort(valueHandle.jsonValue(), signal);
       if (typeof value !== 'string') return false;
-      await input.selectValue(select, value);
+      await input.selectValue(select, value, signal);
       return true;
     } finally {
       void valueHandle.dispose();
@@ -883,18 +878,19 @@ async function selectOptionByText(
   options: readonly TextSnapshotNode[],
   value: string,
   input: BrowserInputDriver,
+  signal: AbortSignal,
 ): Promise<void> {
   let optionFound = false;
   for (const child of options) {
     if (child.role !== 'option' || child.name !== value || !child.value) continue;
     optionFound = true;
-    const childHandle = await child.elementHandle();
+    const childHandle = await raceAbort(child.elementHandle(), signal);
     if (!childHandle) continue;
     try {
-      const valueHandle = await childHandle.getProperty('value');
+      const valueHandle = await raceAbort(childHandle.getProperty('value'), signal);
       try {
-        const actualValue = await valueHandle.jsonValue();
-        if (actualValue) await input.selectValue(handle, actualValue.toString());
+        const actualValue = await raceAbort(valueHandle.jsonValue(), signal);
+        if (typeof actualValue === 'string') await input.selectValue(handle, actualValue, signal);
       } finally {
         void valueHandle.dispose();
       }
@@ -904,17 +900,6 @@ async function selectOptionByText(
     break;
   }
   if (!optionFound) throw new Error(`Could not find option with text "${value}"`);
-}
-
-function optionDescendants(node: TextSnapshotNode): TextSnapshotNode[] {
-  const options: TextSnapshotNode[] = [];
-  const pending = [...node.children];
-  while (pending.length > 0) {
-    const child = pending.shift()!;
-    if (child.role === 'option') options.push(child);
-    pending.push(...child.children);
-  }
-  return options;
 }
 
 function observeDialog(dialog: Dialog): DialogObservation {
@@ -936,8 +921,11 @@ function emptyReceipt(): ActionReceipt {
 }
 
 function throwActionError(error: unknown, uid: string): never {
+  const reason = error instanceof TimeoutError
+    ? 'The element did not become interactive within the configured timeout.'
+    : error instanceof Error ? error.message : String(error);
   throw new Error(
-    `Failed to interact with the element with uid ${uid}. The element did not become interactive within the configured timeout.`,
+    `Failed to interact with the element with uid ${uid}. ${reason}`,
     { cause: error }
   );
 }

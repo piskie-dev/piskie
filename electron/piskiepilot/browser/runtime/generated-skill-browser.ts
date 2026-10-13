@@ -305,8 +305,11 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
   async selectPage(pageIdx: number): Promise<BrowserPageObservation> {
     validatePageIdx(pageIdx);
     return this.#withLockedBrowser(async (context) => {
-      const page = await context.selectPageByIndex(pageIdx);
-      return observe(page);
+      const registered = (await context.listPages())[pageIdx];
+      if (!registered) throw new Error('No page found');
+      return context.withTarget(registered.pageId, async () => observe(await context.selectPageById(registered.pageId)), {
+        feedback: true, signal: this.#binding.signal,
+      });
     });
   }
 
@@ -356,8 +359,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       options.timeoutMs,
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
-        await context.waitForAction(() =>
-          element.asLocator().setTimeout(timeout(options.timeoutMs)).hover()
+        await context.waitForAction((signal) =>
+          context.input.hover(element, signal, timeout(options.timeoutMs))
         );
         return observe(context.getSelectedPage());
       }
@@ -374,8 +377,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       options.timeoutMs,
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
-        await context.waitForAction(() =>
-          context.input.fill(element, value, timeout(options.timeoutMs), 'reject')
+        await context.waitForAction((signal) =>
+          context.input.fill(element, value, timeout(options.timeoutMs), 'reject', signal)
         );
         return observe(context.getSelectedPage());
       }
@@ -411,8 +414,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       options.timeoutMs,
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
-        await context.waitForAction(async () => {
-          const selected = await context.input.select(element, value);
+        await context.waitForAction(async (signal) => {
+          const selected = await context.input.select(element, value, signal);
           if (selected.length === 0) {
             throw new Error(`Select option was not found: ${JSON.stringify(value)}`);
           }
@@ -426,7 +429,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
     return this.#withLockedContext(async (page, context) => {
       await context.waitForAction(() => context.input.typeText(page, text));
       return observe(context.getSelectedPage());
-    });
+    }, true);
   }
 
   async press(key: string): Promise<BrowserPageObservation> {
@@ -435,7 +438,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
     return this.#withLockedContext(async (page, context) => {
       await context.waitForAction(() => context.input.press(page, key));
       return observe(context.getSelectedPage());
-    });
+    }, true);
   }
   async waitFor(
     condition: BrowserWaitCondition,
@@ -607,7 +610,7 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
             }
           }
           return { found: false as const };
-        });
+        }, options.sideEffect === true);
         if (result.found) return result.value;
       } catch (error) {
         // Candidate recovery is safe only until an actual page side effect starts.
@@ -645,8 +648,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
       options.timeoutMs,
       { requirement: 'actionable', sideEffect: true },
       async (_page, element, context) => {
-        await context.waitForAction(() =>
-          element.asLocator().setTimeout(timeout(options.timeoutMs)).click({ count })
+        await context.waitForAction((signal) =>
+          context.input.click(element, count, signal, timeout(options.timeoutMs))
         );
         return observe(context.getSelectedPage());
       }
@@ -654,7 +657,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
   }
 
   async #withLockedContext<T>(
-    action: (page: BrowserPage, context: BrowserSession) => Promise<T>
+    action: (page: BrowserPage, context: BrowserSession) => Promise<T>,
+    feedback = false,
   ): Promise<T> {
     this.#assertActive();
     return BrowserManager.runExclusive(
@@ -665,7 +669,8 @@ class GeneratedSkillPageFacade implements GeneratedSkillPage {
         this.#assertActive();
         return value;
       },
-      this.#binding.signal
+      this.#binding.signal,
+      { feedback },
     );
   }
 

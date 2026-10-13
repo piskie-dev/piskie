@@ -14,7 +14,16 @@ export function useBrowserMonitor(scope: string, workers: readonly WorkerRef[] =
   useEffect(() => {
     setCollections((current) => new Map(current).set(scope, reconcileMonitorTasks(current.get(scope) ?? NO_TASKS, workers)));
   }, [scope, workers]);
-  const windows = windowsByScope.get(scope) ?? NO_WINDOWS;
+  const taskKeys = useMemo(() => new Set(tasks.map((task) => task.key)), [tasks]);
+  const savedWindows = windowsByScope.get(scope) ?? NO_WINDOWS;
+  const windows = useMemo(() => savedWindows.filter((item) => taskKeys.has(item.key)), [savedWindows, taskKeys]);
+  useEffect(() => {
+    setWindowsByScope((current) => {
+      const saved = current.get(scope) ?? NO_WINDOWS;
+      const remaining = saved.filter((item) => taskKeys.has(item.key));
+      return remaining.length === saved.length ? current : new Map(current).set(scope, remaining);
+    });
+  }, [scope, taskKeys]);
   const updateWindows = useCallback((change: (current: readonly MonitorWindow[]) => readonly MonitorWindow[]) => {
     setWindowsByScope((current) => new Map(current).set(scope, change(current.get(scope) ?? NO_WINDOWS)));
   }, [scope]);
@@ -25,7 +34,8 @@ export function useBrowserMonitor(scope: string, workers: readonly WorkerRef[] =
     const publish = () => setCollections((current) => {
       const existing = current.get(scope) ?? NO_TASKS;
       const hasFrame = [...frames.current].some((frame) => frame.scope === scope && frame.key === key);
-      if (existing.find((task) => task.key === key)?.hasFrame === hasFrame) return current;
+      const task = existing.find((item) => item.key === key);
+      if (!task || task.hasFrame === hasFrame) return current;
       return new Map(current).set(scope, existing.map((task) => task.key === key ? { ...task, hasFrame } : task));
     });
     return {

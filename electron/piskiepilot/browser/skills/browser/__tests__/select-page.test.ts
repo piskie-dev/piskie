@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  const page = { url: vi.fn(() => 'https://example.test'), bringToFront: vi.fn() };
+  const page = { url: vi.fn(() => 'https://example.test'), title: vi.fn(async () => ''), bringToFront: vi.fn() };
   const automation = {
-    selectPageByIndex: vi.fn(async () => page),
+    selectPageById: vi.fn(async (_id: number, bringToFront: boolean) => {
+      if (bringToFront) await page.bringToFront();
+      return page;
+    }),
     listPages: vi.fn(async () => [{ pageId: 7, page, navigationSequence: 0 }]),
-    getSelectedPageIndex: vi.fn(() => 0),
-    consumePageChanges: vi.fn(async () => ({ opened: [], closed: [] })),
+    getSelectedPageId: vi.fn(() => 7),
+    consumeSelectedPageFallback: vi.fn(() => undefined),
   };
   const runExclusive = vi.fn(async (_browserId: string, action: (value: unknown) => unknown) =>
     action({ automation })
@@ -18,17 +21,22 @@ vi.mock('../../../core/browser/browser-manager.js', () => ({
   BrowserManager: { runExclusive: mocks.runExclusive },
 }));
 
-import { selectPage } from '../index.js';
+import { select_page } from '../index.js';
 
-describe('browser selectPage', () => {
+describe('browser select_page', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('updates logical selection without activating the Chromium tab', async () => {
-    await expect(selectPage({ pageIdx: 2, browserId: 'browser-a' })).resolves.toContain(
-      '0: https://example.test [selected]'
+  it('uses stable IDs and changes logical selection without activating the tab by default', async () => {
+    await expect(select_page({ pageId: 7, browserId: 'browser-a' })).resolves.toBe(
+      '## Pages\n7: https://example.test [selected]',
     );
-
-    expect(mocks.automation.selectPageByIndex).toHaveBeenCalledWith(2);
+    expect(mocks.automation.selectPageById).toHaveBeenCalledExactlyOnceWith(7, false);
     expect(mocks.page.bringToFront).not.toHaveBeenCalled();
+  });
+
+  it('activates only when bringToFront is explicitly true', async () => {
+    await select_page({ pageId: 7, bringToFront: true, browserId: 'browser-a' });
+    expect(mocks.automation.selectPageById).toHaveBeenCalledExactlyOnceWith(7, true);
+    expect(mocks.page.bringToFront).toHaveBeenCalledOnce();
   });
 });

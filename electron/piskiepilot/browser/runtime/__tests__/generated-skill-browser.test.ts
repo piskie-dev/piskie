@@ -65,7 +65,8 @@ describe('generated Browser Skill facade', () => {
     getSelectedPage: ReturnType<typeof vi.fn>;
     listPages: ReturnType<typeof vi.fn>;
     getSelectedPageIndex: ReturnType<typeof vi.fn>;
-    selectPageByIndex: ReturnType<typeof vi.fn>;
+    selectPageById: ReturnType<typeof vi.fn>;
+    withTarget: ReturnType<typeof vi.fn>;
     throwIfDialogOpen: ReturnType<typeof vi.fn>;
     waitForAction: ReturnType<typeof vi.fn>;
   };
@@ -79,15 +80,16 @@ describe('generated Browser Skill facade', () => {
     context = {
       input: new BrowserInputDriver({ begin: () => null, finish: () => {}, element: () => {}, focus: () => {} }),
       getSelectedPage: vi.fn(() => page),
-      listPages: vi.fn(async () => [{ pageId: 1, page, navigationSequence: 0 }]),
+      listPages: vi.fn(async () => [{ pageId: 11, page, navigationSequence: 0 }]),
       getSelectedPageIndex: vi.fn(() => 0),
       throwIfDialogOpen: vi.fn(),
-      selectPageByIndex: vi.fn(async (pageIdx: number) => {
-        if (pageIdx !== 0) throw new Error('No page found');
+      withTarget: vi.fn(async (_pageId: number, action: () => Promise<unknown>) => action()),
+      selectPageById: vi.fn(async (pageId: number) => {
+        if (pageId !== 11) throw new Error('No page found');
         return page;
       }),
-      waitForAction: vi.fn(async (action: () => Promise<unknown>) => {
-        await action();
+      waitForAction: vi.fn(async (action: (signal: AbortSignal) => Promise<unknown>) => {
+        await action(controller.signal);
       }),
     };
     mocks.getContext.mockReturnValue(context);
@@ -116,6 +118,16 @@ describe('generated Browser Skill facade', () => {
       allowedFileRoots,
     });
   }
+
+  it('keeps SDK observation outside input feedback and uses the common boundary for keyboard input', async () => {
+    const browser = runtime();
+    await browser.page.currentPage();
+    expect(mocks.runExclusive).toHaveBeenLastCalledWith('browser-bound-by-host', expect.any(Function), controller.signal, { feedback: false });
+    await browser.listPages();
+    expect(mocks.runExclusive).toHaveBeenLastCalledWith('browser-bound-by-host', expect.any(Function), controller.signal);
+    await browser.page.typeText('Sample input');
+    expect(mocks.runExclusive).toHaveBeenLastCalledWith('browser-bound-by-host', expect.any(Function), controller.signal, { feedback: true });
+  });
 
   it('exposes only the controlled browser surface and injects host IDs for navigation', async () => {
     const browser = runtime();
@@ -164,10 +176,11 @@ describe('generated Browser Skill facade', () => {
     const pages = [page, detailPage];
     let selectedPageIdx = 0;
     context.listPages.mockResolvedValue(
-      pages.map((listedPage, pageId) => ({ pageId, page: listedPage, navigationSequence: 0 }))
+      pages.map((listedPage, pageIdx) => ({ pageId: (pageIdx + 1) * 11, page: listedPage, navigationSequence: 0 }))
     );
     context.getSelectedPageIndex.mockImplementation(() => selectedPageIdx);
-    context.selectPageByIndex.mockImplementation(async (pageIdx: number) => {
+    context.selectPageById.mockImplementation(async (pageId: number) => {
+      const pageIdx = pageId / 11 - 1;
       const selected = pages[pageIdx];
       if (!selected) throw new Error('No page found');
       selectedPageIdx = pageIdx;
@@ -199,8 +212,9 @@ describe('generated Browser Skill facade', () => {
       title: 'Detail',
     });
 
-    expect(context.listPages).toHaveBeenCalledOnce();
-    expect(context.selectPageByIndex).toHaveBeenCalledWith(1);
+    expect(context.listPages).toHaveBeenCalledTimes(2);
+    expect(context.selectPageById).toHaveBeenCalledWith(22);
+    expect(context.withTarget).toHaveBeenCalledWith(22, expect.any(Function), { feedback: true, signal: controller.signal });
     expect(detailPage.bringToFront).not.toHaveBeenCalled();
   });
 
@@ -248,7 +262,7 @@ describe('generated Browser Skill facade', () => {
       },
     ]);
     expect(missing.dispose).toHaveBeenCalledOnce();
-    expect(element.locator.fill).toHaveBeenCalledWith('query');
+    expect(element.locator.fill).toHaveBeenCalledWith('query', { signal: controller.signal });
     expect(element.dispose).toHaveBeenCalledOnce();
     expect(mocks.getContext).toHaveBeenCalledWith('browser-bound-by-host');
   });
@@ -318,7 +332,7 @@ describe('generated Browser Skill facade', () => {
     ).rejects.toThrow('page changed during click');
 
     expect(element.locator.click).toHaveBeenCalledOnce();
-    expect(element.locator.click).toHaveBeenCalledWith({ count: 1 });
+    expect(element.locator.click).toHaveBeenCalledWith({ count: 1, signal: controller.signal });
     expect(page.evaluateHandle).toHaveBeenCalledOnce();
   });
 
@@ -337,7 +351,7 @@ describe('generated Browser Skill facade', () => {
     ).resolves.toEqual({ url: 'https://example.test/current', title: 'Example' });
 
     expect(doubleClickElement.locator.setTimeout).toHaveBeenCalledWith(75);
-    expect(doubleClickElement.locator.click).toHaveBeenCalledWith({ count: 2 });
+    expect(doubleClickElement.locator.click).toHaveBeenCalledWith({ count: 2, signal: controller.signal });
     expect(hoverElement.locator.setTimeout).toHaveBeenCalledWith(125);
     expect(hoverElement.locator.hover).toHaveBeenCalledOnce();
     expect(context.waitForAction).toHaveBeenCalledTimes(2);
@@ -380,7 +394,7 @@ describe('generated Browser Skill facade', () => {
 
     expect(page.evaluateHandle).toHaveBeenCalledTimes(2);
     expect(actionElements).toHaveLength(1);
-    expect(actionElements[0].locator.fill).toHaveBeenCalledWith('query');
+    expect(actionElements[0].locator.fill).toHaveBeenCalledWith('query', { signal: controller.signal });
   });
 
   it('scrolls an offscreen target, disposes its handle, and acts on the re-resolved element', async () => {
@@ -407,7 +421,7 @@ describe('generated Browser Skill facade', () => {
     expect(page.evaluateHandle).toHaveBeenCalledTimes(2);
     expect(actionElements).toHaveLength(2);
     expect(actionElements[0].locator.click).not.toHaveBeenCalled();
-    expect(actionElements[1].locator.click).toHaveBeenCalledWith({ count: 1 });
+    expect(actionElements[1].locator.click).toHaveBeenCalledWith({ count: 1, signal: controller.signal });
     expect(actionElements[0].dispose.mock.invocationCallOrder[0]).toBeLessThan(
       page.evaluateHandle.mock.invocationCallOrder[1]
     );
@@ -491,7 +505,7 @@ describe('generated Browser Skill facade', () => {
     await runtime().page.click({ role: 'button', name: 'Submit' }, { timeoutMs: 0 });
 
     expect(actionElements).toHaveLength(1);
-    expect(actionElements[0].locator.click).toHaveBeenCalledWith({ count: 1 });
+    expect(actionElements[0].locator.click).toHaveBeenCalledWith({ count: 1, signal: controller.signal });
     expect(mocks.takeSnapshot).not.toHaveBeenCalled();
   });
 
@@ -772,7 +786,7 @@ describe('generated Browser Skill facade', () => {
       expect(page.evaluateHandle).not.toHaveBeenCalled();
       expect(context.waitForAction).toHaveBeenCalledOnce();
       expect(mocks.runExclusive).toHaveBeenCalledExactlyOnceWith(
-        'browser-bound-by-host', expect.any(Function), controller.signal
+        'browser-bound-by-host', expect.any(Function), controller.signal, { feedback: true }
       );
     }
   );

@@ -80,6 +80,52 @@ beforeEach(() => { vi.clearAllMocks(); mocks.casters.length = 0; mocks.sessionLi
 afterEach(() => { hub.close(); vi.useRealTimers(); });
 
 describe('ScreenStreamHub shared screen owner', () => {
+  it('leaves a requested capture restart to rebind across concurrent page and navigation changes', async () => {
+    const runtime = sessionFixture();
+    mocks.getScreenSession.mockResolvedValue(runtime.session);
+    const viewer = sinkFixture();
+    await hub.addViewer('sample-browser', viewer.sink);
+    const caster = mocks.casters[0]!;
+    let finish!: () => void;
+    caster.rebind.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const next = { page: {} as BrowserScreenTarget['page'], identity: identity(2) };
+    runtime.select(next);
+    runtime.select({ ...next, identity: identity(2, 1) });
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(caster.rebind).toHaveBeenCalledTimes(2);
+    expect(caster.rebind).toHaveBeenLastCalledWith(next.page, identity(2, 1));
+    expect(caster.start).toHaveBeenCalledOnce();
+    caster.emit('frame', castFrame(identity(2, 1)));
+    expect(viewer.messages.at(-1)).toMatchObject({ type: 'frame', meta: { page: identity(2, 1) } });
+  });
+
+  it('requests capture again after a null target and resumes the latest connected target', async () => {
+    const runtime = sessionFixture();
+    mocks.getScreenSession.mockResolvedValue(runtime.session);
+    const viewer = sinkFixture();
+    await hub.addViewer('sample-browser', viewer.sink);
+    const caster = mocks.casters[0]!;
+    runtime.emit({ type: 'target', target: null });
+    expect(caster.stop).toHaveBeenCalledOnce();
+    let finish!: () => void;
+    caster.rebind.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const recovered = { page: {} as BrowserScreenTarget['page'], identity: identity(3, 0, 'sample-reconnected') };
+    runtime.select(recovered);
+    const navigated = { ...recovered, identity: identity(3, 1, 'sample-reconnected') };
+    runtime.select(navigated);
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(caster.start).toHaveBeenCalledTimes(2);
+    caster.emit('frame', castFrame(navigated.identity));
+    expect(viewer.messages.at(-1)).toMatchObject({ type: 'frame', meta: { page: navigated.identity } });
+    runtime.select({ ...navigated, identity: identity(3, 2, 'sample-reconnected') });
+    await Promise.resolve();
+    expect(caster.start).toHaveBeenCalledTimes(2);
+  });
+
   it('requests actual current pixels for pending local layout or removal and stops requesting once the frame has arrived', async () => {
     const runtime = sessionFixture();
     mocks.getScreenSession.mockResolvedValue(runtime.session);

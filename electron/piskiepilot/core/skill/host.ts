@@ -10,26 +10,12 @@ import type {
   GeneratedSkillBrowserBinding,
 } from '../../browser/runtime/generated-skill-browser.js';
 
-export type BrowserScreenshotTarget = {
-  id: string;
-  mainAgentId: string;
-  agentId: string;
-  filename: string;
-  filePath: string;
-  timestamp: Date;
-  size: number;
-  format: 'png' | 'jpeg' | 'webp';
-};
-
 /** Trusted host capability. This module is deliberately absent from the external Skill shim. */
 export interface BrowserHostRuntime {
   readonly domain: 'browser';
   readonly core: typeof import('../../browser/skills/browser/index.js');
   notifyPageOpen(): void;
   createGeneratedRuntime(binding: GeneratedSkillBrowserBinding): GeneratedBrowserSkillRuntime;
-  prepareScreenshot(params: Record<string, unknown>): Promise<BrowserScreenshotTarget>;
-  finalizeScreenshot(target: BrowserScreenshotTarget): Promise<void>;
-  cleanupScreenshot(target: BrowserScreenshotTarget): Promise<void>;
 }
 
 export type TrustedBrowserSkillContext = Pick<SkillContextBase, 'signal' | 'log'> & {

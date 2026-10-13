@@ -37,9 +37,9 @@ const fixed = attachSkillProvenance(defineSkill({
   name: 'browser',
   domain: 'browser',
   functions: {
-    takeSnapshot: {
+    take_snapshot: {
       description: '读取页面快照',
-      params: z.object({ verbose: z.boolean().optional() }),
+      params: z.object({ pageId: z.number(), verbose: z.boolean().optional() }),
       async run() {
         return { ok: true, text: 'snapshot' };
       },
@@ -176,7 +176,7 @@ describe('renderSkillTeachingDoc', () => {
     const { found, content, classification } = await renderSkillTeachingDoc(createManager(), 'browser');
 
     expect(found).toBe(true);
-    expect(content).toContain('`browser_takeSnapshot(verbose)`');
+    expect(content).toContain('`browser_take_snapshot(pageId*, verbose)`');
     expect(content).toContain('直接调用');
     expect(content).not.toContain('skill_call({');
     expect(classification).toBe('unknown');

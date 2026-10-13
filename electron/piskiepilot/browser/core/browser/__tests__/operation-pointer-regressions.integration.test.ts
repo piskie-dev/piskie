@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import puppeteer, { type Browser, type ElementHandle, type Page } from 'puppeteer-core';
+import puppeteer, { type Browser, type CDPSession, type ElementHandle, type Page } from 'puppeteer-core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserAutomationSession } from '../../session/browser-automation-session.js';
 import { readOperationTarget } from '../../session/operation-target.js';
@@ -112,13 +112,14 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium operation pointer 
     } finally { await handle.dispose(); }
   });
 
-  async function connectFrames() {
+  async function connectFrames(transport?: CDPSession) {
     // Select the controlled Page explicitly; the browser's initial Page remains a separate owner.
     session = await BrowserAutomationSession.create(browser);
     const pages = await session.listPages();
     await session.selectPageByIndex(pages.findIndex((entry) => entry.page === page));
     const frames: ScreencastFrame[] = [];
-    caster = new ScreenCaster(page, { everyNthFrame: 1 }, session.getScreenTarget().identity, () => session!.reserveInputOrder());
+    if (transport) vi.spyOn(page, 'createCDPSession').mockResolvedValueOnce(transport);
+    caster = new ScreenCaster(page, { everyNthFrame: 1 }, session.getScreenTarget()!.identity, () => session!.reserveInputOrder());
     caster.on('error', () => {});
     caster.on('frame', (frame) => {
       frames.push(frame);
@@ -198,8 +199,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium operation pointer 
   it('keeps a newer element position after tab return while accepting an older successful native manual ACK', async () => {
     await page.setContent(controlHtml);
     const transport = await page.createCDPSession();
-    vi.spyOn(page, 'createCDPSession').mockResolvedValueOnce(transport);
-    await connectFrames();
+    await connectFrames(transport);
     const original = transport.send.bind(transport);
     let release!: () => void;
     let arrived!: () => void;

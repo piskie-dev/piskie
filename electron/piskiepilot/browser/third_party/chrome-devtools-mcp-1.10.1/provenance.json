@@ -1,0 +1,684 @@
+{
+  "schemaVersion": 1,
+  "package": "chrome-devtools-mcp",
+  "version": "1.10.1",
+  "sourceKind": "git-source",
+  "upstream": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+  "tag": "chrome-devtools-mcp-v1.10.1",
+  "commit": "e52c6b59b476c5e04d8dd9fd4bd017ba3b3d65df",
+  "releaseDate": "2026-09-23",
+  "sourceUrl": "https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/e52c6b59b476c5e04d8dd9fd4bd017ba3b3d65df",
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+  "noticeFile": "NOTICE",
+  "copyrightNotices": [
+    "Copyright 2025 Google LLC",
+    "Copyright 2026 Google LLC"
+  ],
+  "integrationScope": "Source adaptations of page/session, snapshots, action/input/navigation, tool contracts and console/network/screenshot/script observation code. Piskie retains BrowserManager, public Skill SDK, feedback/screen and workspace/temp file ownership. The version identifies the source release; chrome-devtools-mcp is not an npm runtime dependency and no MCP server runtime is redistributed.",
+  "hashScope": "SHA-256 values identify immutable upstream source files. Evolving local implementation files are listed by path and adaptation scope without local content digests.",
+  "historicalProvenance": "../chrome-devtools-mcp-1.7.0/provenance.json",
+  "frontendProvenance": "../devtools-frontend-61277fe/provenance.json",
+  "derivedFiles": [
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "5194174ddc3d13e93650d9b4ad6d2b44af72aea73c441082e3a0b8f46175f321",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page routing, selection, named contexts and collector access",
+      "modifications": "Exposes the fixed page/context behavior through a BrowserManager-owned session; delegates persistent page identity and selection to PageRegistry, and retains Piskie's cancellation, call targeting and display feedback."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page-scoped snapshots, current-snapshot UID lookup, dialogs, action boundary and text waiting",
+      "modifications": "Stores snapshot and identity state per registered page and routes optional page IDs to the actual Page; replaces MCP page wrappers with host session methods and ActionReceipt values while retaining the source lookup and observation boundaries."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-automation-session.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "eb604556e6d811d15254e18671fb11ee47ed22f110706d4f614d8457e4b03df8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "UID actions, single/batch fill, interruption attribution, type/press/drag and upload",
+      "modifications": "Adapts input dispatch to the host session/input driver; single and batch fill share a sequential loop under one outer wait, preserve interrupted UID attribution, and propagate the host execution signal. Upload retains its separate no-outer-wait path."
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-registry.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "5194174ddc3d13e93650d9b4ad6d2b44af72aea73c441082e3a0b8f46175f321",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page identity, selection and closed-page fallback, named BrowserContexts, enumeration and creation",
+      "modifications": "Consolidates stable page IDs, selection fallback and isolated-context ownership in the existing host registry; applies the fixed default URL policy at registration and keeps SDK page-index access as a local adapter."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-registry.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page dialog observation and page-scoped console/network owner lifecycle",
+      "modifications": "Adapts page-scoped observation and cleanup to registry records and host events, with one page console/network collector pair and the existing browser-scoped service-worker collector owner."
+    },
+    {
+      "upstreamPath": "src/TextSnapshot.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/text-snapshot.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "19f9ee42c5d21991c741b76e6b29028cdbbef44dad988b285606ebefac3397a7",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Snapshot traversal, loader/backend identity reuse and pruning, DevTools-selected backend lookup",
+      "modifications": "Uses a host-owned per-page identity map and explicit snapshot results; preserves optional protocol identity components, reuses continuously observed UIDs and prunes nodes missing from the new snapshot."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/text-snapshot.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Current-snapshot UID lookup and backend-node element restoration",
+      "modifications": "Provides transport-free UID resolution against the supplied page snapshot and actual Page; preserves the source missing-UID and restoration behavior without a UID prefix check."
+    },
+    {
+      "upstreamPath": "src/formatters/SnapshotFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/text-snapshot.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "d95455f1e219204b4cb7ac51be79dba2a31a231fa225de23fb925ea7216cf307",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Default accessibility text attributes, states and selected-element annotation",
+      "modifications": "Formats the host TextSnapshotResult directly, retaining source text ordering and optional DevTools selection markers while omitting MCP response objects."
+    },
+    {
+      "upstreamPath": "src/utils/WaitForHelper.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/action-waiter.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "540300713f950804308b434c0e943a0d430d3eebd38724e1e6ca0471f8a51eb0",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Pre-dispatch navigation setup, complete-action probes, dialog signal and post-action navigation/DOM waits",
+      "modifications": "Replaces source logging, response dependencies and disposable syntax with explicit host cleanup, cancellation and ActionReceipt values; navigation probes are installed before dispatch and the action/dialog signal reaches the input operation."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/browser-input-driver.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "eb604556e6d811d15254e18671fb11ee47ed22f110706d4f614d8457e4b03df8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Native click/hover options, typing and submit key, key modifiers, drag/drop delay and multi-file upload",
+      "modifications": "Transfers input fragments into Piskie's existing input driver, retaining mouse observation, geometry and pointer ordering; modifiers are released in finally and file-root checks remain supplied by the host."
+    },
+    {
+      "upstreamPath": "src/utils/url.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/url.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b505ea261b5d9a0ad4f022a027468acb9cee39fdeed16809348ae7ddc4ad5f60",
+      "upstreamCopyright": [
+        "Copyright 2026 Google LLC"
+      ],
+      "sourceScope": "isAllowedUrl default categoryExtensions=false predicate",
+      "modifications": "Extracts the fixed default URL predicate as a dependency-free helper with no runtime options; retains source scheme parsing, restricted-page exclusions and newtab/new-tab-page/inspect exceptions."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/core/browser/browser-operations.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "73fb11cf168cf77066fee02790fa2dace7d251e29e659c5c9c0d9b4e931ab50f",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "navigate_page URL/back/forward/reload, initScript, beforeunload and success/Unable text",
+      "modifications": "Routes navigation to the actual target page under BrowserManager exclusivity and returns structured host results plus source message text; retains init-script registration/removal and nonpositive timeout normalization."
+    },
+    {
+      "upstreamPath": "src/McpResponse.ts",
+      "localPath": "electron/piskiepilot/browser/core/browser/browser-operations.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b0df0f9043b207bb74050577e19a4aa334185d204717ad74f4de332e4ddef5bf",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Bounded optional page-title read",
+      "modifications": "Adapts the source timed title lookup to the host BrowserNavigationResult while leaving cookie/window operations under the existing host contract."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "73fb11cf168cf77066fee02790fa2dace7d251e29e659c5c9c0d9b4e931ab50f",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page list/new/select/close/navigation and dialog handlers",
+      "modifications": "Adapts the fixed handlers to stable page-ID session calls and host locks, retaining source messages, selection/context labels, explicit bringToFront and tool-specific dialog behavior; browser-level administration remains host-owned."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "eb604556e6d811d15254e18671fb11ee47ed22f110706d4f614d8457e4b03df8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Click/hover/fill/fill_form/type_text/press_key/drag/upload_file handlers",
+      "modifications": "Retains fixed arguments, success text and recognized dialog-interruption branches through direct session calls; requested snapshots are collected only on the source handler paths, and upload checks all host-authorized paths."
+    },
+    {
+      "upstreamPath": "src/tools/snapshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "738ef6fa6bb340c6e98bc8f7eecfa22cd68c88da36a6a15899f8533f01b009f8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "take_snapshot and wait_for handlers",
+      "modifications": "Uses the shared per-page snapshot formatter, optional host .txt output and any-text waiting; replaces MCP request/response bindings with direct host results."
+    },
+    {
+      "upstreamPath": "src/tools/screenshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "0d7456cdf36d58f8577fe6a970b2b63f487a840793a15bb64754b94c949b574d",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Default non-slim screenshot handler",
+      "modifications": "Delegates to the target-page screenshot helper; forwards image MIME/base64 through the existing Skill image channel or returns source explicit/large-file text using host workspace/temp roots."
+    },
+    {
+      "upstreamPath": "src/tools/script.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e7facf87837868fb1e626c126941d51b1475a734de6c2c0eb3284daa5d122059",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Nonextension evaluate_script handler",
+      "modifications": "Delegates UID/frame/function/file/dialog/DOM options to the page evaluation helper, using the existing host output envelope and injected page action wait."
+    },
+    {
+      "upstreamPath": "src/tools/console.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "3cc61124b0fd25cff9695a1bbffca7913bc0811c73ce66fdd357e593d29ce67c",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Console list/detail handler options and result paths",
+      "modifications": "Passes filters, preserved navigation, pagination, stack and service-worker options to the actual page collector helpers; supplies host file roots and request/element resolvers from current network data and snapshots."
+    },
+    {
+      "upstreamPath": "src/tools/network.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e2d0c0adc759c52dd6c989d258014f0b5fc92e2d617e8be95a8f28abfa1ffdb7",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Network list/detail handler options and selected-request behavior",
+      "modifications": "Delegates filters, paging, preserved requests, optional DevTools selection and body files to target-page helpers with host file roots."
+    },
+    {
+      "upstreamPath": "src/McpResponse.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b0df0f9043b207bb74050577e19a4aa334185d204717ad74f4de332e4ddef5bf",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Default page-list, snapshot heading, result text and dialog formatting",
+      "modifications": "Retains default human-readable text, latest-page headings, selected/context labels and consumed closed-selection notices; replaces MCP Content and structuredContent transport objects with host strings and image outputs."
+    },
+    {
+      "upstreamPath": "src/utils/url.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/index.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b505ea261b5d9a0ad4f022a027468acb9cee39fdeed16809348ae7ddc4ad5f60",
+      "upstreamCopyright": [
+        "Copyright 2026 Google LLC"
+      ],
+      "sourceScope": "isAllowedUrl default categoryExtensions=false validation",
+      "modifications": "Shares the extracted fixed URL predicate for new-page and navigation validation through the host session helper."
+    },
+    {
+      "upstreamPath": "src/tools/pages.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "73fb11cf168cf77066fee02790fa2dace7d251e29e659c5c9c0d9b4e931ab50f",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Page and dialog schemas and descriptions",
+      "modifications": "Retains fixed page IDs, navigation/context/background/initScript/beforeunload parameters and descriptions while injecting private browser identity and host cancellation outside model input."
+    },
+    {
+      "upstreamPath": "src/tools/input.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "eb604556e6d811d15254e18671fb11ee47ed22f110706d4f614d8457e4b03df8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Input schemas, UID arguments and includeSnapshot options",
+      "modifications": "Retains fixed input names, fields, defaults, descriptions and ranges, including batch-fill, submitKey and multiple upload paths; supplies trusted host file roots outside model input."
+    },
+    {
+      "upstreamPath": "src/tools/snapshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "738ef6fa6bb340c6e98bc8f7eecfa22cd68c88da36a6a15899f8533f01b009f8",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Snapshot and any-text wait schemas",
+      "modifications": "Retains source snapshot verbosity/file parameters and any-text wait input through the trusted Skill definition."
+    },
+    {
+      "upstreamPath": "src/tools/screenshot.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "0d7456cdf36d58f8577fe6a970b2b63f487a840793a15bb64754b94c949b574d",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Screenshot format/quality/UID/fullPage/file schema",
+      "modifications": "Retains the fixed screenshot input schema and forwards host image outputs through the existing Skill result channel."
+    },
+    {
+      "upstreamPath": "src/tools/script.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e7facf87837868fb1e626c126941d51b1475a734de6c2c0eb3284daa5d122059",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Nonextension function/UID/file/dialog/DOM evaluation schema",
+      "modifications": "Retains the fixed JavaScript evaluation fields and descriptions in the trusted Skill contract."
+    },
+    {
+      "upstreamPath": "src/tools/console.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "3cc61124b0fd25cff9695a1bbffca7913bc0811c73ce66fdd357e593d29ce67c",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Console list/detail filters, paging, preserved data, stack and service-worker schemas",
+      "modifications": "Retains the fixed console filter enums and source fields through direct trusted Skill definitions."
+    },
+    {
+      "upstreamPath": "src/tools/network.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e2d0c0adc759c52dd6c989d258014f0b5fc92e2d617e8be95a8f28abfa1ffdb7",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Network list/detail resource filters, paging, preserved data and body-file schemas",
+      "modifications": "Retains the fixed network field names, enums and optional request/body-file parameters in the trusted Skill definition."
+    },
+    {
+      "upstreamPath": "src/tools/ToolDefinition.ts",
+      "localPath": "electron/piskiepilot/browser/skills/browser/skill.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "6c2cfc3181989f4d2669f2d0a2db3db200dfa548b4736830db8e1e0777fe4e6c",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Default non-slim schema construction with pageIdRouting=true",
+      "modifications": "Adapts source schema/routing injection to the trusted Skill schema: 22 upstream-equivalent functions, JavaScript enabled and extension tools disabled. Private browser identity, workspace/temp roots and cancellation come from the host; seven existing browser-level functions retain their host contracts."
+    },
+    {
+      "upstreamPath": "src/collectors/PageCollector.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-collector.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "4f5449041d4aef989eb013aefb2f619f4bb8952205177d9a0e82273f90ca1e7c",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Console/network IDs, navigation buckets and limits, main-frame rebinding, issues and Runtime exceptions",
+      "modifications": "Retains stable IDs and three preserved navigation buckets with source console/network limits; binds actual fixed frontend issue mapping/aggregation and primary Runtime exceptions to the existing per-page collector, using explicit host teardown."
+    },
+    {
+      "upstreamPath": "src/formatters/ConsoleFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-formatter.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "71c6274aa712f6d4ecbf20f78e65e57bcada2f33a6b27579956cbac4bdbe3155",
+      "upstreamCopyright": [
+        "Copyright 2026 Google LLC"
+      ],
+      "sourceScope": "Concise/detailed console text, arguments/errors, grouping, stacks, causes and ignore-list notes",
+      "modifications": "Adapts source formatting to the local collector/stack interfaces and fixed frontend model, retaining available mapped stacks, adjacent grouping, stack limits and exact notes without MCP response objects."
+    },
+    {
+      "upstreamPath": "src/formatters/NetworkFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/network-formatter.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "049ef072d527023338a5f22675f2b5401d96ea81563f7994df0d82802492bfce",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Request/status/URL text, headers, bodies and files, truncation and redirects",
+      "modifications": "Retains source header/body markers, 10,000-character inline limit and distinct request-write versus response-write failure behavior; uses host observation file helpers and the source default redactHeaders=false behavior."
+    },
+    {
+      "upstreamPath": "src/utils/pagination.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/pagination.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "d8a2fdb5c963097b451a513be49eb3f790b309be543fc8b96be67160f4b9eea9",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "All-items mode, default page size 20, zero-based paging and invalid-page fallback",
+      "modifications": "Keeps source pagination as a transport-free helper over host arrays, including out-of-range fallback to the first page."
+    },
+    {
+      "upstreamPath": "src/McpResponse.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/pagination.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b0df0f9043b207bb74050577e19a4aa334185d204717ad74f4de332e4ddef5bf",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "dataWithPagination human-readable result text",
+      "modifications": "Retains source pagination lines while omitting MCP Content and structuredContent response objects."
+    },
+    {
+      "upstreamPath": "src/tools/console.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-data.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "3cc61124b0fd25cff9695a1bbffca7913bc0811c73ce66fdd357e593d29ce67c",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Console list/detail filters and service-worker lookup",
+      "modifications": "Provides four transport-free console/network result helpers over existing collectors; retains console filters, worker-specific IDs, preserved buckets, grouping, stacks and host file output options."
+    },
+    {
+      "upstreamPath": "src/tools/network.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-data.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e2d0c0adc759c52dd6c989d258014f0b5fc92e2d617e8be95a8f28abfa1ffdb7",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Network list/detail filters and optional DevTools selected request",
+      "modifications": "Retains source request filtering, preserved buckets, paging and optional panel selection; uses the actual target-page network collector and host body-file options."
+    },
+    {
+      "upstreamPath": "src/McpResponse.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/page-data.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "b0df0f9043b207bb74050577e19a4aa334185d204717ad74f4de332e4ddef5bf",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Console/network list/detail, empty text, pagination and issue resources",
+      "modifications": "Adapts source data text paths to local formatters and actual collectors, resolving issue request IDs and latest snapshot node IDs through supplied host resolvers."
+    },
+    {
+      "upstreamPath": "src/tools/screenshot.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/screenshot.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "0d7456cdf36d58f8577fe6a970b2b63f487a840793a15bb64754b94c949b574d",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Default unconfigured, non-slim screenshot capture and result paths",
+      "modifications": "Retains unscaled PNG viewport defaults, format/quality/UID/fullPage behavior, image MIME/base64 and explicit or >=2,000,000-byte file output; injects host roots/temp/cancellation and explicitly disposes owned element handles."
+    },
+    {
+      "upstreamPath": "src/tools/script.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/script-evaluation.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "e7facf87837868fb1e626c126941d51b1475a734de6c2c0eb3284daa5d122059",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Nonextension page evaluation, UID-derived frame and action waiting",
+      "modifications": "Retains function/async execution, UID arguments, one derived frame or Page, cross-frame errors, JSON/undefined/file results and dialogAction/DOM options; uses one injected page action wait, host files/cancellation and explicit owned-handle cleanup."
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/observation-files.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "5194174ddc3d13e93650d9b4ad6d2b44af72aea73c441082e3a0b8f46175f321",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "ensureExtension, writeFile, saveFile and saveTemporaryFile",
+      "modifications": "Replaces MCP roots/cwd and temporary-directory ownership with host workspace/temp roots; preserves source extension replacement, canonical-path validation, O_NOFOLLOW/0600 writes and write-error causes."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/devtools-reader.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "getDevToolsPage and getDevToolsData",
+      "modifications": "Exposes transport-free reads of an already-open DevTools panel; checks hasDevTools before openDevTools, retains request/backend-node selection and returns empty data when unavailable."
+    },
+    {
+      "upstreamPath": "src/collectors/ServiceWorkerCollector.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/service-worker-console.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "0e4cb2432125be5a108de7cabff5cd1228d35a7476d2e91b94893b74d63ad070",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Extension service-worker subscriptions, storage, IDs, lookup and disposal",
+      "modifications": "Retains separate worker IDs and the default 1,000-log limit, missing-worker lookup behavior and extension-origin filtering; integrates subscriptions, in-flight attach cleanup and explicit teardown with the registry-owned collector."
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-devtools.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Optional DevTools observation initialization/disposal",
+      "modifications": "Creates one secondary observation CDP session owned by the existing page console collector, retaining source best-effort initialization and explicit release."
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-devtools.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "5194174ddc3d13e93650d9b4ad6d2b44af72aea73c441082e3a0b8f46175f321",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "loadResource HTTP(S)/file resource loading",
+      "modifications": "Adapts source-map resource loading to fetch and host-authorized file roots provided by the current observation context."
+    },
+    {
+      "upstreamPath": "src/devtools/DevtoolsUtils.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-devtools.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "f391fa26a41e87ea2b0870b987ae22de633f5bbcd5640d6d958f779c184803bd",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Scoped DevTools observation model connection",
+      "modifications": "Uses the separately built fixed frontend observation graph and local stack model interface rather than the full source Universe; observation session lifecycle remains with the page collector."
+    },
+    {
+      "upstreamPath": "src/devtools/DevtoolsUtils.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/console-stack.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "f391fa26a41e87ea2b0870b987ae22de633f5bbcd5640d6d958f779c184803bd",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "SymbolizedError remote message, stack and cause resolution",
+      "modifications": "Retains uncaught/error message parsing and available stack/cause lookup through the fixed frontend observation model, using a local structural interface and source best-effort stack behavior."
+    },
+    {
+      "upstreamPath": "src/formatters/IssueFormatter.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/issue-formatter.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "c7cf360e09b79c5031b14a6ce069c810d915ff58281c94e3fa103251e8608470",
+      "upstreamCopyright": [
+        "Copyright 2026 Google LLC"
+      ],
+      "sourceScope": "Issue concise/detail text and affected resources",
+      "modifications": "Retains fixed titles, counts, links and source invalid-issue handling; clones affected resource data and resolves requests/nodes using actual host collector/snapshot resolvers."
+    },
+    {
+      "upstreamPath": "src/devtools/issueDescriptions.ts",
+      "localPath": "electron/piskiepilot/browser/core/session/issue-formatter.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "c3f347bb5117668df8eb7952b865fe6b9207b9c6d7c25fe68821b861ba461e09",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Markdown description loading, titles and substitutions",
+      "modifications": "Loads the 255 fixed frontend descriptions relative to emitted host modules and delegates title/placeholders to the fixed frontend observation subset."
+    }
+  ],
+  "hostIntegrationFiles": [
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/core/browser/browser-manager.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Consumption of the adapted page action boundary",
+      "modifications": "Piskie-owned integration: retains browser process/connection lifecycle and per-browser locking; forwards page IDs, cancellation and optional feedback to the adapted session. This entry describes host use of the derived session, not copied McpPage source in the manager.",
+      "relationship": "host-integration"
+    },
+    {
+      "upstreamPath": "src/McpContext.ts",
+      "localPath": "electron/piskiepilot/browser/runtime/generated-skill-browser.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "5194174ddc3d13e93650d9b4ad6d2b44af72aea73c441082e3a0b8f46175f321",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Consumption of adapted stable page identity and selection",
+      "modifications": "Piskie-owned integration: retains the public Skill SDK page-index contract and resolves indices to registered page IDs for target scopes; passive SDK reads leave feedback inactive. This entry describes host use of the derived registry, not copied MCP context source in the SDK.",
+      "relationship": "host-integration"
+    },
+    {
+      "upstreamPath": "src/McpPage.ts",
+      "localPath": "electron/piskiepilot/browser/screen-hub.ts",
+      "version": "1.10.1",
+      "upstreamSha256": "75bc60d3bac83409ff1a3c0a8705a7fa8df69af4015dfb952ad0f3668a10d497",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Consumption of the adapted session page target",
+      "modifications": "Piskie-owned integration: retains ScreenStreamHub and screen capture/stream ownership; follows the session display target, handles a null target and restores the registry selection after call feedback. This entry describes host use of the derived session, not copied MCP page source in the screen hub.",
+      "relationship": "host-integration"
+    }
+  ],
+  "frontendAdaptations": [
+    {
+      "upstreamPath": "src/devtools/DevtoolsUtils.ts",
+      "localPath": "electron/piskiepilot/browser/third_party/devtools-frontend-61277fe/observation.js",
+      "version": "1.10.1",
+      "upstreamSha256": "f391fa26a41e87ea2b0870b987ae22de633f5bbcd5640d6d958f779c184803bd",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "DevTools bootstrap, protocol observation and source-map/stack dependencies",
+      "modifications": "Adapts the observation dependencies of source initialization to a pure Node scoped model graph with host resource loading and explicit observation/formatter teardown."
+    },
+    {
+      "upstreamPath": "src/devtools/McpHostBindingAdapter.ts",
+      "localPath": "electron/piskiepilot/browser/third_party/devtools-frontend-61277fe/observation.js",
+      "version": "1.10.1",
+      "upstreamSha256": "c220226b3592beca05496104e52d477594792e06fbf71cee4efabf928f07fe4e",
+      "upstreamCopyright": [
+        "Copyright 2026 Google LLC"
+      ],
+      "sourceScope": "Frontend host resource-loading bridge and default host methods",
+      "modifications": "Adapts the host resource bridge to the local Node observation bootstrap; stream writes and callback status handling use the fixed frontend HostRuntime and the page collector resource loader."
+    },
+    {
+      "upstreamPath": "scripts/post-build.ts",
+      "localPath": "electron/piskiepilot/browser/third_party/devtools-frontend-61277fe/observation.js",
+      "version": "1.10.1",
+      "upstreamSha256": "9a584032fbcf5784cc919cb02be04ecbf9490e3433f0cb6abac466836f2a0d03",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Runtime/locales shims; CodeMirror shim additionally contributes to observation.js",
+      "modifications": "Extracts the source Node build shims while building the separately pinned frontend subset; worker URLs are bundle-relative and wasm worker messaging uses the existing Node HostRuntime workerScope. Frontend input, runtime artifact and issue-resource hashes are maintained in the sibling frontend provenance record."
+    },
+    {
+      "upstreamPath": "scripts/post-build.ts",
+      "localPath": "electron/piskiepilot/browser/third_party/devtools-frontend-61277fe/formatter-worker.js",
+      "version": "1.10.1",
+      "upstreamSha256": "9a584032fbcf5784cc919cb02be04ecbf9490e3433f0cb6abac466836f2a0d03",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Runtime/locales shims; CodeMirror shim additionally contributes to observation.js",
+      "modifications": "Extracts the source Node build shims while building the separately pinned frontend subset; worker URLs are bundle-relative and wasm worker messaging uses the existing Node HostRuntime workerScope. Frontend input, runtime artifact and issue-resource hashes are maintained in the sibling frontend provenance record."
+    },
+    {
+      "upstreamPath": "scripts/post-build.ts",
+      "localPath": "electron/piskiepilot/browser/third_party/devtools-frontend-61277fe/wasmparser-worker.js",
+      "version": "1.10.1",
+      "upstreamSha256": "9a584032fbcf5784cc919cb02be04ecbf9490e3433f0cb6abac466836f2a0d03",
+      "upstreamCopyright": [
+        "Copyright 2025 Google LLC"
+      ],
+      "sourceScope": "Runtime/locales shims; CodeMirror shim additionally contributes to observation.js",
+      "modifications": "Extracts the source Node build shims while building the separately pinned frontend subset; worker URLs are bundle-relative and wasm worker messaging uses the existing Node HostRuntime workerScope. Frontend input, runtime artifact and issue-resource hashes are maintained in the sibling frontend provenance record."
+    }
+  ],
+  "behavioralReferences": [
+    "src/McpContext.ts",
+    "src/McpPage.ts",
+    "src/McpResponse.ts",
+    "src/TextSnapshot.ts",
+    "src/collectors/PageCollector.ts",
+    "src/collectors/ServiceWorkerCollector.ts",
+    "src/devtools/DevtoolsUtils.ts",
+    "src/devtools/issueDescriptions.ts",
+    "src/formatters/ConsoleFormatter.ts",
+    "src/formatters/IssueFormatter.ts",
+    "src/formatters/NetworkFormatter.ts",
+    "src/formatters/SnapshotFormatter.ts",
+    "src/tools/ToolDefinition.ts",
+    "src/tools/console.ts",
+    "src/tools/input.ts",
+    "src/tools/network.ts",
+    "src/tools/pages.ts",
+    "src/tools/screenshot.ts",
+    "src/tools/script.ts",
+    "src/tools/snapshot.ts",
+    "src/utils/WaitForHelper.ts",
+    "src/utils/pagination.ts",
+    "src/utils/url.ts"
+  ]
+}

@@ -106,8 +106,9 @@ export const ThreadMode = memo<ThreadModeProps>(
     const monitor = useBrowserMonitor(selectedAgentId ?? '', agent?.workers);
     const [fullscreen, setFullscreen] = useState<{ agentId: string; key: string } | null>(null);
     useEffect(() => {
-      setFullscreen((current) => current && current.agentId !== selectedAgentId ? null : current);
-    }, [selectedAgentId]);
+      setFullscreen((current) => current && (current.agentId !== selectedAgentId
+        || !monitor.tasks.some((task) => task.key === current.key)) ? null : current);
+    }, [selectedAgentId, monitor.tasks]);
     const openMonitorWindow = useCallback((key: string) => {
       const rect = readingAreaRef.current?.getBoundingClientRect();
       if (rect) monitor.open(key, { width: rect.width, height: rect.height });
@@ -130,7 +131,7 @@ export const ThreadMode = memo<ThreadModeProps>(
     const { open: openPanel, close: closePanelView, beginReviewRequest } = panelView;
     const returnToMonitor = useCallback((key: string) => {
       monitor.close(key);
-      if (monitor.tasks.some((task) => !task.closed || task.hasFrame)) openPanel('monitor');
+      if (monitor.tasks.length > 0) openPanel('monitor');
     }, [monitor.close, monitor.tasks, openPanel]);
 
     const tabs = useMemo<readonly AgentTabItem[]>(() => {
@@ -210,7 +211,7 @@ export const ThreadMode = memo<ThreadModeProps>(
           hasScreen: !!worker?.browserId && worker.browserReady,
           hasReviewTarget: panelView.reviewTarget !== undefined,
           hasBrowser: browserState.open,
-          hasMonitor: monitor.tasks.some((task) => !task.closed || task.hasFrame),
+          hasMonitor: monitor.tasks.length > 0,
         }),
       [panelView.reviewTarget, browserState.open, worker, monitor.tasks],
     );

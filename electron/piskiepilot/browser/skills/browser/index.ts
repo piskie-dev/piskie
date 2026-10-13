@@ -1,419 +1,341 @@
 /**
  * @license
  * Copyright 2025 Google LLC
+ * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * chrome-devtools-mcp 1.7.0 input, page, snapshot, screenshot, and script
- * behaviors are exposed through Piskie's browser contract.
+ * Adapted from chrome-devtools-mcp@1.10.1 src/tools/{pages,input,snapshot,
+ * screenshot,script,console,network}.ts, src/McpResponse.ts (default text),
+ * and src/utils/url.ts. Browser execution, feedback and file access use the host.
  */
 
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { ElementHandle } from 'puppeteer-core';
 import { BrowserManager } from '../../core/browser/browser-manager.js';
 import {
   BrowserOperations,
   type BrowserNavigateRequest,
-  type BrowserNavigationResult,
   type BrowserWindowBoundsInput,
 } from '../../core/browser/browser-operations.js';
+import type { ActionReceipt } from '../../core/session/action-waiter.js';
 import type { BrowserAutomationSession } from '../../core/session/browser-automation-session.js';
-import {
-  CLOSE_PAGE_ERROR,
-  type PageChangeSet,
-} from '../../core/session/page-registry.js';
-import { ConsoleFormatter } from '../../core/session/console-formatter.js';
+import { CLOSE_PAGE_ERROR } from '../../core/session/page-registry.js';
 import { validatePathWithinRoots } from '../../core/session/file-roots.js';
-import { NetworkFormatter } from '../../core/session/network-formatter.js';
-import { formatPagination, type PaginationOptions } from '../../core/session/pagination.js';
 import {
-  formatTextSnapshot,
-  type TextSnapshotResult,
-} from '../../core/session/text-snapshot.js';
-
-export type ConsoleMessageFilter =
-  | 'log'
-  | 'debug'
-  | 'info'
-  | 'error'
-  | 'warn'
-  | 'dir'
-  | 'dirxml'
-  | 'table'
-  | 'trace'
-  | 'clear'
-  | 'startGroup'
-  | 'startGroupCollapsed'
-  | 'endGroup'
-  | 'assert'
-  | 'profile'
-  | 'profileEnd'
-  | 'count'
-  | 'timeEnd'
-  | 'verbose';
-
-export type NetworkResourceFilter =
-  | 'document'
-  | 'stylesheet'
-  | 'image'
-  | 'media'
-  | 'font'
-  | 'script'
-  | 'texttrack'
-  | 'xhr'
-  | 'fetch'
-  | 'prefetch'
-  | 'eventsource'
-  | 'websocket'
-  | 'manifest'
-  | 'signedexchange'
-  | 'ping'
-  | 'cspviolationreport'
-  | 'preflight'
-  | 'fedcm'
-  | 'other';
+  saveObservationFile,
+  validateObservationFile,
+  type ObservationFileOptions,
+} from '../../core/session/observation-files.js';
+import {
+  listConsoleMessages,
+  getConsoleMessage,
+  listNetworkRequests,
+  getNetworkRequest,
+  resolveCdpRequestId,
+  type ConsoleDataDependencies,
+  type ConsoleListOptions,
+  type NetworkListOptions,
+} from '../../core/session/page-data.js';
+import {
+  takeScreenshot,
+  type ScreenshotOptions,
+  type ScreenshotResult,
+} from '../../core/session/screenshot.js';
+import {
+  evaluateScript,
+  type ScriptEvaluationOptions,
+} from '../../core/session/script-evaluation.js';
+import { formatTextSnapshot } from '../../core/session/text-snapshot.js';
 
 interface BrowserCallContext {
   browserId: string;
   signal?: AbortSignal;
 }
-
-export async function takeSnapshot(params: BrowserCallContext & {
-  verbose?: boolean;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    return formatStandaloneSnapshot(await automation.takeSnapshot(params.verbose ?? false));
-  });
+interface PageCallContext extends BrowserCallContext {
+  pageId: number;
+}
+interface FileCallContext {
+  files: ObservationFileOptions;
+}
+interface SnapshotOption {
+  includeSnapshot?: boolean;
 }
 
-export async function clickByUid(params: BrowserCallContext & {
-  uid: string;
-  clickCount?: number;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.clickByUid(params.uid, params.clickCount === 2 ? 2 : 1);
-    return finalize(automation, 'Successfully ' +
-      (params.clickCount === 2 ? 'double clicked on the element' : 'clicked on the element'), {
-      snapshot: true,
-    });
-  });
+export async function list_pages(params: BrowserCallContext): Promise<string> {
+  return runBrowserCore(params, formatPages);
 }
 
-export async function fillByUid(params: BrowserCallContext & {
-  uid: string;
-  value: string;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.fillByUid(params.uid, params.value);
-    return finalize(automation, 'Successfully filled out the element', { snapshot: true });
-  });
-}
-
-export type NavigateToParams = BrowserNavigateRequest;
-
-export async function navigateTo(params: NavigateToParams): Promise<string> {
-  const { browserId, signal, ...request } = params;
-  return runBrowserCore({ browserId, signal }, async (automation) => {
-    const result = await BrowserOperations.navigateInSession(automation, request);
-    return finalize(automation, navigationMessage(result, request.url), { pages: true });
-  });
-}
-
-export async function goBack(params: BrowserCallContext): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    const page = automation.getSelectedPage();
-    await automation.waitForAction(() => page.goBack({ waitUntil: 'networkidle2' }));
-    const snapshot = await automation.takeSnapshot(false);
-    return `Went back\n\n${formatStandaloneSnapshot(snapshot)}`;
-  });
-}
-
-export async function refresh(params: BrowserCallContext): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    const page = automation.getSelectedPage();
-    await automation.waitForAction(() => page.reload({ waitUntil: 'networkidle2' }));
-    const snapshot = await automation.takeSnapshot(false);
-    return `Page refreshed\n\n${formatStandaloneSnapshot(snapshot)}`;
-  });
-}
-
-export async function newPage(params: BrowserCallContext & {
+export async function new_page(params: BrowserCallContext & {
   url: string;
+  background?: boolean;
+  isolatedContext?: string;
   timeout?: number;
 }): Promise<string> {
   return runBrowserCore(params, async (automation) => {
-    await automation.newPage(params.url, params.timeout);
-    return finalize(automation, '', { pages: true });
+    validateNavigationUrl(params.url);
+    await automation.newPage(params.url, normalizeTimeout(params.timeout), {
+      background: params.background,
+      isolatedContext: params.isolatedContext,
+    });
+    return formatPages(automation);
   });
 }
 
-export async function closePage(params: BrowserCallContext & {
-  pageIndex: number;
+export async function select_page(params: PageCallContext & {
+  bringToFront?: boolean;
 }): Promise<string> {
+  return runBrowserCore(params, async (automation) => {
+    await automation.selectPageById(params.pageId, params.bringToFront ?? false);
+    return formatPages(automation);
+  });
+}
+
+export async function close_page(params: PageCallContext): Promise<string> {
   return runBrowserCore(params, async (automation) => {
     let message = '';
     try {
-      await automation.closePageByIndex(params.pageIndex);
+      await automation.closePageById(params.pageId);
     } catch (error) {
-      if (!(error instanceof Error) || error.message !== CLOSE_PAGE_ERROR) {
-        throw error;
-      }
+      if (!(error instanceof Error) || error.message !== CLOSE_PAGE_ERROR) throw error;
       message = error.message;
     }
-    return finalize(automation, message, { pages: true });
+    return joinLines(message, await formatPages(automation));
   });
 }
 
-export async function listPages(params: BrowserCallContext): Promise<string> {
-  return runBrowserCore(params, (automation) =>
-    finalize(automation, '', { pages: true })
-  );
+export async function navigate_page(params: PageCallContext & Omit<
+  BrowserNavigateRequest, 'browserId' | 'signal' | 'pageId'
+>): Promise<string> {
+  return runPageCore(params, async (automation) => {
+    const { pageId, type, url, ignoreCache, handleBeforeUnload, initScript, timeout } = params;
+    if (url) validateNavigationUrl(url);
+    const result = await actionWithDialog(automation, pageId, () => BrowserOperations.navigateInSession(automation, {
+      pageId, type, url, ignoreCache, handleBeforeUnload, initScript, timeout: normalizeTimeout(timeout),
+    }));
+    return finalize(automation, params.pageId, joinLines(result.message, result.receipt.dialogHandled
+      ? `${params.handleBeforeUnload === 'dismiss' ? 'Dismissed' : 'Accepted'} a beforeunload dialog.`
+      : ''), { pages: true });
+  }, { feedback: true, blockedByDialog: false });
 }
 
-export async function selectPage(params: BrowserCallContext & {
-  pageIdx: number;
+export async function take_snapshot(params: PageCallContext & FileCallContext & {
+  verbose?: boolean;
+  filePath?: string;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.selectPageByIndex(params.pageIdx);
-    return finalize(automation, '', { pages: true });
+  return runPageCore(params, async (automation) => {
+    // File access is checked before starting a new observation.
+    if (params.filePath) await validateObservationFile(params.filePath, '.txt', params.files);
+    const snapshot = await automation.takeSnapshot(params.verbose ?? false, params.pageId);
+    const text = formatTextSnapshot(snapshot);
+    if (params.filePath) {
+      const { filename } = await saveObservationFile(
+        new TextEncoder().encode(text), params.filePath, '.txt', params.files,
+      );
+      return finalize(automation, params.pageId, `Saved snapshot to ${filename}.`);
+    }
+    return finalize(automation, params.pageId, '', { snapshotText: text });
   });
 }
 
-export async function typeText(params: BrowserCallContext & {
-  text: string;
+export async function click(params: PageCallContext & SnapshotOption & {
+  uid: string;
+  dblClick?: boolean;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.typeText(params.text);
-    return finalize(automation, 'Successfully typed text', { snapshot: true });
-  });
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.clickByUid(params.uid, params.dblClick ? 2 : 1, params.pageId));
+    if (receipt.interrupted) {
+      return finalize(automation, params.pageId, params.dblClick
+        ? 'The element was double clicked and it opened a dialog.'
+        : 'The element was clicked and it opened a dialog.');
+    }
+    return finalize(automation, params.pageId, params.dblClick
+      ? 'Successfully double clicked on the element'
+      : 'Successfully clicked on the element', { receipt, snapshot: params.includeSnapshot });
+  }, { feedback: true });
 }
 
-export async function pressKey(params: BrowserCallContext & {
-  key: string;
-  count?: number;
+export async function hover(params: PageCallContext & SnapshotOption & {
+  uid: string;
 }): Promise<string> {
-  const count = params.count ?? 1;
-  let output = '';
-  for (let index = 0; index < count; index += 1) {
-    output = await runBrowserCore(params, async (automation) => {
-      await automation.pressKey(params.key);
-      return finalize(automation, `Successfully pressed key: ${params.key}`, { snapshot: true });
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.hoverByUid(params.uid, params.pageId));
+    if (receipt.interrupted) {
+      return finalize(automation, params.pageId, 'The element was hovered and it opened a dialog.');
+    }
+    return finalize(automation, params.pageId, 'Successfully hovered over the element', {
+      receipt, snapshot: params.includeSnapshot,
     });
-  }
-  return output;
+  }, { feedback: true });
 }
 
-export async function hoverByUid(params: BrowserCallContext & {
+export async function fill(params: PageCallContext & SnapshotOption & {
   uid: string;
+  value: string;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.hoverByUid(params.uid);
-    return finalize(automation, 'Successfully hovered over the element', { snapshot: true });
-  });
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.fillByUid(params.uid, params.value, params.pageId));
+    if (receipt.interrupted) {
+      return finalize(automation, params.pageId, 'The element was filled out and it opened a dialog.');
+    }
+    return finalize(automation, params.pageId, 'Successfully filled out the element', {
+      receipt, snapshot: params.includeSnapshot,
+    });
+  }, { feedback: true });
 }
 
-export async function drag(params: BrowserCallContext & {
-  fromUid: string;
-  toUid: string;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.dragByUids(params.fromUid, params.toUid);
-    return finalize(automation, 'Successfully dragged an element', { snapshot: true });
-  });
-}
-
-export async function uploadFile(params: BrowserCallContext & {
-  uid: string;
-  filePath: string;
-  allowedRoots: readonly string[];
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await validatePathWithinRoots(params.filePath, params.allowedRoots);
-    await automation.uploadFileByUid(params.uid, params.filePath);
-    return finalize(automation, `File uploaded from ${params.filePath}.`, { snapshot: true });
-  });
-}
-
-export async function fillFormByUids(params: BrowserCallContext & {
+export async function fill_form(params: PageCallContext & SnapshotOption & {
   elements: Array<{ uid: string; value: string }>;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.fillFormByUids(params.elements);
-    return finalize(automation, 'Successfully filled out the form', { snapshot: true });
-  });
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.fillFormByUids(params.elements, params.pageId));
+    if (receipt.interrupted) {
+      const hasRemainingElements = receipt.interruptedUid !== params.elements.at(-1)?.uid;
+      return finalize(automation, params.pageId,
+        `Filling out the element with uid ${receipt.interruptedUid} opened a dialog.${
+          hasRemainingElements ? ' The remaining elements were not filled out.' : ''
+        }`);
+    }
+    return finalize(automation, params.pageId, 'Successfully filled out the form', {
+      receipt, snapshot: params.includeSnapshot,
+    });
+  }, { feedback: true });
 }
 
-export async function handleDialog(params: BrowserCallContext & {
-  action: 'accept' | 'dismiss';
-  promptText?: string;
+export async function type_text(params: PageCallContext & {
+  text: string;
+  submitKey?: string;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.handleDialog(params.action, params.promptText);
-    const message = params.action === 'accept'
-      ? 'Successfully accepted the dialog'
-      : 'Successfully dismissed the dialog';
-    return finalize(automation, message, { pages: true });
-  });
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.typeText(params.text, params.submitKey, params.pageId));
+    return finalize(automation, params.pageId,
+      `Typed text "${params.text}${params.submitKey ? ` + ${params.submitKey}` : ''}"`, { receipt });
+  }, { feedback: true });
 }
 
-export async function waitFor(params: BrowserCallContext & {
+export async function press_key(params: PageCallContext & SnapshotOption & {
+  key: string;
+}): Promise<string> {
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.pressKey(params.key, params.pageId));
+    return finalize(automation, params.pageId, `Successfully pressed key: ${params.key}`, {
+      receipt, snapshot: params.includeSnapshot,
+    });
+  }, { feedback: true });
+}
+
+export async function drag(params: PageCallContext & SnapshotOption & {
+  from_uid: string;
+  to_uid: string;
+}): Promise<string> {
+  return runPageCore(params, async (automation) => {
+    const receipt = await actionWithDialog(automation, params.pageId, () => automation.dragByUids(params.from_uid, params.to_uid, params.pageId));
+    return finalize(automation, params.pageId, 'Successfully dragged an element', {
+      receipt, snapshot: params.includeSnapshot,
+    });
+  }, { feedback: true });
+}
+
+export async function upload_file(params: PageCallContext & SnapshotOption & {
+  uid: string;
+  filePaths: string[];
+  allowedRoots: readonly string[];
+}): Promise<string> {
+  return runPageCore(params, async (automation) => {
+    for (const filePath of params.filePaths) await validatePathWithinRoots(filePath, params.allowedRoots);
+    await actionWithDialog(automation, params.pageId, () => automation.uploadFileByUid(params.uid, params.filePaths, params.pageId));
+    return finalize(automation, params.pageId, `File uploaded from ${params.filePaths.join(', ')}.`, {
+      snapshot: params.includeSnapshot,
+    });
+  }, { feedback: true });
+}
+
+export async function wait_for(params: PageCallContext & {
   text: string[];
   timeout?: number;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    await automation.waitForTextOnPage(params.text, params.timeout);
-    return finalize(
-      automation,
-      `Element matching one of ${JSON.stringify(params.text)} found.`,
-      { snapshot: true },
-    );
+  return runPageCore(params, async (automation) => {
+    await actionWithDialog(automation, params.pageId, () => automation.waitForTextOnPage(params.text, normalizeTimeout(params.timeout), params.pageId));
+    return finalize(automation, params.pageId,
+      `Element matching one of ${JSON.stringify(params.text)} found.`, { snapshot: true });
   });
 }
 
-export async function listConsoleMessages(params: BrowserCallContext & {
-  pageSize?: number;
-  pageIdx?: number;
-  types?: ConsoleMessageFilter[];
-  includePreservedMessages?: boolean;
+export async function handle_dialog(params: PageCallContext & {
+  action: 'accept' | 'dismiss';
+  promptText?: string;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    let messages = automation.getConsoleData(params.includePreservedMessages ?? false);
-    if (params.types?.length) {
-      const types = new Set(params.types);
-      messages = messages.filter((message) => (
-        message instanceof Error ? types.has('error') : types.has(message.type())
-      ));
-    }
-    const formatted = await Promise.all(messages.map((message) => ConsoleFormatter.from(message, {
-      id: automation.getConsoleMessageId(message),
-    })));
-    const grouped = ConsoleFormatter.groupConsecutive(formatted);
-    if (grouped.length === 0) return '## Console messages\n<no console messages found>';
+  return runPageCore(params, async (automation) => {
+    await actionWithDialog(automation, params.pageId, () => automation.handleDialog(params.action, params.promptText, params.pageId));
+    return finalize(automation, params.pageId, params.action === 'accept'
+      ? 'Successfully accepted the dialog'
+      : 'Successfully dismissed the dialog', { pages: true });
+  }, { blockedByDialog: false });
+}
 
-    const page = formatPagination(grouped, paginationOptions(params));
-    return ['## Console messages', ...page.info, ...page.items.map((item) => item.toString())]
-      .join('\n');
+export async function take_screenshot(
+  params: PageCallContext & FileCallContext & ScreenshotOptions,
+): Promise<ScreenshotResult> {
+  return runPageCore(params, async (automation) => {
+    const result = await actionWithDialog(automation, params.pageId, () => takeScreenshot(automation.getPage(params.pageId), params, {
+      resolveUid: (uid) => automation.getElementByUid(uid, params.pageId),
+      files: params.files,
+      signal: params.signal,
+    }));
+    return { ...result, text: await finalize(automation, params.pageId, result.text) };
   });
 }
 
-export async function getConsoleMessage(params: BrowserCallContext & {
+export async function evaluate_script(
+  params: PageCallContext & FileCallContext & ScriptEvaluationOptions,
+): Promise<string> {
+  // The source uses defineTool: route the action, but do not bind response dialog state.
+  return BrowserManager.runExclusive(params.browserId, async ({ automation }) => {
+    const result = await evaluateScript(automation.getPageById(params.pageId), params, {
+      resolveUid: (uid) => automation.getElementByUid(uid, params.pageId),
+      waitForAction: (action, options) => automation.waitForAction(action, {
+        ...options, pageId: params.pageId,
+      }),
+      files: params.files,
+      signal: params.signal,
+    });
+    return joinLines(result.text, navigationFeedback(result.receipt));
+  }, params.signal, { pageId: params.pageId, feedback: true });
+}
+
+export async function list_console_messages(
+  params: PageCallContext & FileCallContext & ConsoleListOptions,
+): Promise<string> {
+  return runPageCore(params, async (automation) => finalize(automation, params.pageId,
+    (await listConsoleMessages(automation.getConsoleCollector(params.pageId), params,
+      consoleDependencies(automation, params.pageId, params.files))).text), { blockedByDialog: false });
+}
+
+export async function get_console_message(params: PageCallContext & FileCallContext & {
   msgid: number;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    const message = automation.getConsoleMessageById(params.msgid);
-    const formatter = await ConsoleFormatter.from(message, {
-      id: params.msgid,
-      fetchDetailedData: true,
-    });
-    return formatter.toStringDetailed();
-  });
+  return runPageCore(params, async (automation) => finalize(automation, params.pageId,
+    (await getConsoleMessage(automation.getConsoleCollector(params.pageId), params.msgid,
+      consoleDependencies(automation, params.pageId, params.files))).text),
+  { blockedByDialog: false });
 }
 
-export async function listNetworkRequests(params: BrowserCallContext & {
-  pageSize?: number;
-  pageIdx?: number;
-  resourceTypes?: NetworkResourceFilter[];
-  includePreservedRequests?: boolean;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    let requests = automation.getNetworkRequests(params.includePreservedRequests ?? false);
-    if (params.resourceTypes?.length) {
-      const resourceTypes = new Set(params.resourceTypes);
-      requests = requests.filter((request) => resourceTypes.has(request.resourceType()));
-    }
-    if (requests.length === 0) return '## Network requests\nNo requests found.';
-
-    const formatted = await Promise.all(requests.map((request) => NetworkFormatter.from(request, {
-      requestId: automation.getNetworkRequestId(request),
-    })));
-    const page = formatPagination(formatted, paginationOptions(params));
-    return ['## Network requests', ...page.info, ...page.items.map((item) => item.toString())]
-      .join('\n');
-  });
+export async function list_network_requests(
+  params: PageCallContext & NetworkListOptions,
+): Promise<string> {
+  return runPageCore(params, async (automation) => finalize(automation, params.pageId,
+    (await listNetworkRequests(
+      automation.getPage(params.pageId), automation.getNetworkCollector(params.pageId), params,
+    )).text), { blockedByDialog: false });
 }
 
-export async function getNetworkRequest(params: BrowserCallContext & {
+export async function get_network_request(params: PageCallContext & FileCallContext & {
   reqid?: number;
+  requestFilePath?: string;
+  responseFilePath?: string;
 }): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    automation.throwIfDialogOpen();
-    if (!params.reqid) return 'Nothing is currently selected in the DevTools Network panel.';
-    const request = automation.getNetworkRequestById(params.reqid);
-    const formatter = await NetworkFormatter.from(request, {
-      requestId: params.reqid,
-      requestIdResolver: (redirect) => automation.getNetworkRequestId(redirect),
-      fetchData: true,
-    });
-    return formatter.toStringDetailed();
-  });
-}
-
-export async function takeScreenshot(params: BrowserCallContext & {
-  format?: 'png' | 'jpeg' | 'webp';
-  quality?: number;
-  uid?: string;
-  fullPage?: boolean;
-}): Promise<string> {
-  const format = params.format ?? 'png';
-  return runBrowserCore(params, async (automation) => {
-    if (params.uid && params.fullPage) {
-      throw new Error('Providing both "uid" and "fullPage" is not allowed.');
-    }
-    let target: ElementHandle<Element> | ReturnType<typeof automation.getSelectedPage>;
-    let element: ElementHandle<Element> | undefined;
-    if (params.uid) {
-      element = await automation.getElementByUid(params.uid);
-      target = element;
-    } else {
-      target = automation.getSelectedPage();
-    }
-    try {
-      const image = await target.screenshot({
-        type: format,
-        ...(params.fullPage ? { fullPage: true } : {}),
-        ...(format !== 'png' && params.quality !== undefined ? { quality: params.quality } : {}),
-        optimizeForSpeed: true,
-      });
-      let message = params.uid
-        ? `Took a screenshot of node with uid "${params.uid}".`
-        : params.fullPage
-          ? 'Took a screenshot of the full current page.'
-          : "Took a screenshot of the current page's viewport.";
-      if (image.byteLength >= 2_000_000) {
-        const directory = await mkdtemp(join(tmpdir(), 'piskie-browser-screenshot-'));
-        const filename = join(directory, `screenshot.${format}`);
-        await writeFile(filename, image);
-        message += `\nSaved screenshot to ${filename}.`;
-      }
-      return appendPageChanges(automation, message);
-    } finally {
-      void element?.dispose();
-    }
-  });
-}
-
-export async function evaluateScript(params: BrowserCallContext & {
-  function: string;
-}): Promise<string> {
-  return runBrowserCore(params, async (automation) => {
-    const page = automation.getSelectedPage();
-    const functionHandle = await page.evaluateHandle(`(${params.function})`);
-    try {
-      let serialized: string | undefined;
-      await automation.waitForAction(async () => {
-        serialized = await page.evaluate(async (candidate) => {
-          // @ts-expect-error The upstream contract requires a function expression.
-          return JSON.stringify(await candidate());
-        }, functionHandle);
-      });
-      const message = `Script ran on page and returned:\n\`\`\`json\n${serialized}\n\`\`\``;
-      return appendPageChanges(automation, message);
-    } finally {
-      void functionHandle.dispose();
-    }
-  });
+  return runPageCore(params, async (automation) => finalize(automation, params.pageId,
+    (await getNetworkRequest(
+      automation.getPage(params.pageId), automation.getNetworkCollector(params.pageId), params, params.files,
+    )).text));
 }
 
 export async function closeBrowser(params: { browserId: string }): Promise<string> {
@@ -460,132 +382,154 @@ export async function setWindowBounds(params: BrowserCallContext & {
   return JSON.stringify({ success: true, bounds }, null, 2);
 }
 
-async function runBrowserCore<T>(
+function consoleDependencies(
+  automation: BrowserAutomationSession,
+  pageId: number,
+  files: ObservationFileOptions,
+): ConsoleDataDependencies {
+  return {
+    files,
+    serviceWorkers: automation.getServiceWorkerConsoleCollector(),
+    requestIdResolver: (cdpRequestId) => resolveCdpRequestId(automation.getNetworkCollector(pageId), cdpRequestId),
+    elementIdResolver: (backendNodeId) => {
+      const snapshot = automation.getActiveSnapshot(pageId);
+      for (const node of snapshot?.idToNode.values() ?? []) {
+        if (node.backendNodeId === backendNodeId) return node.id;
+      }
+      return undefined;
+    },
+  };
+}
+
+function runBrowserCore<T>(
   { browserId, signal }: BrowserCallContext,
-  action: (automation: BrowserAutomationSession) => Promise<T>
+  action: (automation: BrowserAutomationSession) => Promise<T>,
+  feedback = false,
 ): Promise<T> {
-  return BrowserManager.runExclusive(browserId, ({ automation }) => action(automation), signal);
+  return BrowserManager.runExclusive(browserId, ({ automation }) => action(automation), signal, { feedback });
+}
+
+function runPageCore<T>(
+  params: PageCallContext,
+  action: (automation: BrowserAutomationSession) => Promise<T>,
+  options: { feedback?: boolean; blockedByDialog?: boolean } = {},
+): Promise<T> {
+  return BrowserManager.runExclusive(params.browserId, async ({ automation }) => {
+    if (options.blockedByDialog !== false) {
+      await actionWithDialog(automation, params.pageId, () => automation.throwIfDialogOpen(params.pageId));
+    }
+    return action(automation);
+  }, params.signal, { pageId: params.pageId, feedback: options.feedback ?? false });
+}
+
+/** Handler errors retain response-page dialog text; observation failures propagate separately. */
+async function actionWithDialog<T>(
+  automation: BrowserAutomationSession,
+  pageId: number,
+  action: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const dialog = formatOpenDialog(automation, pageId);
+    if (!dialog) throw error;
+    throw new Error(joinLines(error instanceof Error ? error.message : String(error), dialog), {
+      ...(error instanceof Error && error.cause !== undefined ? { cause: error.cause } : {}),
+    });
+  }
 }
 
 async function finalize(
   automation: BrowserAutomationSession,
+  pageId: number,
   message: string,
-  options: Readonly<{ snapshot?: boolean; pages?: boolean }>
+  options: {
+    receipt?: ActionReceipt;
+    snapshot?: boolean;
+    snapshotText?: string;
+    pages?: boolean;
+  } = {},
 ): Promise<string> {
-  let output = message;
-  if (options.snapshot) {
-    const snapshot = await automation.takeSnapshot(false);
-    output += `${output ? '\n\n' : ''}## Page Snapshot\n${formatEmbeddedSnapshot(snapshot)}`;
-  }
-  if (options.pages) {
-    output += `\n\n${await formatPages(automation)}`;
-  }
-  return appendPageChanges(automation, output);
+  const snapshotText = options.snapshot
+    ? formatTextSnapshot(await automation.takeSnapshot(false, pageId))
+    : options.snapshotText;
+  return joinLines(
+    message,
+    options.receipt ? navigationFeedback(options.receipt) : '',
+    formatOpenDialog(automation, pageId),
+    options.pages ? await formatPages(automation) : '',
+    snapshotText !== undefined ? `## Latest page snapshot\n${snapshotText}` : '',
+  );
 }
 
-async function appendPageChanges(
-  automation: BrowserAutomationSession,
-  output: string
-): Promise<string> {
-  const changes = await automation.consumePageChanges();
-  const rendered = await formatPageChanges(automation, changes);
-  return rendered ? `${output}${output ? '\n\n' : ''}${rendered}` : output;
+function formatOpenDialog(automation: BrowserAutomationSession, pageId: number): string {
+  const dialog = automation.getDialog(pageId);
+  if (!dialog) return '';
+  const defaultValue = dialog.type() === 'prompt' ? ` (default value: "${dialog.defaultValue()}")` : '';
+  return `# Open dialog\n${dialog.type()}: ${dialog.message()}${defaultValue}.\n`
+    + 'Call handle_dialog to handle it before continuing.';
 }
 
 async function formatPages(automation: BrowserAutomationSession): Promise<string> {
   const pages = await automation.listPages();
-  const selected = automation.getSelectedPageIndex();
-  const lines = ['## Pages'];
-  pages.forEach((entry, index) => {
-    lines.push(`${index}: ${entry.page.url()}${index === selected ? ' [selected]' : ''}`);
-  });
-  return lines.join('\n') + '\n';
-}
-
-async function formatPageChanges(
-  automation: BrowserAutomationSession,
-  changes: PageChangeSet
-): Promise<string> {
-  if (changes.opened.length === 0 && changes.closed.length === 0) return '';
+  const selected = pages.length ? automation.getSelectedPageId() : undefined;
   const lines: string[] = [];
-  if (changes.opened.length) {
-    lines.push(`🆕 New page(s) opened (${changes.opened.length}):`);
-    for (const page of changes.opened) lines.push(`  - [${page.pageIndex}] ${page.url}`);
+  const fallback = automation.consumeSelectedPageFallback();
+  if (fallback) lines.push(`Note: the previously selected page ${fallback.wasClosed ? 'was closed' : 'is no longer listed'}.${selected !== undefined ? ` Page ${selected} is now selected.` : ''}`);
+  if (pages.length) lines.push('## Pages');
+  for (const { pageId, page, isolatedContextName } of pages) {
+    const title = await fetchPageTitle(page);
+    const label = title ? `${truncateTitle(title)} (${page.url()})` : page.url();
+    lines.push(`${pageId}: ${label}${pageId === selected ? ' [selected]' : ''}${
+      isolatedContextName ? ` isolatedContext=${isolatedContextName}` : ''
+    }`);
   }
-  if (changes.closed.length) {
-    lines.push(`🔒 Page(s) closed (${changes.closed.length}):`);
-    for (const page of changes.closed) lines.push(`  - [${page.pageIndex}] ${page.url}`);
-  }
-  const totalAfter = (await automation.listPages()).length;
-  const totalBefore = totalAfter - changes.opened.length + changes.closed.length;
-  lines.push(`📊 Total pages: ${totalBefore} → ${totalAfter}`);
   return lines.join('\n');
 }
 
-function navigationMessage(result: BrowserNavigationResult, requestedUrl?: string): string {
-  let message: string;
-  if (result.error !== undefined) {
-    switch (result.type) {
-      case 'url':
-        message = `Unable to navigate in the selected page: ${result.error}.`;
-        break;
-      case 'back':
-        message = `Unable to navigate back in the selected page: ${result.error}.`;
-        break;
-      case 'forward':
-        message = `Unable to navigate forward in the selected page: ${result.error}.`;
-        break;
-      case 'reload':
-        message = `Unable to reload the selected page: ${result.error}.`;
-        break;
-    }
-  } else {
-    switch (result.type) {
-      case 'url':
-        message = `Successfully navigated to ${requestedUrl ?? result.url}.`;
-        break;
-      case 'back':
-        message = `Successfully navigated back to ${result.url}.`;
-        break;
-      case 'forward':
-        message = `Successfully navigated forward to ${result.url}.`;
-        break;
-      case 'reload':
-        message = 'Successfully reloaded the page.';
-        break;
-    }
+async function fetchPageTitle(page: { title(): Promise<string> }): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      page.title().catch(() => ''),
+      new Promise<string>((resolve) => { timer = setTimeout(() => resolve(''), 1_000); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
-  if (result.receipt.dialog?.handled && result.receipt.dialog.type === 'beforeunload') {
-    message += '\nAccepted a beforeunload dialog.';
+}
+
+function truncateTitle(title: string): string {
+  return title.length <= 50 ? title : title.slice(0, 47) + '...';
+}
+
+function navigationFeedback(receipt: ActionReceipt): string {
+  return receipt.navigatedToUrl ? `Page navigated to ${receipt.navigatedToUrl}.` : '';
+}
+
+function normalizeTimeout(value: number | undefined): number | undefined {
+  return value !== undefined && value <= 0 ? undefined : value;
+}
+
+function joinLines(...parts: string[]): string {
+  return parts.filter(Boolean).join('\n');
+}
+
+/** Fixed source validation with JavaScript enabled and extension tools disabled. */
+function validateNavigationUrl(url: string): void {
+  let parsed: URL;
+  try { parsed = new URL(url); }
+  catch { throw new Error(`Invalid URL: "${url}". URLs must be valid according to the URL standard.`); }
+  if (parsed.protocol === 'chrome-extension:') {
+    throw new Error('Navigating to chrome-extension: URLs is not allowed without --categoryExtensions.');
   }
-  return message;
-}
-
-function formatStandaloneSnapshot(snapshot: TextSnapshotResult): string {
-  return [
-    `# Page Snapshot (ID: ${snapshot.snapshotId})`,
-    '',
-    '## Element Tree',
-    '```',
-    formatTextSnapshot(snapshot).trimEnd(),
-    '```',
-  ].join('\n');
-}
-
-function formatEmbeddedSnapshot(snapshot: TextSnapshotResult): string {
-  const formatNode = (node: TextSnapshotResult['root'], depth: number): string => {
-    const indent = '  '.repeat(depth);
-    let output = `${indent}[${node.id}] ${node.role ?? ''}`;
-    if (node.name) output += ` "${node.name}"`;
-    output += '\n';
-    for (const child of node.children) output += formatNode(child, depth + 1);
-    return output;
-  };
-  return formatNode(snapshot.root, 0);
-}
-
-function paginationOptions(params: PaginationOptions): PaginationOptions | undefined {
-  return params.pageSize !== undefined || params.pageIdx !== undefined
-    ? { pageSize: params.pageSize, pageIdx: params.pageIdx }
-    : undefined;
+  if (parsed.protocol === 'chrome:') {
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (['newtab', 'new-tab-page', 'inspect'].includes(host)
+      || (host === '' && (path === 'newtab' || path === 'new-tab-page' || path.startsWith('inspect')))) return;
+  }
+  if (parsed.protocol === 'chrome:' || parsed.protocol === 'chrome-untrusted:') {
+    throw new Error(`Navigating to ${parsed.protocol} URLs is not allowed.`);
+  }
 }

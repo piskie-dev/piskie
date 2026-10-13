@@ -4,17 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Modified by Piskie Team, 2026.
- * chrome-devtools-mcp 1.7.0 tool schemas are adapted to Piskie's camelCase
- * browser contract and trusted host context.
+ * Adapted from chrome-devtools-mcp@1.10.1 src/tools/{pages,input,snapshot,
+ * screenshot,script,console,network,ToolDefinition}.ts, with pageIdRouting=true,
+ * slim=false, JavaScript enabled, and no extension tools. Host context stays private.
  */
 
-import { bool, int, num, ok, z } from '../../../core/skill/define.js';
-import { defineTrustedBrowserSkill } from '../../../core/skill/host.js';
+import { num, ok, z } from '../../../core/skill/define.js';
+import {
+  defineTrustedBrowserSkill,
+  type TrustedBrowserSkillContext,
+} from '../../../core/skill/host.js';
 
 const CONSOLE_MESSAGE_TYPES = [
   'log', 'debug', 'info', 'error', 'warn', 'dir', 'dirxml', 'table', 'trace',
   'clear', 'startGroup', 'startGroupCollapsed', 'endGroup', 'assert', 'profile',
-  'profileEnd', 'count', 'timeEnd', 'verbose',
+  'profileEnd', 'count', 'timeEnd', 'verbose', 'issue',
 ] as const;
 
 const NETWORK_RESOURCE_TYPES = [
@@ -23,268 +27,435 @@ const NETWORK_RESOURCE_TYPES = [
   'signedexchange', 'ping', 'cspviolationreport', 'preflight', 'fedcm', 'other',
 ] as const;
 
+const pageIdSchema = {
+  pageId: z.number().describe('Targets a specific page by ID.'),
+};
+// Keep the source input schema exportable; normalize nonpositive values in the handler.
+const timeoutSchema = {
+  timeout: z.number().int().optional().describe(
+    'Maximum wait time in milliseconds. If set to 0, the default timeout will be used.',
+  ),
+};
+const includeSnapshotSchema = z.boolean().optional().describe(
+  'Whether to include a snapshot in the response. Default is false.',
+);
+const uidSchema = z.string().describe(
+  'The uid of an element on the page from the page content snapshot',
+);
+
 const browserContext = <T extends Record<string, unknown>>(
   params: T,
-  ctx: { browserId: string; signal: AbortSignal },
+  ctx: TrustedBrowserSkillContext,
 ): T & { browserId: string; signal: AbortSignal } => ({
   ...params,
   browserId: ctx.browserId,
   signal: ctx.signal,
 });
+const files = (ctx: TrustedBrowserSkillContext) => ({
+  cwd: ctx.workspace.dir,
+  tempDir: ctx.workspace.tempDir,
+  allowedRoots: [ctx.workspace.dir, ctx.workspace.tempDir],
+});
+const timeout = (value: number | undefined) => (
+  value !== undefined && value <= 0 ? undefined : value
+);
 
 const skill = defineTrustedBrowserSkill({
   name: 'browser',
   domain: 'browser',
   functions: {
-    takeSnapshot: {
-      description: "Take a text snapshot of the currently selected page based on the accessibility tree. The snapshot lists page elements along with a unique identifier (uid). UID lifecycle: each takeSnapshot generates a NEW snapshot and immediately invalidates all UIDs from previous snapshots — use UIDs right after taking the snapshot, and never reuse UIDs across snapshots. Prefer taking a snapshot over taking a screenshot.",
-      params: z.object({ "verbose": bool().default(false).describe("Whether to include all possible information available in the full a11y tree. Default is false.") }),
+    list_pages: {
+      description: 'Get a list of pages open in the browser.',
+      params: z.object({}),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.takeSnapshot(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.list_pages(browserContext(params, ctx)));
       },
     },
-    clickByUid: {
-      description: "Clicks on the provided element identified by its UID from the page content snapshot. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After clicking, automatically detects if new tabs were opened or closed, and includes this information in the response. This helps you know immediately if a new page opened without manually calling listPages. IMPORTANT: The snapshot is taken immediately after the click. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
-      params: z.object({ "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of an element on the page from the page content snapshot (format: snapshotId_nodeIndex, e.g., \"10_116\")"), "dblClick": bool().default(false).describe("Set to true for double clicks. Default is false.") }),
-      async run({ uid: elementUid, dblClick }, ctx) {
-        return ok(await ctx.browser.core.clickByUid(browserContext({
-          uid: elementUid,
-          clickCount: dblClick ? 2 : 1,
-        }, ctx)));
-      },
-    },
-    fillByUid: {
-      description: "Type text into an input, text area or select an option from a <select> element identified by its UID. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After filling, automatically detects if new tabs were opened or closed (e.g., autocomplete triggered a popup), and includes this information in the response. IMPORTANT: The snapshot is taken immediately after filling. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
-      params: z.object({ "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of an element on the page from the page content snapshot"), "value": z.string().describe("The value to fill in (text for input/textarea, option text for select)") }),
+    new_page: {
+      description: 'Open a new tab and load a URL. Use project URL if not specified otherwise.',
+      params: z.object({
+        url: z.string().describe('URL to load in a new page.'),
+        background: z.boolean().optional().describe(
+          'Whether to open the page in the background without bringing it to the front. Default is false (foreground).',
+        ),
+        isolatedContext: z.string().optional().describe(
+          'If specified, the page is created in an isolated browser context with the given name. '
+          + 'Pages in the same browser context share cookies and storage. '
+          + 'Pages in different browser contexts are fully isolated (useful for clean-slate testing of cookies and authentication).',
+        ),
+        ...timeoutSchema,
+      }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.fillByUid(browserContext(params, ctx)));
-      },
-    },
-    typeText: {
-      description: "Type Unicode text at the currently selected page's current focus/selection, replacing selected text without focusing or clearing a field. Set the focus/selection before calling. Passes text unchanged, including spaces and newlines; empty text sends no input. Newlines act as Enter and may trigger page actions. This is not full IME simulation; verify application state and saving separately. Returns a fresh snapshot.",
-      params: z.object({ "text": z.string().describe("Text to type unchanged at the current focus/selection; spaces and newlines are preserved.") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.typeText(browserContext(params, ctx)));
-      },
-    },
-    pressKey: {
-      description: "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations). Examples: \"Enter\", \"Control+A\", \"Control++\", \"Control+Shift+R\". Modifiers: Control, Shift, Alt, Meta",
-      params: z.object({ "key": z.string().describe("A key or a combination. Examples: \"Enter\", \"Tab\", \"Escape\", \"Control+A\", \"Control+Shift+R\", \"PageDown\", \"ArrowUp\". Available modifiers: Control, Shift, Alt, Meta"), "count": num(z.gte(1)).default(1).describe("Number of times to press the key (deprecated, use count=1 and call multiple times if needed)") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.pressKey(browserContext(params, ctx)));
-      },
-    },
-    navigateTo: {
-      description: "Navigates the currently selected page to a URL, or performs history navigation (back/forward/reload). Returns a snapshot after navigation completes. IMPORTANT: If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
-      params: z.object({ "type": z.enum(["url", "back", "forward", "reload"]).optional().describe("Navigate the page by URL, back or forward in history, or reload. Defaults to \"url\" if url parameter is provided"), "url": z.string().regex(new RegExp("^https?://")).optional().describe("Target URL (required only when type=url or type is omitted)"), "ignoreCache": bool().default(false).describe("Whether to ignore cache on reload (only applicable for type=reload)"), "timeout": num(z.gte(0), z.lte(300000)).default(30000).describe("Maximum wait time in milliseconds. If set to 0, the default timeout will be used.") }),
-      async run(params, ctx) {
-        const text = await ctx.browser.core.navigateTo(browserContext(params, ctx));
+        const text = await ctx.browser.core.new_page(browserContext({
+          ...params, timeout: timeout(params.timeout),
+        }, ctx));
         ctx.browser.notifyPageOpen();
         return ok(text);
       },
     },
-    goBack: {
-      description: "Navigate back in browser history. Equivalent to navigateTo with type=\"back\" — either works; do not call both.",
-      params: z.object({}),
+    select_page: {
+      description: 'Select a page as a context for future tool calls.',
+      params: z.object({
+        pageId: z.number().describe('The ID of the page to select. Call list_pages to get available pages.'),
+        bringToFront: z.boolean().optional().describe('Whether to focus the page and bring it to the top.'),
+      }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.goBack(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.select_page(browserContext(params, ctx)));
       },
     },
-    refresh: {
-      description: "Refresh the current page. Equivalent to navigateTo with type=\"reload\" — either works; do not call both.",
-      params: z.object({}),
-      async run(_params, ctx) {
-        return ok(await ctx.browser.core.refresh(browserContext({}, ctx)));
+    close_page: {
+      description: 'Closes the page by its ID. The last open page cannot be closed.',
+      params: z.object({
+        pageId: z.number().describe('The ID of the page to close. Call list_pages to list pages.'),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.close_page(browserContext(params, ctx)));
       },
     },
-    newPage: {
-      description: "Open a new page/tab in the browser and load the specified URL",
-      params: z.object({ "url": z.string().describe("Target URL to load in the new page. Include a scheme, e.g. https://example.com, http://localhost:3000, about:blank, or file:///path/to/file.html.") }),
+    navigate_page: {
+      description: 'Go to a URL, or back, forward, or reload. Use project URL if not specified otherwise.',
+      params: z.object({
+        ...pageIdSchema,
+        type: z.enum(['url', 'back', 'forward', 'reload']).optional().describe(
+          'Navigate the page by URL, back or forward in history, or reload.',
+        ),
+        url: z.string().optional().describe('Target URL (only type=url)'),
+        ignoreCache: z.boolean().optional().describe('Whether to ignore cache on reload.'),
+        handleBeforeUnload: z.enum(['accept', 'dismiss']).optional().describe(
+          'Whether to auto accept or beforeunload dialogs triggered by this navigation. Default is accept.',
+        ),
+        initScript: z.string().optional().describe(
+          'A JavaScript script to be executed on each new document before any other scripts for the next navigation.',
+        ),
+        ...timeoutSchema,
+      }),
       async run(params, ctx) {
-        const text = await ctx.browser.core.newPage(browserContext(params, ctx));
+        const text = await ctx.browser.core.navigate_page(browserContext({
+          ...params, timeout: timeout(params.timeout),
+        }, ctx));
         ctx.browser.notifyPageOpen();
         return ok(text);
       },
     },
-    closePage: {
-      description: "Close the page/tab at the specified index (use listPages to get page indexes)",
-      params: z.object({ "pageIndex": num(z.gte(0)).describe("Index of the page to close") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.closePage(browserContext(params, ctx)));
-      },
-    },
-    closeBrowser: {
-      description: "Close a browser instance by browserId. This will terminate the Chrome process and delete the persisted config. The browser can be reopened later with a new session.",
-      params: z.object({}),
-      async run(_params, ctx) {
-        return ok(await ctx.browser.core.closeBrowser({ browserId: ctx.browserId }));
-      },
-    },
-    listPages: {
-      description: "List all open pages/tabs in the browser",
-      params: z.object({}),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.listPages(browserContext(params, ctx)));
-      },
-    },
-    selectPage: {
-      description: "Select a different page/tab by index for subsequent browser operations. Always call listPages first to see available pages and their indices. If the page is still loading or incomplete, wait briefly and call takeSnapshot again.",
-      params: z.object({ "pageIdx": num(z.gte(0)).describe("Index of the page to switch to (0-based). Use listPages to see available indices.") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.selectPage(browserContext(params, ctx)));
-      },
-    },
-    handleDialog: {
-      description: "Accept or dismiss the browser dialog currently open on the selected page. Use promptText when accepting a prompt dialog.",
+    take_snapshot: {
+      description: 'Take a text snapshot of the target page based on the a11y tree. The snapshot lists page elements along with a unique identifier (uid). Always use the latest snapshot. Prefer taking a snapshot over taking a screenshot. The snapshot indicates the element selected in the DevTools Elements panel (if any).',
       params: z.object({
-        "action": z.enum(["accept", "dismiss"]).describe("Whether to accept or dismiss the dialog"),
-        "promptText": z.string().optional().describe("Optional text to enter when accepting a prompt dialog"),
+        ...pageIdSchema,
+        verbose: z.boolean().optional().describe(
+          'Whether to include all possible information available in the full a11y tree. Default is false.',
+        ),
+        filePath: z.string().optional().describe(
+          'The absolute path, or a path relative to the current working directory, to save the snapshot to instead of attaching it to the response.',
+        ),
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.handleDialog(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.take_snapshot({ ...browserContext(params, ctx), files: files(ctx) }));
       },
     },
-    waitFor: {
-      description: "Wait until any one of the specified texts appears on the selected page, then return a fresh page snapshot.",
+    click: {
+      description: 'Clicks on the provided element',
       params: z.object({
-        "text": z.array(z.string()).min(1).describe("Non-empty list of texts; resolves when any value appears"),
-        "timeout": int(z.gte(0), z.lte(300000)).optional().describe("Maximum wait time in milliseconds; 0 uses the default timeout"),
+        ...pageIdSchema,
+        uid: uidSchema,
+        dblClick: z.boolean().optional().describe('Set to true for double clicks. Default is false.'),
+        includeSnapshot: includeSnapshotSchema,
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.waitFor(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.click(browserContext(params, ctx)));
       },
     },
-    hoverByUid: {
-      description: "Hover the mouse over an element identified by its UID. Useful for triggering hover effects, tooltips, or dropdown menus.",
-      params: z.object({ "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of an element on the page from the page content snapshot") }),
+    hover: {
+      description: 'Hover over the provided element',
+      params: z.object({ ...pageIdSchema, uid: uidSchema, includeSnapshot: includeSnapshotSchema }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.hoverByUid(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.hover(browserContext(params, ctx)));
+      },
+    },
+    fill: {
+      description: 'Type text into an input, text area or select an option from a <select> element.',
+      params: z.object({
+        ...pageIdSchema,
+        uid: uidSchema,
+        value: z.string().describe(
+          'The value to fill in. "true" or "false" for checkboxes and toggles, "true" for radio buttons.',
+        ),
+        includeSnapshot: includeSnapshotSchema,
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.fill(browserContext(params, ctx)));
+      },
+    },
+    fill_form: {
+      description: 'Fill out multiple form elements (inputs, selects, checkboxes, radios) at once. Prefer this tool when the fields and values are known.',
+      params: z.object({
+        ...pageIdSchema,
+        elements: z.array(z.object({
+          uid: z.string().describe('The uid of the element to fill out'),
+          value: z.string().describe(
+            'Value for the element. "true" or "false" for checkboxes and toggles, "true" for radio buttons.',
+          ),
+        }).describe('An element to fill out')).describe('Elements from snapshot to fill out.'),
+        includeSnapshot: includeSnapshotSchema,
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.fill_form(browserContext(params, ctx)));
+      },
+    },
+    type_text: {
+      description: 'Type text using keyboard into a previously focused input',
+      params: z.object({
+        ...pageIdSchema,
+        text: z.string().describe('The text to type'),
+        submitKey: z.string().optional().describe('Optional key to press after typing. E.g., "Enter", "Tab", "Escape"'),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.type_text(browserContext(params, ctx)));
+      },
+    },
+    press_key: {
+      description: 'Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations).',
+      params: z.object({
+        ...pageIdSchema,
+        key: z.string().describe(
+          'A key or a combination (e.g., "Enter", "Control+A", "Control++", "Control+Shift+R"). Modifiers: Control, Shift, Alt, Meta',
+        ),
+        includeSnapshot: includeSnapshotSchema,
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.press_key(browserContext(params, ctx)));
       },
     },
     drag: {
-      description: "Drag an element onto another element. Both UIDs must come from the latest page snapshot. Returns a fresh snapshot after the drag.",
+      description: 'Drag an element onto another element',
       params: z.object({
-        "fromUid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of the element to drag"),
-        "toUid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of the element to drop into"),
+        ...pageIdSchema,
+        from_uid: z.string().describe('The uid of the element to drag'),
+        to_uid: z.string().describe('The uid of the element to drop into'),
+        includeSnapshot: includeSnapshotSchema,
       }),
       async run(params, ctx) {
         return ok(await ctx.browser.core.drag(browserContext(params, ctx)));
       },
     },
-    uploadFile: {
-      description: "Upload a local file through a file input or an element that opens a file chooser. The file must be inside the current workspace or its temporary directory. Returns a fresh snapshot after the upload.",
+    upload_file: {
+      description: 'Upload a file through a provided element. Files must be inside the workspace or task temporary directory.',
       params: z.object({
-        "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of the file input or file-chooser trigger from the latest page snapshot"),
-        "filePath": z.string().describe("Absolute local path of the file to upload"),
+        ...pageIdSchema,
+        uid: z.string().describe(
+          'The uid of the file input element or an element that will open file chooser on the page from the page content snapshot',
+        ),
+        filePaths: z.array(z.string()).min(1).describe(
+          'One or more files paths to upload. File paths have to be local to the browser instance (not the MCP).',
+        ),
+        includeSnapshot: includeSnapshotSchema,
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.uploadFile({
-          ...browserContext(params, ctx),
-          allowedRoots: [ctx.workspace.dir, ctx.workspace.tempDir],
+        return ok(await ctx.browser.core.upload_file({
+          ...browserContext(params, ctx), allowedRoots: files(ctx).allowedRoots,
         }));
       },
     },
-    fillFormByUids: {
-      description: "Fill multiple form fields in one operation. All UIDs must come from the SAME (latest) snapshot — mixing UIDs from different snapshots will fail. Automatically creates a new snapshot after filling (which invalidates the UIDs just used). Use this to efficiently fill multiple inputs, selects, or textareas at once.",
-      params: z.object({ "elements": z.array(z.object({ "uid": z.string().regex(new RegExp("^\\d+_\\d+$")).describe("The uid of the form element"), "value": z.string().describe("The value to fill in") })).min(1).describe("Array of form elements to fill") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.fillFormByUids(browserContext(params, ctx)));
-      },
-    },
-    takeScreenshot: {
-      description: "Take a screenshot of the page or element.",
-      params: z.object({ "format": z.enum(["png", "jpeg", "webp"]).default("png").describe("Type of format to save the screenshot as. Default is \"png\""), "fullPage": bool().optional().describe("If set to true takes a screenshot of the full page instead of the currently visible viewport. Incompatible with uid."), "quality": num(z.gte(0), z.lte(100)).optional().describe("Compression quality for JPEG and WebP formats (0-100). Higher values mean better quality but larger file sizes. Ignored for PNG format."), "uid": z.string().optional().describe("The uid of an element on the page content snapshot. If omitted, takes a screenshot of the full page.") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.takeScreenshot(browserContext(params, ctx)));
-      },
-    },
-    evaluateScript: {
-      description: "Execute a JavaScript function in the browser context. The function must be a valid JavaScript function expression. The return value MUST be JSON-serializable — returning DOM nodes, functions, or circular structures fails; extract plain data instead. Example: \"() => Array.from(document.querySelectorAll('a')).map(a => ({ text: a.textContent, href: a.href }))\".",
-      params: z.object({ "function": z.string().describe("A JavaScript function as a string (e.g., \"() => document.title\" or \"() => { return document.querySelectorAll('a').length; }\")") }),
-      async run(params, ctx) {
-        return ok(await ctx.browser.core.evaluateScript(browserContext(params, ctx)));
-      },
-    },
-    listConsoleMessages: {
-      description: "Read console messages collected for the selected page since its latest navigation.",
+    wait_for: {
+      description: 'Wait for the specified text to appear on the target page.',
       params: z.object({
-        "pageSize": int(z.gt(0)).optional().describe("Maximum number of messages to return; omit to return all messages"),
-        "pageIdx": int(z.gte(0)).optional().describe("Zero-based result page; defaults to the first page"),
-        "types": z.array(z.enum(CONSOLE_MESSAGE_TYPES)).optional().describe("Only return the selected console message types"),
-        "includePreservedMessages": bool().default(false).describe("Include messages preserved over the last three navigations"),
+        ...pageIdSchema,
+        text: z.array(z.string()).min(1).describe(
+          'Non-empty list of texts. Resolves when any value appears on the page.',
+        ),
+        ...timeoutSchema,
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.listConsoleMessages(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.wait_for(browserContext({
+          ...params, timeout: timeout(params.timeout),
+        }, ctx)));
       },
     },
-    getConsoleMessage: {
-      description: "Read one console message in detail by the msgid returned from listConsoleMessages.",
+    handle_dialog: {
+      description: 'If a browser dialog was opened, use this command to handle it',
       params: z.object({
-        "msgid": z.number().describe("The msgid returned by listConsoleMessages"),
+        ...pageIdSchema,
+        action: z.enum(['accept', 'dismiss']).describe('Whether to dismiss or accept the dialog'),
+        promptText: z.string().optional().describe('Optional prompt text to enter into the dialog.'),
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.getConsoleMessage(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.handle_dialog(browserContext(params, ctx)));
       },
     },
-    listNetworkRequests: {
-      description: "Read network requests collected for the selected page since its latest navigation.",
+    take_screenshot: {
+      description: 'Take a screenshot of the page or element.',
       params: z.object({
-        "pageSize": int(z.gt(0)).optional().describe("Maximum number of requests to return; omit to return all requests"),
-        "pageIdx": int(z.gte(0)).optional().describe("Zero-based result page; defaults to the first page"),
-        "resourceTypes": z.array(z.enum(NETWORK_RESOURCE_TYPES)).optional().describe("Only return the selected resource types"),
-        "includePreservedRequests": bool().default(false).describe("Include requests preserved over the last three navigations"),
+        ...pageIdSchema,
+        format: z.enum(['png', 'jpeg', 'webp']).default('png').describe(
+          'Type of format to save the screenshot as. Default is "png"',
+        ),
+        quality: z.number().min(0).max(100).optional().describe(
+          'Compression quality for JPEG and WebP formats (0-100). Higher values mean better quality but larger file sizes. Ignored for PNG format.',
+        ),
+        uid: z.string().optional().describe(
+          'The uid of an element on the page from the page content snapshot. If omitted, takes a page screenshot.',
+        ),
+        fullPage: z.boolean().optional().describe(
+          'If set to true takes a screenshot of the full page instead of the currently visible viewport. Incompatible with uid.',
+        ),
+        filePath: z.string().optional().describe(
+          'The absolute path, or a path relative to the current working directory, to save the screenshot to instead of attaching it to the response.',
+        ),
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.listNetworkRequests(browserContext(params, ctx)));
+        const result = await ctx.browser.core.take_screenshot({ ...browserContext(params, ctx), files: files(ctx) });
+        return ok(result.text, result.image ? {
+          images: [{ base64: result.image.data, mediaType: result.image.mimeType }],
+        } : undefined);
       },
     },
-    getNetworkRequest: {
-      description: "Read request and response headers and available bodies for a reqid returned by listNetworkRequests. This tool does not write body files.",
+    evaluate_script: {
+      description: 'Evaluate a JavaScript function inside the target page. Returns the response as JSON, so returned values have to be JSON-serializable.',
       params: z.object({
-        "reqid": z.number().optional().describe("The reqid returned by listNetworkRequests; when omitted, reports that no DevTools request is selected"),
+        ...pageIdSchema,
+        function: z.string().describe(
+          'A JavaScript function declaration to be executed by the tool in the target page.\n'
+          + 'Example without arguments: `() => document.title` or `async () => await fetch("example.com")`.\n'
+          + 'Example with arguments: `(el) => el.innerText`\n',
+        ),
+        args: z.array(uidSchema).optional().describe('An optional list of arguments to pass to the function.'),
+        filePath: z.string().optional().describe(
+          'The absolute or relative path to a file to save the script output to. If omitted, the output is returned inline.',
+        ),
+        dialogAction: z.string().optional().describe(
+          'Handle dialogs while execution. "accept", "dismiss", or string for response of window.prompt. Defaults to accept.',
+        ),
+        waitForStableDom: z.boolean().optional().describe(
+          'Whether to wait for the DOM to settle. Pass false if the script only reads data. Defaults to true.',
+        ),
       }),
       async run(params, ctx) {
-        return ok(await ctx.browser.core.getNetworkRequest(browserContext(params, ctx)));
+        return ok(await ctx.browser.core.evaluate_script({ ...browserContext(params, ctx), files: files(ctx) }));
+      },
+    },
+    list_console_messages: {
+      description: 'List all console messages for the target page since the last navigation.',
+      params: z.object({
+        ...pageIdSchema,
+        pageSize: z.number().int().positive().optional().describe(
+          'Maximum number of messages to return. When omitted, returns all messages.',
+        ),
+        pageIdx: z.number().int().min(0).optional().describe(
+          'Page number to return (0-based). When omitted, returns the first page.',
+        ),
+        types: z.array(z.enum(CONSOLE_MESSAGE_TYPES)).optional().describe(
+          'Filter messages to only return messages of the specified resource types. When omitted or empty, returns all messages.',
+        ),
+        includePreservedMessages: z.boolean().default(false).optional().describe(
+          'Set to true to return the preserved messages over the last 3 navigations.',
+        ),
+        includeStackTraces: z.boolean().default(false).optional().describe(
+          'Set to true to include the stack trace for each message when available. Increases the response size.',
+        ),
+        serviceWorkerId: z.string().optional().describe(
+          'Filter messages to only return messages of the specified service worker.',
+        ),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.list_console_messages({ ...browserContext(params, ctx), files: files(ctx) }));
+      },
+    },
+    get_console_message: {
+      description: 'Gets a console message by its ID. You can get all messages by calling list_console_messages.',
+      params: z.object({
+        ...pageIdSchema,
+        msgid: z.number().describe('The msgid of a console message on the page from the listed console messages'),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.get_console_message({ ...browserContext(params, ctx), files: files(ctx) }));
+      },
+    },
+    list_network_requests: {
+      description: 'Lists the most recent requests for the target page since the last navigation.',
+      params: z.object({
+        ...pageIdSchema,
+        pageSize: z.number().int().positive().optional().describe(
+          'Maximum number of requests to return. When omitted, returns all requests.',
+        ),
+        pageIdx: z.number().int().min(0).optional().describe(
+          'Page number to return (0-based). When omitted, returns the first page.',
+        ),
+        resourceTypes: z.array(z.enum(NETWORK_RESOURCE_TYPES)).optional().describe(
+          'Filter requests to only return requests of the specified resource types. When omitted or empty, returns all requests.',
+        ),
+        includePreservedRequests: z.boolean().default(false).optional().describe(
+          'Set to true to return the preserved requests over the last 3 navigations.',
+        ),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.list_network_requests(browserContext(params, ctx)));
+      },
+    },
+    get_network_request: {
+      description: 'Gets a network request by an optional reqid, if omitted returns the currently selected request in the DevTools Network panel. Useful for inspecting request headers (including \'Cookie\') and response headers (including \'Set-Cookie\' and directives).',
+      params: z.object({
+        ...pageIdSchema,
+        reqid: z.number().optional().describe(
+          'The reqid of the network request. If omitted returns the currently selected request in the DevTools Network panel.',
+        ),
+        requestFilePath: z.string().optional().describe(
+          'The absolute or relative path to a .network-request file to save the request body to. If omitted, the body is returned inline.',
+        ),
+        responseFilePath: z.string().optional().describe(
+          'The absolute or relative path to a .network-response file to save the response body to. If omitted, the body is returned inline.',
+        ),
+      }),
+      async run(params, ctx) {
+        return ok(await ctx.browser.core.get_network_request({ ...browserContext(params, ctx), files: files(ctx) }));
+      },
+    },
+    closeBrowser: {
+      description: 'Close the bound browser instance and its session.',
+      params: z.object({}),
+      async run(_params, ctx) {
+        return ok(await ctx.browser.core.closeBrowser({ browserId: ctx.browserId }));
       },
     },
     getAllCookies: {
-      description: "Export all cookies (whole cookie store, including httpOnly) via CDP Network domain. Returns JSON { success, count, cookies }. The cookies array can be fed directly back to setCookies for account migration.",
-      params: z.object({ "urls": z.array(z.string()).optional().describe("Optional: only return cookies matching these URLs; omit to return the entire cookie store") }),
+      description: 'Export all cookies (whole cookie store, including httpOnly) via CDP Network domain. Returns JSON { success, count, cookies }. The cookies array can be fed directly back to setCookies for account migration.',
+      params: z.object({ urls: z.array(z.string()).optional().describe('Optional: only return cookies matching these URLs; omit to return the entire cookie store') }),
       async run(params, ctx) {
         return ok(await ctx.browser.core.getAllCookies(browserContext(params, ctx)));
       },
     },
     setCookies: {
-      description: "Import cookies via CDP Network domain. Accepts a standard cookie JSON array (CDP CookieParam: name/value/domain/path/url/expires/httpOnly/secure/sameSite).",
-      params: z.object({ "cookies": z.array(z.looseObject({})).describe("Cookie objects to set (CDP CookieParam shape)") }),
+      description: 'Import cookies via CDP Network domain. Accepts a standard cookie JSON array (CDP CookieParam: name/value/domain/path/url/expires/httpOnly/secure/sameSite).',
+      params: z.object({ cookies: z.array(z.looseObject({})).describe('Cookie objects to set (CDP CookieParam shape)') }),
       async run(params, ctx) {
         return ok(await ctx.browser.core.setCookies(browserContext(params, ctx)));
       },
     },
     deleteCookies: {
-      description: "Delete specific cookies (one Network.deleteCookies per item). Each item needs a name and at least a url or domain to locate it.",
-      params: z.object({ "cookies": z.array(z.looseObject({})).describe("Cookies to delete; each item requires name plus url or domain") }),
+      description: 'Delete specific cookies (one Network.deleteCookies per item). Each item needs a name and at least a url or domain to locate it.',
+      params: z.object({ cookies: z.array(z.looseObject({})).describe('Cookies to delete; each item requires name plus url or domain') }),
       async run(params, ctx) {
         return ok(await ctx.browser.core.deleteCookies(browserContext(params, ctx)));
       },
     },
     clearCookies: {
-      description: "Clear all cookies in the browser (Network.clearBrowserCookies).",
+      description: 'Clear all cookies in the browser (Network.clearBrowserCookies).',
       params: z.object({}),
       async run(params, ctx) {
         return ok(await ctx.browser.core.clearCookies(browserContext(params, ctx)));
       },
     },
     getWindowBounds: {
-      description: "Read the browser window position/size/state. Returns JSON { success, bounds: { left, top, width, height, windowState } }.",
+      description: 'Read the browser window position/size/state. Returns JSON { success, bounds: { left, top, width, height, windowState } }.',
       params: z.object({}),
       async run(params, ctx) {
         return ok(await ctx.browser.core.getWindowBounds(browserContext(params, ctx)));
       },
     },
     setWindowBounds: {
-      description: "Set the browser window position/size/state (used for tiling). When geometry (left/top/width/height) is provided, the window is switched to normal state first. Returns JSON { success, bounds } with the actual bounds after applying.",
-      params: z.object({ "bounds": z.object({ "left": num().optional(), "top": num().optional(), "width": num().optional(), "height": num().optional(), "windowState": z.enum(["normal", "minimized", "maximized", "fullscreen"]).optional() }).describe("Target window bounds") }),
+      description: 'Set the browser window position/size/state (used for tiling). When geometry (left/top/width/height) is provided, the window is switched to normal state first. Returns JSON { success, bounds } with the actual bounds after applying.',
+      params: z.object({ bounds: z.object({
+        left: num().optional(), top: num().optional(), width: num().optional(), height: num().optional(),
+        windowState: z.enum(['normal', 'minimized', 'maximized', 'fullscreen']).optional(),
+      }).describe('Target window bounds') }),
       async run(params, ctx) {
         return ok(await ctx.browser.core.setWindowBounds(browserContext(params, ctx)));
       },

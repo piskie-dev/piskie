@@ -62,7 +62,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('BrowserModule lazy startup with 
   let readyPortRequests = 0;
 
   beforeAll(async () => {
-    suiteRoot = await mkdtemp(join(tmpdir(), 'sample-browser-lazy-'));
+    suiteRoot = await mkdtemp(join(process.env.PISKIE_TEST_TEMP_DIR ?? tmpdir(), 'sample-browser-lazy-'));
     electron.getPath.mockReturnValue(suiteRoot);
     electron.getAppPath.mockReturnValue(suiteRoot);
     await pilotRuntimeHost.initialize();
@@ -253,13 +253,13 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('BrowserModule lazy startup with 
     expectNotStarted();
   });
 
-  it.each(['builtin listPages', 'SDK currentPage'] as const)(
+  it.each(['builtin list_pages', 'SDK currentPage'] as const)(
     'starts on the first %s read, reuses the process, and cleans it on destroy',
     async (firstRead) => {
       const { browserModule, runtime, emitStateChange } = await startModule();
       expectNotStarted();
-      if (firstRead === 'builtin listPages') {
-        expect(await browserModule.core.listPages({ browserId: BROWSER_ID })).toContain('## Pages');
+      if (firstRead === 'builtin list_pages') {
+        expect(await browserModule.core.list_pages({ browserId: BROWSER_ID })).toContain('## Pages');
       } else {
         expect(await runtime.page.currentPage()).toEqual({ url: expect.any(String), title: expect.any(String) });
       }
@@ -299,7 +299,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('BrowserModule lazy startup with 
     const { browserModule, runtime } = await startModule();
     expectNotStarted();
     const [builtinPages, currentPage, sdkPages] = await Promise.all([
-      browserModule.core.listPages({ browserId: BROWSER_ID }),
+      browserModule.core.list_pages({ browserId: BROWSER_ID }),
       runtime.page.currentPage(), runtime.listPages(),
     ]);
     expect(builtinPages).toContain(currentPage.url);
@@ -335,7 +335,10 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('BrowserModule lazy startup with 
         expect(readyPortRequests).toBe(0);
         expect(await display.$$('canvas')).toHaveLength(0);
         expect(launch).not.toHaveBeenCalled(); expect(connect).not.toHaveBeenCalled();
-        if (firstUse === 'snapshot') await browserModule.core.takeSnapshot({ browserId: BROWSER_ID });
+        if (firstUse === 'snapshot') await browserModule.core.take_snapshot({
+          browserId: BROWSER_ID, pageId: session.getSelectedPageId(),
+          files: { cwd: suiteRoot, tempDir: stateRoot, allowedRoots: [suiteRoot] },
+        });
         else if (firstUse === 'currentPage') await runtime.page.currentPage();
         else if (firstUse === 'fill') await runtime.page.fill({ css: '#sample-input' }, 'Sample borrowed input');
         else await runtime.page.select({ css: '#sample-select' }, 'two');

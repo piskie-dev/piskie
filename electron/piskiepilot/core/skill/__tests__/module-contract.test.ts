@@ -15,14 +15,14 @@ import {
 const FIXED = [
   {
     skill: browserCore,
-    functions: 31,
+    functions: 29,
   },
 ] as const;
 
 const SYSTEM_PARAMS = ['browserId', 'taskId', 'executorId'] as const;
 
 describe('defineSkill module contract', () => {
-  it('publishes exactly the current 31 built-in functions', () => {
+  it('publishes the 22 upstream tools and seven host functions', () => {
     let total = 0;
     for (const { skill, functions } of FIXED) {
       assertDefinedSkill(skill);
@@ -40,7 +40,7 @@ describe('defineSkill module contract', () => {
       expect(entries.every((entry) => !entry.tool.def.name.includes('.'))).toBe(true);
       total += functions;
     }
-    expect(total).toBe(31);
+    expect(total).toBe(29);
   });
 
   it('keeps all system identifiers out of every fixed function schema', () => {
@@ -55,11 +55,12 @@ describe('defineSkill module contract', () => {
   });
 
   it('returns browser snapshots as raw text without JSON escaping', async () => {
-    const snapshot = '[1_1] button "Continue"\n[1_2] textbox "Name"';
-    const output = await browserCore.functions.takeSnapshot.run({ verbose: false }, {
+    const snapshot = 'uid=1_1 button "Continue"\nuid=1_2 textbox "Field A"';
+    const output = await browserCore.functions.take_snapshot.run({ pageId: 7, verbose: false }, {
       signal: new AbortController().signal,
       browserId: 'browser-1',
-      browser: { core: { takeSnapshot: vi.fn(async () => snapshot) } } as never,
+      browser: { core: { take_snapshot: vi.fn(async () => snapshot) } } as never,
+      workspace: { dir: '/workspace', tempDir: '/workspace/tmp' },
       log: vi.fn(),
     });
 

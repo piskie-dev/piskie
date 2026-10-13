@@ -26,6 +26,7 @@ describe('BrowserOperations', () => {
       type: 'url',
       url: 'https://example.test/',
       title: 'Example',
+      message: 'Successfully navigated to https://example.test/.',
       receipt: {
         navigated: true,
         domSettled: true,
@@ -49,7 +50,8 @@ describe('BrowserOperations', () => {
     expect(mocks.runExclusive).toHaveBeenCalledWith(
       'browser-1',
       expect.any(Function),
-      signal
+      signal,
+      { pageId: undefined, feedback: true },
     );
     expect(navigateInSession).toHaveBeenCalledWith(mocks.automation, {
       type: 'url',
@@ -67,6 +69,7 @@ describe('BrowserOperations', () => {
     const receipt = {
       navigated: true,
       domSettled: true,
+      dialogHandled: true,
       dialog: {
         type: 'beforeunload',
         message: 'Leave this page?',
@@ -77,7 +80,7 @@ describe('BrowserOperations', () => {
       closedPageIds: [],
     };
     const automation = {
-      getSelectedPage: vi.fn(() => page),
+      getPage: vi.fn(() => page),
       waitForAction: vi.fn(async (action: () => Promise<void>) => {
         await action();
         return receipt;
@@ -96,6 +99,7 @@ describe('BrowserOperations', () => {
     });
 
     expect(automation.waitForAction).toHaveBeenCalledWith(expect.any(Function), {
+      pageId: undefined,
       navigationTimeoutMs: 1_234,
       handleDialog: { beforeunload: 'accept' },
     });
@@ -109,7 +113,7 @@ describe('BrowserOperations', () => {
       title: vi.fn(async () => ''),
     };
     const automation = {
-      getSelectedPage: vi.fn(() => page),
+      getPage: vi.fn(() => page),
       waitForAction: vi.fn(async (action: () => Promise<void>) => {
         await action();
         return {
@@ -134,9 +138,10 @@ describe('BrowserOperations', () => {
       timeout: 0,
     });
 
-    expect(page.goto).toHaveBeenCalledWith('https://example.test/', { timeout: 0 });
+    expect(page.goto).toHaveBeenCalledWith('https://example.test/', { timeout: undefined });
     expect(automation.waitForAction).toHaveBeenLastCalledWith(expect.any(Function), {
-      navigationTimeoutMs: 0,
+      pageId: undefined,
+      navigationTimeoutMs: undefined,
       handleDialog: { beforeunload: 'accept' },
     });
   });
@@ -156,7 +161,7 @@ describe('BrowserOperations', () => {
       closedPageIds: [],
     };
     const automation = {
-      getSelectedPage: vi.fn(() => page),
+      getPage: vi.fn(() => page),
       waitForAction: vi.fn(async (action: () => Promise<void>) => {
         await action();
         return receipt;
@@ -173,4 +178,78 @@ describe('BrowserOperations', () => {
       error: 'net::ERR_NAME_NOT_RESOLVED',
     });
   });
+});
+
+describe('explicit navigation target and fixed-source text', () => {
+  it('runs and removes an init script on the actual page and handles beforeunload at that page', async () => {
+    const order: string[] = [];
+    const page = {
+      evaluateOnNewDocument: vi.fn(async (_script: string) => { order.push('init'); return { identifier: 'sample-script-id' }; }),
+      removeScriptToEvaluateOnNewDocument: vi.fn(async () => { order.push('remove'); }),
+      goto: vi.fn(async () => { order.push('navigate'); }),
+      url: () => 'https://example.test/b', title: async () => 'Sample target',
+    };
+    const automation = {
+      getPage: vi.fn(() => page), getSelectedPage: vi.fn(() => { throw new Error('Unexpected selection lookup'); }),
+      waitForAction: vi.fn(async (action: () => Promise<unknown>) => {
+        await action();
+        return { navigated: true, domSettled: false, dialogHandled: true, openedPageIds: [], closedPageIds: [] };
+      }),
+      clearDialog: vi.fn(),
+    } as unknown as BrowserAutomationSession;
+    const result = await BrowserOperations.navigateInSession(automation, {
+      pageId: 22, url: 'https://example.test/b', initScript: 'globalThis.sampleFlag = true', handleBeforeUnload: 'dismiss', timeout: 1200,
+    });
+    expect(order).toEqual(['init', 'navigate', 'remove']);
+    expect(automation.getPage).toHaveBeenCalledWith(22);
+    expect(automation.waitForAction).toHaveBeenCalledWith(expect.any(Function), {
+      pageId: 22, navigationTimeoutMs: 1200, handleDialog: { beforeunload: 'dismiss' },
+    });
+    expect(automation.clearDialog).toHaveBeenCalledWith(22);
+    expect(page.removeScriptToEvaluateOnNewDocument).toHaveBeenCalledExactlyOnceWith('sample-script-id');
+    expect(result).toMatchObject({ url: 'https://example.test/b', title: 'Sample target', message: 'Successfully navigated to https://example.test/b.' });
+  });
+
+  it.each([
+    ['url', 'Unable to navigate in the selected page: Sample navigation failure.'],
+    ['back', 'Unable to navigate back in the selected page: Sample navigation failure.'],
+    ['forward', 'Unable to navigate forward in the selected page: Sample navigation failure.'],
+    ['reload', 'Unable to reload the selected page: Sample navigation failure.'],
+  ] as const)('preserves the source Unable result for %s and removes the one-navigation script', async (type, message) => {
+    const failure = new Error('Sample navigation failure');
+    const page = {
+      goto: vi.fn(async () => { throw failure; }), goBack: vi.fn(async () => { throw failure; }),
+      goForward: vi.fn(async () => { throw failure; }), reload: vi.fn(async () => { throw failure; }),
+      evaluateOnNewDocument: vi.fn(async () => ({ identifier: 'sample-script-id' })),
+      removeScriptToEvaluateOnNewDocument: vi.fn(async () => {}), url: () => 'https://example.test/after', title: async () => 'Sample title',
+    };
+    const automation = {
+      getPage: () => page, clearDialog: vi.fn(),
+      waitForAction: async (action: () => Promise<unknown>) => {
+        await action(); return { navigated: false, domSettled: false, openedPageIds: [], closedPageIds: [] };
+      },
+    } as unknown as BrowserAutomationSession;
+    await expect(BrowserOperations.navigateInSession(automation, {
+      pageId: 22, type, url: type === 'url' ? 'https://example.test/sample' : undefined,
+      initScript: 'globalThis.sampleFlag = true', ignoreCache: true,
+    })).resolves.toMatchObject({ message, error: failure.message });
+    expect(page.removeScriptToEvaluateOnNewDocument).toHaveBeenCalledOnce();
+  });
+  it('bounds the optional title read on a paused renderer without replacing navigation text', async () => {
+    vi.useFakeTimers();
+    try {
+      const page = { goto: async () => {}, url: () => 'https://example.test/after', title: () => new Promise<string>(() => {}) };
+      const automation = {
+        getPage: () => page,
+        waitForAction: async (action: () => Promise<unknown>) => {
+          await action(); return { navigated: true, domSettled: false, openedPageIds: [], closedPageIds: [] };
+        },
+      } as unknown as BrowserAutomationSession;
+      const result = BrowserOperations.navigateInSession(automation, { pageId: 22, url: 'https://example.test/after' });
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(result).resolves.toMatchObject({ title: '', message: 'Successfully navigated to https://example.test/after.' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
 });

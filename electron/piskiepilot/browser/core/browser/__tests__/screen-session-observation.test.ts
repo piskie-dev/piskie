@@ -6,6 +6,7 @@ import { Mutex } from '../shared-mutex.js';
 const manager = BrowserManager as unknown as { instances: Map<string, unknown> };
 const browserId = 'sample-browser';
 const automation = { generation: 'sample-connection',
+  withExecutionSignal: <T>(action: () => Promise<T> | T) => action(),
   withOperationFeedback: <T>(action: () => Promise<T> | T) => action(),
 } as unknown as BrowserAutomationSession;
 

@@ -38,7 +38,7 @@ function isEmptyObject(value: unknown): boolean {
 }
 
 describe('fixed Skill model schema compatibility', () => {
-  it('keeps all 31 built-in function descriptions and schemas semantically equivalent', () => {
+  it('keeps all 29 built-in function descriptions and schemas aligned with the fixed baseline', () => {
     let count = 0;
     for (const skill of skills) {
       const expectedSkill = baseline[skill.name];
@@ -58,6 +58,6 @@ describe('fixed Skill model schema compatibility', () => {
         count += 1;
       }
     }
-    expect(count).toBe(31);
+    expect(count).toBe(29);
   });
 });

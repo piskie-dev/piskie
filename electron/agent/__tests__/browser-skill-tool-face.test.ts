@@ -154,18 +154,16 @@ describe('Browser Skill 最终模型工具面', () => {
     const builder = names(browserSkillBuilderSpec);
     const verifier = names(browserSkillVerifierSpec);
     const readNavigation = [
-      'browser_goBack',
-      'browser_listPages',
-      'browser_navigateTo',
-      'browser_refresh',
-      'browser_selectPage',
-      'browser_takeScreenshot',
-      'browser_takeSnapshot',
+      'browser_list_pages',
+      'browser_navigate_page',
+      'browser_select_page',
+      'browser_take_screenshot',
+      'browser_take_snapshot',
     ].sort();
     const scoutExploration = [
       ...readNavigation,
-      'browser_clickByUid',
-      'browser_hoverByUid',
+      'browser_click',
+      'browser_hover',
     ].sort();
 
     expect(builder).toContain('browser_skill_build');
@@ -182,13 +180,13 @@ describe('Browser Skill 最终模型工具面', () => {
     expect(verifier).toContain('skill_call');
     expect(scout.filter((name) => browserCoreNames.includes(name)).sort()).toEqual(scoutExploration);
     expect(verifier.filter((name) => browserCoreNames.includes(name)).sort()).toEqual(readNavigation);
-    expect(scout).not.toContain('browser_fillByUid');
-    expect(scout).not.toContain('browser_fillFormByUids');
-    expect(scout).not.toContain('browser_evaluateScript');
+    expect(scout).not.toContain('browser_fill');
+    expect(scout).not.toContain('browser_fill_form');
+    expect(scout).not.toContain('browser_evaluate_script');
     expect(BROWSER_SCOUT_EXCLUDES).toEqual(expect.arrayContaining([
-      'browser_fillByUid',
-      'browser_fillFormByUids',
-      'browser_evaluateScript',
+      'browser_fill',
+      'browser_fill_form',
+      'browser_evaluate_script',
     ]));
     expect(builder.filter((name) => browserCoreNames.includes(name)).sort())
       .toEqual(browserCoreNames.filter((name) => !BROWSER_BUILDER_EXCLUDES.includes(name)).sort());
@@ -202,14 +200,14 @@ describe('Browser Skill 最终模型工具面', () => {
       'browser_setWindowBounds',
     ]);
     expect(builder).toEqual(expect.arrayContaining([
-      'browser_clickByUid',
-      'browser_evaluateScript',
-      'browser_fillByUid',
-      'browser_hoverByUid',
-      'browser_listPages',
-      'browser_selectPage',
-      'browser_takeScreenshot',
-      'browser_takeSnapshot',
+      'browser_click',
+      'browser_evaluate_script',
+      'browser_fill',
+      'browser_hover',
+      'browser_list_pages',
+      'browser_select_page',
+      'browser_take_screenshot',
+      'browser_take_snapshot',
     ]));
   });
 

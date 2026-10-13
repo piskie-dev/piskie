@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { Eye, Maximize2, Minus, PanelRightClose, Scan, ZoomIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { BrowserScreenView } from '../../content/ScreenView';
@@ -24,13 +24,13 @@ export const BrowserMonitorPanel = memo(function BrowserMonitorPanel(props: Moni
 });
 
 function useMonitorFrame(key: string, trackFrame: BrowserMonitorController['trackFrame']) {
-  const lifetime = useMemo(() => ({ frame: null as ReturnType<BrowserMonitorController['trackFrame']> | null }), [key, trackFrame]);
+  const frameRef = useRef<ReturnType<BrowserMonitorController['trackFrame']> | null>(null);
   useLayoutEffect(() => {
     const frame = trackFrame(key);
-    lifetime.frame = frame;
-    return () => { lifetime.frame = null; frame.release(); };
-  }, [key, lifetime, trackFrame]);
-  return useCallback((available: boolean) => lifetime.frame?.setAvailable(available), [lifetime]);
+    frameRef.current = frame;
+    return () => { frameRef.current = null; frame.release(); };
+  }, [key, trackFrame]);
+  return useCallback((available: boolean) => frameRef.current?.setAvailable(available), []);
 }
 
 function MonitorCard({ agentId, task, hidden, windows, onOpen, trackFrame }: MonitorPanelProps & { task: MonitorTask }) {

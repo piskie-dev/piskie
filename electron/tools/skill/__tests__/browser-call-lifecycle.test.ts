@@ -72,9 +72,6 @@ function toolContext(signal: AbortSignal): ToolContext {
     core: {} as BrowserHostRuntime['core'],
     notifyPageOpen: vi.fn(),
     createGeneratedRuntime: vi.fn(() => generated),
-    prepareScreenshot: vi.fn(),
-    finalizeScreenshot: vi.fn(),
-    cleanupScreenshot: vi.fn(),
   };
   return {
     agentId: 'agent-1',

@@ -35,10 +35,27 @@ describe('shared input value contract', () => {
     expect(test.fill).not.toHaveBeenCalled();
     expect(test.feedback.begin).not.toHaveBeenCalled();
   });
+  it('uses the source role toggle branch for snapshot fills while preserving the SDK text contract', async () => {
+    const test = fixture('sample-area');
+    const controller = new AbortController();
+    await test.driver.fill(test.handle, 'false', 5000, 'boolean-text', controller.signal);
+    expect(test.fill).toHaveBeenCalledWith(false, { signal: controller.signal });
+    expect(isToggleControl(test.element)).toBe(false);
+    await test.driver.fill(test.handle, 'Sample SDK text', 5000, 'reject', controller.signal);
+    expect(test.fill).toHaveBeenLastCalledWith('Sample SDK text', { signal: controller.signal });
+  });
+  it('stops before input and feedback when the action signal is already cancelled', async () => {
+    const test = fixture('sample-text');
+    const controller = new AbortController();
+    const reason = new Error('Sample cancellation'); controller.abort(reason);
+    await expect(test.driver.fill(test.handle, 'Sample input', 5000, 'boolean-text', controller.signal)).rejects.toBe(reason);
+    expect(test.fill).not.toHaveBeenCalled();
+    expect(test.feedback.begin).not.toHaveBeenCalled();
+  });
   it('preserves builtin boolean conversion rather than coercing a non-empty string to true', async () => {
     const test = fixture('sample-toggle');
     await test.driver.fill(test.handle, 'false', 5000, 'boolean-text');
-    expect(test.fill).toHaveBeenCalledWith(false);
+    expect(test.fill).toHaveBeenCalledWith(false, { signal: undefined });
     await expect(test.driver.fill(test.handle, 'Sample invalid value', 5000, 'boolean-text')).rejects.toThrow('require "true" or "false"');
     expect(test.fill).toHaveBeenCalledOnce();
   });

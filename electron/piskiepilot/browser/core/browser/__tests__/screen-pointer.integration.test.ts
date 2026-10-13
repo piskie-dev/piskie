@@ -120,9 +120,9 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       } else if (['/sample-ui.js', '/sample-ui.css', '/sample-worker.js'].includes(request.url ?? '')) {
         response.writeHead(200, { 'Content-Type': request.url!.endsWith('.css') ? 'text/css' : 'application/javascript' });
         response.end(await readFile(join(root, request.url!.slice(1))));
-      } else if (request.url === '/sample-inputs' || request.url === '/sample-input-frame') {
+      } else if (request.url?.startsWith('/sample-inputs') || request.url?.startsWith('/sample-input-frame')) {
         response.writeHead(200, { 'Content-Type': 'text/html' });
-        response.end(request.url === '/sample-inputs' ? operationPointerHtml : operationPointerFrameHtml);
+        response.end(request.url.startsWith('/sample-inputs') ? operationPointerHtml : operationPointerFrameHtml);
       } else if (request.url === '/sample-frame') {
         response.writeHead(200, { 'Content-Type': 'text/html' });
         response.end(`<!doctype html><style>body{margin:0;background:#dde9f0}button{position:absolute;left:40px;top:30px;width:140px;height:60px;border:0}</style><button id="sample-frame-button">Sample frame button</button>${RECORD_EVENTS}`);
@@ -134,6 +134,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     browser = await puppeteer.launch({ executablePath: process.env.FP_CHROMIUM_PATH, headless: true,
       userDataDir: join(root, 'sample-profile'), args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    evidence.sourceBrowser = { pid: browser.process()!.pid, version: await browser.version() };
     const manager = BrowserManager as unknown as {
       initialized: boolean; readPersistedBrowserConfig(id: string): Promise<unknown>;
       savePersisted(id: string, value: unknown): Promise<void>; deletePersisted(id: string): Promise<void>;
@@ -147,6 +148,8 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
 
   beforeEach(async () => {
     automation = await BrowserManager.getScreenSession(BROWSER_ID);
+    const pages = await automation.listPages();
+    await automation.selectPageById(pages[0]!.pageId);
     page = automation.getSelectedPage();
     await page.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
     await page.goto(`${baseUrl}/sample`, { waitUntil: 'networkidle0' });
@@ -154,7 +157,13 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     unsubscribe = automation.subscribeScreen((event) => events.push(event));
     hub = new ScreenStreamHub();
   });
-  afterEach(async () => {
+  afterEach(async context => {
+    let selectedId: number | undefined;
+    try { selectedId = automation.getSelectedPageId(); } catch { /* Cancellation may have disposed the old connection. */ }
+    evidence[`case ${context.task.name}`] = {
+      pointer: automation.getCurrentScreenPointer(), selectedId, target: automation.getScreenTarget()?.identity,
+      events: events.map(event => event.type === 'target' ? { type: event.type, identity: event.target?.identity } : event),
+    };
     unsubscribe?.();
     for (const response of streamClients.keys()) response.end();
     streamClients.clear();
@@ -164,6 +173,11 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     try {
       await BrowserManager.closeAll();
       await browser?.close();
+      let processExited = false;
+      try { process.kill((evidence.sourceBrowser as { pid: number }).pid, 0); } catch { processExited = true; }
+      evidence.cleanup = { processExited, ownedIds: BrowserManager.ownedIds() };
+      expect(processExited).toBe(true);
+      expect(BrowserManager.ownedIds()).toEqual([]);
       if (process.env.PISKIE_POINTER_EVIDENCE_DIR) {
         await mkdir(process.env.PISKIE_POINTER_EVIDENCE_DIR, { recursive: true });
         await writeFile(join(process.env.PISKIE_POINTER_EVIDENCE_DIR, 'live-evidence.json'), JSON.stringify(evidence, null, 2));
@@ -180,11 +194,15 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     return createGeneratedBrowserSkillRuntime({ browserId: BROWSER_ID, signal: new AbortController().signal,
       log: () => {}, notifyPageOpen: () => {}, allowedFileRoots: [root] });
   }
+  function target() {
+    return { browserId: BROWSER_ID, pageId: automation.getSelectedPageId(),
+      files: { cwd: root, tempDir: root, allowedRoots: [root] } };
+  }
   async function clickBuiltin(name: string) {
-    const snapshot = await builtin.takeSnapshot({ browserId: BROWSER_ID });
-    const uid = snapshot.match(new RegExp(`\\[(\\d+_\\d+)\\] (?:button|link) "${name}"`))?.[1];
+    const snapshot = await builtin.take_snapshot(target());
+    const uid = snapshot.match(new RegExp(`uid=(\\S+) (?:button|link) "${name}"`))?.[1];
     expect(uid).toBeDefined();
-    await builtin.clickByUid({ browserId: BROWSER_ID, uid: uid! });
+    await builtin.click({ ...target(), uid: uid! });
   }
   async function checkOperation(name: string, operation: () => Promise<unknown>) {
     events.length = 0;
@@ -197,15 +215,15 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       const type = action.action === 'move' ? 'pointermove' : action.action === 'down' ? 'pointerdown' : 'pointerup';
       expect(received.some((event) => event.type === type && Math.abs(event.x - action.x) < 1
         && Math.abs(event.y - action.y) < 1 && event.buttons === action.buttons), `${name}: ${action.action} ${action.x},${action.y}`).toBe(true);
-      expect(sameScreenPage(action.page, automation.getScreenTarget().identity)).toBe(true);
+      expect(sameScreenPage(action.page, automation.getScreenTarget()!.identity)).toBe(true);
     }
     expect(observed.length).toBeGreaterThan(0);
     evidence[name] = { observed, received };
     return { observed, received };
   }
 
-  async function openOperationDisplay(decodeDelayMs = 0, viewport: 'inline' | 'scroll' = 'inline') {
-    const display = await browser.newPage();
+  async function openOperationDisplay(decodeDelayMs = 0, viewport: 'inline' | 'scroll' = 'inline', displayBrowser = browser) {
+    const display = await displayBrowser.newPage();
     display.setDefaultTimeout(7_000);
     await display.setViewport({ width: 1280, height: 820, deviceScaleFactor: 2 });
     await display.evaluateOnNewDocument(({ decodeDelay, observedViewport }) => {
@@ -316,7 +334,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       const firstIndex = automation.getSelectedPageIndex();
       events.length = 0;
       const next = await automation.newPage(`${baseUrl}/sample-inputs`);
-      const nextIdentity = automation.getScreenTarget().identity;
+      const nextIdentity = automation.getScreenTarget()!.identity;
       evidence['new-page-owner-diagnostic'] = { nextIdentity, pointer: automation.getCurrentScreenPointer(),
         nextUrl: next.url(), selectedUrl: automation.getSelectedPage().url(), events: events.map((event) => event.type === 'target' ? { type: 'target', identity: event.target?.identity } : event) };
       expect(automation.getCurrentScreenPointer()).toMatchObject({ origin: 'initial', x: 24, y: 24 });
@@ -379,18 +397,18 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
           const uid = await operationUid(name);
           const replacement = long ? 'Example complete value '.repeat(12) : 'Example complete value';
           await nonMouse(`builtin ${name} ${long ? 'long' : 'short'}`, selector,
-            () => builtin.fillByUid({ browserId: BROWSER_ID, uid, value: replacement }), replacement);
+            () => builtin.fill({ ...target(), uid, value: replacement }), replacement);
         }
       }
       const snapshot = await automation.takeSnapshot();
       const form = ['Example input', 'Example textarea'].map((name) => ({ uid: [...snapshot.idToNode.values()].find((node) => node.name === name)!.id, value: 'Sample form' }));
-      await nonMouse('builtin form', '#sample-area', () => builtin.fillFormByUids({ browserId: BROWSER_ID, elements: form }), 'Sample form');
+      await nonMouse('builtin form', '#sample-area', () => builtin.fill_form({ ...target(), elements: form }), 'Sample form');
       await nonMouse('SDK select', '#sample-select', () => runtime.page.select({ css: '#sample-select' }, 'two'));
       expect(await page.$eval('#sample-select', (element) => (element as HTMLSelectElement).value)).toBe('two');
       const selectUid = await operationUid('Example select');
-      await nonMouse('builtin select display text', '#sample-select', () => builtin.fillByUid({ browserId: BROWSER_ID, uid: selectUid, value: 'Example one' }));
+      await nonMouse('builtin select display text', '#sample-select', () => builtin.fill({ ...target(), uid: selectUid, value: 'Example one' }));
       const optionUid = await operationUid('Example two');
-      await nonMouse('builtin native option', '#sample-select', () => builtin.clickByUid({ browserId: BROWSER_ID, uid: optionUid }));
+      await nonMouse('builtin native option', '#sample-select', () => builtin.click({ ...target(), uid: optionUid }));
       const file = join(root, 'sample-upload.txt');
       await writeFile(file, 'Sample upload');
       await nonMouse('visible file upload', '#sample-file', () => runtime.page.uploadFile({ css: '#sample-file' }, file));
@@ -415,7 +433,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
         const uid = await operationUid('Example toggle');
         events.length = 0;
         const wasChecked = await page.$eval('#sample-toggle', (element) => (element as HTMLInputElement).checked);
-        await builtin.fillByUid({ browserId: BROWSER_ID, uid, value });
+        await builtin.fill({ ...target(), uid, value });
         const native = events.filter((event) => event.type === 'pointer');
         expect(native.length).toBe(wasChecked === (value === 'true') ? 0 : 3);
         expect(await page.$eval('#sample-toggle', (element) => (element as HTMLInputElement).checked)).toBe(value === 'true');
@@ -674,7 +692,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       evidence['p2-dynamic-viewports'] = { original, native, checks, final: automation.getCurrentScreenPointer(), rows: await display.evaluate(() => (window as unknown as SampleUiWindow).samplePaintRows) };
     } catch (error) {
       evidence['p2-dynamic-viewports-failure'] = { error: String(error), checks, pointer: automation.getCurrentScreenPointer(),
-        target: automation.getScreenTarget().identity, controlExists: await page.$eval('body', (element) => !!element.querySelector('#sample-control')),
+        target: automation.getScreenTarget()!.identity, controlExists: await page.$eval('body', (element) => !!element.querySelector('#sample-control')),
         display: await display.evaluate(() => ({ frame: (window as unknown as SampleUiWindow).sampleCurrentFrame,
           pointer: (window as unknown as SampleUiWindow).samplePresentedPointer, messages: (window as unknown as SampleUiWindow).sampleState.messages.slice(-20) })) };
       throw error;
@@ -703,7 +721,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('sample-area');
       const frame = page.frames().find((entry) => entry.url().endsWith('/sample-input-frame'))!;
       await frame.focus('#sample-frame-input');
-      await focusOperation('iframe focus', () => builtin.typeText({ browserId: BROWSER_ID, text: 'Sample frame' }), async () => {
+      await focusOperation('iframe focus', () => builtin.type_text({ ...target(), text: 'Sample frame' }), async () => {
         const parent = await page.$eval('iframe', (element) => { const rect = element.getBoundingClientRect(); return { x: rect.x + element.clientLeft, y: rect.y + element.clientTop }; });
         const child = await frame.$eval('input', (element) => { const rect = element.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; });
         return { x: parent.x + child.x, y: parent.y + child.y };
@@ -723,13 +741,13 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       expect(events.filter((event) => event.type === 'pointer')).toEqual([]);
       checks.push({ name: 'PageDown', pointer: automation.getCurrentScreenPointer(), scrollY: await page.evaluate(() => scrollY) });
       await page.evaluate(() => scrollTo(0, 0));
-      await focusOperation('script focus outcome', () => builtin.evaluateScript({ browserId: BROWSER_ID, function: "() => { document.querySelector('#sample-area').focus(); return 'Sample focus'; }" }), () => domPoint('#sample-area'));
+      await focusOperation('script focus outcome', () => builtin.evaluate_script({ ...target(), function: "() => { document.querySelector('#sample-area').focus(); return 'Sample focus'; }" }), () => domPoint('#sample-area'));
       await focusOperation('Tab scrolls to far focus', async () => { await page.focus('#sample-chooser'); await runtime.page.press('Tab'); }, () => domPoint('#sample-far'));
       expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
-      await focusOperation('script scroll result', () => builtin.evaluateScript({ browserId: BROWSER_ID, function: "() => { window.scrollBy(0, -100); return 'Sample scroll'; }" }), () => domPoint('#sample-far'));
+      await focusOperation('script scroll result', () => builtin.evaluate_script({ ...target(), function: "() => { window.scrollBy(0, -100); return 'Sample scroll'; }" }), () => domPoint('#sample-far'));
       events.length = 0;
       const source = automation.getCurrentScreenPointer()!;
-      await builtin.evaluateScript({ browserId: BROWSER_ID, function: "() => document.querySelector('#sample-toggle').click()" });
+      await builtin.evaluate_script({ ...target(), function: "() => document.querySelector('#sample-toggle').click()" });
       expect(events.filter((event) => event.type === 'pointer')).toEqual([]);
       expect(automation.getCurrentScreenPointer()).toMatchObject({ seq: source.seq, timestamp: source.timestamp, page: source.page });
       checks.push({ name: 'script DOM click has no inferred mouse source', pointer: automation.getCurrentScreenPointer() });
@@ -814,26 +832,26 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       checks.push({ name: 'iframe navigation removes its old target', pointer: automation.getCurrentScreenPointer() });
       await runtime.page.fill({ css: '#sample-area' }, 'Example removable input');
       const retained = automation.getCurrentScreenPointer()!.target!;
-      await builtin.evaluateScript({ browserId: BROWSER_ID, function: "() => document.querySelector('#sample-area').remove()" });
+      await builtin.evaluate_script({ ...target(), function: "() => document.querySelector('#sample-area').remove()" });
       await vi.waitFor(() => expect(automation.getCurrentScreenPointer()?.target).toBeUndefined());
       await awaitOperationPoint(display, retained);
       checks.push({ name: 'removed control keeps only position', pointer: automation.getCurrentScreenPointer() });
       events.length = 0;
       const classes: Array<[string, () => Promise<unknown>]> = [
-        ['snapshot', () => builtin.takeSnapshot({ browserId: BROWSER_ID })],
+        ['snapshot', () => builtin.take_snapshot(target())],
         ['currentPage', () => runtime.page.currentPage()],
         ['wait', () => runtime.page.waitFor({ text: 'Example chooser' })],
         ['extractText', () => runtime.page.extractText({ locator: { css: '#sample-chooser' } })],
         ['extractList', () => runtime.page.extractList({ items: { css: 'button' }, fields: { label: { text: 'self' } } })],
-        ['console', () => builtin.listConsoleMessages({ browserId: BROWSER_ID })],
-        ['network', () => builtin.listNetworkRequests({ browserId: BROWSER_ID })],
+        ['console', () => builtin.list_console_messages(target())],
+        ['network', () => builtin.list_network_requests(target())],
         ['cookie read', () => builtin.getAllCookies({ browserId: BROWSER_ID })],
         ['cookie write', () => builtin.setCookies({ browserId: BROWSER_ID, cookies: [{ name: 'sample_cookie', value: 'sample-value', url: baseUrl }] })],
         ['cookie delete', () => builtin.deleteCookies({ browserId: BROWSER_ID, cookies: [{ name: 'sample_cookie', url: baseUrl }] })],
         ['cookie clear', () => builtin.clearCookies({ browserId: BROWSER_ID })],
         ['window read', () => builtin.getWindowBounds({ browserId: BROWSER_ID })],
         ['window write', () => builtin.setWindowBounds({ browserId: BROWSER_ID, bounds: { width: 900, height: 700 } })],
-        ['script read', () => builtin.evaluateScript({ browserId: BROWSER_ID, function: "() => 'Sample read result'" })],
+        ['script read', () => builtin.evaluate_script({ ...target(), function: "() => 'Sample read result'" })],
       ];
       for (const [name, action] of classes) {
         const source = automation.getCurrentScreenPointer()!;
@@ -844,7 +862,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       }
       await page.evaluate(() => { setTimeout(() => alert('Sample dialog'), 0); });
       await vi.waitFor(() => expect(() => automation.throwIfDialogOpen()).toThrow());
-      await builtin.handleDialog({ browserId: BROWSER_ID, action: 'accept' });
+      await builtin.handle_dialog({ ...target(), action: 'accept' });
       expect(() => automation.throwIfDialogOpen()).not.toThrow();
       expect(events.filter((event) => event.type === 'pointer')).toEqual([]);
       checks.push({ name: 'native dialog has state only', pointer: automation.getCurrentScreenPointer() });
@@ -871,7 +889,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     const snapshot = await automation.takeSnapshot();
     const source = [...snapshot.idToNode.values()].find((node) => node.name === 'Sample source')!;
     const target = [...snapshot.idToNode.values()].find((node) => node.name === 'Sample target')!;
-    const drag = await checkOperation('ordinary-drag', () => builtin.drag({ browserId: BROWSER_ID, fromUid: source.id, toUid: target.id }));
+    const drag = await checkOperation('ordinary-drag', () => builtin.drag({ browserId: BROWSER_ID, pageId: automation.getSelectedPageId(), from_uid: source.id, to_uid: target.id }));
     expect(drag.observed.some((item) => item.action === 'move' && item.buttons === 1)).toBe(true);
     expect(drag.observed.at(-1)).toMatchObject({ action: 'up', x: 500, y: 375, buttons: 0 });
     await checkOperation('builtin-offscreen-click', () => clickBuiltin('Sample offscreen'));
@@ -890,8 +908,135 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     evidence['iframe-click'] = { observed: down.pointer, received, iframeOffset: rect };
   }, 20_000);
 
+  it('routes model fill to B with real viewport pixels and pointer while selected A stays unchanged and restores A', async () => {
+    const selectedId = automation.getSelectedPageId();
+    await builtin.new_page({ browserId: BROWSER_ID, url: `${baseUrl}/sample-inputs`, background: true });
+    const targetPage = automation.getSelectedPage();
+    const targetId = automation.getSelectedPageId();
+    await targetPage.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
+    const params = { browserId: BROWSER_ID, pageId: targetId, files: { cwd: root, tempDir: root, allowedRoots: [root] } };
+    await builtin.take_snapshot(params);
+    const inputUid = [...automation.getActiveSnapshot(targetId)!.idToNode.values()].find(node => node.name === 'Example input')!.id;
+    await builtin.select_page({ browserId: BROWSER_ID, pageId: selectedId });
+    const display = await openOperationDisplay();
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const original = automation.input.fill.bind(automation.input);
+    const fill = vi.spyOn(automation.input, 'fill').mockImplementationOnce(async (...args) => {
+      await original(...args); entered(); await gate;
+    });
+    const logicalSelections: number[] = [];
+    const stop = automation.subscribeScreen(() => { logicalSelections.push(automation.getSelectedPageId()); });
+    const operation = builtin.fill({ ...params, uid: inputUid, value: 'Sample routed input' });
+    try {
+      await started;
+      expect(automation.getSelectedPageId()).toBe(selectedId);
+      expect(automation.getScreenTarget()!.identity.pageId).toBe(targetId);
+      await display.waitForFunction(id => (window as unknown as SampleUiWindow).sampleFramePage?.pageId === id, { polling: 'raf' }, targetId);
+      const point = await targetPage.$eval('#sample-input', element => { const rect = element.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; });
+      await awaitOperationPoint(display, point);
+      const pointer = automation.getCurrentScreenPointer()!;
+      expect(pointer.target?.page.pageId).toBe(targetId);
+      expect(await targetPage.$eval('#sample-input', element => (element as HTMLInputElement).value)).toBe('Sample routed input');
+      const painting = await display.evaluate(() => (window as unknown as SampleUiWindow).samplePaintRows.at(-1));
+      expect(painting?.frame?.pageId).toBe(targetId);
+      if (process.env.PISKIE_POINTER_EVIDENCE_DIR) {
+        await display.screenshot({ path: join(process.env.PISKIE_POINTER_EVIDENCE_DIR, 'routed-B-during-fill.png') });
+        await targetPage.screenshot({ path: join(process.env.PISKIE_POINTER_EVIDENCE_DIR, 'routed-B-source.png') });
+      }
+      release(); await operation;
+      await display.waitForFunction(id => (window as unknown as SampleUiWindow).sampleFramePage?.pageId === id, { polling: 'raf' }, selectedId);
+      expect(automation.getScreenTarget()!.page).toBe(page);
+      expect(logicalSelections.every(id => id === selectedId)).toBe(true);
+      evidence['routed-B-independent'] = { selectedId, targetId, point, pointer, painting, logicalSelections };
+    } finally { release(); await operation.catch(() => {}); fill.mockRestore(); stop(); await display.close(); await targetPage.close(); }
+  }, 20_000);
+
+  it('chain selected A targets B iframe navigation and continued input then restores current selection on failure and cancellation', async () => {
+    const selectedId = automation.getSelectedPageId();
+    await builtin.new_page({ browserId: BROWSER_ID, url: `${baseUrl}/sample-inputs`, background: true });
+    const targetPage = automation.getSelectedPage(); const targetId = automation.getSelectedPageId();
+    await targetPage.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
+    const params = { browserId: BROWSER_ID, pageId: targetId, files: { cwd: root, tempDir: root, allowedRoots: [root] } };
+    await builtin.take_snapshot(params);
+    const oldUid = [...automation.getActiveSnapshot(targetId)!.idToNode.values()].find(node => node.name === 'Example input')!.id;
+    const frameUid = [...automation.getActiveSnapshot(targetId)!.idToNode.values()].find(node => node.name === 'Example frame input')!.id;
+    await builtin.select_page({ browserId: BROWSER_ID, pageId: selectedId });
+    const viewerBrowser = await puppeteer.launch({ executablePath: process.env.FP_CHROMIUM_PATH, headless: true,
+      userDataDir: join(root, 'sample-routed-viewer-profile'), args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    const display = await openOperationDisplay(0, 'inline', viewerBrowser);
+    const selectedDuring: number[] = [];
+    let cleanupTarget = targetPage;
+    const stop = automation.subscribeScreen(() => { selectedDuring.push(automation.getSelectedPageId()); });
+    try {
+      let entered!: () => void, release!: () => void;
+      const enteredPromise = new Promise<void>(resolve => { entered = resolve; }); const gate = new Promise<void>(resolve => { release = resolve; });
+      const original = automation.input.fill.bind(automation.input);
+      const spy = vi.spyOn(automation.input, 'fill').mockImplementationOnce(async (...args) => { await original(...args); entered(); await gate; });
+      const frameFill = builtin.fill({ ...params, uid: frameUid, value: 'Sample routed iframe' });
+      try {
+        await enteredPromise;
+        await display.waitForFunction(id => (window as unknown as SampleUiWindow).sampleFramePage?.pageId === id, { polling: 'raf' }, targetId);
+        await awaitOperationPoint(display, { x: 194, y: 454 });
+        expect(automation.getCurrentScreenPointer()?.target?.page.pageId).toBe(targetId);
+        if (process.env.PISKIE_POINTER_EVIDENCE_DIR) await display.screenshot({ path: join(process.env.PISKIE_POINTER_EVIDENCE_DIR, 'routed-B-iframe-chain.png') });
+      } finally { release(); await frameFill; spy.mockRestore(); }
+      expect(await targetPage.frames().find(frame => frame.url().endsWith('/sample-input-frame'))!.$eval('input', element => (element as HTMLInputElement).value)).toBe('Sample routed iframe');
+      await builtin.navigate_page({ ...params, url: `${baseUrl}/sample-inputs?sample-new-document` });
+      await builtin.take_snapshot(params);
+      await expect(builtin.fill({ ...params, uid: oldUid, value: 'Sample stale input' })).rejects.toThrow('not found');
+      const newUid = [...automation.getActiveSnapshot(targetId)!.idToNode.values()].find(node => node.name === 'Example input')!.id;
+      await builtin.fill({ ...params, uid: newUid, value: 'Sample continued input', includeSnapshot: true });
+      expect(await targetPage.$eval('#sample-input', element => (element as HTMLInputElement).value)).toBe('Sample continued input');
+      expect(selectedDuring.every(id => id === selectedId)).toBe(true);
+      expect(automation.getScreenTarget()!.identity.pageId).toBe(selectedId);
+      stop();
+      await expect(BrowserManager.runExclusive(BROWSER_ID, async ({ automation: current }) => {
+        expect(current.getScreenTarget()!.identity.pageId).toBe(targetId);
+        await current.selectPageById(targetId);
+        await current.getPageById(targetId).evaluate(() => { throw new Error('Sample actual interaction failure'); });
+      }, undefined, { pageId: targetId, feedback: true })).rejects.toThrow('Sample actual interaction failure');
+      expect(automation.getSelectedPageId()).toBe(targetId); expect(automation.getScreenTarget()!.identity.pageId).toBe(targetId);
+      await builtin.select_page({ browserId: BROWSER_ID, pageId: selectedId });
+      let begun!: () => void; const begunPromise = new Promise<void>(resolve => { begun = resolve; });
+      const controller = new AbortController();
+      const selectedUrl = page.url(), targetUrl = targetPage.url();
+      const oldSession = automation;
+      const cancelled = BrowserManager.runExclusive(BROWSER_ID, async ({ automation: current }) => {
+        expect(current.getScreenTarget()!.identity.pageId).toBe(targetId); begun();
+        await targetPage.evaluate(() => new Promise<void>(() => {}));
+      }, controller.signal, { pageId: targetId, feedback: true });
+      const rejection = expect(cancelled).rejects.toThrow('Sample cancelled route');
+      await begunPromise; controller.abort(new Error('Sample cancelled route')); await rejection;
+      expect(oldSession.getScreenTarget()).toBeNull();
+      expect(browser.connected).toBe(true);
+      expect((await browser.pages()).map(live => live.url())).toEqual(expect.arrayContaining([selectedUrl, targetUrl]));
+      automation = await BrowserManager.getScreenSession(BROWSER_ID);
+      expect(automation.generation).not.toBe(oldSession.generation);
+      const recovered = automation.getScreenTarget()!;
+      expect([selectedUrl, targetUrl]).toContain(recovered.page.url());
+      expect(automation.getSelectedPageId()).toBe(recovered.identity.pageId);
+      await display.waitForFunction(identity => {
+        const frame = (window as unknown as SampleUiWindow).sampleFramePage;
+        return frame?.connectionId === identity.connectionId && frame.pageId === identity.pageId;
+      }, { polling: 'raf' }, recovered.identity);
+      await awaitOperationPoint(display, { x: 24, y: 24 });
+      const freshTarget = (await automation.listPages()).find(registered => registered.page.url() === targetUrl)!;
+      cleanupTarget = freshTarget.page;
+      expect(await freshTarget.page.$eval('#sample-input', element => (element as HTMLInputElement).value)).toBe('Sample continued input');
+      if (process.env.PISKIE_POINTER_EVIDENCE_DIR) await display.screenshot({ path: join(process.env.PISKIE_POINTER_EVIDENCE_DIR, 'cancel-recovered-selected.png') });
+      evidence['routed-B-chain'] = { selectedId, targetId, oldUid, newUid, selectedDuring, continuedValue: 'Sample continued input', errorRestoredCurrentSelected: true,
+        cancellation: { oldTargetStopped: true, oldGeneration: oldSession.generation, browserStillRunning: true, freshIdentity: recovered.identity, freshTargetId: freshTarget.pageId, selectedUrlBeforeCancel: selectedUrl, selectedUrlAfterReconnect: recovered.page.url(), targetUrl } };
+    } finally {
+      stop(); await display.close(); await viewerBrowser.close();
+      expect(() => process.kill(viewerBrowser.process()!.pid!, 0)).toThrow();
+      await cleanupTarget.close().catch(() => {});
+    }
+  }, 25_000);
+
   it('measures a real scaled capture and bitmap independently at DPR 2 and page scale 1.25', async () => {
-    const caster = new ScreenCaster(page, { maxWidth: 400, maxHeight: 300 }, automation.getScreenTarget().identity);
+    const caster = new ScreenCaster(page, { maxWidth: 400, maxHeight: 300 }, automation.getScreenTarget()!.identity);
     const frames: ScreencastFrame[] = [];
     caster.on('frame', (frame) => frames.push(frame));
     await caster.start();
@@ -921,19 +1066,19 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     const messages: StreamServerMessage[] = [];
     const sink: ViewerSink = { isOpen: () => true, send: (message) => messages.push(message) };
     await hub.addViewer(BROWSER_ID, sink);
-    const first = automation.getScreenTarget().identity;
+    const first = automation.getScreenTarget()!.identity;
     await clickBuiltin('Sample new tab');
     const pages = await generated().listPages();
     const nextIndex = pages.find((entry) => !entry.selected && entry.url.endsWith('/sample-next'))!.pageIdx;
     await generated().selectPage(nextIndex);
-    const selected = automation.getScreenTarget().identity;
+    const selected = automation.getScreenTarget()!.identity;
     expect(selected.pageId).not.toBe(first.pageId);
     expect(messages.filter((message) => message.type === 'screen-state').at(-1)).toMatchObject({ page: selected, pointer: { origin: 'initial', action: 'initialize', x: 24, y: 24 } });
     // The lock preserves call order; capture stop/start can still be awaiting CDP between selections.
     const frameCountBeforeSwitch = messages.filter((message) => message.type === 'frame').length;
     const firstIndex = pages.find((entry) => entry.url.endsWith('/sample'))!.pageIdx;
     await Promise.all([generated().selectPage(firstIndex), generated().selectPage(nextIndex), generated().selectPage(firstIndex)]);
-    const returned = automation.getScreenTarget().identity;
+    const returned = automation.getScreenTarget()!.identity;
     expect(returned.pageId).toBe(first.pageId);
     await vi.waitFor(() => {
       const frames = messages.filter((message) => message.type === 'frame');
@@ -941,7 +1086,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       expect(frames.at(-1)).toMatchObject({ meta: { page: returned } });
     }, { timeout: 5_000 });
     await generated().page.navigate(`${baseUrl}/sample-navigation`);
-    const navigated = automation.getScreenTarget().identity;
+    const navigated = automation.getScreenTarget()!.identity;
     expect(navigated.navigationSequence).toBeGreaterThan(selected.navigationSequence);
     await automation.browser.disconnect();
     expect(messages.filter((message) => message.type === 'screen-state').at(-1)).toMatchObject({ page: null, pointer: null });
@@ -952,13 +1097,13 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     await vi.waitFor(() => expect(messages.filter((message) => message.type === 'screen-state').at(-1))
       .toMatchObject({ page: { connectionId: recovered.generation }, pointer: { x: 70, y: 90 } }), { timeout: 5_000 });
     expect(messages.filter((message) => message.type === 'screen-state').at(-1))
-      .toMatchObject({ page: recovered.getScreenTarget().identity, pointer: { x: 70, y: 90 } });
+      .toMatchObject({ page: recovered.getScreenTarget()!.identity, pointer: { x: 70, y: 90 } });
     let current: import('@shared/types/stream.js').ScreenPageIdentity | null = null;
     for (const message of messages) {
       if (message.type === 'screen-state') current = message.page;
       if (message.type === 'frame') expect(sameScreenPage(message.meta.page, current)).toBe(true);
     }
-    evidence['page-lifecycle'] = { first, selected, returned, navigated, recovered: recovered.getScreenTarget().identity };
+    evidence['page-lifecycle'] = { first, selected, returned, navigated, recovered: recovered.getScreenTarget()!.identity };
   }, 20_000);
 
   it('paints six moving clicks on the old frame and retains a static real pointer on every new same-Page frame', async () => {
@@ -1008,7 +1153,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
       const rounds = [];
       for (let round = 0; round < 6; round += 1) {
         if (round > 0) await page.goto(`${baseUrl}/sample`);
-        const oldPage = automation.getScreenTarget().identity;
+        const oldPage = automation.getScreenTarget()!.identity;
         await display.waitForFunction((expected) => {
           const current = (window as unknown as SampleUiWindow).sampleFramePage;
           return current?.connectionId === expected.connectionId && current.pageId === expected.pageId
@@ -1022,7 +1167,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
         await display.evaluate(() => { (window as unknown as SampleUiWindow).samplePaintRows = []; });
         events.length = 0;
         await Promise.all([page.waitForNavigation(), page.locator('#sample-nav').click()]);
-        const nextPage = automation.getScreenTarget().identity;
+        const nextPage = automation.getScreenTarget()!.identity;
         await display.waitForFunction((expected) => {
           const current = (window as unknown as SampleUiWindow).sampleFramePage;
           return current?.navigationSequence === expected.navigationSequence
@@ -1072,7 +1217,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     await page.goto(`${baseUrl}/sample-navigation`);
     expect(page.mouse).toBe(mouse);
     expect(automation.getCurrentScreenPointer()).toMatchObject({ page: original.page, seq: original.seq, timestamp: original.timestamp, x: original.x, y: original.y });
-    expect(original.page.navigationSequence).toBeLessThan(automation.getScreenTarget().identity.navigationSequence);
+    expect(original.page.navigationSequence).toBeLessThan(automation.getScreenTarget()!.identity.navigationSequence);
     expect(events.filter((event) => event.type === 'pointer')).toHaveLength(0);
     await page.evaluate(() => { (window as unknown as SampleUiWindow).sampleEvents = []; });
     await mouse.down();
@@ -1082,7 +1227,7 @@ describe.skipIf(!process.env.FP_CHROMIUM_PATH)('real Chromium screen pointer', (
     expect(down).toMatchObject({ x: 340, y: 280, buttons: 1 });
     const observed = events.filter((event): event is Extract<BrowserScreenEvent, { type: 'pointer' }> => event.type === 'pointer');
     expect(observed).toHaveLength(2);
-    expect(observed[0]!.pointer.press!.page).toEqual(automation.getScreenTarget().identity);
+    expect(observed[0]!.pointer.press!.page).toEqual(automation.getScreenTarget()!.identity);
     expect(original.timestamp).toBe(sourceAt);
     evidence['same-Page-Mouse-position'] = { original, current: automation.getCurrentScreenPointer(), received };
   });

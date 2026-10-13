@@ -1,103 +1,86 @@
 {
   "browser": {
-    "takeSnapshot": {
-      "description": "Take a text snapshot of the currently selected page based on the accessibility tree. The snapshot lists page elements along with a unique identifier (uid). UID lifecycle: each takeSnapshot generates a NEW snapshot and immediately invalidates all UIDs from previous snapshots — use UIDs right after taking the snapshot, and never reuse UIDs across snapshots. Prefer taking a snapshot over taking a screenshot.",
+    "list_pages": {
+      "description": "Get a list of pages open in the browser.",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "new_page": {
+      "description": "Open a new tab and load a URL. Use project URL if not specified otherwise.",
       "schema": {
         "type": "object",
         "properties": {
-          "verbose": {
-            "default": false,
-            "description": "Whether to include all possible information available in the full a11y tree. Default is false.",
+          "url": {
+            "type": "string",
+            "description": "URL to load in a new page."
+          },
+          "background": {
+            "description": "Whether to open the page in the background without bringing it to the front. Default is false (foreground).",
             "type": "boolean"
-          }
-        }
-      }
-    },
-    "clickByUid": {
-      "description": "Clicks on the provided element identified by its UID from the page content snapshot. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After clicking, automatically detects if new tabs were opened or closed, and includes this information in the response. This helps you know immediately if a new page opened without manually calling listPages. IMPORTANT: The snapshot is taken immediately after the click. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "uid": {
-            "type": "string",
-            "pattern": "^\\d+_\\d+$",
-            "description": "The uid of an element on the page from the page content snapshot (format: snapshotId_nodeIndex, e.g., \"10_116\")"
           },
-          "dblClick": {
-            "default": false,
-            "description": "Set to true for double clicks. Default is false.",
-            "type": "boolean"
+          "isolatedContext": {
+            "description": "If specified, the page is created in an isolated browser context with the given name. Pages in the same browser context share cookies and storage. Pages in different browser contexts are fully isolated (useful for clean-slate testing of cookies and authentication).",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Maximum wait time in milliseconds. If set to 0, the default timeout will be used.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
-          "uid"
+          "url"
         ]
       }
     },
-    "fillByUid": {
-      "description": "Type text into an input, text area or select an option from a <select> element identified by its UID. The UID must come from the LATEST snapshot — any takeSnapshot call (including the auto-snapshot after click/fill) invalidates all earlier UIDs. After filling, automatically detects if new tabs were opened or closed (e.g., autocomplete triggered a popup), and includes this information in the response. IMPORTANT: The snapshot is taken immediately after filling. If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
+    "select_page": {
+      "description": "Select a page as a context for future tool calls.",
       "schema": {
         "type": "object",
         "properties": {
-          "uid": {
-            "type": "string",
-            "pattern": "^\\d+_\\d+$",
-            "description": "The uid of an element on the page from the page content snapshot"
-          },
-          "value": {
-            "type": "string",
-            "description": "The value to fill in (text for input/textarea, option text for select)"
-          }
-        },
-        "required": [
-          "uid",
-          "value"
-        ]
-      }
-    },
-    "typeText": {
-      "description": "Type Unicode text at the currently selected page's current focus/selection, replacing selected text without focusing or clearing a field. Set the focus/selection before calling. Passes text unchanged, including spaces and newlines; empty text sends no input. Newlines act as Enter and may trigger page actions. This is not full IME simulation; verify application state and saving separately. Returns a fresh snapshot.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "Text to type unchanged at the current focus/selection; spaces and newlines are preserved."
-          }
-        },
-        "required": [
-          "text"
-        ]
-      }
-    },
-    "pressKey": {
-      "description": "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations). Examples: \"Enter\", \"Control+A\", \"Control++\", \"Control+Shift+R\". Modifiers: Control, Shift, Alt, Meta",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "description": "A key or a combination. Examples: \"Enter\", \"Tab\", \"Escape\", \"Control+A\", \"Control+Shift+R\", \"PageDown\", \"ArrowUp\". Available modifiers: Control, Shift, Alt, Meta"
-          },
-          "count": {
-            "default": 1,
-            "description": "Number of times to press the key (deprecated, use count=1 and call multiple times if needed)",
+          "pageId": {
             "type": "number",
-            "minimum": 1
+            "description": "The ID of the page to select. Call list_pages to get available pages."
+          },
+          "bringToFront": {
+            "description": "Whether to focus the page and bring it to the top.",
+            "type": "boolean"
           }
         },
         "required": [
-          "key"
+          "pageId"
         ]
       }
     },
-    "navigateTo": {
-      "description": "Navigates the currently selected page to a URL, or performs history navigation (back/forward/reload). Returns a snapshot after navigation completes. IMPORTANT: If the snapshot shows \"loading\", incomplete content, or doesn't match expectations, the page may still be loading data via AJAX/fetch. Wait 2-3 seconds and call takeSnapshot again to get the complete state.",
+    "close_page": {
+      "description": "Closes the page by its ID. The last open page cannot be closed.",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "The ID of the page to close. Call list_pages to list pages."
+          }
+        },
+        "required": [
+          "pageId"
+        ]
+      }
+    },
+    "navigate_page": {
+      "description": "Go to a URL, or back, forward, or reload. Use project URL if not specified otherwise.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "type": {
-            "description": "Navigate the page by URL, back or forward in history, or reload. Defaults to \"url\" if url parameter is provided",
+            "description": "Navigate the page by URL, back or forward in history, or reload.",
             "type": "string",
             "enum": [
               "url",
@@ -107,246 +90,360 @@
             ]
           },
           "url": {
-            "description": "Target URL (required only when type=url or type is omitted)",
-            "type": "string",
-            "pattern": "^https?:\\/\\/"
+            "description": "Target URL (only type=url)",
+            "type": "string"
           },
           "ignoreCache": {
-            "default": false,
-            "description": "Whether to ignore cache on reload (only applicable for type=reload)",
+            "description": "Whether to ignore cache on reload.",
             "type": "boolean"
           },
-          "timeout": {
-            "default": 30000,
-            "description": "Maximum wait time in milliseconds. If set to 0, the default timeout will be used.",
-            "type": "number",
-            "minimum": 0,
-            "maximum": 300000
-          }
-        }
-      }
-    },
-    "goBack": {
-      "description": "Navigate back in browser history. Equivalent to navigateTo with type=\"back\" — either works; do not call both.",
-      "schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    "refresh": {
-      "description": "Refresh the current page. Equivalent to navigateTo with type=\"reload\" — either works; do not call both.",
-      "schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    "newPage": {
-      "description": "Open a new page/tab in the browser and load the specified URL",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "Target URL to load in the new page. Include a scheme, e.g. https://example.com, http://localhost:3000, about:blank, or file:///path/to/file.html."
-          }
-        },
-        "required": [
-          "url"
-        ]
-      }
-    },
-    "closePage": {
-      "description": "Close the page/tab at the specified index (use listPages to get page indexes)",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "pageIndex": {
-            "description": "Index of the page to close",
-            "type": "number",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "pageIndex"
-        ]
-      }
-    },
-    "closeBrowser": {
-      "description": "Close a browser instance by browserId. This will terminate the Chrome process and delete the persisted config. The browser can be reopened later with a new session.",
-      "schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    "listPages": {
-      "description": "List all open pages/tabs in the browser",
-      "schema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    "selectPage": {
-      "description": "Select a different page/tab by index for subsequent browser operations. Always call listPages first to see available pages and their indices. If the page is still loading or incomplete, wait briefly and call takeSnapshot again.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "pageIdx": {
-            "description": "Index of the page to switch to (0-based). Use listPages to see available indices.",
-            "type": "number",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "pageIdx"
-        ]
-      }
-    },
-    "handleDialog": {
-      "description": "Accept or dismiss the browser dialog currently open on the selected page. Use promptText when accepting a prompt dialog.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "action": {
+          "handleBeforeUnload": {
+            "description": "Whether to auto accept or beforeunload dialogs triggered by this navigation. Default is accept.",
             "type": "string",
             "enum": [
               "accept",
               "dismiss"
-            ],
-            "description": "Whether to accept or dismiss the dialog"
+            ]
           },
-          "promptText": {
-            "description": "Optional text to enter when accepting a prompt dialog",
+          "initScript": {
+            "description": "A JavaScript script to be executed on each new document before any other scripts for the next navigation.",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Maximum wait time in milliseconds. If set to 0, the default timeout will be used.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "pageId"
+        ]
+      }
+    },
+    "take_snapshot": {
+      "description": "Take a text snapshot of the target page based on the a11y tree. The snapshot lists page elements along with a unique identifier (uid). Always use the latest snapshot. Prefer taking a snapshot over taking a screenshot. The snapshot indicates the element selected in the DevTools Elements panel (if any).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "verbose": {
+            "description": "Whether to include all possible information available in the full a11y tree. Default is false.",
+            "type": "boolean"
+          },
+          "filePath": {
+            "description": "The absolute path, or a path relative to the current working directory, to save the snapshot to instead of attaching it to the response.",
             "type": "string"
           }
         },
         "required": [
-          "action"
+          "pageId"
         ]
       }
     },
-    "waitFor": {
-      "description": "Wait until any one of the specified texts appears on the selected page, then return a fresh page snapshot.",
+    "click": {
+      "description": "Clicks on the provided element",
       "schema": {
         "type": "object",
         "properties": {
-          "text": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Non-empty list of texts; resolves when any value appears"
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
           },
-          "timeout": {
-            "description": "Maximum wait time in milliseconds; 0 uses the default timeout",
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 300000
-          }
-        },
-        "required": [
-          "text"
-        ]
-      }
-    },
-    "hoverByUid": {
-      "description": "Hover the mouse over an element identified by its UID. Useful for triggering hover effects, tooltips, or dropdown menus.",
-      "schema": {
-        "type": "object",
-        "properties": {
           "uid": {
             "type": "string",
-            "pattern": "^\\d+_\\d+$",
             "description": "The uid of an element on the page from the page content snapshot"
+          },
+          "dblClick": {
+            "description": "Set to true for double clicks. Default is false.",
+            "type": "boolean"
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
           }
         },
         "required": [
+          "pageId",
           "uid"
         ]
       }
     },
-    "drag": {
-      "description": "Drag an element onto another element. Both UIDs must come from the latest page snapshot. Returns a fresh snapshot after the drag.",
+    "hover": {
+      "description": "Hover over the provided element",
       "schema": {
         "type": "object",
         "properties": {
-          "fromUid": {
-            "type": "string",
-            "pattern": "^\\d+_\\d+$",
-            "description": "The uid of the element to drag"
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
           },
-          "toUid": {
-            "type": "string",
-            "pattern": "^\\d+_\\d+$",
-            "description": "The uid of the element to drop into"
-          }
-        },
-        "required": [
-          "fromUid",
-          "toUid"
-        ]
-      }
-    },
-    "uploadFile": {
-      "description": "Upload a local file through a file input or an element that opens a file chooser. The file must be inside the current workspace or its temporary directory. Returns a fresh snapshot after the upload.",
-      "schema": {
-        "type": "object",
-        "properties": {
           "uid": {
             "type": "string",
-            "pattern": "^\\d+_\\d+$",
-            "description": "The uid of the file input or file-chooser trigger from the latest page snapshot"
+            "description": "The uid of an element on the page from the page content snapshot"
           },
-          "filePath": {
-            "type": "string",
-            "description": "Absolute local path of the file to upload"
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
           }
         },
         "required": [
-          "uid",
-          "filePath"
+          "pageId",
+          "uid"
         ]
       }
     },
-    "fillFormByUids": {
-      "description": "Fill multiple form fields in one operation. All UIDs must come from the SAME (latest) snapshot — mixing UIDs from different snapshots will fail. Automatically creates a new snapshot after filling (which invalidates the UIDs just used). Use this to efficiently fill multiple inputs, selects, or textareas at once.",
+    "fill": {
+      "description": "Type text into an input, text area or select an option from a <select> element.",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "uid": {
+            "type": "string",
+            "description": "The uid of an element on the page from the page content snapshot"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value to fill in. \"true\" or \"false\" for checkboxes and toggles, \"true\" for radio buttons."
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pageId",
+          "uid",
+          "value"
+        ]
+      }
+    },
+    "fill_form": {
+      "description": "Fill out multiple form elements (inputs, selects, checkboxes, radios) at once. Prefer this tool when the fields and values are known.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "elements": {
-            "minItems": 1,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "uid": {
                   "type": "string",
-                  "pattern": "^\\d+_\\d+$",
-                  "description": "The uid of the form element"
+                  "description": "The uid of the element to fill out"
                 },
                 "value": {
                   "type": "string",
-                  "description": "The value to fill in"
+                  "description": "Value for the element. \"true\" or \"false\" for checkboxes and toggles, \"true\" for radio buttons."
                 }
               },
               "required": [
                 "uid",
                 "value"
-              ]
+              ],
+              "description": "An element to fill out"
             },
-            "description": "Array of form elements to fill"
+            "description": "Elements from snapshot to fill out."
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
           }
         },
         "required": [
+          "pageId",
           "elements"
         ]
       }
     },
-    "takeScreenshot": {
+    "type_text": {
+      "description": "Type text using keyboard into a previously focused input",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "text": {
+            "type": "string",
+            "description": "The text to type"
+          },
+          "submitKey": {
+            "description": "Optional key to press after typing. E.g., \"Enter\", \"Tab\", \"Escape\"",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pageId",
+          "text"
+        ]
+      }
+    },
+    "press_key": {
+      "description": "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "key": {
+            "type": "string",
+            "description": "A key or a combination (e.g., \"Enter\", \"Control+A\", \"Control++\", \"Control+Shift+R\"). Modifiers: Control, Shift, Alt, Meta"
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pageId",
+          "key"
+        ]
+      }
+    },
+    "drag": {
+      "description": "Drag an element onto another element",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "from_uid": {
+            "type": "string",
+            "description": "The uid of the element to drag"
+          },
+          "to_uid": {
+            "type": "string",
+            "description": "The uid of the element to drop into"
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pageId",
+          "from_uid",
+          "to_uid"
+        ]
+      }
+    },
+    "upload_file": {
+      "description": "Upload a file through a provided element. Files must be inside the workspace or task temporary directory.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "uid": {
+            "type": "string",
+            "description": "The uid of the file input element or an element that will open file chooser on the page from the page content snapshot"
+          },
+          "filePaths": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more files paths to upload. File paths have to be local to the browser instance (not the MCP)."
+          },
+          "includeSnapshot": {
+            "description": "Whether to include a snapshot in the response. Default is false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pageId",
+          "uid",
+          "filePaths"
+        ]
+      }
+    },
+    "wait_for": {
+      "description": "Wait for the specified text to appear on the target page.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "text": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Non-empty list of texts. Resolves when any value appears on the page."
+          },
+          "timeout": {
+            "description": "Maximum wait time in milliseconds. If set to 0, the default timeout will be used.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "pageId",
+          "text"
+        ]
+      }
+    },
+    "handle_dialog": {
+      "description": "If a browser dialog was opened, use this command to handle it",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "description": "Whether to dismiss or accept the dialog"
+          },
+          "promptText": {
+            "description": "Optional prompt text to enter into the dialog.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pageId",
+          "action"
+        ]
+      }
+    },
+    "take_screenshot": {
       "description": "Take a screenshot of the page or element.",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "format": {
             "default": "png",
             "description": "Type of format to save the screenshot as. Default is \"png\"",
@@ -357,10 +454,6 @@
               "webp"
             ]
           },
-          "fullPage": {
-            "description": "If set to true takes a screenshot of the full page instead of the currently visible viewport. Incompatible with uid.",
-            "type": "boolean"
-          },
           "quality": {
             "description": "Compression quality for JPEG and WebP formats (0-100). Higher values mean better quality but larger file sizes. Ignored for PNG format.",
             "type": "number",
@@ -368,46 +461,86 @@
             "maximum": 100
           },
           "uid": {
-            "description": "The uid of an element on the page content snapshot. If omitted, takes a screenshot of the full page.",
+            "description": "The uid of an element on the page from the page content snapshot. If omitted, takes a page screenshot.",
             "type": "string"
-          }
-        }
-      }
-    },
-    "evaluateScript": {
-      "description": "Execute a JavaScript function in the browser context. The function must be a valid JavaScript function expression. The return value MUST be JSON-serializable — returning DOM nodes, functions, or circular structures fails; extract plain data instead. Example: \"() => Array.from(document.querySelectorAll('a')).map(a => ({ text: a.textContent, href: a.href }))\".",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "function": {
-            "type": "string",
-            "description": "A JavaScript function as a string (e.g., \"() => document.title\" or \"() => { return document.querySelectorAll('a').length; }\")"
+          },
+          "fullPage": {
+            "description": "If set to true takes a screenshot of the full page instead of the currently visible viewport. Incompatible with uid.",
+            "type": "boolean"
+          },
+          "filePath": {
+            "description": "The absolute path, or a path relative to the current working directory, to save the screenshot to instead of attaching it to the response.",
+            "type": "string"
           }
         },
         "required": [
+          "pageId"
+        ]
+      }
+    },
+    "evaluate_script": {
+      "description": "Evaluate a JavaScript function inside the target page. Returns the response as JSON, so returned values have to be JSON-serializable.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "function": {
+            "type": "string",
+            "description": "A JavaScript function declaration to be executed by the tool in the target page.\nExample without arguments: `() => document.title` or `async () => await fetch(\"example.com\")`.\nExample with arguments: `(el) => el.innerText`\n"
+          },
+          "args": {
+            "description": "An optional list of arguments to pass to the function.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "The uid of an element on the page from the page content snapshot"
+            }
+          },
+          "filePath": {
+            "description": "The absolute or relative path to a file to save the script output to. If omitted, the output is returned inline.",
+            "type": "string"
+          },
+          "dialogAction": {
+            "description": "Handle dialogs while execution. \"accept\", \"dismiss\", or string for response of window.prompt. Defaults to accept.",
+            "type": "string"
+          },
+          "waitForStableDom": {
+            "description": "Whether to wait for the DOM to settle. Pass false if the script only reads data. Defaults to true.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pageId",
           "function"
         ]
       }
     },
-    "listConsoleMessages": {
-      "description": "Read console messages collected for the selected page since its latest navigation.",
+    "list_console_messages": {
+      "description": "List all console messages for the target page since the last navigation.",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "pageSize": {
-            "description": "Maximum number of messages to return; omit to return all messages",
+            "description": "Maximum number of messages to return. When omitted, returns all messages.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
           },
           "pageIdx": {
-            "description": "Zero-based result page; defaults to the first page",
+            "description": "Page number to return (0-based). When omitted, returns the first page.",
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
           },
           "types": {
-            "description": "Only return the selected console message types",
+            "description": "Filter messages to only return messages of the specified resource types. When omitted or empty, returns all messages.",
             "type": "array",
             "items": {
               "type": "string",
@@ -430,52 +563,74 @@
                 "profileEnd",
                 "count",
                 "timeEnd",
-                "verbose"
+                "verbose",
+                "issue"
               ]
             }
           },
           "includePreservedMessages": {
+            "description": "Set to true to return the preserved messages over the last 3 navigations.",
             "default": false,
-            "description": "Include messages preserved over the last three navigations",
             "type": "boolean"
-          }
-        }
-      }
-    },
-    "getConsoleMessage": {
-      "description": "Read one console message in detail by the msgid returned from listConsoleMessages.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "msgid": {
-            "description": "The msgid returned by listConsoleMessages",
-            "type": "number"
+          },
+          "includeStackTraces": {
+            "description": "Set to true to include the stack trace for each message when available. Increases the response size.",
+            "default": false,
+            "type": "boolean"
+          },
+          "serviceWorkerId": {
+            "description": "Filter messages to only return messages of the specified service worker.",
+            "type": "string"
           }
         },
         "required": [
+          "pageId"
+        ]
+      }
+    },
+    "get_console_message": {
+      "description": "Gets a console message by its ID. You can get all messages by calling list_console_messages.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
+          "msgid": {
+            "type": "number",
+            "description": "The msgid of a console message on the page from the listed console messages"
+          }
+        },
+        "required": [
+          "pageId",
           "msgid"
         ]
       }
     },
-    "listNetworkRequests": {
-      "description": "Read network requests collected for the selected page since its latest navigation.",
+    "list_network_requests": {
+      "description": "Lists the most recent requests for the target page since the last navigation.",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "pageSize": {
-            "description": "Maximum number of requests to return; omit to return all requests",
+            "description": "Maximum number of requests to return. When omitted, returns all requests.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
           },
           "pageIdx": {
-            "description": "Zero-based result page; defaults to the first page",
+            "description": "Page number to return (0-based). When omitted, returns the first page.",
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
           },
           "resourceTypes": {
-            "description": "Only return the selected resource types",
+            "description": "Filter requests to only return requests of the specified resource types. When omitted or empty, returns all requests.",
             "type": "array",
             "items": {
               "type": "string",
@@ -503,23 +658,48 @@
             }
           },
           "includePreservedRequests": {
+            "description": "Set to true to return the preserved requests over the last 3 navigations.",
             "default": false,
-            "description": "Include requests preserved over the last three navigations",
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "pageId"
+        ]
       }
     },
-    "getNetworkRequest": {
-      "description": "Read request and response headers and available bodies for a reqid returned by listNetworkRequests. This tool does not write body files.",
+    "get_network_request": {
+      "description": "Gets a network request by an optional reqid, if omitted returns the currently selected request in the DevTools Network panel. Useful for inspecting request headers (including 'Cookie') and response headers (including 'Set-Cookie' and directives).",
       "schema": {
         "type": "object",
         "properties": {
+          "pageId": {
+            "type": "number",
+            "description": "Targets a specific page by ID."
+          },
           "reqid": {
-            "description": "The reqid returned by listNetworkRequests; when omitted, reports that no DevTools request is selected",
+            "description": "The reqid of the network request. If omitted returns the currently selected request in the DevTools Network panel.",
             "type": "number"
+          },
+          "requestFilePath": {
+            "description": "The absolute or relative path to a .network-request file to save the request body to. If omitted, the body is returned inline.",
+            "type": "string"
+          },
+          "responseFilePath": {
+            "description": "The absolute or relative path to a .network-response file to save the response body to. If omitted, the body is returned inline.",
+            "type": "string"
           }
-        }
+        },
+        "required": [
+          "pageId"
+        ]
+      }
+    },
+    "closeBrowser": {
+      "description": "Close the bound browser instance and its session.",
+      "schema": {
+        "type": "object",
+        "properties": {}
       }
     },
     "getAllCookies": {

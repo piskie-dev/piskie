@@ -47,11 +47,11 @@ interface CasterEntry {
   session: BrowserAutomationSession;
   unsubscribe: () => void;
   unsubscribeConnection: () => void;
-  /** 逻辑选中页跟随定时器；停流时清除 */
+  /** 显示目标跟随定时器；停流时清除 */
   follow: ReturnType<typeof setInterval> | null;
 }
 
-/** 跟随 selectedPageIdx 的轮询间隔。 */
+/** 跟随 session 当前显示目标的轮询间隔。 */
 const FOLLOW_SELECTED_PAGE_MS = 1_000;
 
 /**
@@ -110,6 +110,7 @@ export class ScreenStreamHub {
         const shared = this.casters.get(browserId);
         if (shared) return this.addViewerToEntry(browserId, shared, sink, info);
         const target = session.getScreenTarget();
+        if (!target) throw new Error('No page available for screen capture');
         const caster: ScreenCaster = new ScreenCaster(target.page, {
           quality: info.quality,
           maxWidth: info.maxWidth,
@@ -289,6 +290,7 @@ export class ScreenStreamHub {
 
   private updateTarget(browserId: string, entry: CasterEntry, target: BrowserScreenTarget | null): void {
     if (target?.page === entry.target?.page && sameScreenPage(target?.identity, entry.target?.identity)) return;
+    const resume = entry.target === null;
     entry.target = target;
     entry.lastFrame = null;
     for (const sink of entry.viewers.keys()) this.sendState(sink, browserId, entry);
@@ -296,8 +298,9 @@ export class ScreenStreamHub {
       void entry.caster.stop().catch(() => undefined);
       return;
     }
+    // rebind restarts a requested capture; a stopped/disconnected capture needs one new request.
     void entry.caster.rebind(target.page, target.identity).then(async () => {
-      if (this.casters.get(browserId) === entry && entry.target === target) await entry.caster.start();
+      if (resume && this.casters.get(browserId) === entry && entry.target) await entry.caster.start();
     }).catch(() => undefined);
   }
 

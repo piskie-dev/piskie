@@ -1,4 +1,15 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Modified by Piskie Team, 2026.
+ * Input actions adapt chrome-devtools-mcp@1.10.1 src/tools/input.ts to the
+ * host's shared input and pointer feedback owner. SDK value rules stay local.
+ */
+
 import type { ElementHandle, KeyInput, Page } from 'puppeteer-core';
+import { raceAbort } from '@electron/utils/abort.js';
 import type { ScreenInputActor, ScreenOperationKind, ScreenPageIdentity } from '@shared/types/stream.js';
 import { parseKeyCombination, typeKeyboardText } from './keyboard.js';
 
@@ -20,31 +31,56 @@ export interface OperationFeedbackSink {
 export class BrowserInputDriver {
   constructor(private readonly feedback: OperationFeedbackSink) {}
 
-  async fill(handle: ElementHandle<Element>, value: string, timeoutMs: number, toggles: 'boolean-text' | 'reject'): Promise<void> {
-    const isToggle = await handle.evaluate(isToggleControl);
+  click(handle: ElementHandle<Element>, count: 1 | 2, signal?: AbortSignal, timeoutMs?: number): Promise<void> {
+    signal?.throwIfAborted();
+    const locator = timeoutMs === undefined ? handle.asLocator() : handle.asLocator().setTimeout(timeoutMs);
+    return locator.click({ count, signal });
+  }
+
+  hover(handle: ElementHandle<Element>, signal?: AbortSignal, timeoutMs?: number): Promise<void> {
+    signal?.throwIfAborted();
+    const locator = timeoutMs === undefined ? handle.asLocator() : handle.asLocator().setTimeout(timeoutMs);
+    return locator.hover({ signal });
+  }
+
+  async drag(from: ElementHandle<Element>, to: ElementHandle<Element>): Promise<void> {
+    await from.drag(to);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await to.drop(from);
+  }
+
+  async fill(handle: ElementHandle<Element>, value: string, timeoutMs: number, toggles: 'boolean-text' | 'reject', signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    const isToggle = await raceAbort(handle.evaluate(toggles === 'boolean-text' ? isSnapshotToggleControl : isToggleControl), signal);
     if (isToggle && toggles === 'reject') throw new Error('Browser Skill fill requires a text input, textarea or contenteditable element; toggles are not supported.');
     if (isToggle && value !== 'true' && value !== 'false') {
       throw new Error(`Checkboxes, radio boxes and toggles require "true" or "false" value, but ${value} was used`);
     }
-    const isSelect = !isToggle && await handle.evaluate(isSelectControl);
+    const isSelect = !isToggle && await raceAbort(handle.evaluate(isSelectControl), signal);
+    signal?.throwIfAborted();
     await this.element(handle, isSelect ? 'select' : 'input', () =>
-      handle.asLocator().setTimeout(timeoutMs).fill(isToggle ? value === 'true' : value));
+      (isToggle ? handle.asLocator() : handle.asLocator().setTimeout(timeoutMs)).fill(isToggle ? value === 'true' : value, { signal }));
   }
 
-  selectValue(handle: ElementHandle<Element>, value: string): Promise<void> {
-    return this.element(handle, 'select', () => handle.asLocator().fill(value));
+  selectValue(handle: ElementHandle<Element>, value: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    return this.element(handle, 'select', () => handle.asLocator().fill(value, { signal }));
   }
 
-  select(handle: ElementHandle<Element>, value: string): Promise<string[]> {
-    return this.element(handle, 'select', () => handle.select(value));
+  select(handle: ElementHandle<Element>, value: string, signal?: AbortSignal): Promise<string[]> {
+    signal?.throwIfAborted();
+    return this.element(handle, 'select', () => raceAbort(handle.select(value), signal));
   }
 
-  upload(page: Page, handle: ElementHandle<Element>, filePath: string, timeoutMs?: number): Promise<void> {
-    return this.element(handle, 'upload', () => uploadFileThroughElement(page, handle, filePath, timeoutMs));
+  upload(page: Page, handle: ElementHandle<Element>, filePaths: string | readonly string[], timeoutMs?: number): Promise<void> {
+    return this.element(handle, 'upload', () => uploadFileThroughElement(page, handle, filePaths, timeoutMs));
   }
 
-  typeText(page: Page, text: string): Promise<void> {
-    return this.keyboard(page, 'input', () => typeKeyboardText(page.keyboard, text));
+  typeText(page: Page, text: string, submitKey?: string): Promise<void> {
+    return this.keyboard(page, 'input', async () => {
+      await typeKeyboardText(page.keyboard, text);
+      if (submitKey) await page.keyboard.press(submitKey as KeyInput);
+    });
   }
 
   press(page: Page, input: string): Promise<void> {
@@ -84,18 +120,24 @@ export function isToggleControl(element: Element): boolean {
   if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable)) return false;
   return ['checkbox', 'radio', 'switch'].includes(element.getAttribute('role') ?? '');
 }
+function isSnapshotToggleControl(element: Element): boolean {
+  if (element instanceof HTMLInputElement) return element.type === 'checkbox' || element.type === 'radio';
+  const role = element.getAttribute('role');
+  return role === 'checkbox' || role === 'radio' || role === 'switch';
+}
 function isSelectControl(element: Element): boolean { return element instanceof HTMLSelectElement; }
 
-export async function uploadFileThroughElement(page: Page, handle: ElementHandle<Element>, filePath: string, clickTimeoutMs?: number): Promise<void> {
+export async function uploadFileThroughElement(page: Page, handle: ElementHandle<Element>, filePaths: string | readonly string[], clickTimeoutMs?: number): Promise<void> {
+  const paths = typeof filePaths === 'string' ? [filePaths] : [...filePaths];
   try {
-    await (handle as ElementHandle<HTMLInputElement>).uploadFile(filePath);
+    await (handle as ElementHandle<HTMLInputElement>).uploadFile(...paths);
   } catch {
     try {
       const [fileChooser] = await Promise.all([
         page.waitForFileChooser({ timeout: 3_000 }),
         clickTimeoutMs === undefined ? handle.asLocator().click() : handle.asLocator().setTimeout(clickTimeoutMs).click(),
       ]);
-      await fileChooser.accept([filePath]);
+      await fileChooser.accept(paths);
     } catch {
       throw new Error('Failed to upload file. The element could not accept the file directly, '
         + 'and clicking it did not trigger a file chooser.');

@@ -35,10 +35,15 @@ const fixedSkills = [
 
 const includeEveryName = { includes: () => true } as unknown as readonly string[];
 
-const STRICT_NUMERIC_PARAMS = new Set([
-  'browser_getConsoleMessage.msgid',
-  'browser_getNetworkRequest.reqid',
-]);
+// The source-aligned browser tools accept JSON scalar types without coercion.
+// Host browser helpers retain their existing coercing parameter contract.
+const STRICT_BROWSER_TOOLS = new Set([
+  'list_pages', 'new_page', 'select_page', 'close_page', 'navigate_page',
+  'take_snapshot', 'click', 'hover', 'fill', 'fill_form', 'type_text',
+  'press_key', 'drag', 'upload_file', 'wait_for', 'handle_dialog',
+  'take_screenshot', 'evaluate_script', 'list_console_messages',
+  'get_console_message', 'list_network_requests', 'get_network_request',
+].map((name) => `browser_${name}`));
 
 // Cross-field constraints need a valid combination beyond sampling each field independently.
 // An `undefined` override removes the sampled field.
@@ -158,7 +163,15 @@ function replaceAtPath(input: unknown, path: readonly (string | number)[], value
   return clone;
 }
 
-describe('model-facing parameter coercion matrix', () => {
+function valueAtPath(input: unknown, path: readonly (string | number)[]): unknown {
+  let current = input;
+  for (const segment of path) {
+    current = (current as Record<string | number, unknown> | undefined)?.[segment];
+  }
+  return current;
+}
+
+describe('model-facing parameter runtime matrix', () => {
   it('covers every current native tool and built-in Skill function with one zod runtime contract', () => {
     const catalog = createProcessToolCatalog(undefined, {
       getExecutableSkills: () => fixedSkills,
@@ -241,6 +254,7 @@ describe('model-facing parameter coercion matrix', () => {
 
     const failures: string[] = [];
     let coercionCases = 0;
+    let strictCases = 0;
     for (const definition of definitions) {
       const entry = entries.get(definition.name)?.entry;
       if (!entry) {
@@ -256,7 +270,6 @@ describe('model-facing parameter coercion matrix', () => {
       }
 
       for (const item of scalarCases(apiSchema, baseline)) {
-        coercionCases += 1;
         const path = item.path.join('.');
         const quoted = item.kind === 'boolean' ? 'false' : String(item.value);
         const parsed = parse(
@@ -264,16 +277,37 @@ describe('model-facing parameter coercion matrix', () => {
           replaceAtPath(baseline, item.path, quoted),
         );
         const qualifiedPath = `${definition.name}.${path}`;
-        if (STRICT_NUMERIC_PARAMS.has(qualifiedPath)) {
-          if (parsed.ok) failures.push(`${qualifiedPath}: accepted a numeric string`);
-          if (item.optional && !parse(
-            entry.contract.schema,
-            replaceAtPath(baseline, item.path, ''),
-          ).ok) {
-            failures.push(`${qualifiedPath}: rejected an empty optional numeric parameter`);
+        if (STRICT_BROWSER_TOOLS.has(definition.name)) {
+          strictCases += 1;
+          const quotedInput = replaceAtPath(baseline, item.path, quoted);
+          const emptyInput = replaceAtPath(baseline, item.path, '');
+          if (entry.contract.schema.safeParse(quotedInput).success) {
+            failures.push(`${qualifiedPath}: source schema accepted a scalar string`);
+          }
+          if (entry.contract.schema.safeParse(emptyInput).success) {
+            failures.push(`${qualifiedPath}: source schema accepted an empty scalar string`);
+          }
+          if (parsed.ok) failures.push(`${qualifiedPath}: runtime accepted a valued scalar string`);
+          const empty = parse(entry.contract.schema, emptyInput);
+          if (item.optional) {
+            const omitted = parse(
+              entry.contract.schema,
+              replaceAtPath(baseline, item.path, undefined),
+            );
+            if (!empty.ok || !omitted.ok) {
+              failures.push(`${qualifiedPath}: runtime rejected an omitted optional parameter`);
+            } else if (!Object.is(
+              valueAtPath(empty.value, item.path),
+              valueAtPath(omitted.value, item.path),
+            )) {
+              failures.push(`${qualifiedPath}: empty optional parameter differs from omission/default`);
+            }
+          } else if (empty.ok) {
+            failures.push(`${qualifiedPath}: runtime accepted an empty required scalar string`);
           }
           continue;
         }
+        coercionCases += 1;
         if (!parsed.ok) {
           failures.push(`${qualifiedPath}: rejected ${JSON.stringify(quoted)}`);
           continue;
@@ -303,6 +337,7 @@ describe('model-facing parameter coercion matrix', () => {
     }
 
     expect(coercionCases).toBeGreaterThan(0);
+    expect(strictCases).toBeGreaterThan(0);
     expect(failures).toEqual([]);
   });
 });

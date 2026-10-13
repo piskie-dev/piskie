@@ -138,7 +138,7 @@ describe('ToolCatalog snapshots', () => {
       name: 'browser',
       domain: 'browser',
       functions: {
-        takeScreenshot: {
+        take_screenshot: {
           description: 'Take a screenshot',
           params: z.object({}),
           async run() {
@@ -158,10 +158,34 @@ describe('ToolCatalog snapshots', () => {
       entryPoint: 'skill_call',
     });
 
-    expect(descriptorFor(builtin).effects).toEqual(['read-fs', 'write-fs']);
-    expect(descriptorFor(builtin).wrapExecute).toBeDefined();
-    expect(descriptorFor(sameNameCustom).effects).toEqual(['read-fs', 'write-fs', 'exec']);
-    expect(descriptorFor(sameNameCustom).wrapExecute).toBeDefined();
+    const generatedRuntime = { page: {}, listPages: vi.fn(), selectPage: vi.fn() };
+    const createGeneratedRuntime = vi.fn(() => generatedRuntime);
+    const browserRuntime = {
+      core: { take_screenshot: vi.fn() },
+      createGeneratedRuntime,
+      notifyPageOpen: vi.fn(),
+    };
+    const ctx = {
+      ...fakeContext(),
+      resourceIds: { browserId: 'browser-example' },
+      browser: browserRuntime,
+    } as unknown as ToolContext;
+    const builtinDescriptor = descriptorFor(builtin);
+    const customDescriptor = descriptorFor(sameNameCustom);
+
+    expect(builtinDescriptor.effects).toEqual(['read-fs', 'write-fs']);
+    expect(builtinDescriptor.makeContext(ctx).browser).toBe(browserRuntime);
+    expect(customDescriptor.effects).toEqual(['read-fs', 'write-fs', 'exec']);
+    expect(customDescriptor.wrapExecute).toBeDefined();
+    const customContext = customDescriptor.makeContext(ctx);
+    expect(customContext.browser).toBe(generatedRuntime);
+    expect(customContext.browser).not.toHaveProperty('core');
+    expect(createGeneratedRuntime).toHaveBeenCalledOnce();
+    expect(createGeneratedRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      browserId: 'browser-example',
+      signal: ctx.signal,
+      allowedFileRoots: [ctx.workspace.dir, ctx.workspace.tempDir],
+    }));
 
     const unknownBuiltin = attachSkillProvenance(
       defineSkill({

@@ -10,62 +10,63 @@ import { toApiSchema } from '../../params.js';
 import type { ToolContext } from '../../types.js';
 import { buildLoadedSkillEntries } from '../domain-descriptors.js';
 
+function screenshotEntry() {
+  const loaded = attachSkillProvenance(browserCore, {
+    root: '/app/skills/browser', trust: 'builtin', entryPoint: 'direct',
+  });
+  const entry = buildLoadedSkillEntries(loaded)
+    .find((candidate) => candidate.identity.function === 'take_screenshot');
+  if (!entry) throw new Error('take_screenshot tool missing');
+  return entry;
+}
+
+function context(take_screenshot: ReturnType<typeof vi.fn>): ToolContext {
+  return {
+    agentId: 'worker-1', mainAgentId: 'main-1', resourceIds: { browserId: 'browser-1' },
+    signal: new AbortController().signal,
+    workspace: { dir: '/workspace', tempDir: '/workspace/tmp' },
+    browser: { core: { take_screenshot } },
+  } as unknown as ToolContext;
+}
+
 describe('browser screenshot model/host boundary', () => {
-  it('hides filePath from the model, injects it in the host, and preserves result text', async () => {
-    const loaded = attachSkillProvenance(browserCore, {
-      root: '/app/skills/browser',
-      trust: 'builtin',
-      entryPoint: 'direct',
-    });
-    const entry = buildLoadedSkillEntries(loaded)
-      .find((candidate) => candidate.identity.function === 'takeScreenshot');
-    if (!entry) throw new Error('takeScreenshot tool missing');
+  it('exposes the source filePath contract and carries inline image bytes and MIME unchanged', async () => {
+    const entry = screenshotEntry();
+    expect(toApiSchema(entry.tool.def.schema).properties).toHaveProperty('filePath');
+    const take_screenshot = vi.fn(async () => ({
+      text: "Took a screenshot of the current page's viewport.",
+      image: { data: 'c2FtcGxlLWltYWdl', mimeType: 'image/webp' },
+    }));
+    const ctx = context(take_screenshot);
+    const params = { pageId: 7, format: 'webp' };
+    const output = await entry.tool.execute(params, ctx);
 
-    const schema = toApiSchema(entry.tool.def.schema);
-    expect(schema.properties).not.toHaveProperty('filePath');
-
-    const finalPath = '/user-data/agent-runs/main-1/workers/worker-1/screenshots/final.png';
-    const prepareScreenshot = vi.fn(async (params: Record<string, unknown>) => {
-      params.filePath = finalPath;
-      return {
-        id: 'shot-1',
-        mainAgentId: 'main-1',
-        agentId: 'worker-1',
-        filename: 'final.png',
-        filePath: finalPath,
-        timestamp: new Date('2026-08-19T00:00:00.000Z'),
-        size: 0,
-        format: 'png' as const,
-      };
+    expect(params).toEqual({ pageId: 7, format: 'webp' });
+    expect(take_screenshot).toHaveBeenCalledExactlyOnceWith({
+      pageId: 7, format: 'webp', browserId: 'browser-1', signal: ctx.signal,
+      files: { cwd: '/workspace', tempDir: '/workspace/tmp', allowedRoots: ['/workspace', '/workspace/tmp'] },
     });
-    const takeScreenshot = vi.fn(async () => `Saved screenshot to ${finalPath}.`);
-    const finalizeScreenshot = vi.fn(async () => undefined);
-    const signal = new AbortController().signal;
-    const output = await entry.tool.execute({ format: 'png' }, {
-      agentType: 'worker',
-      agentSpec: 'browser-worker',
-      agentId: 'worker-1',
-      mainAgentId: 'main-1',
-      runConfig: { name: 'Run', description: '', promptTemplate: '' },
-      resourceIds: { browserId: 'browser-1' },
-      signal,
-      log: vi.fn(),
-      browser: {
-        core: { takeScreenshot },
-        prepareScreenshot,
-        finalizeScreenshot,
-        cleanupScreenshot: vi.fn(async () => undefined),
-      },
-    } as unknown as ToolContext);
-
-    expect(prepareScreenshot).toHaveBeenCalledWith({ format: 'png', filePath: finalPath });
-    expect(takeScreenshot).toHaveBeenCalledWith({
-      format: 'png',
-      filePath: finalPath,
-      browserId: 'browser-1',
-      signal,
+    expect(output).toEqual({
+      ok: true, text: "Took a screenshot of the current page's viewport.",
+      images: [{ base64: 'c2FtcGxlLWltYWdl', mediaType: 'image/webp' }],
     });
-    expect(finalizeScreenshot).toHaveBeenCalledOnce();
+  });
+
+  it.each(['explicit', 'temporary'])('preserves %s file results without substituting a host screenshot path', async (kind) => {
+    const entry = screenshotEntry();
+    const finalPath = kind === 'explicit' ? '/workspace/export.png' : '/workspace/tmp/observation/screenshot.png';
+    const take_screenshot = vi.fn(async (_params: Record<string, unknown>) => ({ text: `Saved screenshot to ${finalPath}.`, filePath: finalPath }));
+    const params = { pageId: 7, format: 'png', ...(kind === 'explicit' ? { filePath: '/workspace/export.png' } : {}) };
+    const output = await entry.tool.execute(params, context(take_screenshot));
+    expect(take_screenshot.mock.calls[0][0]).toMatchObject(params);
     expect(output).toEqual({ ok: true, text: `Saved screenshot to ${finalPath}.` });
+  });
+
+  it('propagates screenshot failure through the existing error channel', async () => {
+    const failure = new Error('Could not save observation');
+    const take_screenshot = vi.fn(async () => { throw failure; });
+    await expect(screenshotEntry().tool.execute({ pageId: 7, format: 'png', filePath: '/workspace/export.png' }, context(take_screenshot)))
+      .rejects.toBe(failure);
+    expect(take_screenshot).toHaveBeenCalledOnce();
   });
 });

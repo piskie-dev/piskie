@@ -51,12 +51,15 @@ function App(){
  const [scope,setScope]=useState('sample-main');
  const [workers,setWorkers]=useState([first,second,pending]);
  const [panel,setPanel]=useState(true);
+ const [panelWidth,setPanelWidth]=useState('38%');
  const [gate,setGate]=useState(false);
  const [interactive,setInteractive]=useState(false);
  const [full,setFull]=useState(null);
  const reading=useRef(null);
  const controller=useBrowserMonitor(scope,scope==='sample-main'?workers:empty);
- window.sampleUi={scope:setScope,panel:setPanel,gate:setGate,interactive:setInteractive,
+ window.sampleUi={scope:setScope,panel:setPanel,panelWidth:value=>setPanelWidth(value+'px'),gate:setGate,interactive:setInteractive,
+  resources:count=>setWorkers(Array.from({length:count},(_,index)=>index<2?[first,second][index]:index===2?pending:
+   {...pending,id:'sample-worker-'+index,browserId:'sample-browser-'+index,subject:'Sample pending task '+index})),
   closeResource:id=>setWorkers(items=>items.filter(item=>item.id!==id)),
   taskState:(id,type)=>{
    window.sampleActivities[id]={text:type==='completed'?'Completed':type==='need_user_action'?'Waiting for user action':'Executing',unfinished:type!=='completed'};
@@ -67,7 +70,7 @@ function App(){
  };
  const target=controller.tasks.find(task=>task.key===full);
  return <RendererRuntimeProvider runtime={{screenFeeds}}>
-  <main className={layout.threadview} data-threads-collapsed="true" data-panel-hidden={panel?undefined:'true'}>
+  <main className={layout.threadview} style={{'--col-panel':panelWidth}} data-threads-collapsed="true" data-panel-hidden={panel?undefined:'true'}>
    <nav className={layout.threads}>Sample</nav>
    <div className={layout.center}><header style={{height:40,flexShrink:0}}>Sample conversation</header>
     <div className={layout.column}>
@@ -77,7 +80,7 @@ function App(){
      <div data-tasks="true" style={{height:35}}>Sample task list</div>
      <div data-input="true" style={{height:gate?220:100,flexShrink:0}}>{gate?<button>Approve sample</button>:<textarea aria-label="Sample input"/>}</div>
      <FloatingBrowserMonitors agentId={scope} controller={controller} readingRef={reading} hidden={false} onFullscreen={setFull}
-      onReturnToMonitor={key=>{controller.close(key);if(controller.tasks.some(task=>!task.closed||task.hasFrame))setPanel(true)}}/>
+      onReturnToMonitor={key=>{controller.close(key);if(controller.tasks.length>0)setPanel(true)}}/>
     </div>
    </div>
    <aside className={layout.panel} style={{paddingTop:40}} data-collapsed={panel?undefined:'true'}>
