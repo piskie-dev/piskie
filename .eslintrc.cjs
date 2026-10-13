@@ -143,5 +143,8 @@ module.exports = {
     'react/prop-types': 'off', // 使用 TypeScript 类型检查
     'react-hooks/rules-of-hooks': 'error',
     'react-hooks/exhaustive-deps': 'warn',
+    'react-hooks/refs': 'warn',
+    'react-hooks/immutability': 'warn',
+    'react-hooks/set-state-in-effect': 'warn',
   },
 };

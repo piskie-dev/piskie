@@ -29,9 +29,12 @@ vi.mock('../../../data/vm', async () => {
   };
   const useWorkers = () => useSyncExternalStore(subscribe, () => vm.workers);
   return {
-    useAgentVM: (agentId: string) => ({
-      agentId, title: agentId, status: 'waiting', workers: agentId === 'session-alpha' ? useWorkers() : (useWorkers(), vm.emptyWorkers),
-    }),
+    useAgentVM: (agentId: string) => {
+      const workers = useWorkers();
+      return {
+        agentId, title: agentId, status: 'waiting', workers: agentId === 'session-alpha' ? workers : vm.emptyWorkers,
+      };
+    },
     useWorkerVM: (_agentId: string, workerId?: string) => useWorkers().find((worker) => worker.id === workerId) ?? null,
   };
 });

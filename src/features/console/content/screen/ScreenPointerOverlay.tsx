@@ -126,12 +126,12 @@ function PointerEffects({ pointer, frame, size, area, onPresented }: {
       <defs>
         <linearGradient id={`${artworkId}-rest`} x1="0" y1="0" x2="0.8" y2="1">
           <stop offset="0" stopColor="#fff" />
-          <stop offset="0.47" stopColor="#d6f3ff" />
-          <stop offset="1" stopColor="#8fbfd4" />
+          <stop offset="0.47" stopColor="#d6f3ff" /> {/* style-token-ignore: pointer arrow gradient */}
+          <stop offset="1" stopColor="#8fbfd4" /> {/* style-token-ignore: pointer arrow gradient */}
         </linearGradient>
         <linearGradient id={`${artworkId}-press`} x1="0" y1="0" x2="0.8" y2="1">
-          <stop offset="0" stopColor="#e7faff" />
-          <stop offset="1" stopColor="#69a7c3" />
+          <stop offset="0" stopColor="#e7faff" /> {/* style-token-ignore: pointer arrow gradient */}
+          <stop offset="1" stopColor="#69a7c3" /> {/* style-token-ignore: pointer arrow gradient */}
         </linearGradient>
       </defs>
       <path className={styles.arrowEdge} d="M2.15 1.65L4.5 19.1Q4.58 19.62 4.94 19.17L8.85 13.92L16.7 13.5Q17.22 13.47 16.82 13.12Z" />
