@@ -1151,10 +1151,25 @@ describe('all managed Config Domains', () => {
     expect(removeSelectedModel.validation.valid).toBe(false);
     expect(removeSelectedModel.validation.issues).toContainEqual(expect.objectContaining({
       code: 'INFERENCE_SELECTION_STILL_REFERENCED',
+      details: { gateway: 'ai', providerId: 'primary', modelId: 'chat', targetKind: 'model' },
     }));
     expect(removeSelectedModel.impacts).toContainEqual(expect.objectContaining({
       code: 'INFERENCE_SELECTION_TARGET_REMOVED',
     }));
+
+    for (const [path, targetKind] of [
+      ['/providers/primary/models/chat/enabled', 'model'],
+      ['/providers/primary/enabled', 'provider'],
+    ]) {
+      const disableSelectedTarget = await host.createPatchPlan<ConfigPlan>('inference', [{
+        op: 'replace', path: path!, value: false,
+      }]);
+      expect(disableSelectedTarget.validation.valid).toBe(false);
+      expect(disableSelectedTarget.validation.issues).toContainEqual(expect.objectContaining({
+        code: 'INFERENCE_SELECTION_STILL_REFERENCED',
+        details: { gateway: 'ai', providerId: 'primary', modelId: 'chat', targetKind },
+      }));
+    }
 
     await applyPlan(host, 'model-catalog', [{
       op: 'add',

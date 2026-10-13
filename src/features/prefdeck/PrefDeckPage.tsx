@@ -50,6 +50,7 @@ import styles from './deck.module.css';
 const SECTS: readonly DeckSect[] = [
   'web-search', 'web-search-settings', 'ai', 'image', 'ai-tuning', 'image-tuning', 'proxy', 'account', 'look', 'shortcuts', 'kernel', 'model-usage', 'logs', 'guides', 'about',
 ];
+const STRIP_TIMEOUT_MS = 4000;
 
 /** 旧 /settings 的 ?tab= 值映射 */
 const TAB_BRIDGE: Record<string, DeckSect> = {
@@ -87,6 +88,7 @@ export const PrefDeckPage: React.FC = () => {
   const searchConfig = useWebSearchStore((s) => s.config);
   const searchPresets = useWebSearchStore((s) => s.presets);
   const searchError = useWebSearchStore((s) => s.error);
+  const clearSearchError = useWebSearchStore((s) => s.clearError);
   const canAddSearchProvider = searchPresets.some((preset) => !searchConfig?.providers[preset.id]);
   const [pickedSearch, setPickedSearch] = useState<string | null>(null);
   const [searchForge, setSearchForge] = useState(false);
@@ -144,9 +146,21 @@ export const PrefDeckPage: React.FC = () => {
 
   useEffect(() => {
     if (!flash) return;
-    const timer = setTimeout(() => setFlash(null), 4000);
+    const timer = setTimeout(() => setFlash(null), STRIP_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [flash]);
+
+  useEffect(() => {
+    if (!inferenceError) return;
+    const timer = setTimeout(clearInferenceError, STRIP_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [inferenceError, clearInferenceError]);
+
+  useEffect(() => {
+    if (!searchError) return;
+    const timer = setTimeout(clearSearchError, STRIP_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [searchError, clearSearchError]);
 
   useEffect(() => {
     const dialog = shotRef.current;
@@ -284,7 +298,7 @@ export const PrefDeckPage: React.FC = () => {
         <div className={styles.stripDock}>
           {searchErrorText && <div className={styles.strip} data-tone="halt" role="alert">
             <span className={styles.stripText}>{searchErrorText}</span>
-            <button type="button" className={styles.stripClose} aria-label={t('common.close')} onClick={() => useWebSearchStore.getState().clearError()}><X size={12} /></button>
+            <button type="button" className={styles.stripClose} aria-label={t('common.close')} onClick={clearSearchError}><X size={12} /></button>
           </div>}
           {inferenceErrorText && (
             <div className={styles.strip} data-tone="halt" role="alert">

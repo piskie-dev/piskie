@@ -11,6 +11,7 @@ import type {
   ConfigDomainRevisionChangedEvent,
   ConfigFieldDescriptor,
   ConfigPlanRequest,
+  ConfigValidationReport,
 } from '../../../shared/types/config';
 import {
   createProviderId,
@@ -227,7 +228,7 @@ function api(currentConfig: InferenceConfig, currentSelections: InferenceSelecti
         id: planId,
         domain: planned.domain,
         baseRevision: revisionOf(planned.domain),
-        validation: { valid: true, issues: [] },
+        validation: { valid: true, issues: [] } as ConfigValidationReport,
       };
     }),
     apply: vi.fn(async (planId: string, expectedRevision: number) => {
@@ -568,7 +569,7 @@ describe('inferenceStore configuration mutations', () => {
     expect(useInferenceStore.getState().config?.providers['provider-main']).toBeUndefined();
   });
 
-  it('clears the current model when it is disabled without changing any other target', async () => {
+  it.each(['model', 'provider'] as const)('keeps the selected %s enabled and presents the validation guard', async (targetKind) => {
     const currentConfig = config();
     const currentSelections: InferenceSelections = {
       ...selections(),
@@ -582,23 +583,33 @@ describe('inferenceStore configuration mutations', () => {
     };
     const gateway = api(currentConfig, currentSelections);
     resetStore(currentConfig, currentSelections);
-
-    await expect(useInferenceStore.getState().upsertProviderModel(
-      'ai',
-      'provider-main',
-      'model-main',
-      disabledProvider.models['model-main']!,
-      'model-main',
-    )).resolves.toBe(true);
-
-    expect(gateway.config.plan).toHaveBeenNthCalledWith(2, 'inference-selections', {
-      descriptorHash: descriptors['inference-selections'].descriptorHash,
-      changes: [{ op: 'remove', fieldId: 'field-selection-ai' }],
+    gateway.config.validate.mockResolvedValueOnce({
+      id: 'plan-1', domain: 'inference', baseRevision: currentConfig.revision,
+      validation: { valid: false, issues: [{
+        stage: 'reference', code: 'INFERENCE_SELECTION_STILL_REFERENCED',
+        path: '/providers/provider-main/models/model-main',
+        message: 'ai selection still references provider-main/model-main.',
+        details: { targetKind },
+      }] },
     });
-    expect(useInferenceStore.getState().selections?.image).toEqual({
-      providerId: 'image-provider',
-      modelId: 'image-model',
+
+    const operation = targetKind === 'provider'
+      ? useInferenceStore.getState().updateProvider('provider-main', { enabled: false })
+      : useInferenceStore.getState().upsertProviderModel(
+          'ai', 'provider-main', 'model-main', disabledProvider.models['model-main']!, 'model-main',
+        );
+    await expect(operation).resolves.toBe(false);
+
+    expect(useInferenceStore.getState().error).toEqual({
+      kind: 'message',
+      key: targetKind === 'provider'
+        ? 'configValidation.selectionProviderStillReferenced'
+        : 'configValidation.selectionModelStillReferenced',
     });
+    expect(useInferenceStore.getState().config).toEqual(currentConfig);
+    expect(useInferenceStore.getState().selections).toEqual(currentSelections);
+    expect(gateway.config.plan).toHaveBeenCalledTimes(1);
+    expect(gateway.config.apply).not.toHaveBeenCalled();
   });
 
   it('persists the model selected by the user as one exact target', async () => {

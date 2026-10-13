@@ -2323,6 +2323,13 @@ export default {
     entryFacts: 'Entry Facts',
   },
 
+  configValidation: {
+    failed: 'Configuration validation failed. Check your settings and try again.',
+    issueList: '{{first}}\n{{rest}}',
+    selectionModelStillReferenced: 'This is the current default model. Select another model before disabling or deleting it.',
+    selectionProviderStillReferenced: 'This provider contains the current default model. Select a model from another provider before disabling or deleting this provider.',
+  },
+
   // Error feedback
   error: {
     incidentTitle: 'Runtime Incidents',
